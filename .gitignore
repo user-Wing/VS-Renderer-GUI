@@ -1,0 +1,20 @@
+/build/
+/dist/
+/.deps/
+/.vs/
+/.idea/
+/.vscode/
+*.user
+*.autosave
+*.vpy.tmp
+/.cache/
+
+# Runtime dependencies are supplied separately.
+*.dll
+*.lib
+*.pdb
+*.7z
+*.lwi
+
+# Keep the official Git checkout local; its exact commit is recorded in project.md.
+/third_party/vapoursynth/

@@ -1,0 +1,318 @@
+diff --git a/FFF.Native/3FP/Api/FFF.Player.Api.h b/FFF.Native/3FP/Api/FFF.Player.Api.h
+index 8d5aa08..55541d0 100644
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -27,6 +27,14 @@ enum class FFF3FPVideoScalingQuality : std::uint32_t {
+     HighQuality = 1,
+ };
+ 
++enum class FFF3FPScalingAlgorithm : std::uint32_t {
++    Nearest = 0,
++    Bilinear = 1,
++    Bicubic = 2,
++    Lanczos3 = 3,
++    Jinc2 = 4,
++};
++
+ enum class FFF3FPColorTransfer : std::uint32_t {
+     SdrBt709 = 0,
+     Pq = 1,
+@@ -425,6 +433,50 @@ struct FFF3FPVideoPixelProbe {
+     std::uint32_t reserved;
+ };
+ 
++// Stable formats accepted by the external frame-server ABI. Values are not
++// FFmpeg AVPixelFormat numbers and therefore remain stable across FFmpeg majors.
++enum class FFF3FPExternalPixelFormat : std::uint32_t {
++    Gray8 = 1,
++    Gray16 = 2,
++    Yuv420P8 = 10,
++    Yuv420P10 = 11,
++    Yuv420P12 = 12,
++    Yuv420P16 = 13,
++    Yuv422P8 = 20,
++    Yuv422P10 = 21,
++    Yuv422P12 = 22,
++    Yuv422P16 = 23,
++    Yuv444P8 = 30,
++    Yuv444P10 = 31,
++    Yuv444P12 = 32,
++    Yuv444P16 = 33,
++    GbrP8 = 40,
++    GbrP10 = 41,
++    GbrP12 = 42,
++    GbrP16 = 43,
++};
++
++// Version 1 CPU frame descriptor for frame servers such as VapourSynth.
++// Plane memory only has to remain valid until SubmitExternalVideoFrame returns;
++// the renderer uploads/copies the complete frame before returning.
++struct FFF3FPExternalVideoFrame {
++    std::uint32_t size;
++    std::uint32_t version;
++    std::uint32_t width;
++    std::uint32_t height;
++    FFF3FPExternalPixelFormat format;
++    std::uint32_t colorRange;      // 0=unspecified, 1=limited, 2=full
++    std::uint32_t colorPrimaries;  // H.273/AVColorPrimaries value
++    std::uint32_t colorTransfer;   // H.273/AVColorTransferCharacteristic value
++    std::uint32_t colorMatrix;     // H.273/AVColorSpace value
++    std::uint32_t chromaLocation;  // AVChromaLocation value, 0=unspecified
++    const void* data[4];
++    std::int32_t linesize[4];
++    std::int64_t frameIndex;
++    std::int64_t duration100ns;
++    std::int64_t totalFrames;
++};
++
+ #ifdef FFFNATIVE_EXPORTS
+ #define FFF3FP_API extern "C" __declspec(dllexport)
+ #else
+@@ -484,6 +536,8 @@ FFF3FP_API FFFResult FFF3FP_SetOutputWindow(FFF3FPHandle player, void* outputWin
+ // relative to the unzoomed box.
+ FFF3FP_API FFFResult FFF3FP_SetViewTransform(FFF3FPHandle player,
+     float zoom, float panX, float panY) noexcept;
++FFF3FP_API FFFResult FFF3FP_SetScalingAlgorithms(FFF3FPHandle player,
++    FFF3FPScalingAlgorithm upscale, FFF3FPScalingAlgorithm downscale) noexcept;
+ // Equirectangular 360-degree video projection. yaw/pitch/fovY use degrees;
+ // pitch is clamped by the renderer so the horizon never rolls or flips.
+ FFF3FP_API FFFResult FFF3FP_Set360View(FFF3FPHandle player,
+@@ -498,6 +552,8 @@ FFF3FP_API FFFResult FFF3FP_SetVolume(FFF3FPHandle player, float volume, std::ui
+ FFF3FP_API FFFResult FFF3FP_SetTimedTextLayer(FFF3FPHandle player,
+     const FFF3FPTimedTextLayer* layer) noexcept;
+ FFF3FP_API FFFResult FFF3FP_GetSnapshot(FFF3FPHandle player, FFF3FPSnapshot* snapshot) noexcept;
++FFF3FP_API FFFResult FFF3FP_SubmitExternalVideoFrame(FFF3FPHandle player,
++    const FFF3FPExternalVideoFrame* frame) noexcept;
+ FFF3FP_API FFFResult FFF3FP_ReadVideoPixel(FFF3FPHandle player,
+     FFF3FPVideoPixelProbe* probe) noexcept;
+ // 3FCompare patch (0004): batch pixel readback. Samples a rectangular region
+diff --git a/FFF.Native/3FP/Api/PlayerApi.cpp b/FFF.Native/3FP/Api/PlayerApi.cpp
+index aa5432f..d797f6e 100644
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -7,7 +7,7 @@
+ #include <atomic>
+ 
+ namespace {
+-constexpr std::uint32_t PlayerApiVersion = 13;
++constexpr std::uint32_t PlayerApiVersion = 14;
+ 
+ // 3FCompare extension (F-LOG): process-wide native log sink.
+ std::atomic<FFF3FPLogCallback> g_logSink{nullptr};
+@@ -98,6 +98,12 @@ FFFResult FFF3FP_SetViewTransform(const FFF3FPHandle player, const float zoom,
+     return player ? static_cast<PlayerSession*>(player)->SetViewTransform(zoom, panX, panY)
+         : FFFResult::InvalidArgument;
+ }
++FFFResult FFF3FP_SetScalingAlgorithms(const FFF3FPHandle player,
++    const FFF3FPScalingAlgorithm upscale,
++    const FFF3FPScalingAlgorithm downscale) noexcept {
++    return player ? static_cast<PlayerSession*>(player)->SetScalingAlgorithms(upscale, downscale)
++        : FFFResult::InvalidArgument;
++}
+ FFFResult FFF3FP_Set360View(const FFF3FPHandle player, const std::uint32_t enabled,
+     const float yaw, const float pitch, const float fovY) noexcept {
+     return player && enabled <= 1 ?
+@@ -116,6 +122,11 @@ FFFResult FFF3FP_SetTimedTextLayer(const FFF3FPHandle player,
+         : FFFResult::InvalidArgument;
+ }
+ FFFResult FFF3FP_GetSnapshot(const FFF3FPHandle player, FFF3FPSnapshot* snapshot) noexcept { return player && snapshot ? static_cast<PlayerSession*>(player)->GetSnapshot(*snapshot) : FFFResult::InvalidArgument; }
++FFFResult FFF3FP_SubmitExternalVideoFrame(const FFF3FPHandle player,
++    const FFF3FPExternalVideoFrame* frame) noexcept {
++    return player && frame ? static_cast<PlayerSession*>(player)->SubmitExternalVideoFrame(*frame)
++        : FFFResult::InvalidArgument;
++}
+ FFFResult FFF3FP_ReadVideoPixel(const FFF3FPHandle player,
+     FFF3FPVideoPixelProbe* probe) noexcept {
+     return player && probe ? static_cast<PlayerSession*>(player)->ReadVideoPixel(*probe) :
+diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
+index 3533edd..93d39f5 100644
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -1083,6 +1083,38 @@ FFFResult PlayerSession::SetViewTransform(const float zoom, const float panX,
+         videoRenderer_.RequestRecoveryIfDeviceLost()) return redrawResult;
+     return FFFResult::Success;
+ }
++FFFResult PlayerSession::SetScalingAlgorithms(const FFF3FPScalingAlgorithm upscale,
++    const FFF3FPScalingAlgorithm downscale) noexcept {
++    const auto result = videoRenderer_.SetScalingAlgorithms(upscale, downscale);
++    if (result != FFFResult::Success) return result;
++    const auto redrawResult = videoRenderer_.Redraw();
++    return redrawResult == FFFResult::InvalidState ? FFFResult::Success : redrawResult;
++}
++
++AVPixelFormat ExternalPixelFormat(const FFF3FPExternalPixelFormat format) noexcept {
++    switch (format) {
++    case FFF3FPExternalPixelFormat::Gray8: return AV_PIX_FMT_GRAY8;
++    case FFF3FPExternalPixelFormat::Gray16: return AV_PIX_FMT_GRAY16LE;
++    case FFF3FPExternalPixelFormat::Yuv420P8: return AV_PIX_FMT_YUV420P;
++    case FFF3FPExternalPixelFormat::Yuv420P10: return AV_PIX_FMT_YUV420P10LE;
++    case FFF3FPExternalPixelFormat::Yuv420P12: return AV_PIX_FMT_YUV420P12LE;
++    case FFF3FPExternalPixelFormat::Yuv420P16: return AV_PIX_FMT_YUV420P16LE;
++    case FFF3FPExternalPixelFormat::Yuv422P8: return AV_PIX_FMT_YUV422P;
++    case FFF3FPExternalPixelFormat::Yuv422P10: return AV_PIX_FMT_YUV422P10LE;
++    case FFF3FPExternalPixelFormat::Yuv422P12: return AV_PIX_FMT_YUV422P12LE;
++    case FFF3FPExternalPixelFormat::Yuv422P16: return AV_PIX_FMT_YUV422P16LE;
++    case FFF3FPExternalPixelFormat::Yuv444P8: return AV_PIX_FMT_YUV444P;
++    case FFF3FPExternalPixelFormat::Yuv444P10: return AV_PIX_FMT_YUV444P10LE;
++    case FFF3FPExternalPixelFormat::Yuv444P12: return AV_PIX_FMT_YUV444P12LE;
++    case FFF3FPExternalPixelFormat::Yuv444P16: return AV_PIX_FMT_YUV444P16LE;
++    case FFF3FPExternalPixelFormat::GbrP8: return AV_PIX_FMT_GBRP;
++    case FFF3FPExternalPixelFormat::GbrP10: return AV_PIX_FMT_GBRP10LE;
++    case FFF3FPExternalPixelFormat::GbrP12: return AV_PIX_FMT_GBRP12LE;
++    case FFF3FPExternalPixelFormat::GbrP16: return AV_PIX_FMT_GBRP16LE;
++    }
++    return AV_PIX_FMT_NONE;
++}
++
+ FFFResult PlayerSession::Set360View(const bool enabled, const float yaw,
+     const float pitch, const float fovY) noexcept {
+     if (!std::isfinite(yaw) || !std::isfinite(pitch) ||
+@@ -1593,6 +1625,69 @@ FFFResult PlayerSession::Redraw() noexcept {
+     return result;
+ }
+ 
++FFFResult PlayerSession::SubmitExternalVideoFrame(const FFF3FPExternalVideoFrame& source) noexcept {
++    if (source.size < sizeof(FFF3FPExternalVideoFrame) || source.version != 1 ||
++        source.width == 0 || source.height == 0 || source.data[0] == nullptr ||
++        source.linesize[0] <= 0 || source.frameIndex < 0 || source.totalFrames < 0 ||
++        source.colorRange > 2) return FFFResult::InvalidArgument;
++
++    const auto pixelFormat = ExternalPixelFormat(source.format);
++    if (pixelFormat == AV_PIX_FMT_NONE) return FFFResult::NotSupported;
++    const auto* descriptor = av_pix_fmt_desc_get(pixelFormat);
++    if (descriptor == nullptr) return FFFResult::NotSupported;
++    const auto planeCount = av_pix_fmt_count_planes(pixelFormat);
++    for (int plane = 0; plane < planeCount; ++plane) {
++        if (source.data[plane] == nullptr || source.linesize[plane] <= 0)
++            return FFFResult::InvalidArgument;
++    }
++
++    AVFrame frame{};
++    frame.width = static_cast<int>(source.width);
++    frame.height = static_cast<int>(source.height);
++    frame.format = pixelFormat;
++    frame.pts = source.frameIndex;
++    frame.best_effort_timestamp = source.frameIndex;
++    frame.duration = 1;
++    frame.color_range = source.colorRange == 2 ? AVCOL_RANGE_JPEG :
++        (source.colorRange == 1 ? AVCOL_RANGE_MPEG : AVCOL_RANGE_UNSPECIFIED);
++    frame.color_primaries = static_cast<AVColorPrimaries>(source.colorPrimaries);
++    frame.color_trc = static_cast<AVColorTransferCharacteristic>(source.colorTransfer);
++    frame.colorspace = static_cast<AVColorSpace>(source.colorMatrix);
++    frame.chroma_location = static_cast<AVChromaLocation>(source.chromaLocation);
++    for (int plane = 0; plane < planeCount; ++plane) {
++        frame.data[plane] = static_cast<std::uint8_t*>(const_cast<void*>(source.data[plane]));
++        frame.linesize[plane] = source.linesize[plane];
++    }
++
++    const auto result = videoRenderer_.Render(&frame);
++    if (result != FFFResult::Success) {
++        if (result == FFFResult::DeviceFailure) videoRenderer_.RequestRecoveryIfDeviceLost();
++        return result;
++    }
++
++    FFF3FPSnapshot external{};
++    {
++        std::lock_guard lock(snapshotMutex_);
++        external = publishedSnapshot_;
++        external.size = sizeof(external);
++        external.version = 8;
++        external.state = FFF3FPState::Paused;
++        external.position100ns = source.duration100ns > 0 ? source.frameIndex * source.duration100ns : 0;
++        external.duration100ns = source.duration100ns > 0 ? source.totalFrames * source.duration100ns : 0;
++        external.frameIndex = source.frameIndex;
++        external.framePts = source.frameIndex;
++        external.frameTimeBaseNumerator = source.duration100ns > 0 ? static_cast<std::int32_t>(source.duration100ns) : 1;
++        external.frameTimeBaseDenominator = static_cast<std::int32_t>(TicksPerSecond);
++        external.videoWidth = source.width;
++        external.videoHeight = source.height;
++        external.decodedVideoFrames++;
++        external.actualColorMode = videoRenderer_.ActualColorMode();
++        external.sourcePeakNits = static_cast<std::uint32_t>(std::lround(videoRenderer_.SourcePeakNits()));
++        publishedSnapshot_ = external;
++    }
++    return FFFResult::Success;
++}
++
+ FFFResult PlayerSession::GetSnapshot(FFF3FPSnapshot& output) const noexcept {
+     if (output.size < sizeof(FFF3FPSnapshot) || output.version != 8) return FFFResult::InvalidArgument;
+     { std::lock_guard lock(snapshotMutex_); output = publishedSnapshot_; }
+diff --git a/FFF.Native/3FP/Core/PlayerSession.h b/FFF.Native/3FP/Core/PlayerSession.h
+index 5223870..e2ed2eb 100644
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -52,11 +52,14 @@ public:
+     FFFResult SetPacingConfig(bool enablePacing) noexcept;
+     FFFResult SetOutputWindow(void* outputWindow) noexcept;
+     FFFResult SetViewTransform(float zoom, float panX, float panY) noexcept;
++    FFFResult SetScalingAlgorithms(FFF3FPScalingAlgorithm upscale,
++        FFF3FPScalingAlgorithm downscale) noexcept;
+     FFFResult Set360View(bool enabled, float yaw, float pitch, float fovY) noexcept;
+     FFFResult SetAudioEndpoint(const char* endpointIdUtf8) noexcept;
+     FFFResult SetAudioExclusiveMode(bool exclusive) noexcept;
+     FFFResult SetVolume(float volume, bool muted) noexcept;
+     FFFResult SetTimedTextLayer(const FFF3FPTimedTextLayer& layer) noexcept;
++    FFFResult SubmitExternalVideoFrame(const FFF3FPExternalVideoFrame& frame) noexcept;
+     FFFResult GetSnapshot(FFF3FPSnapshot& snapshot) const noexcept;
+     FFFResult ReadVideoPixel(FFF3FPVideoPixelProbe& probe) noexcept;
+     // 3FCompare patch (0004)
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/VideoRenderer.cpp
+index 99ff55b..75eb8fb 100644
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -911,6 +911,16 @@ constexpr float CalculateZoomViewportScale(const VideoDestination destination,
+     return std::clamp(zoom, 1.0f, std::max(coverScale, 1.0f));
+ }
+ 
++// The resample cache follows the total inspection zoom, not merely the fitted
++// viewport. Until this extent reaches the native frame size every zoom step is
++// still a downscale from the source; only the remainder beyond native density
++// is reconstructed by the selected upscale filter.
++constexpr std::uint32_t CalculateZoomSamplingExtent(const std::uint32_t fittedExtent,
++    const float zoom) noexcept {
++    return std::max(1u, static_cast<std::uint32_t>(
++        static_cast<float>(fittedExtent) * std::clamp(zoom, 0.05f, 64.0f) + 0.5f));
++}
++
+ constexpr VideoDestination CalculateLyricsCoverDestination(const std::uint32_t sourceWidth,
+     const std::uint32_t sourceHeight, const std::uint32_t outputWidth,
+     const std::uint32_t outputHeight, const float coverWidthPercentage,
+@@ -997,5 +1008,8 @@ static_assert(CalculateZoomViewportScale(
+     CalculateZoomViewportScale(
+         CalculateVideoDestination(1920, 1080, 640, 800), 640, 800, 4.0f) < 2.23f);
++static_assert(CalculateZoomSamplingExtent(640, 0.5f) == 320);
++static_assert(CalculateZoomSamplingExtent(640, 2.0f) == 1280);
++static_assert(CalculateZoomSamplingExtent(640, 4.0f) == 2560);
+ static_assert(CalculateLyricsCoverDestination(512, 512, 800, 400,
+     50.0f, 50.0f, 7.5f, 0.0f, 7.5f).x == 60 &&
+     CalculateLyricsCoverDestination(512, 512, 800, 400,
+@@ -4634,7 +4648,17 @@ FFFResult PlayerVideoRenderer::DrawCachedVideo(ID3D11RenderTargetView* target)
+     float drawY = static_cast<float>(destination.y);
+     float drawWidth = static_cast<float>(destination.width);
+     float drawHeight = static_cast<float>(destination.height);
+-    if (!projection360 && zoom > 1.0001f) {
++    if (!projection360 && zoom < 0.9999f) {
++        drawWidth *= zoom;
++        drawHeight *= zoom;
++        drawX = static_cast<float>(destination.x) +
++            (static_cast<float>(destination.width) - drawWidth) * 0.5f;
++        drawY = static_cast<float>(destination.y) +
++            (static_cast<float>(destination.height) - drawHeight) * 0.5f;
++        cachedVideoSettings_.viewPanX = 0.0f;
++        cachedVideoSettings_.viewPanY = 0.0f;
++        cachedVideoSettings_.viewZoom = 1.0f;
++    } else if (!projection360 && zoom > 1.0001f) {
+         const auto viewportScale = CalculateZoomViewportScale(
+             destination, swapWidth_, swapHeight_, zoom);
+         drawWidth *= viewportScale;
+@@ -4665,7 +4689,8 @@ FFFResult PlayerVideoRenderer::DrawCachedVideo(ID3D11RenderTargetView* target)
+         // source planes directly in the projection shader instead.
+         std::copy(std::begin(sourceViews_), std::end(sourceViews_), presentationViews);
+     } else {
+-        const auto scaleResult = PrepareScaledVideo(destination.width, destination.height,
+-            presentationViews);
++        const auto scaleResult = PrepareScaledVideo(
++            CalculateZoomSamplingExtent(destination.width, zoom),
++            CalculateZoomSamplingExtent(destination.height, zoom), presentationViews);
+         if (scaleResult != FFFResult::Success) return scaleResult;
+     }
