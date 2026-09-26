@@ -2,7 +2,7 @@
 
 ## 普通用户
 
-下载 `VS-Renderer-GUI-1.0.0-windows-x64.7z` 后直接解压并运行 `VSRenderer.exe`。正式包已包含 Qt、MinGW runtime、Python、VapourSynth、内置 VS 插件、3FP 和匹配的 FFmpeg DLL，不读取系统中的 Python/VapourSynth 安装。
+下载 `VS-Renderer-GUI-1.0.1-windows-x64.7z` 后直接解压并运行 `VSRenderer.exe`。正式包已包含 Qt、MinGW runtime、Python、VapourSynth、vs-placebo、内置 VS 插件、3FP，以及隔离部署在 `runtime\ffmpeg` 的导出 CLI，不读取系统中的 Python/VapourSynth 安装。
 
 系统要求：Windows 10 22H2 或更新的 64 位 Windows，支持 Direct3D 11 的显卡与驱动。
 
@@ -11,6 +11,7 @@
 - Git、CMake 3.25+、Ninja、7-Zip。
 - Qt 6.8+；官方构建使用 Qt 6.10.2 MinGW 64-bit 与配套 MinGW。
 - Python 3.12+。
+- 带所需编码器的 FFmpeg CLI；发布脚本通过 `-FfmpegExecutable` 指定，并把其 DLL 隔离复制到 `runtime\ffmpeg`。
 - Visual Studio 2022 的“使用 C++ 的桌面开发”工作负载，用于构建 VapourSynth 和 3FP。
 
 先设置 Qt 与编译器环境；路径按本机 Qt 安装位置调整：
@@ -25,6 +26,8 @@ $env:PATH = "C:\Qt\Tools\mingw1310_64\bin;C:\Qt\Tools\Ninja;$env:PATH"
 ```powershell
 .\tools\build-vapoursynth.ps1 -PythonVersion 3.12 -SevenZip "C:\Program Files\7-Zip\7z.exe"
 ```
+
+脚本固定安装 `vs-placebo==2.0.4`，其 Windows wheel 提供 `libvs_placebo.dll`。Anime4K shader 文件本身不复制进仓库或便携运行时；GUI 默认读取 `C:\PortableSoft\FFmpegFreeUI ReadyToRun x64\libplacebo`，也可在节点参数中浏览任意兼容 `.glsl`。
 
 构建 API 14 版 3FP：
 
@@ -42,4 +45,20 @@ cmake --build --preset windows-mingw-release
 ctest --preset windows-mingw-release
 ```
 
+构建正式包时显式提供与其 DLL 同目录的 FFmpeg CLI，避免把导出进程依赖与根目录的 3FP FFmpeg ABI 混用：
+
+```powershell
+.\tools\package-release.ps1 -Version 1.0.1 `
+  -FfmpegExecutable "C:\path\to\ffmpeg.exe" `
+  -SevenZip "C:\path\to\7z.exe" `
+  -WinDeployQt "$env:QT_ROOT\bin\windeployqt.exe"
+```
+
 VapourSynth 固定参考提交为 `5b2d5562726a91d9a75441cc4728a90e6c9f4f27`。3FP 补丁基于 `ee2bfde51a8f85ac156a2253845d5dcb4a07df09`；若上游接口变化导致补丁无法应用，请先 checkout 该提交。
+
+
+### 多路分析构建补丁与着色器缓存
+
+`tools/build-3fp.ps1` 还应用 `3fp-performance-chroma.patch`：共享 D3D 字节码、非阻塞状态读取/首帧重绘、独立色度核与 Spline36/Super-XBR 单阶段。它与当前 GUI 的缩放参数编码配套，不可只替换 EXE。
+
+Release 构建后运行 `vsr_frame_bridge_tests.exe startupWarmsDecodeAndBothRenderers`，生成输出目录中的 `shader-cache/*.cso`。编译缓存缺失时首次测试会较慢，后续新进程直接读取字节码。发布必须一起复制 `shader-cache`，打包脚本会检查此目录存在；Super-XBR 原始源文件/许可证从 `third_party/shaders` 部署到 `shader-licenses`。

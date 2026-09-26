@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$FffProject,
     [string]$OutputDirectory = ""
@@ -10,13 +10,15 @@ $source = (Resolve-Path $FffProject).Path
 $nativeProject = Join-Path $source "FFF.Native\FFF.Native.vcxproj"
 if (-not (Test-Path $nativeProject)) { throw "FFF.Native.vcxproj not found under $source" }
 
-$patch = Join-Path $projectRoot "patches\3fp-vsrenderer-extensions.patch"
-& git -C $source apply --reverse --check $patch 2>$null
-if ($LASTEXITCODE -ne 0) {
-    & git -C $source apply --check $patch
-    if ($LASTEXITCODE -ne 0) { throw "3FP patch does not apply cleanly." }
-    & git -C $source apply $patch
-    if ($LASTEXITCODE -ne 0) { throw "3FP patch failed." }
+foreach ($patchName in @("3fp-vsrenderer-extensions.patch", "3fp-resize-flags.patch", "3fp-performance-chroma.patch")) {
+    $patch = Join-Path $projectRoot "patches\$patchName"
+    & git -C $source apply --reverse --check $patch 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        & git -C $source apply --check $patch
+        if ($LASTEXITCODE -ne 0) { throw "3FP patch does not apply cleanly." }
+        & git -C $source apply $patch
+        if ($LASTEXITCODE -ne 0) { throw "3FP patch failed." }
+    }
 }
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"

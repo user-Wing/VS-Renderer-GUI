@@ -34,7 +34,9 @@ enum class ThreeFpScalingAlgorithm : std::uint32_t {
     Bilinear = 1,
     Bicubic = 2,
     Lanczos3 = 3,
-    Jinc2 = 4
+    Jinc2 = 4,
+    Spline36 = 5,
+    SuperXbrSinglePass = 6
 };
 
 struct ThreeFpConfiguration {

@@ -16,17 +16,25 @@ bool isTransportReady(ThreeFpState state)
 }
 
 ThreeFpPlayer::ThreeFpPlayer(ThreeFpApi &api, QWidget *surface, QObject *parent)
-    : QObject(parent), api_(api)
+    : QObject(parent), api_(api), surface_(surface)
 {
     if (!api_.available()) {
         lastError_ = api_.errorString();
         return;
     }
 
+    createSession();
+}
+
+bool ThreeFpPlayer::createSession()
+{
+    if (!api_.available() || !surface_)
+        return false;
+
     ThreeFpConfiguration configuration{};
     configuration.size = sizeof(configuration);
     configuration.version = api_.apiVersion();
-    configuration.outputWindow = reinterpret_cast<void *>(surface->winId());
+    configuration.outputWindow = reinterpret_cast<void *>(surface_->winId());
     configuration.decodeMode = 2;
     configuration.colorMode = 0;
     configuration.sdrPeakNits = 100.0f;
@@ -34,11 +42,19 @@ ThreeFpPlayer::ThreeFpPlayer(ThreeFpApi &api, QWidget *surface, QObject *parent)
     configuration.sdrPaperWhiteNits = 203.0f;
     configuration.videoScalingQuality = 1;
 
-    check(api_.create(&configuration, &handle_), QStringLiteral("创建 3FP 会话"));
-    if (handle_)
-        check(api_.setScalingAlgorithms(handle_, ThreeFpScalingAlgorithm::Nearest,
-                                        ThreeFpScalingAlgorithm::Lanczos3),
-              QStringLiteral("设置默认缩放算法"));
+    if (!check(api_.create(&configuration, &handle_), QStringLiteral("创建 3FP 会话")))
+        return false;
+    if (!check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale_) | ((chromaAlgorithm_ + 1) << 8)), downscale_), QStringLiteral("设置缩放算法")))
+        return false;
+    if (muted_)
+        check(api_.setVolume(handle_, 1.0f, 1u), QStringLiteral("静音"));
+    if (vrrPresent_)
+        api_.setPresentConfig(handle_, true);
+    if (vrrPacing_)
+        api_.setPacingConfig(handle_, true);
+    if (zoom_ != 1.0f || panX_ != 0.0f || panY_ != 0.0f)
+        check(api_.setViewTransform(handle_, zoom_, panX_, panY_), QStringLiteral("缩放"));
+    return true;
 }
 
 ThreeFpPlayer::~ThreeFpPlayer()
@@ -51,6 +67,17 @@ ThreeFpPlayer::~ThreeFpPlayer()
 
 bool ThreeFpPlayer::ready() const { return handle_ != nullptr; }
 QString ThreeFpPlayer::lastError() const { return lastError_; }
+
+bool ThreeFpPlayer::resetVideoOutput()
+{
+    if (handle_) {
+        api_.stop(handle_);
+        api_.destroy(handle_);
+        handle_ = nullptr;
+    }
+    lastError_.clear();
+    return createSession();
+}
 
 bool ThreeFpPlayer::openFile(const QString &path)
 {
@@ -105,27 +132,46 @@ bool ThreeFpPlayer::stepFrame(int d)
         return false;
     return check(api_.stepFrame(handle_, d), QStringLiteral("逐帧"));
 }
-void ThreeFpPlayer::setMuted(bool m) { if (handle_) check(api_.setVolume(handle_, 1.0f, m ? 1u : 0u), QStringLiteral("静音")); }
+void ThreeFpPlayer::setMuted(bool m)
+{
+    muted_ = m;
+    if (handle_)
+        check(api_.setVolume(handle_, 1.0f, m ? 1u : 0u), QStringLiteral("静音"));
+}
 
 bool ThreeFpPlayer::setVrrPresent(bool enabled)
 {
+    vrrPresent_ = enabled;
     return handle_ && check(api_.setPresentConfig(handle_, enabled), QStringLiteral("VRR low-latency present"));
 }
 
 bool ThreeFpPlayer::setVrrPacing(bool enabled)
 {
+    vrrPacing_ = enabled;
     return handle_ && check(api_.setPacingConfig(handle_, enabled), QStringLiteral("VRR Pacing"));
 }
 
 bool ThreeFpPlayer::setScalingAlgorithms(ThreeFpScalingAlgorithm upscale,
                                          ThreeFpScalingAlgorithm downscale)
 {
-    return handle_ && check(api_.setScalingAlgorithms(handle_, upscale, downscale),
+    upscale_ = upscale;
+    downscale_ = downscale;
+    return handle_ && check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale) | ((chromaAlgorithm_ + 1) << 8)), downscale),
                             QStringLiteral("设置缩放算法"));
+}
+
+bool ThreeFpPlayer::setChromaAlgorithm(int algorithm)
+{
+    if (algorithm < 0 || algorithm > 10) return false;
+    chromaAlgorithm_ = algorithm;
+    return setScalingAlgorithms(upscale_, downscale_);
 }
 
 void ThreeFpPlayer::setView(float zoom, float panX, float panY)
 {
+    zoom_ = zoom;
+    panX_ = panX;
+    panY_ = panY;
     if (handle_)
         check(api_.setViewTransform(handle_, zoom, panX, panY), QStringLiteral("缩放"));
 }
@@ -144,7 +190,7 @@ ThreeFpSnapshot ThreeFpPlayer::snapshot() const
 
 bool ThreeFpPlayer::samplePixel(int x, int y, ThreeFpPixelProbe &sample) const
 {
-    if (!handle_)
+    if (!handle_ || snapshot().presentedVideoFrames == 0)
         return false;
     sample = {};
     sample.size = sizeof(sample);

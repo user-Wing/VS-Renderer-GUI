@@ -1,11 +1,20 @@
 #include "app/MainWindow.h"
 
 #include "backend/FrameTimeline.h"
+#include "backend/StartupWarmup.h"
+#include "ui/ExportWindow.h"
+#include "ui/AnalysisPage.h"
+#include <QStackedWidget>
+#include <QToolButton>
+#include <QStyle>
+#include <QProgressBar>
+#include <QCloseEvent>
 #include "backend/ThreeFpPlayer.h"
 #include "backend/VapourSynthFrameServer.h"
 #include "graph/FilterCatalog.h"
 #include "graph/VpyScriptBuilder.h"
 #include "ui/CollapsibleSection.h"
+#include "ui/CompareView.h"
 #include "ui/ParameterEditor.h"
 #include "ui/PreviewPane.h"
 
@@ -17,6 +26,8 @@
 #include <QDateTime>
 #include <QDialog>
 #include <QDir>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -30,6 +41,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSaveFile>
@@ -40,6 +52,7 @@
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolBar>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -73,6 +86,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     setWindowTitle(QStringLiteral("VS Renderer — VapourSynth 实时滤镜工作台"));
+    setAcceptDrops(true);
     resize(1440, 900);
     setMinimumSize(1120, 700);
     buildToolbar();
@@ -91,7 +105,35 @@ MainWindow::MainWindow(QWidget *parent)
     content->setStretchFactor(1, 1);
     rootLayout->addWidget(content, 1);
     rootLayout->addWidget(buildTransport());
-    setCentralWidget(root);
+    auto *shell = new QWidget(this);
+    auto *shellLayout = new QHBoxLayout(shell);
+    shellLayout->setContentsMargins(0, 0, 0, 0);
+    shellLayout->setSpacing(0);
+    navigation_ = new QWidget(shell);
+    navigation_->setObjectName(QStringLiteral("pageNavigation"));
+    navigation_->setFixedWidth(44);
+    auto *navigationLayout = new QVBoxLayout(navigation_);
+    navigationLayout->setContentsMargins(2, 4, 2, 4);
+    for (int i = 0; i < 2; ++i) {
+        auto *button = new QToolButton(navigation_);
+        button->setText(i == 0 ? QStringLiteral("VS 实时渲染") : QStringLiteral("图像分析比对"));
+        button->setToolTip(button->text());
+        button->setIcon(style()->standardIcon(i == 0 ? QStyle::SP_ComputerIcon : QStyle::SP_FileDialogContentsView));
+        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        button->setCheckable(true);
+        button->setChecked(i == 0);
+        button->setMinimumHeight(36);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        navigationButtons_.append(button);
+        navigationLayout->addWidget(button);
+        connect(button, &QToolButton::clicked, this, [this, i] { selectPage(i); });
+    }
+    navigationLayout->addStretch();
+    pages_ = new QStackedWidget(shell);
+    pages_->addWidget(root);
+    shellLayout->addWidget(navigation_);
+    shellLayout->addWidget(pages_, 1);
+    setCentralWidget(shell);
 
     statusBar()->setFixedHeight(24);
     taskStatus_ = new QLabel(this);
@@ -102,6 +144,7 @@ MainWindow::MainWindow(QWidget *parent)
     sourcePlayer_ = std::make_unique<ThreeFpPlayer>(api_, sourcePane_->surface(), this);
     processedPlayer_ = std::make_unique<ThreeFpPlayer>(api_, processedPane_->surface(), this);
     frameServer_ = std::make_unique<VapourSynthFrameServer>(this);
+
     processedPlayer_->setMuted(true);
 
     const QString fp = api_.available()
@@ -121,6 +164,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(frameServer_.get(), &VapourSynthFrameServer::scriptLoaded, this,
             [this](const VapourSynthClipInfo &processed, const VapourSynthClipInfo &source) {
+        if (startupWarmup_ && startupWarmup_->ownsScript()) return;
         vsScriptReady_ = true;
         sourceTotalFrames_ = source.totalFrames;
         sourceFpsNumerator_ = source.fpsNumerator;
@@ -130,6 +174,7 @@ MainWindow::MainWindow(QWidget *parent)
         vsFpsDenominator_ = processed.fpsDenominator;
         requestedVsFrame_ = -1;
         lastVsFrame_ = -1;
+        vsFramePending_ = false;
         processedPane_->setBadge(QStringLiteral("VS · %1 · 首帧渲染中").arg(processed.formatName));
         processedPane_->setSurfaceActive(true);
         processedPlayer_->redraw();
@@ -142,20 +187,31 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(frameServer_.get(), &VapourSynthFrameServer::frameReady, this,
             [this](const VapourSynthFrame &frame) {
-        const int desired = requestedVsFrame_;
-        const auto source = sourcePlayer_->snapshot();
-        const int sourceTarget = static_cast<int>(frameAtPosition100ns(
-            source.position100ns, vsTotalFrames_, vsFpsNumerator_, vsFpsDenominator_));
-        if (timelineSeekPending_ || source.frameIndex < 0 || desired < 0 ||
-            frame.frameIndex != desired || sourceTarget != desired) {
-            if (!timelineSeekPending_ && source.frameIndex >= 0 && sourceTarget >= 0)
-                requestProcessedFrame(sourceTarget);
+        if (startupWarmup_ && startupWarmup_->ownsScript()) return;
+        vsFramePending_ = false;
+        if (timelineSeekPending_ || requestedVsFrame_ < 0 || frame.frameIndex != requestedVsFrame_)
             return;
+        bool recoveredDevice = false;
+        bool submitted = processedPlayer_->submitFrame(frame);
+        if (!submitted && processedPlayer_->lastError().contains(QStringLiteral("DeviceFailure"))) {
+            processedPane_->setSurfaceActive(true);
+            if (processedPlayer_->resetVideoOutput()) {
+                processedPlayer_->setMuted(true);
+                submitted = processedPlayer_->submitFrame(frame);
+                recoveredDevice = submitted;
+            }
         }
-        if (processedPlayer_->submitFrame(frame)) {
+        if (submitted) {
             lastVsFrame_ = static_cast<int>(frame.frameIndex);
             processedPane_->setSurfaceActive(true);
             processedPane_->setBadge(QStringLiteral("VS · 实时 · 帧 %1").arg(frame.frameIndex));
+            if (recoveredDevice)
+                setStatus(QStringLiteral("右侧渲染设备已重建，处理链继续实时预览。"));
+            const auto source = sourcePlayer_->snapshot();
+            const int latest = static_cast<int>(frameAtPosition100ns(
+                source.position100ns, vsTotalFrames_, vsFpsNumerator_, vsFpsDenominator_));
+            if (!timelineSeekPending_ && latest >= 0 && latest != lastVsFrame_)
+                requestProcessedFrame(latest);
         } else {
             processedPane_->setPlaceholderText(processedPlayer_->lastError());
             processedPane_->setSurfaceActive(false);
@@ -163,19 +219,48 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(frameServer_.get(), &VapourSynthFrameServer::errorOccurred, this,
             [this](const QString &message) {
+        if (startupWarmup_ && startupWarmup_->ownsScript()) return;
         vsScriptReady_ = false;
+        vsFramePending_ = false;
         processedPane_->setPlaceholderText(message);
         processedPane_->setSurfaceActive(false);
         processedPane_->setBadge(QStringLiteral("VS · 错误"));
         setStatus(message, true);
     });
-
     qApp->installEventFilter(this);
 
     stateTimer_ = new QTimer(this);
     stateTimer_->setInterval(33);
     connect(stateTimer_, &QTimer::timeout, this, &MainWindow::updatePlaybackState);
     stateTimer_->start();
+    startupWarmup_ = std::make_unique<StartupWarmup>(sourcePlayer_.get(), processedPlayer_.get(), frameServer_.get(), this);
+    auto *warmupProgress = new QProgressBar(this);
+    warmupProgress->setRange(0, 100);
+    warmupProgress->setFixedWidth(180);
+    statusBar()->addPermanentWidget(warmupProgress);
+    connect(startupWarmup_.get(), &StartupWarmup::progress, this, [this, warmupProgress](int value, const QString &stage) {
+        warmupProgress->setValue(value);
+        warmupProgress->setToolTip(stage);
+        runtimeStatus_->setText(stage);
+        if (value == 100) warmupProgress->hide();
+    });
+    connect(startupWarmup_.get(), &StartupWarmup::finished, this, [this](bool success, const QString &message) {
+        primedProcessedOutput_ = success;
+        sourcePane_->setSurfaceActive(false);
+        processedPane_->setSurfaceActive(false);
+        sourcePane_->setBadge(QStringLiteral("Fit"));
+        processedPane_->setBadge(QStringLiteral("VS · 待渲染"));
+        setStatus(message, !success);
+        if (!deferredSource_.isEmpty()) loadSource(std::exchange(deferredSource_, {}));
+    });
+    QTimer::singleShot(0, this, [this] {
+        sourcePane_->setSurfaceActive(true);
+        processedPane_->setSurfaceActive(true);
+        sourcePane_->setBadge(QStringLiteral("启动预热中"));
+        processedPane_->setBadge(QStringLiteral("启动预热中"));
+        setStatus(QStringLiteral("正在预热解码、VS 源滤镜和双路渲染…"));
+        startupWarmup_->start();
+    });
 }
 
 MainWindow::~MainWindow() = default;
@@ -201,6 +286,47 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     return QMainWindow::eventFilter(watched, event);
 }
 
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasUrls() && !event->mimeData()->urls().isEmpty() &&
+        event->mimeData()->urls().first().isLocalFile())
+        event->acceptProposedAction();
+}
+
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    if (!event->mimeData()->hasUrls() || event->mimeData()->urls().isEmpty())
+        return;
+    if (pages_->currentIndex() == 1) {
+        QStringList paths;
+        for (const auto &url : event->mimeData()->urls()) if (url.isLocalFile()) paths.append(url.toLocalFile());
+        analysisPage_->openFiles(paths);
+        event->acceptProposedAction();
+        return;
+    }
+    const QString path = event->mimeData()->urls().first().toLocalFile();
+    if (!path.isEmpty() && QFileInfo(path).isFile() && loadSource(path))
+        event->acceptProposedAction();
+}
+
+void MainWindow::selectPage(int index)
+{
+    if (index == 1 && !analysisPage_) {
+        analysisPage_ = std::make_unique<AnalysisPage>(api_);
+        pages_->addWidget(analysisPage_.get());
+    }
+    if (index != pages_->currentIndex()) {
+        if (index == 1 && sourcePlayer_ && sourcePlayer_->snapshot().state == ThreeFpState::Playing)
+            sourcePlayer_->pause();
+        if (index == 0 && analysisPage_) analysisPage_->pause();
+        pages_->setCurrentIndex(index);
+    }
+    for (int i = 0; i < navigationButtons_.size(); ++i) navigationButtons_[i]->setChecked(i == index);
+    for (auto *action : vsActions_) action->setVisible(index == 0);
+    frameStatus_->setVisible(index == 0);
+    setStatus(index == 0 ? QStringLiteral("VS 实时渲染") : QStringLiteral("图像分析比对 · 双路直接解码"));
+}
+
 void MainWindow::buildToolbar()
 {
     auto *bar = addToolBar(QStringLiteral("命令栏"));
@@ -209,6 +335,15 @@ void MainWindow::buildToolbar()
     bar->setFixedHeight(44);
     bar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
+    auto *menu = bar->addAction(QStringLiteral("☰"));
+    menu->setObjectName(QStringLiteral("navigationToggle"));
+    menu->setToolTip(QStringLiteral("展开 / 收起页面导航"));
+    connect(menu, &QAction::triggered, this, [this] {
+        const bool expand = navigation_->width() == 44;
+        navigation_->setFixedWidth(expand ? 180 : 44);
+        for (auto *button : navigationButtons_)
+            button->setToolButtonStyle(expand ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
+    });
     auto *openSourceAction = bar->addAction(QStringLiteral("打开源"));
     auto *openProjectAction = bar->addAction(QStringLiteral("打开项目"));
     auto *saveProjectAction = bar->addAction(QStringLiteral("保存项目"));
@@ -217,10 +352,15 @@ void MainWindow::buildToolbar()
     auto *validateAction = bar->addAction(QStringLiteral("生成并验证"));
     auto *previewAction = bar->addAction(QStringLiteral("渲染预览"));
     previewAction->setToolTip(QStringLiteral("通过 VSScript 载入脚本，并把当前帧直接提交给 3FP。"));
+    auto *exportAction = bar->addAction(QStringLiteral("导出当前处理结果"));
+    exportAction->setToolTip(QStringLiteral("用 vspipe 输出当前 VS 处理链，再套用粘贴的 3FUI FFmpeg 参数。"));
     auto *spacer = new QWidget(bar);
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     bar->addWidget(spacer);
     auto *settingsAction = bar->addAction(QStringLiteral("实验设置"));
+
+    vsActions_ = bar->actions();
+    vsActions_.removeFirst();
 
     connect(openSourceAction, &QAction::triggered, this, &MainWindow::openSource);
     connect(openProjectAction, &QAction::triggered, this, &MainWindow::openProject);
@@ -228,6 +368,7 @@ void MainWindow::buildToolbar()
     connect(viewScriptAction, &QAction::triggered, this, &MainWindow::showScript);
     connect(validateAction, &QAction::triggered, this, &MainWindow::validateScript);
     connect(previewAction, &QAction::triggered, this, &MainWindow::validateScript);
+    connect(exportAction, &QAction::triggered, this, &MainWindow::exportCurrentResult);
     connect(settingsAction, &QAction::triggered, this, [this] {
         vrrPresent_->setFocus(Qt::ShortcutFocusReason);
         setStatus(QStringLiteral("实验设置位于比较栏：VRR low-latency present 与 VRR Pacing。"));
@@ -250,6 +391,7 @@ QWidget *MainWindow::buildSidebar()
     inputLayout->setSpacing(4);
     sourcePath_ = new QLineEdit(input);
     sourcePath_->setReadOnly(true);
+    sourcePath_->setAcceptDrops(false);
     sourcePath_->setPlaceholderText(QStringLiteral("尚未选择视频"));
     auto *inputRow = new QHBoxLayout;
     sourceFilter_ = new QComboBox(input);
@@ -374,23 +516,20 @@ QWidget *MainWindow::buildWorkspace()
     syncView_->setChecked(true);
     vrrPresent_ = new QCheckBox(QStringLiteral("VRR 低延迟（实验）"), compareBar);
     vrrPacing_ = new QCheckBox(QStringLiteral("VRR Pacing（实验）"), compareBar);
+    vrrPresent_->setProperty("vrrToggle", true); vrrPacing_->setProperty("vrrToggle", true);
     vrrPresent_->setToolTip(QStringLiteral("调用 FFF3FP_SetPresentConfig；不支持时保持 VSync。"));
     vrrPacing_->setToolTip(QStringLiteral("调用 FFF3FP_SetPacingConfig；建议与 VRR 低延迟配合。"));
     compareLayout->addWidget(syncView_);
     compareLayout->addWidget(vrrPresent_);
     compareLayout->addWidget(vrrPacing_);
 
-    auto *previews = new QSplitter(Qt::Horizontal, workspace);
-    previews->setHandleWidth(1);
-    sourcePane_ = new PreviewPane(QStringLiteral("源视频"), QStringLiteral("Fit"));
-    processedPane_ = new PreviewPane(QStringLiteral("处理后"), QStringLiteral("VS · 待渲染"));
-    previews->addWidget(sourcePane_);
-    previews->addWidget(processedPane_);
-    previews->setSizes({556, 556});
+    compareView_ = new CompareView(workspace);
+    sourcePane_ = compareView_->sourcePane();
+    processedPane_ = compareView_->processedPane();
     sourcePane_->setActive(true);
 
     layout->addWidget(compareBar);
-    layout->addWidget(previews, 1);
+    layout->addWidget(compareView_, 1);
     return workspace;
 }
 
@@ -417,8 +556,7 @@ QWidget *MainWindow::buildTransport()
 
     auto *controlRow = new QHBoxLayout;
     auto *mode = new QComboBox(transport);
-    mode->addItems({QStringLiteral("并排"), QStringLiteral("A/B 滑块（后续）")});
-    mode->model()->setData(mode->model()->index(1, 0), 0, Qt::UserRole - 1);
+    mode->addItems({QStringLiteral("并排"), QStringLiteral("A/B 滑块")});
     auto *previous = compactButton(QStringLiteral("◀ 帧"), transport);
     playButton_ = compactButton(QStringLiteral("播放"), transport);
     auto *next = compactButton(QStringLiteral("帧 ▶"), transport);
@@ -428,6 +566,8 @@ QWidget *MainWindow::buildTransport()
     scaler->addItem(QStringLiteral("放大：Bicubic"), static_cast<int>(ThreeFpScalingAlgorithm::Bicubic));
     scaler->addItem(QStringLiteral("放大：Lanczos 3"), static_cast<int>(ThreeFpScalingAlgorithm::Lanczos3));
     scaler->addItem(QStringLiteral("放大：Jinc 2"), static_cast<int>(ThreeFpScalingAlgorithm::Jinc2));
+    scaler->addItem(QStringLiteral("放大：Spline36"), static_cast<int>(ThreeFpScalingAlgorithm::Spline36));
+    scaler->addItem(QStringLiteral("放大：Super-XBR（单阶段）"), static_cast<int>(ThreeFpScalingAlgorithm::SuperXbrSinglePass));
     scaler->setToolTip(QStringLiteral("仅超过源像素密度后使用所选算法；缩小固定使用 Lanczos 3。"));
     controlRow->addWidget(mode);
     controlRow->addStretch();
@@ -439,6 +579,16 @@ QWidget *MainWindow::buildTransport()
 
     layout->addLayout(timelineRow);
     layout->addLayout(controlRow);
+
+    connect(mode, &QComboBox::currentIndexChanged, this, [this](int index) {
+        compareView_->setMode(index == 1 ? CompareMode::Slider : CompareMode::SideBySide);
+        QTimer::singleShot(40, this, [this] {
+            sourcePlayer_->redraw();
+            processedPlayer_->redraw();
+        });
+        setStatus(index == 1 ? QStringLiteral("A/B 滑块：左侧源视频，右侧处理后；拖动蓝色中线调整位置。")
+                             : QStringLiteral("已切换为并排比较。"));
+    });
 
     connect(timeline_, &QSlider::sliderPressed, this, [this] { timelinePressed_ = true; });
     connect(timeline_, &QSlider::sliderMoved, this, [this](int value) {
@@ -549,8 +699,18 @@ void MainWindow::openSource()
 
 bool MainWindow::loadSource(const QString &path)
 {
+    if (!QFileInfo(path).isFile()) {
+        setStatus(QStringLiteral("源文件不存在：%1").arg(path), true);
+        return false;
+    }
+    if (startupWarmup_ && startupWarmup_->isRunning()) {
+        deferredSource_ = path;
+        setStatus(QStringLiteral("已接收视频，启动预热结束后自动加载。"));
+        return true;
+    }
     sourcePath_->setText(QDir::toNativeSeparators(path));
     sourcePath_->setToolTip(path);
+    if (exportWindow_) exportWindow_->setCurrentSource(path);
     if (!api_.available()) {
         setStatus(api_.errorString(), true);
         return false;
@@ -573,7 +733,10 @@ bool MainWindow::loadSource(const QString &path)
     vsFpsDenominator_ = 0;
     requestedVsFrame_ = -1;
     lastVsFrame_ = -1;
-    setStatus(left ? QStringLiteral("源已打开；点击“渲染预览”生成右侧 VS 输出。")
+    vsFramePending_ = false;
+    sourcePrimePending_ = left;
+    sourcePrimeStarted_ = false;
+    setStatus(left ? QStringLiteral("源已打开；正在预取首帧，点击“渲染预览”可生成右侧 VS 输出。")
                    : QStringLiteral("3FP 打开源失败。"), !left);
     return left;
 }
@@ -603,6 +766,10 @@ void MainWindow::showScript()
 
 void MainWindow::validateScript()
 {
+    if (startupWarmup_ && startupWarmup_->isRunning()) {
+        setStatus(QStringLiteral("启动链路正在预热，完成后可渲染预览。"));
+        return;
+    }
     QString error;
     const QString path = writePreviewScript(&error);
     if (path.isEmpty()) {
@@ -624,15 +791,54 @@ void MainWindow::validateScript()
     vsFpsDenominator_ = 0;
     requestedVsFrame_ = -1;
     lastVsFrame_ = -1;
-    processedPane_->setSurfaceActive(false);
-    processedPane_->setPlaceholderText(QStringLiteral("正在加载 VPY 处理链…"));
+    vsFramePending_ = false;
+    processedPane_->setSurfaceActive(true);
     processedPane_->setBadge(QStringLiteral("VS · 加载中"));
     setStatus(QStringLiteral("正在通过 VSScript 载入处理链…"));
+    if (!std::exchange(primedProcessedOutput_, false) && !processedPlayer_->resetVideoOutput()) {
+        processedPane_->setSurfaceActive(false);
+        processedPane_->setPlaceholderText(processedPlayer_->lastError());
+        setStatus(processedPlayer_->lastError(), true);
+        return;
+    }
+    processedPlayer_->setMuted(true);
+    if (startupWarmup_) startupWarmup_->releaseScript();
     frameServer_->loadScript(result.script, path);
+}
+
+void MainWindow::exportCurrentResult()
+{
+    if (!exportWindow_) {
+        exportWindow_ = std::make_unique<ExportWindow>();
+        connect(exportWindow_.get(), &ExportWindow::statusMessage, this, [this](const QString &message) {
+            setStatus(message);
+        });
+        exportWindow_->setScriptBuilder([this](const QString &source) {
+            return VpyScriptBuilder::build(source, static_cast<SourceFilter>(sourceFilter_->currentData().toInt()), graph_);
+        });
+    }
+    exportWindow_->setCurrentSource(sourcePath_->text());
+    exportWindow_->showNormal();
+    exportWindow_->raise();
+    exportWindow_->activateWindow();
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (exportWindow_ && exportWindow_->isBusy()) {
+        event->ignore();
+        connect(exportWindow_.get(), &ExportWindow::idle, this, &QWidget::close, Qt::UniqueConnection);
+        exportWindow_->stopAll();
+        setStatus(QStringLiteral("正在停止编码并保留输出文件，完成后退出。"));
+        return;
+    }
+    if (exportWindow_) exportWindow_->close();
+    QMainWindow::closeEvent(event);
 }
 
 void MainWindow::togglePlayback()
 {
+    if (pages_->currentIndex() == 1) { analysisPage_->togglePlayback(); return; }
     if (!sourcePlayer_)
         return;
     const bool wasPlaying = sourcePlayer_->snapshot().state == ThreeFpState::Playing;
@@ -653,6 +859,7 @@ void MainWindow::seekTimeline(int sliderValue)
     const int value = std::exchange(pendingTimelineValue_, -1);
     const auto position = snap.duration100ns * value / timeline_->maximum();
     requestedVsFrame_ = -1;
+    vsFramePending_ = false;
     processedPane_->setBadge(QStringLiteral("VS · 同步中"));
     timelineSeekGeneration_ = snap.timelineGeneration;
     timelineSeekPending_ = sourcePlayer_->seek(position);
@@ -660,11 +867,11 @@ void MainWindow::seekTimeline(int sliderValue)
 
 void MainWindow::requestProcessedFrame(int frameIndex)
 {
-    if (!vsScriptReady_ || frameIndex < 0)
+    if (!vsScriptReady_ || vsFramePending_ || frameIndex < 0)
         return;
     requestedVsFrame_ = vsTotalFrames_ > 0 ? std::min(frameIndex, vsTotalFrames_ - 1) : frameIndex;
-    processedPane_->setBadge(QStringLiteral("VS · 同步中 · 目标帧 %1").arg(requestedVsFrame_));
-    frameServer_->requestFrame(requestedVsFrame_);
+    vsFramePending_ = true;
+    frameServer_->requestFrame(requestedVsFrame_, lastVsFrame_ < 0 ? 6 : 0);
 }
 
 QString MainWindow::writePreviewScript(QString *error) const
@@ -758,9 +965,17 @@ void MainWindow::openProject()
 
 void MainWindow::updatePlaybackState()
 {
-    if (!sourcePlayer_)
+    if (!sourcePlayer_ || sourcePath_->text().isEmpty() || (startupWarmup_ && startupWarmup_->isRunning()))
         return;
     const auto snap = sourcePlayer_->snapshot();
+    if (sourcePrimePending_ && snap.state != ThreeFpState::Opening) {
+        if (snap.decodedVideoFrames > 0) {
+            sourcePrimePending_ = false;
+        } else if (!sourcePrimeStarted_ &&
+                   (snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused)) {
+            sourcePrimeStarted_ = sourcePlayer_->seekFrame(0);
+        }
+    }
     if (snap.duration100ns > 0) {
         positionLabel_->setText(formatTime(snap.position100ns));
         durationLabel_->setText(formatTime(snap.duration100ns));
@@ -780,7 +995,8 @@ void MainWindow::updatePlaybackState()
         snap.position100ns, sourceTotalFrames_, sourceFpsNumerator_, sourceFpsDenominator_);
     const auto vsTarget = frameAtPosition100ns(
         snap.position100ns, vsTotalFrames_, vsFpsNumerator_, vsFpsDenominator_);
-    if (!timelineSeekPending_ && snap.frameIndex >= 0 && vsTarget >= 0 && vsTarget != lastVsFrame_)
+    if (!timelineSeekPending_ && !vsFramePending_ && snap.frameIndex >= 0 &&
+        vsTarget >= 0 && vsTarget != lastVsFrame_)
         requestProcessedFrame(static_cast<int>(vsTarget));
     frameStatus_->setText(QStringLiteral("源帧 %1  |  VS 帧 %2  |  %3×%4  |  %5-bit  |  3FP API %6")
         .arg(sourceFrame >= 0 ? QString::number(sourceFrame) : QStringLiteral("--（待 VPY 定位）"))

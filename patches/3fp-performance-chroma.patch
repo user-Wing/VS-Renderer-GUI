@@ -1,0 +1,261 @@
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/VideoRenderer.cpp
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -29,10 +29,51 @@
+ #include <cstring>
+ #include <mutex>
+ #include <string_view>
++#include <map>
++#include <filesystem>
+ 
+ using Microsoft::WRL::ComPtr;
+ 
+ namespace {
++// Bytecode is device-independent; compile each built-in shader once per process.
++HRESULT CompileSharedShader(LPCVOID source, SIZE_T length, LPCSTR sourceName,
++    const D3D_SHADER_MACRO* defines, ID3DInclude* include, LPCSTR entry, LPCSTR target,
++    UINT flags, UINT effectFlags, ID3DBlob** code, ID3DBlob** errors) {
++    static std::mutex mutex;
++    static std::map<std::string, ComPtr<ID3DBlob>> cache;
++    std::lock_guard lock(mutex);
++    const std::string key = std::string(static_cast<const char*>(source), length) + target + entry;
++    const auto found = cache.find(key);
++    if (found != cache.end()) return found->second.CopyTo(code);
++    std::filesystem::path cachePath;
++    HMODULE module = nullptr;
++    wchar_t modulePath[32768]{};
++    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
++        reinterpret_cast<LPCWSTR>(&CompileSharedShader), &module) && GetModuleFileNameW(module, modulePath, 32768)) {
++        std::uint64_t hash = 14695981039346656037ull;
++        for (unsigned char c : key + "vsr-opt1-v1") { hash ^= c; hash *= 1099511628211ull; }
++        cachePath = std::filesystem::path(modulePath).parent_path() / L"shader-cache" / (std::to_wstring(hash) + L".cso");
++        ComPtr<ID3DBlob> cached;
++        if (SUCCEEDED(D3DReadFileToBlob(cachePath.c_str(), &cached))) {
++            cache.emplace(key, cached);
++            return cached.CopyTo(code);
++        }
++    }
++    // Level 1 avoids lengthy loop optimization at startup without changing kernels.
++    flags = (flags & ~D3DCOMPILE_OPTIMIZATION_LEVEL3) | D3DCOMPILE_OPTIMIZATION_LEVEL1;
++    const auto result = D3DCompile(source, length, sourceName, defines, include, entry,
++        target, flags, effectFlags, code, errors);
++    if (SUCCEEDED(result)) {
++        cache.emplace(key, *code);
++        if (!cachePath.empty()) {
++            std::error_code error;
++            std::filesystem::create_directories(cachePath.parent_path(), error);
++            if (!error) D3DWriteBlobToFile(*code, cachePath.c_str(), TRUE);
++        }
++    }
++    return result;
++}
++
+ float DetectDisplayRefreshRate(const HWND window) noexcept {
+     // Pace camera redraws to the monitor hosting the playback window.  A
+     // 120 Hz ceiling keeps high-refresh displays responsive without creating
+@@ -439,8 +480,8 @@
+     float2 position=uv*float2(dimensions)-0.5;
+     int2 origin=int2(floor(position));
+     float4 total=0.0; float weightTotal=0.0;
+-    [unroll] for(int y=-1;y<=2;++y) {
+-        [unroll] for(int x=-1;x<=2;++x) {
++    [loop] for(int y=-1;y<=2;++y) {
++        [loop] for(int x=-1;x<=2;++x) {
+             float weight=CubicWeight(float(origin.x+x)-position.x)*
+                 CubicWeight(float(origin.y+y)-position.y);
+             total+=LoadClamped(sourceTexture,origin+int2(x,y),dimensions)*weight;
+@@ -481,8 +522,8 @@
+     float2 position=uv*float2(dimensions)-0.5;
+     int2 origin=int2(floor(position));
+     float4 total=0.0; float weightTotal=0.0;
+-    [unroll] for(int y=-1;y<=2;++y) {
+-        [unroll] for(int x=-1;x<=2;++x) {
++    [loop] for(int y=-1;y<=2;++y) {
++        [loop] for(int x=-1;x<=2;++x) {
+             float2 delta=float2(origin+int2(x,y))-position;
+             float weight=Jinc2Weight(length(delta));
+             total+=LoadClamped(sourceTexture,origin+int2(x,y),dimensions)*weight;
+@@ -562,17 +603,87 @@
+     sourceTexture.GetDimensions(width,height);
+     return SampleLanczos3Panorama(sourceTexture,uv,uint2(width,height),float2(OutputWidth,OutputHeight));
+ }
++
++float Spline36Weight(float x) {
++    x=abs(x);
++    if(x<1)return ((13.0/11.0*x-453.0/209.0)*x-3.0/209.0)*x+1;
++    if(x<2){x-=1;return ((-6.0/11.0*x+270.0/209.0)*x-156.0/209.0)*x;}
++    if(x<3){x-=2;return ((1.0/11.0*x-45.0/209.0)*x+26.0/209.0)*x;}
++    return 0;
++}
++float GeneralCubic(float x,float B,float C) {
++    x=abs(x);
++    if(x<1)return ((12-9*B-6*C)*x*x*x+(-18+12*B+6*C)*x*x+6-2*B)/6;
++    if(x<2)return ((-B-6*C)*x*x*x+(6*B+30*C)*x*x+(-12*B-48*C)*x+8*B+24*C)/6;
++    return 0;
++}
++float4 SampleSeparable(Texture2D<float4> tex,float2 uv,uint2 dim,uint kernel) {
++    float2 pos=uv*dim-.5;int2 origin=int2(floor(pos));float4 sum=0;float norm=0;
++    [loop]for(int y=-2;y<=3;++y)[loop]for(int x=-2;x<=3;++x){
++        float2 d=float2(origin+int2(x,y))-pos;
++        float w=kernel==5?Spline36Weight(d.x)*Spline36Weight(d.y):
++            GeneralCubic(d.x,kernel==7?1.0:1.0/3.0,kernel==7?0.0:1.0/3.0)*GeneralCubic(d.y,kernel==7?1.0:1.0/3.0,kernel==7?0.0:1.0/3.0);
++        sum+=LoadClamped(tex,origin+int2(x,y),dim)*w;norm+=w;
++    }return sum/max(norm,.000001);
++}
++// Hyllian's MIT-licensed Super-XBR pass-0 diagonal kernel, adapted to D3D11.
++// This is intentionally exposed as the single-stage variant, not the 3-pass scaler.
++float XbrDistance(float c0,float c1,float c2,float d1,float d2,float e1,float e2,float e3) {
++    return abs(c1-c2)+abs(c1-c0)+abs(e2-e1)+abs(e2-e3)+2*abs(d1-d2)-abs(c0-c2)-abs(e1-e3);
++}
++float4 SampleSuperXbr(Texture2D<float4> tex,float2 uv,uint2 dim) {
++    float2 p=uv*dim;int2 o=int2(floor(p));
++    if(any(frac(p)<.5))return LoadClamped(tex,o,dim);
++    float4 P0=LoadClamped(tex,o+int2(-1,-1),dim),P1=LoadClamped(tex,o+int2(2,-1),dim);
++    float4 P2=LoadClamped(tex,o+int2(-1,2),dim),P3=LoadClamped(tex,o+int2(2,2),dim);
++    float4 B=LoadClamped(tex,o+int2(0,-1),dim),C=LoadClamped(tex,o+int2(1,-1),dim);
++    float4 D=LoadClamped(tex,o+int2(-1,0),dim),E=LoadClamped(tex,o,dim),F=LoadClamped(tex,o+int2(1,0),dim);
++    float4 G=LoadClamped(tex,o+int2(-1,1),dim),H=LoadClamped(tex,o+int2(0,1),dim),I=LoadClamped(tex,o+int2(1,1),dim);
++    float4 F4=LoadClamped(tex,o+int2(2,0),dim),I4=LoadClamped(tex,o+int2(2,1),dim);
++    float4 H5=LoadClamped(tex,o+int2(0,2),dim),I5=LoadClamped(tex,o+int2(1,2),dim);
++    float4 l=float4(.2126,.7152,.0722,0);
++    float edge=XbrDistance(dot(G,l),dot(E,l),dot(C,l),dot(H,l),dot(F,l),dot(H5,l),dot(I,l),dot(F4,l))-
++        XbrDistance(dot(B,l),dot(F,l),dot(I4,l),dot(E,l),dot(I,l),dot(D,l),dot(H,l),dot(I5,l));
++    float k=.129633;float4 a=-k*(P2+P1)+(k+.5)*(H+F),b=-k*(P0+P3)+(k+.5)*(E+I);
++    float4 result=lerp(a,b,smoothstep(-1.000001,1.000001,edge));
++    float4 correction=lerp((P2-H)*(F-P1),(P0-E)*(I-P3),step(0,edge));
++    return clamp(result,min(min(E,F),min(H,I))+correction,max(max(E,F),max(H,I))-correction);
++}
++float4 SampleBilateral(Texture2D<float4> tex,float2 uv,uint2 dim,bool guided) {
++    float2 pos=uv*dim-.5;int2 o=int2(floor(pos));float4 sum=0;float norm=0;
++    float4 center=tex.SampleLevel(LinearSampler,uv,0);
++    float guide=Source.SampleLevel(LinearSampler,uv-ChromaOffset,0).r;
++    [loop]for(int y=-1;y<=2;++y)[loop]for(int x=-1;x<=2;++x){
++        float2 d=float2(o+int2(x,y))-pos;float4 value=LoadClamped(tex,o+int2(x,y),dim);
++        float range=guided?Source.SampleLevel(LinearSampler,(float2(o+int2(x,y))+.5)/dim-ChromaOffset,0).r-guide:length(value-center);
++        float w=exp(-dot(d,d)*.5-range*range*200);sum+=value*w;norm+=w;
++    }return sum/max(norm,.000001);
++}
++float4 SampleChroma(Texture2D<float4> tex,float2 uv) {
++    uint w,h;tex.GetDimensions(w,h);uint2 dim=uint2(w,h);
++    uint algorithm=(UpscaleAlgorithm>>8)==0?1:(UpscaleAlgorithm>>8)-1;
++    if(algorithm==0)return tex.SampleLevel(PointSampler,uv,0);
++    if(algorithm==1)return tex.SampleLevel(LinearSampler,uv,0);
++    if(algorithm==2)return SampleBicubic(tex,uv,dim);
++    if(algorithm==3)return SampleLanczos3(tex,uv,dim,float2(w,h));
++    if(algorithm==4)return SampleJinc2(tex,uv,dim);
++    if(algorithm==5 || algorithm==7 || algorithm==8)return SampleSeparable(tex,uv,dim,algorithm);
++    if(algorithm==6)return SampleSuperXbr(tex,uv,dim);
++    return SampleBilateral(tex,uv,dim,algorithm==10);
++}
+ float4 SampleVideo(Texture2D<float4> sourceTexture,float2 uv) {
+     uint width,height;
+     sourceTexture.GetDimensions(width,height);
+     const uint2 dimensions=uint2(width,height);
+     float effectiveScale=min(OutputWidth/max(float(width),1.0),
+         OutputHeight/max(float(height),1.0))*max(ViewZoom,1.0);
+-    uint algorithm=effectiveScale>=1.0?UpscaleAlgorithm:DownscaleAlgorithm;
++    uint algorithm=effectiveScale>=1.0?(UpscaleAlgorithm & 255):DownscaleAlgorithm;
+     if(algorithm==0)return sourceTexture.SampleLevel(PointSampler,uv,0);
+     if(algorithm==1)return sourceTexture.SampleLevel(LinearSampler,uv,0);
+     if(algorithm==2)return SampleBicubic(sourceTexture,uv,dimensions);
+     if(algorithm==4)return SampleJinc2(sourceTexture,uv,dimensions);
++    if(algorithm==5)return SampleSeparable(sourceTexture,uv,dimensions,5);
++    if(algorithm==6)return SampleSuperXbr(sourceTexture,uv,dimensions);
+     return SampleLanczos3(sourceTexture,uv,dimensions,float2(OutputWidth,OutputHeight));
+ }
+ float3 ReadSource(float2 uv) {
+@@ -580,8 +691,8 @@
+     float2 chromaUv=uv+ChromaOffset;
+     float y=SampleVideo(Source,uv).r*SampleScale;
+     float2 chroma=InputLayout==1
+-        ?float2(SampleVideo(ChromaU,chromaUv).r,SampleVideo(ChromaV,chromaUv).r)*SampleScale
+-        :SampleVideo(ChromaU,chromaUv).rg*SampleScale;
++        ?float2(SampleChroma(ChromaU,chromaUv).r,SampleChroma(ChromaV,chromaUv).r)*SampleScale
++        :SampleChroma(ChromaU,chromaUv).rg*SampleScale;
+     y=(y-YOffset)*YScale;
+     chroma=(chroma-COffset)*CScale;
+     float kg=1.0-Kr-Kb;
+@@ -594,9 +705,9 @@
+     float2 chromaUv=uv+ChromaOffset;
+     float y=Source.Sample(LinearSampler,uv).r*SampleScale;
+     float2 chroma=InputLayout==1
+-        ?float2(ChromaU.Sample(LinearSampler,chromaUv).r,
+-                ChromaV.Sample(LinearSampler,chromaUv).r)*SampleScale
+-        :ChromaU.Sample(LinearSampler,chromaUv).rg*SampleScale;
++        ?float2(SampleChroma(ChromaU,chromaUv).r,
++                SampleChroma(ChromaV,chromaUv).r)*SampleScale
++        :SampleChroma(ChromaU,chromaUv).rg*SampleScale;
+     y=(y-YOffset)*YScale;
+     chroma=(chroma-COffset)*CScale;
+     float kg=1.0-Kr-Kb;
+@@ -1976,7 +2087,8 @@
+ FFFResult PlayerVideoRenderer::SetScalingAlgorithms(
+     const FFF3FPScalingAlgorithm upscale,
+     const FFF3FPScalingAlgorithm downscale) noexcept {
+-    if (upscale > FFF3FPScalingAlgorithm::Jinc2 ||
++    if ((static_cast<std::uint32_t>(upscale) & 255u) > 6u ||
++        (static_cast<std::uint32_t>(upscale) >> 8) > 11u ||
+         downscale > FFF3FPScalingAlgorithm::Jinc2)
+         return FFFResult::InvalidArgument;
+     upscaleAlgorithm_.store(static_cast<std::uint32_t>(upscale), std::memory_order_release);
+@@ -2500,18 +2612,18 @@
+         constants_ == nullptr || scaleConstants_ == nullptr) {
+         ComPtr<ID3DBlob> vertexCode, pixelCode, scalePixelCode, coverBackdropPixelCode,
+             timedTextPixelCode, errors;
+-        if (FAILED(D3DCompile(VertexShaderSource, std::strlen(VertexShaderSource), nullptr, nullptr, nullptr,
++        if (FAILED(CompileSharedShader(VertexShaderSource, std::strlen(VertexShaderSource), nullptr, nullptr, nullptr,
+             "main", "vs_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &vertexCode, &errors)) ||
+-            FAILED(D3DCompile(PixelShaderSource, std::strlen(PixelShaderSource), nullptr, nullptr, nullptr,
++            FAILED(CompileSharedShader(PixelShaderSource, std::strlen(PixelShaderSource), nullptr, nullptr, nullptr,
+                 "main", "ps_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &pixelCode, &errors)) ||
+-            FAILED(D3DCompile(ScalePixelShaderSource, std::strlen(ScalePixelShaderSource),
++            FAILED(CompileSharedShader(ScalePixelShaderSource, std::strlen(ScalePixelShaderSource),
+                 nullptr, nullptr, nullptr, "main", "ps_5_0",
+                 D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &scalePixelCode, &errors)) ||
+-            FAILED(D3DCompile(CoverBackdropPixelShaderSource,
++            FAILED(CompileSharedShader(CoverBackdropPixelShaderSource,
+                 std::strlen(CoverBackdropPixelShaderSource), nullptr, nullptr, nullptr,
+                 "main", "ps_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0,
+                 &coverBackdropPixelCode, &errors)) ||
+-            FAILED(D3DCompile(TimedTextPixelShaderSource, std::strlen(TimedTextPixelShaderSource), nullptr, nullptr, nullptr,
++            FAILED(CompileSharedShader(TimedTextPixelShaderSource, std::strlen(TimedTextPixelShaderSource), nullptr, nullptr, nullptr,
+             "main", "ps_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &timedTextPixelCode, &errors)) ||
+             FAILED(device_->CreateVertexShader(vertexCode->GetBufferPointer(), vertexCode->GetBufferSize(), nullptr, &vertexShader_)) ||
+             FAILED(device_->CreatePixelShader(pixelCode->GetBufferPointer(), pixelCode->GetBufferSize(), nullptr, &pixelShader_)) ||
+@@ -3432,10 +3544,10 @@
+     }
+     if (timedTextSpriteVertexShader_ == nullptr || timedTextSpritePixelShader_ == nullptr) {
+         ComPtr<ID3DBlob> spriteVertexCode, spritePixelCode, shaderErrors;
+-        if (FAILED(D3DCompile(TimedTextSpriteVertexShaderSource,
++        if (FAILED(CompileSharedShader(TimedTextSpriteVertexShaderSource,
+             std::strlen(TimedTextSpriteVertexShaderSource), nullptr, nullptr, nullptr,
+             "main", "vs_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &spriteVertexCode, &shaderErrors)) ||
+-            FAILED(D3DCompile(TimedTextSpritePixelShaderSource,
++            FAILED(CompileSharedShader(TimedTextSpritePixelShaderSource,
+             std::strlen(TimedTextSpritePixelShaderSource), nullptr, nullptr, nullptr,
+             "main", "ps_5_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &spritePixelCode, &shaderErrors)) ||
+             FAILED(device_->CreateVertexShader(spriteVertexCode->GetBufferPointer(),
+@@ -4270,9 +4382,10 @@
+             return FFFResult::Success;
+         }
+     }
+-    // Slow path: not playing yet or chain absent.
++    // First-frame resource creation must never block a GUI redraw request.
+     {
+-        std::lock_guard deviceLock(deviceMutex_);
++        std::unique_lock deviceLock(deviceMutex_, std::try_to_lock);
++        if (!deviceLock.owns_lock()) return FFFResult::Success;
+         if (!hasCachedVideo_ || window_ == nullptr) return FFFResult::Success;
+         const auto chainResult = EnsureSwapChain(sourceWidth_, sourceHeight_, sourceBitDepth_);
+         if (chainResult != FFFResult::Success) return chainResult;
+@@ -5248,8 +5361,8 @@
+ std::uint64_t PlayerVideoRenderer::DeviceLockWait100ns() const noexcept { return deviceLockWait100ns_.load(); }
+ std::uint64_t PlayerVideoRenderer::SoftwareConvert100ns() const noexcept { return softwareConvert100ns_.load(); }
+ std::uint32_t PlayerVideoRenderer::OutputBitDepth() const noexcept {
+-    std::lock_guard lock(deviceMutex_);
+-    return swapOutputBits_;
++    std::unique_lock lock(deviceMutex_, std::try_to_lock);
++    return lock.owns_lock() ? swapOutputBits_ : 0;
+ }
+ FFF3FPVideoScalingMode PlayerVideoRenderer::ActualVideoScalingMode() const noexcept {
+     return actualVideoScalingMode_.load();

@@ -6,6 +6,8 @@
 #include <QLocale>
 #include <QSet>
 
+#include <algorithm>
+
 namespace vsr {
 namespace {
 
@@ -45,6 +47,13 @@ QString interpolationDoubleHeight(const QVariantMap &p)
     return choiceCode(p, QStringLiteral("mode")) >= 4 ? QStringLiteral("True") : QStringLiteral("False");
 }
 
+QString preserveDoubleHeightAspect(const QVariantMap &p)
+{
+    return choiceCode(p, QStringLiteral("mode")) >= 4
+        ? QStringLiteral("\nclip = core.resize.Spline36(clip, width=clip.width * 2, height=clip.height)")
+        : QString();
+}
+
 QString emitNode(const FilterNode &node)
 {
     const auto &p = node.parameters;
@@ -69,6 +78,12 @@ QString emitNode(const FilterNode &node)
         return QString("clip = core.resize.%1(clip, width=%2, height=%3%4)")
             .arg(kernel, number(p, "width"), number(p, "height"), suffix);
     }
+    if (node.definitionId == "anime4k") {
+        const int scale = std::clamp(p.value("scale").toString().section(QChar(0x00d7), 0, 0).toInt(), 1, 4);
+        return QString("clip = core.resize.Spline36(clip, format=vs.YUV420P16)\n"
+                       "clip = core.placebo.Shader(clip, shader=%1, width=clip.width * %2, height=clip.height * %2)")
+            .arg(VpyScriptBuilder::pythonString(p.value("shader").toString())).arg(scale);
+    }
     if (node.definitionId == "remove_grain")
         return QString("clip = core.rgvs.RemoveGrain(clip, mode=%1)").arg(number(p, "mode"));
     if (node.definitionId == "bilateral")
@@ -89,19 +104,52 @@ QString emitNode(const FilterNode &node)
     if (node.definitionId == "deblock")
         return QString("clip = core.deblock.Deblock(clip, quant=%1, aoffset=%2, boffset=%3)")
             .arg(number(p, "quant"), number(p, "aoffset"), number(p, "boffset"));
+    if (node.definitionId == "dering")
+        return QString("_blur = core.std.Convolution(clip, matrix=[1,2,1,2,4,2,1,2,1])\n"
+                       "_lo = core.std.Minimum(_blur)\n_hi = core.std.Maximum(_blur)\n"
+                       "_limited = core.std.Expr([clip, _lo, _hi], expr='x y max z min')\n"
+                       "clip = core.std.Merge(clip, _limited, weight=%1)").arg(realNumber(p, "strength"));
+    if (node.definitionId == "thin_edges")
+        return QString("_thin = core.std.Maximum(clip, planes=[0])\n"
+                       "clip = core.std.Merge(clip, _thin, weight=[%1, 0, 0] if clip.format.num_planes == 3 else [%1])")
+            .arg(realNumber(p, "strength"));
+    if (node.definitionId == "sharpen_edges" || node.definitionId == "crispen_edges" || node.definitionId == "enhance_detail") {
+        QString expression;
+        if (node.definitionId == "sharpen_edges")
+            expression = QString("x y - abs %1 {scale} * > x x y - %2 * + x ?")
+                .arg(realNumber(p, "threshold"), realNumber(p, "strength"));
+        else if (node.definitionId == "crispen_edges")
+            expression = QString("x x y - %1 * +").arg(realNumber(p, "strength"));
+        else
+            expression = QString("x x y - y z - 0.5 * + %1 * +").arg(realNumber(p, "strength"));
+        const QString matrix = node.definitionId == "crispen_edges"
+            ? QStringLiteral("[0,1,0,1,4,1,0,1,0]") : QStringLiteral("[1,2,1,2,4,2,1,2,1]");
+        return QString("_blur = core.std.Convolution(clip, matrix=%1, planes=[0])\n"
+                       "_wide = core.std.Convolution(_blur, matrix=[1,2,1,2,4,2,1,2,1], planes=[0])\n"
+                       "_scale = 1 / 255 if clip.format.sample_type == vs.FLOAT else (1 << max(0, clip.format.bits_per_sample - 8))\n"
+                       "_expr = %2.replace('{scale}', str(_scale))\n"
+                       "_sharp = core.std.Expr([clip, _blur, _wide], expr=[_expr, '', ''] if clip.format.num_planes == 3 else [_expr])\n"
+                       "_lo = core.std.Minimum(clip, planes=[0])\n_hi = core.std.Maximum(clip, planes=[0])\n"
+                       "clip = core.std.Expr([_sharp, _lo, _hi], expr=['x y max z min', '', ''] if clip.format.num_planes == 3 else ['x y max z min'])")
+            .arg(matrix, VpyScriptBuilder::pythonString(expression));
+    }
     if (node.definitionId == "cas")
         return QString("clip = core.cas.CAS(clip, sharpness=%1)").arg(realNumber(p, "sharpness"));
     if (node.definitionId == "znedi3")
-        return QString("clip = core.znedi3.nnedi3(clip, field=%1, dh=%2, nsize=%3, nns=%4, qual=%5, pscrn=%6)")
+        return QString("clip = core.znedi3.nnedi3(clip, field=%1, dh=%2, nsize=%3, nns=%4, qual=%5, pscrn=%6)%7")
             .arg(interpolationField(p), interpolationDoubleHeight(p), choiceNumber(p, "nsize"),
-                 choiceNumber(p, "nns"), choiceNumber(p, "qual"), choiceNumber(p, "pscrn"));
+                 choiceNumber(p, "nns"), choiceNumber(p, "qual"), choiceNumber(p, "pscrn"),
+                 preserveDoubleHeightAspect(p));
     if (node.definitionId == "eedi3")
-        return QString("clip = core.eedi3m.EEDI3(clip, field=%1, dh=%2, alpha=%3, beta=%4, gamma=%5, nrad=%6, mdis=%7)")
+        return QString("clip = core.eedi3m.EEDI3(clip, field=%1, dh=%2, alpha=%3, beta=%4, gamma=%5, nrad=%6, mdis=%7)%8")
             .arg(interpolationField(p), interpolationDoubleHeight(p), realNumber(p, "alpha"), realNumber(p, "beta"),
-                 realNumber(p, "gamma"), number(p, "nrad"), number(p, "mdis"));
+                 realNumber(p, "gamma"), number(p, "nrad"), number(p, "mdis"), preserveDoubleHeightAspect(p));
     if (node.definitionId == "sangnom")
-        return QString("clip = core.sangnom.SangNom(clip, order=%1, dh=%2, aa=[%3, %4, %4])")
-            .arg(choiceNumber(p, "order"), booleanValue(p, "dh"), number(p, "aa_y"), number(p, "aa_c"));
+        return QString("clip = core.sangnom.SangNom(clip, order=%1, dh=%2, aa=[%3, %4, %4])%5")
+            .arg(choiceNumber(p, "order"), booleanValue(p, "dh"), number(p, "aa_y"), number(p, "aa_c"),
+                 p.value("dh").toBool()
+                    ? QStringLiteral("\nclip = core.resize.Spline36(clip, width=clip.width * 2, height=clip.height)")
+                    : QString());
     if (node.definitionId == "bwdif")
         return QString("clip = core.bwdif.Bwdif(clip, field=%1)").arg(choiceNumber(p, "field"));
     if (node.definitionId == "vivtc")

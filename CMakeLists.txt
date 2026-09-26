@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.0.0 LANGUAGES CXX)
+project(VSRenderer VERSION 1.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,6 +12,13 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets)
 
 qt_add_executable(VSRenderer WIN32
+    assets/startup.qrc
+    src/backend/StartupWarmup.cpp
+    src/backend/StartupWarmup.h
+    src/ui/MultiCompareView.cpp
+    src/ui/MultiCompareView.h
+    src/ui/AnalysisPage.cpp
+    src/ui/AnalysisPage.h
     src/main.cpp
     src/app/MainWindow.cpp
     src/app/MainWindow.h
@@ -22,6 +29,8 @@ qt_add_executable(VSRenderer WIN32
     src/backend/ThreeFpPlayer.cpp
     src/backend/ThreeFpPlayer.h
     src/backend/FrameTimeline.h
+    src/backend/ExportPipeline.cpp
+    src/backend/ExportPipeline.h
     src/backend/VapourSynthFrameServer.cpp
     src/backend/VapourSynthFrameServer.h
     src/graph/FilterCatalog.cpp
@@ -32,6 +41,12 @@ qt_add_executable(VSRenderer WIN32
     src/graph/VpyScriptBuilder.h
     src/ui/CollapsibleSection.cpp
     src/ui/CollapsibleSection.h
+    src/ui/PreparedFiles.cpp
+    src/ui/PreparedFiles.h
+    src/ui/ExportWindow.cpp
+    src/ui/ExportWindow.h
+    src/ui/CompareView.cpp
+    src/ui/CompareView.h
     src/ui/ParameterEditor.cpp
     src/ui/ParameterEditor.h
     src/ui/PreviewPane.cpp
@@ -75,7 +90,12 @@ if(BUILD_TESTING)
     add_test(NAME graph-and-vpy COMMAND vsr_graph_tests)
 
     qt_add_executable(vsr_frame_bridge_tests
+        assets/startup.qrc
+        src/backend/StartupWarmup.cpp
+        src/backend/StartupWarmup.h
         tests/TestFrameBridge.cpp
+        src/ui/CompareView.cpp
+        src/ui/CompareView.h
         src/backend/ThreeFpApi.cpp
         src/backend/ThreeFpApi.h
         src/backend/ThreeFpPlayer.cpp
@@ -91,6 +111,8 @@ if(BUILD_TESTING)
 
     qt_add_executable(vsr_preview_tests
         tests/TestPreviewPane.cpp
+        src/ui/CompareView.cpp
+        src/ui/CompareView.h
         src/ui/PreviewPane.cpp
         src/ui/PreviewPane.h
     )
@@ -98,8 +120,31 @@ if(BUILD_TESTING)
     target_link_libraries(vsr_preview_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
     add_test(NAME preview-zoom-and-pan COMMAND vsr_preview_tests)
 
+    qt_add_executable(vsr_export_tests
+        tests/TestExportPipeline.cpp
+        src/app/Style.cpp
+        src/app/Style.h
+        src/ui/PreparedFiles.cpp
+        src/ui/PreparedFiles.h
+        src/ui/ExportWindow.cpp
+        src/ui/ExportWindow.h
+        src/backend/ExportPipeline.cpp
+        src/backend/ExportPipeline.h
+    )
+    target_include_directories(vsr_export_tests PRIVATE src)
+    target_link_libraries(vsr_export_tests PRIVATE Qt6::Core Qt6::Widgets Qt6::Test)
+    add_test(NAME export-command-compatibility COMMAND vsr_export_tests)
+
+    get_target_property(analysis_test_sources VSRenderer SOURCES)
+    list(FILTER analysis_test_sources EXCLUDE REGEX "src/main.cpp|VSRenderer_autogen")
+    qt_add_executable(vsr_analysis_tests tests/TestAnalysis.cpp ${analysis_test_sources})
+    target_include_directories(vsr_analysis_tests PRIVATE src third_party/vapoursynth/include)
+    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+    target_compile_definitions(vsr_analysis_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
+    add_test(NAME direct-video-comparison COMMAND vsr_analysis_tests)
+
     if(WIN32)
-        set_tests_properties(graph-and-vpy vapoursynth-to-3fp-frame-bridge preview-zoom-and-pan
+        set_tests_properties(direct-video-comparison graph-and-vpy vapoursynth-to-3fp-frame-bridge preview-zoom-and-pan export-command-compatibility
             PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     endif()
 endif()

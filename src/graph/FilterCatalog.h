@@ -11,7 +11,8 @@ enum class ParameterType {
     Integer,
     Real,
     Boolean,
-    Choice
+    Choice,
+    File
 };
 
 struct ParameterDefinition {

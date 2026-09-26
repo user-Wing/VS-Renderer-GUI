@@ -71,6 +71,7 @@ private slots:
             {"sangnom", "sangnom", "core.sangnom.SangNom"},
             {"bwdif", "bwdif", "core.bwdif.Bwdif"},
             {"vivtc", "vivtc", "core.vivtc.VFM"},
+            {"anime4k", "placebo", "core.placebo.Shader"},
         };
 
         for (const auto &plugin : cases) {
@@ -104,8 +105,25 @@ private slots:
         const auto result = VpyScriptBuilder::build(QStringLiteral("D:\\src.mkv"), SourceFilter::Lsmas, graph);
         QVERIFY2(result.errors.isEmpty(), qPrintable(result.errors.join('\n')));
         QVERIFY(result.script.contains(QStringLiteral("field=0, dh=True")));
+        QVERIFY(result.script.contains(QStringLiteral("width=clip.width * 2")));
         QVERIFY(result.script.contains(QStringLiteral("nns=4")));
         QVERIFY(result.script.contains(QStringLiteral("thresh=[6, 9, 9]")));
+    }
+
+    void anime4kUsesShaderPathAndUniformScale()
+    {
+        FilterGraph graph;
+        const int row = graph.add(QStringLiteral("anime4k"));
+        QVERIFY(row >= 0);
+        QVERIFY(graph.setParameter(row, QStringLiteral("shader"), QStringLiteral("D:\\Shaders\\Anime4K.glsl")));
+        QVERIFY(graph.setParameter(row, QStringLiteral("scale"), QStringLiteral("3×")));
+
+        const auto result = VpyScriptBuilder::build(QStringLiteral("D:\\src.mkv"), SourceFilter::Lsmas, graph);
+        QVERIFY2(result.errors.isEmpty(), qPrintable(result.errors.join('\n')));
+        QVERIFY(result.requiredNamespaces.contains(QStringLiteral("placebo")));
+        QVERIFY(result.script.contains(QStringLiteral("format=vs.YUV420P16")));
+        QVERIFY(result.script.contains(QStringLiteral("shader=\"D:\\\\Shaders\\\\Anime4K.glsl\"")));
+        QVERIFY(result.script.contains(QStringLiteral("width=clip.width * 3, height=clip.height * 3")));
     }
 };
 

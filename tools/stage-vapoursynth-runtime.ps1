@@ -51,6 +51,7 @@ $pluginFiles = @(
     "plugins\vivtc.dll",
     "plugins\vsnlm_ispc.dll",
     "plugins\znedi3.dll",
+    "plugins\libvs_placebo.dll",
     "plugins\vsrepo\AddGrain.dll",
     "plugins\vsrepo\ffms2.dll",
     "plugins\vsrepo\fmtconv.dll",

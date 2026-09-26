@@ -11,5 +11,11 @@
 | FFmpeg shared libraries | 3FP 解码依赖 | [FFmpeg](https://ffmpeg.org/)；以发布包所含构建的配置为准，通常为 LGPL/GPL |
 | L-SMASH Works、FFMS2 | VapourSynth 源滤镜 | 通过 VSRepo 获取；许可证及源码链接见各 VSRepo 包元数据 |
 | fmtconv、RemoveGrain、AddGrain、VSZip、nlm-ispc、CAS、Zsmooth、Deblock、ZNEDI3、EEDI3、SangNom、Bwdif、VIVTC | VapourSynth 处理插件 | 通过 PyPI/VSRepo 获取；许可证及源码链接见各项目包元数据 |
+| vs-placebo 2.0.4 / libplacebo | VapourSynth 中执行 Anime4K 等 mpv GLSL | [vs-placebo](https://github.com/Lypheo/vs-placebo)、[libplacebo](https://github.com/haasn/libplacebo)；LGPL-2.1+ |
 
 发布包内同时保留 Qt、Python、VapourSynth 等组件随附的许可证文件。重新分发前请核对你所替换的 FFmpeg 和 VapourSynth 插件构建配置。
+
+
+## Super-XBR 单阶段色度 / 放大核
+
+Hyllian, Copyright (c) 2015. MIT License. Adapted from the pass-0 diagonal kernel in [MPDN Extensions](https://github.com/zachsaw/MPDN_Extensions/blob/master/Extensions/RenderScripts/Super-xBR/super-xbr.hlsl). The original source and full license are retained in `third_party/shaders/super-xbr-upstream.hlsl` and deployed under `shader-licenses`. This implementation is the single-stage variant, not the complete three-pass scaler.

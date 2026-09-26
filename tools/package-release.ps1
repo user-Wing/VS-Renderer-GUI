@@ -1,7 +1,8 @@
-param(
-    [string]$Version = "1.0.0",
+﻿param(
+    [string]$Version = "1.0.1",
     [string]$BuildDirectory = "",
     [string]$NativeRuntimeDirectory = "",
+    [string]$FfmpegExecutable = "",
     [string]$SevenZip = "",
     [string]$WinDeployQt = ""
 )
@@ -24,6 +25,15 @@ if (-not (Test-Path -LiteralPath $pythonRuntime)) { throw "Bundled VapourSynth r
 if (-not (Test-Path -LiteralPath (Join-Path $NativeRuntimeDirectory "FFF.Native.dll"))) {
     throw "FFF.Native.dll not found under $NativeRuntimeDirectory"
 }
+if (-not $FfmpegExecutable) {
+    $buildFfmpeg = Join-Path $BuildDirectory "ffmpeg.exe"
+    $localFfmpeg = "C:\PortableSoft\FFmpegFreeUI ReadyToRun x64\ffmpeg.exe"
+    if (Test-Path -LiteralPath $buildFfmpeg) { $FfmpegExecutable = $buildFfmpeg }
+    elseif (Test-Path -LiteralPath $localFfmpeg) { $FfmpegExecutable = $localFfmpeg }
+}
+if (-not $FfmpegExecutable -or -not (Test-Path -LiteralPath $FfmpegExecutable)) {
+    throw "ffmpeg.exe not found; pass -FfmpegExecutable."
+}
 
 if (-not $WinDeployQt -and $env:QT_ROOT) {
     $WinDeployQt = Join-Path $env:QT_ROOT "bin\windeployqt.exe"
@@ -31,6 +41,13 @@ if (-not $WinDeployQt -and $env:QT_ROOT) {
 if (-not (Test-Path -LiteralPath $WinDeployQt)) { throw "windeployqt.exe not found; pass -WinDeployQt." }
 if (-not (Test-Path -LiteralPath $SevenZip)) { throw "7z.exe not found; pass -SevenZip." }
 
+# Validate the resolved destinations before replacing an existing package.
+$distPrefix = [System.IO.Path]::GetFullPath($distRoot).TrimEnd('\') + '\'
+foreach ($target in @($staging, $archive)) {
+    if (-not [System.IO.Path]::GetFullPath($target).StartsWith($distPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Package destination escapes dist: $target"
+    }
+}
 New-Item -ItemType Directory -Force -Path $distRoot | Out-Null
 if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
 if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
@@ -39,13 +56,24 @@ New-Item -ItemType Directory -Force -Path $staging | Out-Null
 Copy-Item -LiteralPath $exe -Destination $staging
 New-Item -ItemType Directory -Force -Path (Join-Path $staging "runtime") | Out-Null
 Copy-Item -LiteralPath $pythonRuntime -Destination (Join-Path $staging "runtime\python") -Recurse
+$packagedFfmpeg = Join-Path $staging "runtime\ffmpeg"
+New-Item -ItemType Directory -Force -Path $packagedFfmpeg | Out-Null
+Copy-Item -LiteralPath $FfmpegExecutable -Destination (Join-Path $packagedFfmpeg "ffmpeg.exe") -Force
+Get-ChildItem -LiteralPath (Split-Path -Parent $FfmpegExecutable) -Filter "*.dll" -File |
+    Copy-Item -Destination $packagedFfmpeg -Force
 Get-ChildItem -LiteralPath $NativeRuntimeDirectory -Filter "*.dll" -File |
     Copy-Item -Destination $staging -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md"),
                            (Join-Path $projectRoot "LICENSE"),
+                           (Join-Path $projectRoot "changelog.md"),
                            (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $staging
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs\dependencies.md") `
     -Destination (Join-Path $staging "DEPENDENCIES.md")
+
+$shaderCache = Join-Path $BuildDirectory "shader-cache"
+if (-not (Test-Path $shaderCache)) { throw "Missing shader cache; run the startup warmup test before packaging." }
+Copy-Item -LiteralPath $shaderCache -Destination $staging -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "third_party\shaders") -Destination (Join-Path $staging "shader-licenses") -Recurse -Force
 
 & $WinDeployQt --release --no-translations --no-opengl-sw --no-system-d3d-compiler `
     (Join-Path $staging "VSRenderer.exe")

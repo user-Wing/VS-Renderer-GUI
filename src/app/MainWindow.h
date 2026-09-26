@@ -10,17 +10,25 @@
 class QAction;
 class QCheckBox;
 class QComboBox;
+class QDragEnterEvent;
+class QDropEvent;
 class QLabel;
 class QLineEdit;
 class QListWidget;
 class QPushButton;
 class QSlider;
 class QTimer;
+class QStackedWidget;
+class QToolButton;
 
 namespace vsr {
 
+class AnalysisPage;
 class ParameterEditor;
+class CompareView;
 class PreviewPane;
+class ExportWindow;
+class StartupWarmup;
 class ThreeFpPlayer;
 class VapourSynthFrameServer;
 
@@ -32,12 +40,16 @@ public:
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
 
 private:
     QWidget *buildSidebar();
     QWidget *buildWorkspace();
     QWidget *buildTransport();
     void buildToolbar();
+    void selectPage(int index);
     void connectPlayback();
     void populateCatalog();
     void refreshPipeline(int selectRow = -1);
@@ -46,6 +58,7 @@ private:
     bool loadSource(const QString &path);
     void showScript();
     void validateScript();
+    void exportCurrentResult();
     void togglePlayback();
     void seekTimeline(int sliderValue);
     void requestProcessedFrame(int frameIndex);
@@ -60,6 +73,15 @@ private:
     std::unique_ptr<ThreeFpPlayer> sourcePlayer_;
     std::unique_ptr<ThreeFpPlayer> processedPlayer_;
     std::unique_ptr<VapourSynthFrameServer> frameServer_;
+    std::unique_ptr<ExportWindow> exportWindow_;
+    std::unique_ptr<StartupWarmup> startupWarmup_;
+    QString deferredSource_;
+    bool primedProcessedOutput_ = false;
+    std::unique_ptr<AnalysisPage> analysisPage_;
+    QStackedWidget *pages_ = nullptr;
+    QWidget *navigation_ = nullptr;
+    QList<QAction *> vsActions_;
+    QList<QToolButton *> navigationButtons_;
     FilterGraph graph_;
 
     QLineEdit *sourcePath_ = nullptr;
@@ -69,6 +91,7 @@ private:
     QListWidget *catalogList_ = nullptr;
     QListWidget *pipelineList_ = nullptr;
     ParameterEditor *parameterEditor_ = nullptr;
+    CompareView *compareView_ = nullptr;
     PreviewPane *sourcePane_ = nullptr;
     PreviewPane *processedPane_ = nullptr;
     QSlider *timeline_ = nullptr;
@@ -85,6 +108,9 @@ private:
     bool timelinePressed_ = false;
     bool timelineSeekPending_ = false;
     bool vsScriptReady_ = false;
+    bool vsFramePending_ = false;
+    bool sourcePrimePending_ = false;
+    bool sourcePrimeStarted_ = false;
     int pendingTimelineValue_ = -1;
     std::uint64_t timelineSeekGeneration_ = 0;
     int sourceTotalFrames_ = 0;

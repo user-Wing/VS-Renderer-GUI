@@ -1,8 +1,14 @@
 #include "backend/FrameTimeline.h"
+#include "backend/StartupWarmup.h"
+#include <QFile>
+#include <QTimer>
+#include <QTemporaryDir>
 #include "backend/ThreeFpApi.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/VapourSynthFrameServer.h"
 #include "ui/PreviewPane.h"
+#include "ui/CompareView.h"
+#include <QWheelEvent>
 
 #include <QSignalSpy>
 #include <QTest>
@@ -14,6 +20,56 @@ class TestFrameBridge final : public QObject {
     Q_OBJECT
 
 private slots:
+    void startupWarmsDecodeAndBothRenderers()
+    {
+        CompareView view;
+        view.resize(1000, 600);
+        view.sourcePane()->setSurfaceActive(true);
+        view.processedPane()->setSurfaceActive(true);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QTemporaryDir directory;
+        ThreeFpApi api;
+        QVERIFY2(api.available(), qPrintable(api.errorString()));
+        ThreeFpPlayer source(api, view.sourcePane()->surface());
+        ThreeFpPlayer processed(api, view.processedPane()->surface());
+        QElapsedTimer construction;
+        construction.start();
+        VapourSynthFrameServer server;
+        QVERIFY(construction.elapsed() < 250);
+        QElapsedTimer heartbeatClock;
+        heartbeatClock.start();
+        qint64 previousBeat = 0, maxGap = 0;
+        QTimer heartbeat;
+        connect(&heartbeat, &QTimer::timeout, this, [&] {
+            const auto now = heartbeatClock.elapsed(); maxGap = std::max(maxGap, now-previousBeat); previousBeat=now;
+        });
+        heartbeat.start(10);
+        StartupWarmup warmup(&source, &processed, &server);
+        QSignalSpy done(&warmup, &StartupWarmup::finished);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        warmup.start();
+        QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty(), 35000);
+        QVERIFY2(done.first().at(0).toBool(), qPrintable(done.first().at(1).toString()));
+        QVERIFY(!warmup.isRunning());
+        QVERIFY(source.snapshot().presentedVideoFrames > 0);
+        QVERIFY(processed.snapshot().swapChainPresents > 0);
+        qInfo() << "Startup warmup ms:" << elapsed.elapsed() << "UI maximum heartbeat gap ms:" << maxGap;
+        QVERIFY(maxGap < 1000);
+        const QString next = directory.filePath(QStringLiteral("first-user-video.mkv"));
+        QVERIFY(QFile::copy(QStringLiteral(":/startup/warmup.mkv"), next));
+        QFile::setPermissions(next, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        elapsed.restart();
+        QVERIFY(source.openFile(next));
+        QTRY_VERIFY_WITH_TIMEOUT(source.snapshot().state == ThreeFpState::Ready, 10000);
+        QVERIFY(source.seekFrame(0));
+        QTRY_VERIFY_WITH_TIMEOUT(source.snapshot().presentedVideoFrames > 0, 10000);
+        qInfo() << "First import after warmup ms:" << elapsed.elapsed();
+        warmup.releaseScript();
+        QVERIFY(!warmup.ownsScript());
+    }
+
     void mapsDisplayedTimeToAbsoluteFrame()
     {
         constexpr std::int64_t fpsNumerator = 30000;
@@ -29,6 +85,7 @@ private slots:
     void loadsSourceAndProcessedTimingsSeparately()
     {
         VapourSynthFrameServer server;
+        QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(), 15000);
         QVERIFY2(server.available(), qPrintable(server.errorString()));
         QSignalSpy loaded(&server, &VapourSynthFrameServer::scriptLoaded);
         QSignalSpy errors(&server, &VapourSynthFrameServer::errorOccurred);
@@ -74,6 +131,7 @@ private slots:
                                             ThreeFpScalingAlgorithm::Lanczos3));
 
         VapourSynthFrameServer server;
+        QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(), 15000);
         QVERIFY2(server.available(), qPrintable(server.errorString()));
         QSignalSpy loaded(&server, &VapourSynthFrameServer::scriptLoaded);
         QSignalSpy frames(&server, &VapourSynthFrameServer::frameReady);
@@ -96,11 +154,38 @@ private slots:
         QVERIFY2(player.submitFrame(frame), qPrintable(player.lastError()));
         QTest::qWait(100);
         QCOMPARE(player.snapshot().frameIndex, 0);
+        QVERIFY2(player.resetVideoOutput(), qPrintable(player.lastError()));
+        QVERIFY2(player.submitFrame(frame), qPrintable(player.lastError()));
+        QTest::qWait(100);
+        QCOMPARE(player.snapshot().frameIndex, 0);
+
+        loaded.clear();
+        frames.clear();
+        errors.clear();
+        server.loadScript(QStringLiteral(
+            "import vapoursynth as vs\n"
+            "clip = vs.core.std.BlankClip(width=128, height=72, format=vs.YUV444P16, "
+            "length=1, color=[4096, 32768, 32768])\n"
+            "clip.set_output(0)\n"), QStringLiteral("changed-chain-geometry-test.vpy"));
+        QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !errors.isEmpty(), 10000);
+        QVERIFY2(errors.isEmpty(), errors.isEmpty() ? "" : qPrintable(errors.first().first().toString()));
+        server.requestFrame(0);
+        QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty() || !errors.isEmpty(), 10000);
+        QVERIFY2(errors.isEmpty(), errors.isEmpty() ? "" : qPrintable(errors.first().first().toString()));
+        const auto changedFrame = qvariant_cast<VapourSynthFrame>(frames.first().first());
+        QCOMPARE(changedFrame.width, 128);
+        QCOMPARE(changedFrame.height, 72);
+        QVERIFY2(player.resetVideoOutput(), qPrintable(player.lastError()));
+        QVERIFY2(player.submitFrame(changedFrame), qPrintable(player.lastError()));
+        QTest::qWait(100);
+        QCOMPARE(player.snapshot().videoWidth, 128u);
+        QCOMPARE(player.snapshot().videoHeight, 72u);
     }
 
     void rendersBundledFilterChain()
     {
         VapourSynthFrameServer server;
+        QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(), 15000);
         QVERIFY2(server.available(), qPrintable(server.errorString()));
         QSignalSpy loaded(&server, &VapourSynthFrameServer::scriptLoaded);
         QSignalSpy frames(&server, &VapourSynthFrameServer::frameReady);
@@ -130,6 +215,7 @@ private slots:
     void coalescesFrameRequestsToNewest()
     {
         VapourSynthFrameServer server;
+        QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(), 15000);
         QVERIFY2(server.available(), qPrintable(server.errorString()));
         QSignalSpy loaded(&server, &VapourSynthFrameServer::scriptLoaded);
         QSignalSpy frames(&server, &VapourSynthFrameServer::frameReady);
@@ -158,6 +244,7 @@ private slots:
     void reportsMissingNamespacePrecisely()
     {
         VapourSynthFrameServer server;
+        QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(), 15000);
         QVERIFY2(server.available(), qPrintable(server.errorString()));
         QSignalSpy errors(&server, &VapourSynthFrameServer::errorOccurred);
         server.loadScript(QStringLiteral(
@@ -171,18 +258,27 @@ private slots:
 
     void rendersVapourSynthFrameThroughThreeFp()
     {
-        QWidget surface;
-        surface.resize(640, 360);
-        surface.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&surface));
+        CompareView view;
+        view.resize(1000, 600);
+        view.sourcePane()->setSurfaceActive(true);
+        view.processedPane()->setSurfaceActive(true);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QWidget &surface = *view.sourcePane()->surface();
 
         ThreeFpApi api;
         QVERIFY2(api.available(), qPrintable(api.errorString()));
         QVERIFY(api.apiVersion() >= 14);
         ThreeFpPlayer player(api, &surface);
         QVERIFY2(player.ready(), qPrintable(player.lastError()));
+        ThreeFpPlayer processed(api, view.processedPane()->surface());
+        QVERIFY2(processed.ready(), qPrintable(processed.lastError()));
+        connect(view.sourcePane(), &PreviewPane::redrawRequested, &player, &ThreeFpPlayer::redraw);
+        connect(view.processedPane(), &PreviewPane::redrawRequested, &processed, &ThreeFpPlayer::redraw);
+        connect(view.sourcePane(), &PreviewPane::viewChanged, &player, &ThreeFpPlayer::setView);
 
         VapourSynthFrameServer server;
+        QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(), 15000);
         QVERIFY2(server.available(), qPrintable(server.errorString()));
         QSignalSpy loaded(&server, &VapourSynthFrameServer::scriptLoaded);
         QSignalSpy frames(&server, &VapourSynthFrameServer::frameReady);
@@ -206,7 +302,48 @@ private slots:
         QCOMPARE(frame.frameIndex, 0);
         QCOMPARE(static_cast<unsigned char>(frame.planes[0].front()), 16u);
         QVERIFY2(player.submitFrame(frame), qPrintable(player.lastError()));
+        QVERIFY2(processed.submitFrame(frame), qPrintable(processed.lastError()));
+        const auto sourceId = surface.winId();
+        const auto processedId = view.processedPane()->surface()->winId();
+        for (const auto mode : {CompareMode::Slider, CompareMode::SideBySide, CompareMode::Slider}) {
+            view.setMode(mode);
+            for (double split : {0.05, 0.5, 0.95}) {
+                const auto sourcePresents = player.snapshot().swapChainPresents;
+                const auto processedPresents = processed.snapshot().swapChainPresents;
+                view.setSplitRatio(split);
+                QCoreApplication::processEvents();
+                player.redraw();
+                processed.redraw();
+                QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().swapChainPresents > sourcePresents, 3000);
+                QTRY_VERIFY_WITH_TIMEOUT(processed.snapshot().swapChainPresents > processedPresents, 3000);
+                QCOMPARE(surface.winId(), sourceId);
+                QCOMPARE(view.processedPane()->surface()->winId(), processedId);
+            }
+        }
         QTest::qWait(100);
+        for (const QSize size : {QSize(913, 517), QSize(1200, 700), QSize(777, 433)}) {
+            const auto presents = player.snapshot().swapChainPresents;
+            view.resize(size);
+            QCoreApplication::processEvents();
+            player.redraw();
+            QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().swapChainPresents > presents, 3000);
+            const auto beforeZoom = player.snapshot().swapChainPresents;
+            const QPointF center(surface.rect().center());
+            QWheelEvent wheel(center, surface.mapToGlobal(center.toPoint()), {}, QPoint(0, 120),
+                Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+            const float previousZoom = view.sourcePane()->zoom();
+            QCoreApplication::sendEvent(&surface, &wheel);
+            QVERIFY(view.sourcePane()->zoom() > previousZoom);
+            QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().swapChainPresents > beforeZoom, 3000);
+            player.setView(1.0f, 0.0f, 0.0f);
+        }
+        for (bool fullscreen : {true, false}) {
+            const auto presents = player.snapshot().swapChainPresents;
+            if (fullscreen) view.showFullScreen(); else view.showNormal();
+            QCoreApplication::processEvents();
+            player.redraw();
+            QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().swapChainPresents > presents, 3000);
+        }
         QCOMPARE(player.snapshot().frameIndex, 0);
         ThreeFpPixelProbe sample{};
         QVERIFY2(player.samplePixel(surface.width() / 2, surface.height() / 2, sample),

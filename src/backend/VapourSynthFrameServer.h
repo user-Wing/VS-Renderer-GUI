@@ -45,12 +45,14 @@ public:
     ~VapourSynthFrameServer() override;
 
     bool available() const;
+    bool initializing() const;
     QString libraryPath() const;
     QString errorString() const;
     void loadScript(const QString &script, const QString &scriptPath);
-    void requestFrame(int frameIndex);
+    void requestFrame(int frameIndex, int prefetchFrames = 0);
 
 signals:
+    void initialized(bool success);
     void scriptLoaded(const vsr::VapourSynthClipInfo &processed, const vsr::VapourSynthClipInfo &source);
     void frameReady(const vsr::VapourSynthFrame &frame);
     void errorOccurred(const QString &message);
@@ -63,6 +65,7 @@ private:
     QString libraryPath_;
     QString initError_;
     bool available_ = false;
+    bool initializing_ = true;
     std::atomic<int> desiredFrame_{-1};
     std::atomic_bool frameRequestScheduled_{false};
 };

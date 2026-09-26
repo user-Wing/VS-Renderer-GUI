@@ -10,9 +10,12 @@
 #include <QLibrary>
 #include <QMetaObject>
 #include <QRegularExpression>
+#include <QTimer>
 
 #include <cmath>
 #include <limits>
+#include <future>
+#include <vector>
 
 namespace vsr {
 namespace {
@@ -151,7 +154,7 @@ struct VapourSynthFrameServer::Impl {
         static constexpr char probeScript[] =
             "import vapoursynth as vs\n"
             "required = ('std', 'resize', 'lsmas', 'ffms2', 'fmtc', 'rgvs', 'grain', "
-            "'vszip', 'nlm_ispc', 'cas')\n"
+            "'vszip', 'nlm_ispc', 'cas', 'placebo')\n"
             "missing = [name for name in required if not hasattr(vs.core, name)]\n"
             "if missing: raise RuntimeError('missing bundled namespace: ' + ', '.join(missing))\n";
         if (scriptApi->evaluateBuffer(probe, probeScript, "runtime-check.vpy") != 0) {
@@ -192,12 +195,20 @@ VapourSynthFrameServer::VapourSynthFrameServer(QObject *parent)
 
     if (libraryPath_.isEmpty()) {
         initError_ = QStringLiteral("内置 VapourSynth 运行时不完整：未发现 VSScript.dll。请重新构建或解压完整程序包。");
+        initializing_ = false;
+        QTimer::singleShot(0, this, [this] { emit initialized(false); });
         return;
     }
     QMetaObject::invokeMethod(worker_, [this] {
-        available_ = impl_->initialize(libraryPath_);
-        initError_ = impl_->error;
-    }, Qt::BlockingQueuedConnection);
+        const bool success = impl_->initialize(libraryPath_);
+        const QString error = impl_->error;
+        QMetaObject::invokeMethod(this, [this, success, error] {
+            available_ = success;
+            initError_ = error;
+            initializing_ = false;
+            emit initialized(success);
+        });
+    }, Qt::QueuedConnection);
 }
 
 VapourSynthFrameServer::~VapourSynthFrameServer()
@@ -210,6 +221,8 @@ VapourSynthFrameServer::~VapourSynthFrameServer()
     }
     worker_ = nullptr;
 }
+
+bool VapourSynthFrameServer::initializing() const { return initializing_; }
 
 bool VapourSynthFrameServer::available() const { return available_; }
 QString VapourSynthFrameServer::libraryPath() const { return libraryPath_; }
@@ -244,6 +257,8 @@ void VapourSynthFrameServer::loadScript(const QString &source, const QString &sc
             return;
         }
         impl_->info = *impl_->vsApi->getVideoInfo(impl_->node);
+        if (VSCore *core = impl_->scriptApi->getCore(impl_->script))
+            impl_->vsApi->setThreadCount(qMax(4, QThread::idealThreadCount()), core);
         const auto makeInfo = [this](const VSVideoInfo &info) {
             char formatName[32]{};
             VapourSynthClipInfo result;
@@ -269,7 +284,7 @@ void VapourSynthFrameServer::loadScript(const QString &source, const QString &sc
     }, Qt::QueuedConnection);
 }
 
-void VapourSynthFrameServer::requestFrame(int frameIndex)
+void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames)
 {
     if (!available_ || frameIndex < 0)
         return;
@@ -277,7 +292,7 @@ void VapourSynthFrameServer::requestFrame(int frameIndex)
     if (frameRequestScheduled_.exchange(true))
         return;
 
-    QMetaObject::invokeMethod(worker_, [this, frameIndex] {
+    QMetaObject::invokeMethod(worker_, [this, frameIndex, prefetchFrames] {
         const auto finish = [this, frameIndex] {
             frameRequestScheduled_.store(false);
             const int latest = desiredFrame_.load();
@@ -289,6 +304,33 @@ void VapourSynthFrameServer::requestFrame(int frameIndex)
             return;
         }
         const int bounded = impl_->info.numFrames > 0 ? qMin(frameIndex, impl_->info.numFrames - 1) : frameIndex;
+        struct PrefetchedFrames final {
+            const VSAPI *api = nullptr;
+            std::vector<std::future<const VSFrame *>> futures;
+            ~PrefetchedFrames()
+            {
+                for (auto &future : futures) {
+                    try {
+                        if (const VSFrame *frame = future.get())
+                            api->freeFrame(frame);
+                    } catch (...) {
+                    }
+                }
+            }
+        } prefetched{impl_->vsApi, {}};
+        const int availableAhead = impl_->info.numFrames > 0
+            ? qMax(0, impl_->info.numFrames - bounded - 1) : 0;
+        const int warmCount = qBound(0, prefetchFrames, qMin(8, availableAhead));
+        prefetched.futures.reserve(static_cast<std::size_t>(warmCount));
+        for (int offset = 1; offset <= warmCount; ++offset) {
+            const int warmFrame = bounded + offset;
+            const VSAPI *api = impl_->vsApi;
+            VSNode *node = impl_->node;
+            prefetched.futures.push_back(std::async(std::launch::async, [api, node, warmFrame] {
+                char ignoredError[1024]{};
+                return api->getFrame(warmFrame, node, ignoredError, sizeof(ignoredError));
+            }));
+        }
         char errorBuffer[1024]{};
         const VSFrame *source = impl_->vsApi->getFrame(bounded, impl_->node, errorBuffer, sizeof(errorBuffer));
         if (!source) {

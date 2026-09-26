@@ -32,7 +32,7 @@ $scripts = Join-Path $venv "Scripts"
     "vapoursynth-cas==3.0" "vapoursynth-nlm-ispc==4.0" "vapoursynth-vszip==22.1.0" `
     "vapoursynth-zsmooth==0.20.0" "vapoursynth-deblock==9.0" "vapoursynth-znedi3==3.3" `
     "vapoursynth-eedi3==10.0" "vapoursynth-sangnom==45.0" "vapoursynth-bwdif==5.1" `
-    "vapoursynth-vivtc==2.0"
+    "vapoursynth-vivtc==2.0" "vs-placebo==2.0.4"
 if ($LASTEXITCODE -ne 0) { throw "VapourSynth build dependencies failed to install." }
 
 $env:PATH = "$scripts;$env:PATH"

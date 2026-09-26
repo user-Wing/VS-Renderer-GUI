@@ -6,8 +6,12 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
 #include <QSpinBox>
 
 namespace vsr {
@@ -76,6 +80,29 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             connect(combo, &QComboBox::currentTextChanged, this,
                     [this, id](const QString &v) { emit parameterChanged(id, v); });
             editor = combo;
+            break;
+        }
+        case ParameterType::File: {
+            auto *container = new QWidget(this);
+            auto *layout = new QHBoxLayout(container);
+            layout->setContentsMargins(0, 0, 0, 0);
+            layout->setSpacing(4);
+            auto *path = new QLineEdit(value.toString(), container);
+            auto *browse = new QPushButton(QStringLiteral("浏览…"), container);
+            connect(path, &QLineEdit::editingFinished, this,
+                    [this, id, path] { emit parameterChanged(id, path->text()); });
+            connect(browse, &QPushButton::clicked, this, [this, id, path] {
+                const QString selected = QFileDialog::getOpenFileName(
+                    this, QStringLiteral("选择 libplacebo GLSL"), path->text(),
+                    QStringLiteral("GLSL shader (*.glsl);;所有文件 (*.*)"));
+                if (!selected.isEmpty()) {
+                    path->setText(selected);
+                    emit parameterChanged(id, selected);
+                }
+            });
+            layout->addWidget(path, 1);
+            layout->addWidget(browse);
+            editor = container;
             break;
         }
         }

@@ -1,0 +1,32 @@
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -2302,7 +2302,8 @@
+     if (swapChain_ != nullptr && hdr == swapHdr_ && outputBits == swapOutputBits_) {
+         context_->ClearState();
+         std::lock_guard presentLock(presentMutex_);
+-        const auto resize = swapChain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
++        const auto resize = swapChain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, tearingSupported_.load(std::memory_order_relaxed)
++            ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
+         if (SUCCEEDED(resize)) {
+             swapWidth_ = width; swapHeight_ = height;
+             ReleaseTimedTextResources();
+@@ -2428,7 +2429,8 @@
+             DXGI_FORMAT_B8G8R8A8_UNORM);
+     std::unique_lock presentLock(presentMutex_);
+     const auto resize = swapChain_->ResizeBuffers(0, std::max(1u, swapWidth_),
+-        std::max(1u, swapHeight_), format, 0);
++        std::max(1u, swapHeight_), format, tearingSupported_.load(std::memory_order_relaxed)
++            ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
+     if (FAILED(resize)) {
+         std::ostringstream message;
+         message << "Could not reconfigure the playback swap chain (HRESULT 0x" << std::hex
+@@ -4961,7 +4963,8 @@
+         } else if (pendingH != 0) {
+             context_->ClearState();
+             const auto resize = swapChain_->ResizeBuffers(0, pendingW,
+-                std::max(1u, pendingH), DXGI_FORMAT_UNKNOWN, 0);
++                std::max(1u, pendingH), DXGI_FORMAT_UNKNOWN, tearingSupported_.load(std::memory_order_relaxed)
++            ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0);
+             if (FAILED(resize)) {
+                 if (RequestRecoveryIfDeviceLostLocked()) {
+                     presentLock.unlock();
