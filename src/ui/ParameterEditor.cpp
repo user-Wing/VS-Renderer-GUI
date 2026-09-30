@@ -4,6 +4,7 @@
 #include "graph/FilterGraph.h"
 
 #include <QCheckBox>
+#include <algorithm>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
@@ -13,6 +14,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QAbstractItemView>
 
 namespace vsr {
 
@@ -22,7 +24,8 @@ ParameterEditor::ParameterEditor(QWidget *parent)
     form_ = new QFormLayout(this);
     form_->setContentsMargins(8, 8, 8, 8);
     form_->setHorizontalSpacing(8);
-    form_->setVerticalSpacing(4);
+    form_->setVerticalSpacing(10);
+    form_->setRowWrapPolicy(QFormLayout::WrapLongRows);
     form_->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     form_->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     clear();
@@ -75,10 +78,17 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         }
         case ParameterType::Choice: {
             auto *combo = new QComboBox(this);
+            combo->setMinimumWidth(90);
+            combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+            combo->setMinimumContentsLength(8);
             combo->addItems(parameter.choices);
+            int popupWidth = 0;
+            for (const auto &item : parameter.choices) popupWidth = std::max(popupWidth, combo->fontMetrics().horizontalAdvance(item) + 48);
+            combo->view()->setMinimumWidth(popupWidth);
+            combo->setToolTip(value.toString());
             combo->setCurrentText(value.toString());
             connect(combo, &QComboBox::currentTextChanged, this,
-                    [this, id](const QString &v) { emit parameterChanged(id, v); });
+                    [this, id, combo](const QString &v) { combo->setToolTip(v); emit parameterChanged(id, v); });
             editor = combo;
             break;
         }
@@ -106,7 +116,14 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             break;
         }
         }
-        form_->addRow(parameter.label, editor);
+        auto *label = new QLabel(parameter.label, this);
+        label->setWordWrap(true);
+        label->setMinimumWidth(70);
+        label->setMaximumWidth(150);
+        label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        editor->setMinimumWidth(0);
+        form_->addRow(label, editor);
     }
     if (definition->parameters.isEmpty())
         form_->addRow(new QLabel(QStringLiteral("该节点没有可调参数。"), this));

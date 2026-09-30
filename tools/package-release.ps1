@@ -73,6 +73,8 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "docs\dependencies.md") `
 $shaderCache = Join-Path $BuildDirectory "shader-cache"
 if (-not (Test-Path $shaderCache)) { throw "Missing shader cache; run the startup warmup test before packaging." }
 Copy-Item -LiteralPath $shaderCache -Destination $staging -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "third_party\rife") -Destination (Join-Path $staging "rife-licenses") -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "third_party\filter-licenses") -Destination (Join-Path $staging "filter-licenses") -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "third_party\shaders") -Destination (Join-Path $staging "shader-licenses") -Recurse -Force
 
 & $WinDeployQt --release --no-translations --no-opengl-sw --no-system-d3d-compiler `

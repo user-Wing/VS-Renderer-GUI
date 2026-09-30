@@ -50,6 +50,7 @@ private:
     QWidget *buildTransport();
     void buildToolbar();
     void selectPage(int index);
+    void showSettings();
     void connectPlayback();
     void populateCatalog();
     void refreshPipeline(int selectRow = -1);

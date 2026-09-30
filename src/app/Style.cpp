@@ -25,6 +25,9 @@ QString applicationStyleSheet()
         QCheckBox[vrrToggle="true"] { border: 1px solid #a8a8a8; border-radius: 3px; padding: 5px; background: #ffffff; }
         QCheckBox[vrrToggle="true"]:checked { border-color: #0067c0; background: #d9ebf7; }
         QCheckBox[vrrToggle="true"]:hover { border-color: #0067c0; background: #e5f1fb; }
+        QCheckBox::indicator { width: 15px; height: 15px; border: 1px solid #727272; border-radius: 2px; background: #ffffff; }
+        QCheckBox::indicator:checked { background: #0067c0; border-color: #0067c0; image: url(:/ui/check.svg); }
+        QMenu::item:selected, QComboBox QAbstractItemView::item:selected, QComboBox QAbstractItemView::item:hover { background: #d9ebf7; color: #111111; }
         QStatusBar { background: #f9f9f9; border-top: 1px solid #d1d1d1; }
         QToolTip { color: #111111; background: #ffffff; border: 1px solid #8a8a8a; padding: 4px; }
     )");

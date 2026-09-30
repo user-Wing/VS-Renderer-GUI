@@ -29,6 +29,7 @@ public:
     void setScriptBuilder(std::function<ScriptBuildResult(const QString &)> builder);
     bool addJob(const QString &command, const QString &output, const QString &source,
                 const QString &script, double durationSeconds, QString *error = nullptr);
+    void setComposition(const QString &script, const QStringList &sources, double audioOffset, bool muted, const QString &description);
     bool isBusy() const;
     void stopAll();
     static QString outputPath(const QString &source, const QString &directory, bool timestamp);
@@ -42,6 +43,7 @@ private:
         QString source;
         QString output;
         QString sourceKey;
+        QStringList inputKeys;
         QString outputKey;
         std::shared_ptr<QTemporaryDir> directory;
         QTreeWidgetItem *item = nullptr;
@@ -77,6 +79,9 @@ private:
     qint64 pausedMilliseconds_ = 0;
     bool queuePaused_ = false;
     QString currentSource_;
+    QStringList compositionSources_;
+    double compositionAudioOffset_ = 0;
+    bool compositionMuted_ = false;
     std::function<ScriptBuildResult(const QString &)> scriptBuilder_;
 };
 

@@ -35,3 +35,10 @@ VCB 教程覆盖以公开章节 6、8、9、10 为入口。扩展节点优先选
 | vs-placebo | [vs-placebo](https://github.com/Lypheo/vs-placebo) | 官方 `Shader` 接口直接执行 mpv/libplacebo GLSL，可加载 Anime4K；输入 16-bit YUV、输出 YUV444P16 |
 
 DFTTest、Neo FFT3D 与 HQDn3D 的 VSRepo Windows 包仍使用已被 R80 拒绝的 API 3，因此没有列入可用 catalog；等上游提供 API 4 Windows 构建后再评估。
+
+
+## 2026-09-30 扩展
+
+已集成并执行验证：Zsmooth 的 TemporalMedian、FluxSmoothT、FluxSmoothST、SmartMedian、InterQuartileMean、DegrainMedian、Cnr4、CCD、DCTFilter、TemporalSoften、VerticalCleaner；VSZip CLAHE；Descale r11；RIFE NCNN Vulkan 4.26 / Heavy。界面新增 14 个节点，不是 14 个重复下载的插件。
+
+旧 API 3 版 DFTTest、CTMF、AWarpSharp2、Retinex、KNLMeansCL 等不能直接放入 R80 bundle；本轮使用其现代同类实现，不以不可加载的 DLL 充数。RIFE 核心与模型随包部署，不能直接加载 PKL 到 NCNN；性能记录见 README。

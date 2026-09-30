@@ -27,6 +27,10 @@ if (-not (Test-Path $archive)) {
     Invoke-WebRequest -Uri $url -OutFile $archive
 }
 
+$runtimePrefix = [System.IO.Path]::GetFullPath((Join-Path $projectRoot "build")).TrimEnd('\') + '\'
+if (-not $OutputDirectory.StartsWith($runtimePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Runtime staging target must stay inside project build directory: $OutputDirectory"
+}
 if (Test-Path $OutputDirectory) { Remove-Item -LiteralPath $OutputDirectory -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 Expand-Archive -LiteralPath $archive -DestinationPath $OutputDirectory -Force
@@ -42,6 +46,8 @@ Copy-Item (Join-Path $package "*.py"),
               (Join-Path $package "*.exe") -Destination $sitePackage -Force
 
 $pluginFiles = @(
+    "plugins\librife.dll",
+    "plugins\vsrepo\libdescale.dll",
     "plugins\cas.dll",
     "plugins\bwdif.dll",
     "plugins\deblock.dll",
@@ -77,6 +83,17 @@ if (-not (Test-Path (Join-Path $zsmoothSource "zsmooth.dll"))) {
     throw "Required VapourSynth plugin not found: plugins\zsmooth\zsmooth.dll"
 }
 Copy-Item -LiteralPath $zsmoothSource -Destination $plugins -Recurse -Force
+
+$rifeModels = Join-Path $package "plugins\models"
+foreach ($model in @("rife-v4.26", "rife-v4.26-heavy")) {
+    $modelSource = Join-Path $rifeModels $model
+    if (-not (Test-Path (Join-Path $modelSource "flownet.bin")) -or -not (Test-Path (Join-Path $modelSource "flownet.param"))) {
+        throw "Required RIFE NCNN model not found: $modelSource"
+    }
+    $modelsTarget = Join-Path $plugins "models"
+    New-Item -ItemType Directory -Force -Path $modelsTarget | Out-Null
+    Copy-Item -LiteralPath $modelSource -Destination $modelsTarget -Recurse -Force
+}
 
 $pth = Get-ChildItem $OutputDirectory -Filter "python*._pth" | Select-Object -First 1
 if (-not $pth) { throw "Embedded Python path file was not found." }

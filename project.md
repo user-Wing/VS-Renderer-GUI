@@ -163,3 +163,15 @@ third_party/   官方 VapourSynth Git 工作树；其他二进制不入库
 - 颜色处理加宽至至少 240 逻辑像素，当前算法完整悬停提示、菜单互斥标记；两页 VRR 控件增加边框和选中状态。
 - 验证：真实九路导入后卸载、偏移和 HWND 保留、重导入、全部移除及恢复；ABCD 四区域真实像素探针和提示几何检查通过。全套 CTest 五组通过。Qt 截图仅核查控件，不包含原生视频画面。
 - 交付：根目录 changelog.md 记录本轮及版本累计更新，docs/release-1.0.1-draft.md 保存本地发布说明。代码推送 GitHub，生成含 shader-cache 的 7z 和校验文件，不创建或上传 GitHub Release。
+
+
+## 19. 对比画布导出、参数布局与 RIFE（2026-09-30）
+
+- 文件：AnalysisExport.cpp 与内嵌 comparison-export.py 承担画布快照和合成，AnalysisPage 保留播放职责；ExportWindow 复用现有队列，保护快照所有输入，音频输入应用负偏移/静音。按归一化区域、真实视频视口、缩放和平移计算裁切，RGB float 拼图后输出 YUV444P16。分段堆叠代替九张满尺寸空白画布。
+- 语义：最大源按像素总数选原始宽高；所有导入源参与尺寸选择，仅可见源合成。全局零时刻至可见源/音频最早结束，负偏移前段保持首帧。静态布局快照；VFR 按源时间基近似。Jinc/Super-XBR/双边色度拒绝不一致导出，不静默降级；实时 D3D 与 VS 非逐像素复刻。
+- UI：自适配文件名宽度、最小 160px 进度条、8px 间距；底部模式/音频加宽，颜色处理采用标准组合框。SVG 勾号及显式复选框。设置按钮移动源滤镜选择并保存。根因修复：侧栏裸 border-right QSS 继承到子控件，限定为 #processingSidebar 后消失；参数使用行间距与长标签换行、展开菜单宽度自适配。
+- 滤镜：新增 14 个节点，Zsmooth 0.20.0 / VSZip 22.1.0 已有 API 4 算法直接复用，Descale r11 与 RIFE r9_mod_v33 实际部署。批量下载发现旧 DFTTest/CTMF/AWarp/Retinex 等为 API 3，未加入便携 staging。build-vapoursynth 调用 install-analysis-plugins，RIFE 模型来自用户现有转换目录，SHA-256 清单与许可证在 third_party/rife。最终用户无需单独安装，源码构建需提供已验证模型目录。
+- RIFE：PKL 是 PyTorch 权重，NCNN 使用 param/bin。本机两个 NCNN 模型实际插值与 2× 帧数通过，AMD 610M 小图验证成功；RTX 4070 Laptop 单线程 1080p 暖态 12.88 / 10.97 张插值帧每秒，不能保证 24→48 实时。VS 高于源 FPS 时提升状态轮询，验证真实 GUI 提交奇数插值帧；CPU plane copy 和 GPU 吞吐限制仍存在。
+- 验证：所有 AB/ABC/ABCD 子模式及九路网格在缩放/平移后实际取帧；四颜色 MKV 实际编码并逐象限检查、最大尺寸包含隐藏源，长名称与最小进度条、禁止覆盖非主源、设置入口验证。14 新滤镜和两个 RIFE 模型实际输出。
+
+- 最终回归：Release 构建，CTest 5/5 通过；RIFE 实际主页面 700ms 测试提交 29 帧，其中 13 帧为补出来的奇数中间帧。日志 build/rife-preview.txt、build/new-filters.txt、build/composition-final.txt、build/rife-1080p.txt、build/rife-amd.txt。

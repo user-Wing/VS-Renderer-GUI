@@ -26,7 +26,7 @@ Windows 上用图形化滤镜链生成 VapourSynth 脚本，并以双路画面�
 
 ## 图像分析比对
 
-左上角三横按钮展开或收起导航，切换“VS 实时渲染”和“图像分析比对”。切页暂停离开的播放器，保留文件、画面设置和每个视频独立的时间偏移。
+左上角三横按钮展开或收起导航，切换“VS 实时渲染”和“图像分析比对”。切页暂停离开的播放器，保留文件、画面设置和每个视频独立的时间偏移。导航最底部“设置”可切换 VS 源滤镜 L-SMASH Works / FFMS2，并保存选择；该选择不再占用“输入与环境”栏目。
 
 顶部“打开视频”可多选，也可直接拖入多个视频，最多 9 个。对比页接受 MP4、MKV、MOV、AVI、WebM、TS 等主流格式（具体编码由随附 FFmpeg/3FP 支持），不经过 VS；**MKV 限制仅用于第一页导出**。
 
@@ -41,7 +41,29 @@ Windows 上用图形化滤镜链生成 VapourSynth 脚本，并以双路画面�
 
 进度条显示各路本地时间，拖动任一条同步移动当前参与比较的视频并保持偏移。每行 ±1 帧、±1 秒只调整本视频；全局逐帧以第一格实际帧时间为准，其他视频按时间定位。音频下拉可选择任意已导入视频或静音；VRR 低延迟与 VRR Pacing 位于播放控制右侧。上下平移按实际视频显示区域计算，与水平拖动保持相同像素响应。
 
-右下角“颜色处理”控制独立色度上采样：Nearest、Bilinear、Bicubic、Softcubic、Mitchell、Lanczos、Spline36、Jinc、Bilateral、亮度引导双边重建及 Super-XBR 单阶段。悬停显示当前选中算法的完整名称，菜单用勾选标记当前项；颜色处理控件已加宽，两个 VRR 开关有边框和选中高亮。Cubic 与 Reconstruction 使用二级菜单。放大算法新增 Spline36 和 Super-XBR 单阶段；后者是 Hyllian 开源 pass-0 对角核的移植，**并非完整三阶段 Super-XBR**。不包含 NGU 或其他 madVR 专有实现。
+右下角“颜色处理”控制独立色度上采样：Nearest、Bilinear、Bicubic、Softcubic、Mitchell、Lanczos、Spline36、Jinc、Bilateral、亮度引导双边重建及 Super-XBR 单阶段。悬停显示当前选中算法的完整名称，菜单用勾选标记当前项；颜色处理控件已加宽，两个 VRR 开关有边框和选中高亮。颜色处理与放大算法均采用一致的下拉列表和蓝色悬停提示。放大算法新增 Spline36 和 Super-XBR 单阶段；后者是 Hyllian 开源 pass-0 对角核的移植，**并非完整三阶段 Super-XBR**。不包含 NGU 或其他 madVR 专有实现。
+
+## 导出对比画布
+
+顶部模式选择右侧“导出对比画布…”复用独立导出窗口与编码队列，粘贴 3FUI FFmpeg 命令后输出 MKV。保存的是点击按钮时的布局快照：当前显示的源、常规并排/网格或 AB/ABC/ABCD 切割位置、各路缩放平移、时间偏移及音频来源。画布内容合成为单路视频，不包含控件、取色提示和拖柄；任务开始后修改页面不会改变已保存的快照。
+
+输出尺寸取所有已导入源中像素总数最多的视频的原始宽高（相同总像素时取先导入者）；当前未显示的高分辨率源也参与尺寸选择。常规模式拼完整画面，滑块模式拼同一画布上的局部；按当前画面视口保留适配和黑边，导出尺寸与预览宽高比不同会按归一化坐标映射。默认以第一格帧率，从全局时间 0 输出至参与画面/音频的最早结束点；负偏移的前段保持源首帧。VFR 使用源滤镜给出的时间基近似。
+
+支持 Point/Linear/Bicubic/Lanczos/Spline36 与对应 Cubic 色度核。Jinc、Super-XBR、双边色度尚无一致的 VS 导出实现，当前会明确阻止，不静默换成其他核；CPU VS 和实时 D3D 路径不保证逐像素相同。3FUI 命令中额外的裁切、缩放、调色继续作用于合成结果。所选音频源作为 FFmpeg 输入 0，应用同一时间偏移；静音选择强制不输出音频。保护所有输入及已排队任务的输入路径，禁止覆盖。
+
+对齐轨道会按长文件名自适配扩大下拉框、缩短进度条，进度条至少 160 逻辑像素，下拉框最多 600；完整名称可悬停查看，展开列表可更宽。时间与左右控件采用一致的 8 像素间隔。底部布局、音频选择器加宽，VRR 使用显式方框和蓝色勾选标记。
+
+## 新增滤镜与 RIFE
+
+新增 14 个可调节点：TemporalMedian、FluxSmoothT、FluxSmoothST、SmartMedian、InterQuartileMean、DegrainMedian、Cnr4、CCD、DCTFilter、TemporalSoften、VerticalCleaner、CLAHE、Descale、RIFE。前 12 个使用随附 Zsmooth / VSZip 的 API 4 实现，Descale 和 RIFE 原生插件也随便携程序部署；无需用户另外下载插件。时域中值/Cnr4/RIFE 使用基于邻帧亮度差的镜头属性，CCD 和补帧前后明确转换格式。参数说明与调节项直接显示在节点面板。
+
+RIFE 提供 4.26 和 4.26 Heavy，采用 NCNN Vulkan，携带两套转换后的 `.param/.bin` 模型。已在 NVIDIA RTX 4070 Laptop 和 AMD Radeon 610M 实际生成插值帧；Intel 等设备需可用 Vulkan 驱动，未逐机型验证。倍数、GPU 编号、工作线程及镜头切换处理可调。
+
+VS 的 PyTorch 路线支持 `.pkl` 权重，Windows 常见 CUDA/TensorRT 配置以 NVIDIA 为目标，PyTorch 依赖体积大且当前便携 Python 3.15 无对应常用预编译轮子，因此本轮采用 NCNN。`.pkl` 不能直接作为 NCNN 模型传入；本机使用用户指定目录中已有的 4.26 / Heavy 转换模型，记录精确 SHA-256，不临时把 PKL 改扩展名。
+
+本机 1920×1080 合成输入、GPU 0、单工作线程、四张插值帧的暖态测试：4.26 约 12.88 张插值帧/秒，Heavy 约 10.97 张/秒（不含解码、帧桥和显示开销），达不到该配置下 24→48 fps 实时播放；小分辨率预览已验证中间帧确实提交。补帧播放使用更密的时间轮询，慢滤镜仍跳过落后目标，离线导出保持完整帧数。
+
+来源：[Zsmooth](https://github.com/adworacz/zsmooth)、[VSZip](https://github.com/dnjulek/vapoursynth-zip)、[Descale](https://github.com/Irrational-Encoding-Wizardry/descale)、[NCNN RIFE](https://github.com/styler00dollar/VapourSynth-RIFE-ncnn-Vulkan)、[PyTorch RIFE](https://github.com/HolyWu/vs-rife)。
 
 ## 启动性能与 VS 增强
 

@@ -200,6 +200,17 @@ void ExportWindow::setCurrentSource(const QString &source)
     singleOutput_->setText(source.isEmpty() ? QString() : outputPath(source, {}, true));
 }
 
+void ExportWindow::setComposition(const QString &script, const QStringList &sources, double audioOffset, bool muted, const QString &description)
+{
+    compositionSources_ = sources;
+    compositionAudioOffset_ = audioOffset;
+    compositionMuted_ = muted;
+    setScriptBuilder([script](const QString &) { ScriptBuildResult result; result.script = script; return result; });
+    tabs_->setTabEnabled(1, false);
+    sourceLabel_->setText(description);
+    findChild<QPushButton *>(QStringLiteral("exportSingle"))->setText(QStringLiteral("导出对比画布"));
+}
+
 QString ExportWindow::outputPath(const QString &source, const QString &directory, bool timestamp)
 {
     const QFileInfo info(source);
@@ -259,10 +270,13 @@ bool ExportWindow::addJob(const QString &command, const QString &output, const Q
     const auto fail = [&](const QString &message) { if (error) *error = message; return false; };
     const QString sourceKey = pathKey(source);
     const QString outputKey = pathKey(output);
+    QStringList inputKeys{sourceKey};
+    for (const auto &input : compositionSources_) inputKeys.append(pathKey(input));
+    if (inputKeys.contains(outputKey)) return fail(QStringLiteral("输出不能覆盖任何输入视频。"));
     for (const auto &existing : jobs_) {
         if (existing->sourceKey == sourceKey)
             return fail(QStringLiteral("此文件已在队列中，停止后请使用“从头重新处理”，不要重复添加。"));
-        if (existing->outputKey == outputKey || existing->sourceKey == outputKey || existing->outputKey == sourceKey)
+        if (existing->outputKey == outputKey || existing->inputKeys.contains(outputKey) || inputKeys.contains(existing->outputKey))
             return fail(QStringLiteral("输出路径与队列中的输入或输出冲突。"));
     }
     auto job = std::make_shared<Job>();
@@ -278,8 +292,23 @@ bool ExportWindow::addJob(const QString &command, const QString &output, const Q
     file.close();
     job->plan = ExportPipeline::buildPlan(command, source, output, file.fileName(), QCoreApplication::applicationDirPath());
     if (!job->plan.error.isEmpty()) return fail(job->plan.error);
+    for (const auto &input : compositionSources_)
+        if (pathKey(input) == outputKey) return fail(QStringLiteral("输出不能覆盖任何对比源视频。"));
+    if (!compositionSources_.isEmpty()) {
+        auto &args = job->plan.ffmpegArguments;
+        const int input = args.indexOf(QStringLiteral("-i"));
+        if (input >= 0 && compositionAudioOffset_ != 0) {
+            args.insert(input, QStringLiteral("-itsoffset"));
+            args.insert(input + 1, QString::number(-compositionAudioOffset_, 'f', 7));
+        }
+        if (compositionMuted_) {
+            const int destination = args.indexOf(QDir::toNativeSeparators(output));
+            args.insert(destination, QStringLiteral("-an"));
+        }
+    }
     job->source = source;
     job->sourceKey = sourceKey;
+    job->inputKeys = inputKeys;
     job->outputKey = outputKey;
     job->output = output;
     job->durationSeconds = durationSeconds;

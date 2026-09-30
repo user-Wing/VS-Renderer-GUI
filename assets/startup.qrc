@@ -1,1 +1,1 @@
-<RCC><qresource prefix="/startup"><file alias="warmup.mkv">startup-warmup.mkv</file></qresource></RCC>
+<RCC><qresource prefix="/startup"><file alias="warmup.mkv">startup-warmup.mkv</file></qresource><qresource prefix="/ui"><file>check.svg</file></qresource><qresource prefix="/export"><file>comparison-export.py</file></qresource></RCC>

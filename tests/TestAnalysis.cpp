@@ -1,4 +1,14 @@
 #include "ui/AnalysisPage.h"
+#include "ui/ExportWindow.h"
+#include <QTreeWidget>
+#include <QPlainTextEdit>
+#include <QLineEdit>
+#include <QDialog>
+#include <QTimer>
+#include <QDropEvent>
+#include <QDragEnterEvent>
+#include <QMimeData>
+#include <QListWidget>
 #include "ui/MultiCompareView.h"
 #include "ui/PreviewPane.h"
 #include "app/MainWindow.h"
@@ -174,9 +184,8 @@ private slots:
             QVERIFY(label->text().contains("RGB"));
             QVERIFY(view->cellRect(slot).translated(0,28).contains(QRect(label->mapTo(view,QPoint(0,0)),label->size())));
         }
-        auto *color = page.findChild<QToolButton *>("colorProcessing");
-        auto *nearest = color->menu()->actions().first();
-        nearest->trigger(); QVERIFY(nearest->isChecked());
+        auto *color = page.findChild<QComboBox *>("colorProcessing");
+        color->setCurrentIndex(0); QCOMPARE(color->currentData().toInt(),0);
         QVERIFY(color->toolTip().contains("Nearest"));
         auto *retained = view->pane(8);
         const auto hwnd = retained->surface()->winId();
@@ -217,6 +226,117 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty() || !errors.isEmpty(),15000);
         QVERIFY2(errors.isEmpty(),errors.isEmpty()?"":qPrintable(errors.first().first().toString()));
         QVERIFY(!frames.isEmpty());
+    }
+    void expandedFiltersExecute()
+    {
+        QTemporaryDir dir; const QString input=dir.filePath("input.mkv");
+        QVERIFY(QFile::copy(QStringLiteral(":/startup/warmup.mkv"),input));
+        VapourSynthFrameServer server;
+        QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(),15000); QVERIFY(server.available());
+        QSignalSpy loaded(&server,&VapourSynthFrameServer::scriptLoaded), errors(&server,&VapourSynthFrameServer::errorOccurred), frames(&server,&VapourSynthFrameServer::frameReady);
+        for(const auto &id:{"temporal_median","flux_t","flux_st","smart_median","iq_mean","degrain_median","cnr4","ccd","dct_filter","temporal_soften","vertical_cleaner","clahe","descale","rife"}) {
+            FilterGraph graph; const int row=graph.add(id); QVERIFY(row>=0);
+            if(QString(id)=="descale") {graph.setParameter(row,"width",64);graph.setParameter(row,"height",36);}
+            const auto script=VpyScriptBuilder::build(input,SourceFilter::Ffms2,graph);
+            QVERIFY(script.errors.isEmpty());
+            loaded.clear();errors.clear();frames.clear();
+            server.loadScript(script.script,dir.filePath("filters.vpy"));
+            QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !errors.isEmpty(),15000);
+            QVERIFY2(errors.isEmpty(),qPrintable(QString(id)+": "+(errors.isEmpty()?QString():errors.first().first().toString())));
+            server.requestFrame(1);
+            QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty() || !errors.isEmpty(),20000);
+            QVERIFY2(errors.isEmpty(),qPrintable(QString(id)+": "+(errors.isEmpty()?QString():errors.first().first().toString())));
+            QVERIFY(!frames.isEmpty());
+            qInfo()<<"Verified filter"<<id;
+            if(QString(id)=="rife") {
+                const auto info=qvariant_cast<VapourSynthClipInfo>(loaded.first().first()); const auto sourceInfo=qvariant_cast<VapourSynthClipInfo>(loaded.first().at(1)); QCOMPARE(info.totalFrames,sourceInfo.totalFrames*2);
+                graph.setParameter(row,"model",QStringLiteral("4.26 Heavy"));
+                loaded.clear();errors.clear();frames.clear();
+                server.loadScript(VpyScriptBuilder::build(input,SourceFilter::Ffms2,graph).script,dir.filePath("heavy.vpy"));
+                QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !errors.isEmpty(),15000);
+                QVERIFY2(errors.isEmpty(),errors.isEmpty()?"":qPrintable(errors.first().first().toString()));
+                server.requestFrame(1);QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty() || !errors.isEmpty(),20000);
+                QVERIFY2(errors.isEmpty(),errors.isEmpty()?"":qPrintable(errors.first().first().toString()));
+                QVERIFY(!frames.isEmpty());
+            }
+        }
+    }
+    void compositionExportsCanvas()
+    {
+        QTemporaryDir dir; QStringList paths;
+        const QString ffmpeg=QStringLiteral("C:/PortableSoft/FFmpegFreeUI ReadyToRun x64/ffmpeg.exe");
+        const QStringList colors{"red","lime","blue","white"};
+        for(int i=0;i<4;++i) {
+            const QString path=dir.filePath(QString("%1.mkv").arg(i));paths<<path;
+            QProcess process;process.start(ffmpeg,{"-v","error","-f","lavfi","-i",QString("color=%1:size=%2:rate=24:duration=2").arg(colors[i],i==3?"320x180":"160x90"),"-c:v","ffv1","-y",path});
+            QVERIFY(process.waitForFinished(15000));QCOMPARE(process.exitCode(),0);
+        }
+        ThreeFpApi api;AnalysisPage page(api);page.resize(1700,1000);page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));page.openFiles(paths);
+        QTRY_VERIFY_WITH_TIMEOUT(!page.busy(),15000);
+        auto *layout=page.findChild<QComboBox *>("analysisLayout");
+        layout->setCurrentIndex(layout->findData(MultiCompareView::FourWipe));
+        auto *view=page.findChild<MultiCompareView *>();view->setDivision(.35,.65);
+        page.alignVideo(1,1,true);QTRY_VERIFY_WITH_TIMEOUT(!page.busy() && page.offset(1)>9000000,10000);
+        const auto script=page.compositionScript();QVERIFY2(script.errors.isEmpty(),qPrintable(script.errors.join(";")));
+        QFile saved(dir.filePath("composition.vpy"));QVERIFY(saved.open(QIODevice::WriteOnly));saved.write(script.script.toUtf8());saved.close();
+        QProcess pipe;pipe.start(QCoreApplication::applicationDirPath()+"/runtime/python/Lib/site-packages/vapoursynth/vspipe.exe",{"--info",saved.fileName(),"-"});
+        QVERIFY(pipe.waitForFinished(15000));QVERIFY2(pipe.exitCode()==0,pipe.readAllStandardError().constData());
+        QVERIFY(pipe.readAllStandardOutput().contains("Width: 320"));
+        QTest::mouseClick(page.findChild<QPushButton *>("exportComparison"),Qt::LeftButton);
+        ExportWindow *window=nullptr;
+        for(auto *widget:QApplication::topLevelWidgets()) if(auto *candidate=qobject_cast<ExportWindow *>(widget)) window=candidate;
+        QVERIFY(window);
+        const QString output=dir.filePath("canvas.mkv");
+        QString overwriteError;
+        QVERIFY(!window->addJob("ffmpeg -y -i <输入文件> -c:v ffv1 <输出文件>",paths[2],paths[0],script.script,1,&overwriteError));
+        QVERIFY(overwriteError.contains(QStringLiteral("覆盖")));
+        window->findChild<QPlainTextEdit *>("exportCommand")->setPlainText("ffmpeg -y -i <输入文件> -map 0:v -c:v ffv1 <输出文件>");
+        window->findChild<QLineEdit *>("singleOutput")->setText(output);
+        QTest::mouseClick(window->findChild<QPushButton *>("exportSingle"),Qt::LeftButton);
+        QTRY_VERIFY_WITH_TIMEOUT(!page.exportBusy() && QFileInfo(output).size()>1000,30000);
+        auto *table=window->findChild<QTreeWidget *>();QCOMPARE(table->topLevelItem(0)->text(2),QStringLiteral("100%"));
+        QProcess decode;decode.start(ffmpeg,{"-v","error","-i",output,"-frames:v","1","-pix_fmt","rgb24","-f","rawvideo","pipe:1"});
+        QVERIFY(decode.waitForFinished(15000));QCOMPARE(decode.exitCode(),0);
+        const QByteArray rgb=decode.readAllStandardOutput();QCOMPARE(rgb.size(),320*180*3);
+        const QList<QPoint> probes{{50,60},{240,60},{50,145},{240,145}};
+        for(int i=0;i<4;++i) {
+            const int index=(probes[i].y()*320+probes[i].x())*3;
+            const int r=uchar(rgb[index]),g=uchar(rgb[index+1]),b=uchar(rgb[index+2]);
+            QVERIFY2(i==0?r>200&&g<40&&b<40:i==1?g>200&&r<40&&b<40:i==2?b>200&&r<40&&g<40:r>200&&g>200&&b>200,qPrintable(QString("slot %1: %2 %3 %4").arg(i).arg(r).arg(g).arg(b)));
+        }
+        page.grab().save(QCoreApplication::applicationDirPath()+"/comparison-export-layout.png");
+        auto *trackSource=page.findChild<QComboBox *>("analysisSource0");
+        const int shortWidth=trackSource->width();
+        const QString longName=QString(90,QLatin1Char('W'))+QStringLiteral(".mkv");
+        trackSource->setItemText(trackSource->currentIndex(),longName);
+        page.refreshLayout();
+        QVERIFY(trackSource->width()>shortWidth);
+        QVERIFY(page.findChild<QSlider *>("analysisTimeline0")->width()>=160);
+        QCOMPARE(trackSource->toolTip(),longName);
+        VapourSynthFrameServer server;
+        QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(),15000);
+        QSignalSpy loaded(&server,&VapourSynthFrameServer::scriptLoaded),errors(&server,&VapourSynthFrameServer::errorOccurred),frames(&server,&VapourSynthFrameServer::frameReady);
+        for(int count:{2,3,4,9}) {
+            if(count==9)page.openFiles({paths[0],paths[1],paths[2],paths[3],paths[0]});
+            page.setMode(count);QTRY_VERIFY_WITH_TIMEOUT(!page.busy(),10000);
+            for(int option=0;option<layout->count();++option) {
+                layout->setCurrentIndex(option);
+                QTest::qWait(50);
+                auto *pane=view->pane(page.visibleVideos().first());
+                pane->adoptView(1.25f,.2f,-.1f);
+                const auto composition=page.compositionScript();QVERIFY2(composition.errors.isEmpty(),qPrintable(composition.errors.join(";")));
+                loaded.clear();errors.clear();frames.clear();
+                server.loadScript(composition.script,dir.filePath("layout.vpy"));
+                QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !errors.isEmpty(),15000);
+                QVERIFY2(errors.isEmpty(),errors.isEmpty()?"":qPrintable(errors.first().first().toString()));
+                server.requestFrame(1);QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty() || !errors.isEmpty(),15000);
+                QVERIFY2(errors.isEmpty(),errors.isEmpty()?"":qPrintable(errors.first().first().toString()));
+                const auto frame=qvariant_cast<VapourSynthFrame>(frames.first().first());
+                QCOMPARE(frame.width,320);QCOMPARE(frame.height,180);
+            }
+        }
+        window->close();
     }
     void firstFrame2160p()
     {
@@ -355,6 +475,39 @@ private slots:
         QCOMPARE(view.cellRect(0).size(),QSize(480,314));
     }
 
+    void rifePreviewPresentsIntermediateFrames()
+    {
+        QTemporaryDir dir;const QString input=dir.filePath("rife.mkv");
+        QProcess encode;encode.start(QStringLiteral("C:/PortableSoft/FFmpegFreeUI ReadyToRun x64/ffmpeg.exe"),
+            {"-v","error","-f","lavfi","-i","testsrc2=size=320x180:rate=24:duration=4","-c:v","libx264","-preset","ultrafast","-y",input});
+        QVERIFY(encode.waitForFinished(15000));QCOMPARE(encode.exitCode(),0);
+        MainWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTRY_VERIFY_WITH_TIMEOUT(window.findChild<QProgressBar *>()->isHidden(),15000);
+        QMimeData mime;mime.setUrls({QUrl::fromLocalFile(input)});
+        QDragEnterEvent enter(QPoint(400,300),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier);
+        QApplication::sendEvent(&window,&enter);QVERIFY(enter.isAccepted());
+        QDropEvent drop(QPointF(400,300),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier);
+        QApplication::sendEvent(&window,&drop);QVERIFY(drop.isAccepted());
+        bool found=false;
+        for(auto *list:window.findChildren<QListWidget *>()) for(int i=0;i<list->count();++i)
+            if(list->item(i)->data(Qt::UserRole).toString()=="rife") {list->setCurrentRow(i);found=true;}
+        QVERIFY(found);
+        for(auto *button:window.findChildren<QPushButton *>()) if(button->text()==QStringLiteral("添加到处理链"))button->click();
+        auto *server=window.findChild<VapourSynthFrameServer *>();QVERIFY(server);
+        QSignalSpy loaded(server,&VapourSynthFrameServer::scriptLoaded),frames(server,&VapourSynthFrameServer::frameReady),errors(server,&VapourSynthFrameServer::errorOccurred);
+        for(auto *action:window.findChildren<QAction *>()) if(action->text()==QStringLiteral("生成并验证")) action->trigger();
+        QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !errors.isEmpty(),15000);
+        QVERIFY2(errors.isEmpty(),errors.isEmpty()?"":qPrintable(errors.first().first().toString()));
+        QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty(),15000);
+        QPushButton *play=nullptr;
+        for(auto *button:window.findChildren<QPushButton *>()) if(button->text()==QStringLiteral("播放"))play=button;
+        QVERIFY(play);frames.clear();play->click();QTest::qWait(700);play->click();
+        int intermediate=0;
+        for(const auto &entry:frames) if(qvariant_cast<VapourSynthFrame>(entry.first()).frameIndex%2==1)++intermediate;
+        qInfo()<<"RIFE preview submitted frames"<<frames.size()<<"intermediate frames"<<intermediate;
+        QVERIFY(frames.size()>8);QVERIFY(intermediate>2);
+        window.close();
+    }
     void navigation()
     {
         MainWindow window;
@@ -368,7 +521,15 @@ private slots:
         toggle->trigger();
         QCOMPARE(rail->width(), 180);
         const auto buttons = rail->findChildren<QToolButton *>();
-        QCOMPARE(buttons.size(), 2);
+        QCOMPARE(buttons.size(), 3);
+        QVERIFY(!window.findChild<QComboBox *>("sourceFilter")->isVisible());
+        bool settingsShown=false;
+        QTimer::singleShot(0,&window,[&settingsShown] {
+            auto *dialog=qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            if(dialog) { settingsShown=dialog->windowTitle()==QStringLiteral("设置") && dialog->findChild<QComboBox *>()->count()==2; dialog->reject(); }
+        });
+        window.findChild<QToolButton *>("applicationSettings")->click();
+        QVERIFY(settingsShown);
         buttons[1]->click();
         QVERIFY(window.findChild<AnalysisPage *>()->isVisible());
         buttons[0]->click();

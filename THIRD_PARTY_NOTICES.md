@@ -19,3 +19,7 @@
 ## Super-XBR 单阶段色度 / 放大核
 
 Hyllian, Copyright (c) 2015. MIT License. Adapted from the pass-0 diagonal kernel in [MPDN Extensions](https://github.com/zachsaw/MPDN_Extensions/blob/master/Extensions/RenderScripts/Super-xBR/super-xbr.hlsl). The original source and full license are retained in `third_party/shaders/super-xbr-upstream.hlsl` and deployed under `shader-licenses`. This implementation is the single-stage variant, not the complete three-pass scaler.
+
+
+- RIFE Vulkan：styler00dollar/VapourSynth-RIFE-ncnn-Vulkan r9_mod_v33，MIT；基于 Practical-RIFE 与 Tencent NCNN，对应 MIT/BSD 声明附在 `rife-licenses`。两套转换模型来自用户已安装的 VideoEnhancer RIFE 目录，精确哈希记录于 third_party/rife/runtime-sha256.json。以 NCNN param/bin 形式部署，不包含 PyTorch PKL 或 CUDA/TensorRT。
+- Descale r11：Irrational-Encoding-Wizardry/descale，MIT；来源与使用参数见 README 和依赖说明。

@@ -157,6 +157,50 @@ QString emitNode(const FilterNode &node)
                        "clip = core.vivtc.VDecimate(clip, cycle=%6, dupthresh=%7)")
             .arg(choiceNumber(p, "order"), choiceNumber(p, "mode"), booleanValue(p, "mchroma"),
                  number(p, "cthresh"), number(p, "mi"), number(p, "cycle"), realNumber(p, "dupthresh"));
+    if (node.definitionId == "temporal_median")
+        return QString("clip = core.zsmooth.TemporalMedian(clip, radius=%1, scenechange=True)").arg(number(p,"radius"));
+    if (node.definitionId == "flux_t")
+        return QString("clip = core.zsmooth.FluxSmoothT(clip, temporal_threshold=[%1], scalep=True)").arg(realNumber(p,"threshold"));
+    if (node.definitionId == "flux_st")
+        return QString("clip = core.zsmooth.FluxSmoothST(clip, temporal_threshold=[%1], spatial_threshold=[%2], scalep=True)").arg(realNumber(p,"temporal"),realNumber(p,"spatial"));
+    if (node.definitionId == "smart_median")
+        return QString("clip = core.zsmooth.SmartMedian(clip, radius=[%1], threshold=[%2], scalep=True)").arg(number(p,"radius"),realNumber(p,"threshold"));
+    if (node.definitionId == "iq_mean")
+        return QString("clip = core.zsmooth.InterQuartileMean(clip, radius=[%1])").arg(number(p,"radius"));
+    if (node.definitionId == "degrain_median")
+        return QString("clip = core.zsmooth.DegrainMedian(clip, limit=[%1], mode=[%2], scalep=True)").arg(realNumber(p,"limit"),number(p,"mode"));
+    if (node.definitionId == "cnr4")
+        return QString("clip = core.zsmooth.Cnr4(clip, radius=%1, str=[0,%2,%2])").arg(number(p,"radius"),number(p,"strength"));
+    if (node.definitionId == "ccd")
+        return QString("clip = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s='709')\n"
+                       "clip = core.zsmooth.CCD(clip, threshold=%1, temporal_radius=%2, scale=max(1.0, clip.height / 240.0))\n"
+                       "clip = core.resize.Bicubic(clip, format=vs.YUV444P16, matrix_s='709')").arg(realNumber(p,"threshold"),number(p,"radius"));
+    if (node.definitionId == "dct_filter")
+        return QString("clip = core.zsmooth.DCTFilter(clip, factors=[1,1,1,1,1,%1,%1,%1])").arg(realNumber(p,"high"));
+    if (node.definitionId == "temporal_soften")
+        return QString("clip = core.zsmooth.TemporalSoften(clip, radius=%1, threshold=[%2], scenechange=0, scalep=True)").arg(number(p,"radius"),realNumber(p,"threshold"));
+    if (node.definitionId == "vertical_cleaner")
+        return QString("clip = core.zsmooth.VerticalCleaner(clip, mode=[%1])").arg(choiceNumber(p,"mode"));
+    if (node.definitionId == "clahe")
+        return QString("_clahe_src = core.resize.Point(clip, format=vs.YUV444P8)\n"
+                       "_clahe_y = core.std.ShufflePlanes(_clahe_src, planes=0, colorfamily=vs.GRAY)\n"
+                       "_clahe_y = core.vszip.CLAHE(_clahe_y, limit=%1, tiles=[%2,%2])\n"
+                       "clip = core.std.ShufflePlanes([_clahe_y,_clahe_src], planes=[0,1,2], colorfamily=vs.YUV)").arg(number(p,"limit"),number(p,"tiles"));
+    if (node.definitionId == "descale")
+        return QString("_descale_y = core.std.ShufflePlanes(clip, planes=0, colorfamily=vs.GRAY)\n"
+                       "_descale_y = core.resize.Point(_descale_y, format=vs.GRAYS)\n"
+                       "_descale_y = core.descale.%1(_descale_y, width=%2, height=%3)\n"
+                       "_descale_y = core.resize.Point(_descale_y, format=vs.GRAY16)\n"
+                       "_descale_uv = core.resize.Spline36(clip, width=%2, height=%3, format=vs.YUV444P16)\n"
+                       "clip = core.std.ShufflePlanes([_descale_y,_descale_uv], planes=[0,1,2], colorfamily=vs.YUV)").arg(p.value("kernel").toString(),number(p,"width"),number(p,"height"));
+    if (node.definitionId == "rife")
+        return QString("import os\n"
+                       "_model = os.path.join(os.path.dirname(vs.__file__), 'plugins', 'models', %1)\n"
+                       "clip = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s='709')\n"
+                       "clip = core.rife.RIFE(clip, model_path=_model, factor_num=%2, gpu_id=%3, gpu_thread=%4, sc=%5)\n"
+                       "clip = core.resize.Bicubic(clip, format=vs.YUV444P16, matrix_s='709')")
+            .arg(VpyScriptBuilder::pythonString(p.value("model").toString()=="4.26 Heavy"?"rife-v4.26-heavy":"rife-v4.26"),
+                 number(p,"factor"),number(p,"gpu"),number(p,"threads"),booleanValue(p,"scene"));
     if (node.definitionId == "grain_add")
         return QString("clip = core.grain.Add(clip, var=%1, constant=%2)")
             .arg(realNumber(p, "var"), booleanValue(p, "constant"));
@@ -188,6 +232,18 @@ ScriptBuildResult VpyScriptBuilder::build(const QString &sourcePath, SourceFilte
         body << QString("src = core.lsmas.LWLibavSource(source=%1)").arg(path);
     else
         body << QString("src = core.ffms2.Source(source=%1)").arg(path);
+    body << QStringLiteral(
+        "def _vsr_scene_detect(c):\n"
+        "    nxt = c[1:] + c[-1] if c.num_frames > 1 else c\n"
+        "    prv = c[0] + c[:-1] if c.num_frames > 1 else c\n"
+        "    next_stats = core.std.PlaneStats(c, nxt, prop='Next')\n"
+        "    prev_stats = core.std.PlaneStats(c, prv, prop='Prev')\n"
+        "    def mark(n, f):\n"
+        "        out = f[0].copy()\n"
+        "        out.props['_SceneChangeNext'] = int(f[1].props['NextDiff'] > 0.1)\n"
+        "        out.props['_SceneChangePrev'] = int(f[2].props['PrevDiff'] > 0.1)\n"
+        "        return out\n"
+        "    return core.std.ModifyFrame(c, clips=[c, next_stats, prev_stats], selector=mark)\n");
     body << QStringLiteral("clip = src");
 
     int emitted = 0;
@@ -202,7 +258,10 @@ ScriptBuildResult VpyScriptBuilder::build(const QString &sourcePath, SourceFilte
         namespaces.insert(definition->pluginNamespace);
         if (node.definitionId == QStringLiteral("deband"))
             namespaces.insert(QStringLiteral("fmtc"));
-        const QString line = emitNode(node);
+        QString line = emitNode(node);
+        if (node.definitionId == "temporal_median" || node.definitionId == "cnr4" ||
+            (node.definitionId == "rife" && node.parameters.value("scene").toBool()))
+            line.prepend(QStringLiteral("clip = _vsr_scene_detect(clip)\n"));
         if (line.isEmpty()) {
             result.errors.append(QString("节点尚无脚本映射：%1").arg(definition->name));
             continue;

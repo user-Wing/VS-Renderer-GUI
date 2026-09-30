@@ -62,3 +62,10 @@ VapourSynth 固定参考提交为 `5b2d5562726a91d9a75441cc4728a90e6c9f4f27`。3
 `tools/build-3fp.ps1` 还应用 `3fp-performance-chroma.patch`：共享 D3D 字节码、非阻塞状态读取/首帧重绘、独立色度核与 Spline36/Super-XBR 单阶段。它与当前 GUI 的缩放参数编码配套，不可只替换 EXE。
 
 Release 构建后运行 `vsr_frame_bridge_tests.exe startupWarmsDecodeAndBothRenderers`，生成输出目录中的 `shader-cache/*.cso`。编译缓存缺失时首次测试会较慢，后续新进程直接读取字节码。发布必须一起复制 `shader-cache`，打包脚本会检查此目录存在；Super-XBR 原始源文件/许可证从 `third_party/shaders` 部署到 `shader-licenses`。
+
+
+### RIFE / 分析导出扩展（2026-09-30）
+
+`tools/install-analysis-plugins.ps1` 安装 Descale 并下载固定 r9_mod_v33 RIFE Vulkan DLL，校验 SHA-256，再从 `-ModelDirectory` 拷贝已转换的 `rife-v4.26` 与 `rife-v4.26-heavy` 目录（每个包含 flownet.param / flownet.bin）。默认采用用户的 FFmpegFreeUI VideoEnhancer 模型目录；模型清单见 third_party/rife/runtime-sha256.json。stage 脚本随后将这些文件放入便携运行时，发布脚本附带许可证。PKL 不能替代 NCNN 文件。
+
+14 个新增节点其余使用已固定的 Zsmooth / VSZip；不部署 VSRepo 返回的 API 3 旧二进制。源码依赖安装需要模型目录，最终便携使用无需下载。RIFE Vulkan 不要求 CUDA/TensorRT，需支持 Vulkan 的显卡驱动。

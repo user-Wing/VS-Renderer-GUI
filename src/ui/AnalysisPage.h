@@ -1,6 +1,7 @@
 #pragma once
 
 #include "backend/ThreeFpApi.h"
+#include "graph/VpyScriptBuilder.h"
 #include <QElapsedTimer>
 #include <QWidget>
 #include <array>
@@ -14,6 +15,7 @@ class QCheckBox;
 class QComboBox;
 
 namespace vsr {
+class ExportWindow;
 class MultiCompareView;
 class PreviewPane;
 class ThreeFpPlayer;
@@ -39,13 +41,21 @@ public:
     void selectSource(int slot, int video);
     void setMode(int tracks);
     void refreshLayout();
+    ScriptBuildResult compositionScript() const;
+    bool exportBusy() const;
+    void stopExport();
+signals:
+    void exportIdle();
 
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dropEvent(QDropEvent *event) override;
 
 private:
+    void exportComparison();
     void poll();
+    void resizeEvent(QResizeEvent *event) override;
+    void adjustTrackWidths();
     void configurePlayer(int video);
     int masterVideo() const;
     bool activeVideo(int video) const;
@@ -80,6 +90,7 @@ private:
     MultiCompareView *view_ = nullptr;
     QPushButton *play_ = nullptr;
     QLabel *status_ = nullptr;
+    std::unique_ptr<ExportWindow> exportWindow_;
     QCheckBox *sync_ = nullptr;
     std::int64_t global_ = 0;
     std::optional<std::int64_t> queuedSeek_;

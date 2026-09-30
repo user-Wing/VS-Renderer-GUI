@@ -17,6 +17,7 @@ qt_add_executable(VSRenderer WIN32
     src/backend/StartupWarmup.h
     src/ui/MultiCompareView.cpp
     src/ui/MultiCompareView.h
+    src/ui/AnalysisExport.cpp
     src/ui/AnalysisPage.cpp
     src/ui/AnalysisPage.h
     src/main.cpp

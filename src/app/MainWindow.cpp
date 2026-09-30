@@ -8,6 +8,8 @@
 #include <QToolButton>
 #include <QStyle>
 #include <QProgressBar>
+#include <QSettings>
+#include <QDialogButtonBox>
 #include <QCloseEvent>
 #include "backend/ThreeFpPlayer.h"
 #include "backend/VapourSynthFrameServer.h"
@@ -129,6 +131,17 @@ MainWindow::MainWindow(QWidget *parent)
         connect(button, &QToolButton::clicked, this, [this, i] { selectPage(i); });
     }
     navigationLayout->addStretch();
+    auto *settings = new QToolButton(navigation_);
+    settings->setObjectName(QStringLiteral("applicationSettings"));
+    settings->setText(QStringLiteral("设置"));
+    settings->setToolTip(settings->text());
+    settings->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    settings->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    settings->setMinimumHeight(36);
+    settings->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    navigationButtons_.append(settings);
+    navigationLayout->addWidget(settings);
+    connect(settings, &QToolButton::clicked, this, &MainWindow::showSettings);
     pages_ = new QStackedWidget(shell);
     pages_->addWidget(root);
     shellLayout->addWidget(navigation_);
@@ -327,6 +340,29 @@ void MainWindow::selectPage(int index)
     setStatus(index == 0 ? QStringLiteral("VS 实时渲染") : QStringLiteral("图像分析比对 · 双路直接解码"));
 }
 
+void MainWindow::showSettings()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("设置"));
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *label = new QLabel(QStringLiteral("VapourSynth 源滤镜"), &dialog);
+    layout->addWidget(label);
+    auto *source = new QComboBox(&dialog);
+    source->addItems({QStringLiteral("L-SMASH Works"), QStringLiteral("FFMS2")});
+    source->setCurrentIndex(sourceFilter_->currentIndex());
+    layout->addWidget(source);
+    auto *hint = new QLabel(QStringLiteral("用于 VS 预览与导出。更改后重新生成并验证脚本生效。"), &dialog);
+    hint->setWordWrap(true); layout->addWidget(hint);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() == QDialog::Accepted) {
+        sourceFilter_->setCurrentIndex(source->currentIndex());
+        QSettings().setValue(QStringLiteral("sourceFilter"), source->currentIndex());
+    }
+}
+
 void MainWindow::buildToolbar()
 {
     auto *bar = addToolBar(QStringLiteral("命令栏"));
@@ -380,7 +416,8 @@ QWidget *MainWindow::buildSidebar()
     auto *sidebar = new QWidget(this);
     sidebar->setMinimumWidth(296);
     sidebar->setMaximumWidth(460);
-    sidebar->setStyleSheet(QStringLiteral("background:#ffffff;border-right:1px solid #d1d1d1;"));
+    sidebar->setObjectName(QStringLiteral("processingSidebar"));
+    sidebar->setStyleSheet(QStringLiteral("#processingSidebar{background:#ffffff;border-right:1px solid #d1d1d1;}"));
     auto *layout = new QVBoxLayout(sidebar);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(1);
@@ -394,11 +431,14 @@ QWidget *MainWindow::buildSidebar()
     sourcePath_->setAcceptDrops(false);
     sourcePath_->setPlaceholderText(QStringLiteral("尚未选择视频"));
     auto *inputRow = new QHBoxLayout;
-    sourceFilter_ = new QComboBox(input);
+    sourceFilter_ = new QComboBox(this);
+    sourceFilter_->hide();
+    sourceFilter_->setObjectName(QStringLiteral("sourceFilter"));
     sourceFilter_->addItem(QStringLiteral("L-SMASH Works"), static_cast<int>(SourceFilter::Lsmas));
     sourceFilter_->addItem(QStringLiteral("FFMS2"), static_cast<int>(SourceFilter::Ffms2));
     auto *browse = compactButton(QStringLiteral("浏览…"), input);
-    inputRow->addWidget(sourceFilter_, 1);
+    sourceFilter_->setCurrentIndex(QSettings().value(QStringLiteral("sourceFilter"),0).toInt());
+    inputRow->addStretch();
     inputRow->addWidget(browse);
     runtimeStatus_ = new QLabel(input);
     runtimeStatus_->setWordWrap(true);
@@ -832,6 +872,13 @@ void MainWindow::closeEvent(QCloseEvent *event)
         setStatus(QStringLiteral("正在停止编码并保留输出文件，完成后退出。"));
         return;
     }
+    if (analysisPage_ && analysisPage_->exportBusy()) {
+        event->ignore();
+        connect(analysisPage_.get(), &AnalysisPage::exportIdle, this, &QWidget::close, Qt::UniqueConnection);
+        analysisPage_->stopExport();
+        setStatus(QStringLiteral("正在停止对比编码并保留输出文件，完成后退出。"));
+        return;
+    }
     if (exportWindow_) exportWindow_->close();
     QMainWindow::closeEvent(event);
 }
@@ -990,6 +1037,10 @@ void MainWindow::updatePlaybackState()
             seekTimeline(pendingTimelineValue_);
     }
     playing_ = snap.state == ThreeFpState::Playing;
+    const bool higherFps = vsFpsNumerator_ > 0 && sourceFpsNumerator_ > 0 &&
+        vsFpsNumerator_ * sourceFpsDenominator_ > sourceFpsNumerator_ * vsFpsDenominator_;
+    stateTimer_->setInterval(playing_ && higherFps
+        ? std::clamp<int>(int(500 * vsFpsDenominator_ / vsFpsNumerator_), 4, 33) : 33);
     playButton_->setText(playing_ ? QStringLiteral("暂停") : QStringLiteral("播放"));
     const auto sourceFrame = frameAtPosition100ns(
         snap.position100ns, sourceTotalFrames_, sourceFpsNumerator_, sourceFpsDenominator_);

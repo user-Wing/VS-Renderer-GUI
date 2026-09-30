@@ -1,10 +1,11 @@
 #include "ui/AnalysisPage.h"
+#include "ui/ExportWindow.h"
 #include "backend/ThreeFpPlayer.h"
 #include "ui/MultiCompareView.h"
 #include "ui/PreviewPane.h"
 #include <QCheckBox>
-#include <QActionGroup>
 #include <QComboBox>
+#include <QAbstractItemView>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileDialog>
@@ -12,8 +13,6 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMimeData>
-#include <QMenu>
-#include <QToolButton>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -51,6 +50,10 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     mode_ = new QComboBox(this);
     mode_->setObjectName(QStringLiteral("analysisMode"));
     header->addWidget(mode_);
+    auto *exportButton = new QPushButton(QStringLiteral("导出对比画布…"),this);
+    exportButton->setObjectName(QStringLiteral("exportComparison"));
+    header->addWidget(exportButton);
+    connect(exportButton,&QPushButton::clicked,this,&AnalysisPage::exportComparison);
     connect(mode_, &QComboBox::currentIndexChanged, this, [this] { setMode(mode_->currentData().toInt()); });
     header->addStretch();
     sync_ = new QCheckBox(QStringLiteral("同步缩放"), this); sync_->setChecked(true); header->addWidget(sync_);
@@ -61,12 +64,14 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     connect(view_, &MultiCompareView::sourceRemoved, this, &AnalysisPage::removeVideo);
     for (int i=0;i<9;++i) panes_[i]=view_->pane(i);
     for (int row=0;row<4;++row) {
-        rows_[row]=new QWidget(this); auto *line=new QHBoxLayout(rows_[row]); line->setContentsMargins(0,0,0,0);
-        sources_[row]=new QComboBox(this); sources_[row]->setFixedWidth(180);
+        rows_[row]=new QWidget(this); auto *line=new QHBoxLayout(rows_[row]); line->setContentsMargins(0,0,0,0); line->setSpacing(8);
+        sources_[row]=new QComboBox(this); sources_[row]->setObjectName(QStringLiteral("analysisSource%1").arg(row)); sources_[row]->setMinimumWidth(120);
+        sources_[row]->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        sources_[row]->setMinimumContentsLength(10);
         line->addWidget(sources_[row]);
         connect(sources_[row], &QComboBox::currentIndexChanged, this, [this,row](int video) { if(video>=0) selectSource(row,video); });
-        times_[row]=new QLabel(this); times_[row]->setMinimumWidth(195); line->addWidget(times_[row]);
-        sliders_[row]=new QSlider(Qt::Horizontal,this); sliders_[row]->setRange(0,100000);
+        times_[row]=new QLabel(this); times_[row]->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Preferred); line->addWidget(times_[row]);
+        sliders_[row]=new QSlider(Qt::Horizontal,this); sliders_[row]->setRange(0,100000); sliders_[row]->setMinimumWidth(160);
         sliders_[row]->setObjectName(QStringLiteral("analysisTimeline%1").arg(row));
         line->addWidget(sliders_[row],1);
         connect(sliders_[row], &QSlider::valueChanged, this,[this,row](int value) {
@@ -83,9 +88,10 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     auto *controls=new QHBoxLayout(controls_);
     controls->setContentsMargins(0,0,0,0);
     layoutChoice_=new QComboBox(this); layoutChoice_->setObjectName(QStringLiteral("analysisLayout"));
+    layoutChoice_->setMinimumWidth(210);
     controls->addWidget(layoutChoice_);
     connect(layoutChoice_,&QComboBox::currentIndexChanged,this,[this] { refreshLayout(); });
-    audio_=new QComboBox(this); audio_->setMaximumWidth(150); audio_->setToolTip(QStringLiteral("音频选项：选择音频来源")); controls->addWidget(audio_);
+    audio_=new QComboBox(this); audio_->setMinimumWidth(200); audio_->setMaximumWidth(300); audio_->setToolTip(QStringLiteral("音频选项：选择音频来源")); controls->addWidget(audio_);
     connect(audio_,&QComboBox::currentIndexChanged,this,[this] {
         pause();
         for(int i=0;i<videoCount_;++i) if(players_[i]) players_[i]->setMuted(audio_->currentData().toInt()!=i);
@@ -105,44 +111,21 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     connect(vrr_,&QCheckBox::toggled,this,[this](bool enabled){for(auto &p:players_)if(p)p->setVrrPresent(enabled);});
     connect(pacing_,&QCheckBox::toggled,this,[this](bool enabled){for(auto &p:players_)if(p)p->setVrrPacing(enabled);});
     controls->addStretch();
-    auto *color = new QToolButton(this);
-    color->setText(QStringLiteral("颜色处理：Bilinear"));
-    color->setMinimumWidth(240);
+    auto *color = new QComboBox(this);
     color->setObjectName(QStringLiteral("colorProcessing"));
-    color->setPopupMode(QToolButton::InstantPopup);
-    auto *colorMenu = new QMenu(color);
-    color->setMenu(colorMenu);
-    auto *kernels = new QActionGroup(color);
-    kernels->setExclusive(true);
-    auto addKernel = [this,color,kernels](QMenu *menu,const QString &text,int value) {
-        menu->setToolTipsVisible(true);
-        auto *action=menu->addAction(text);
-        action->setToolTip(QStringLiteral("色度上采样：%1").arg(text));
-        action->setCheckable(true);
-        kernels->addAction(action);
-        action->setChecked(value == chromaAlgorithm_);
-        connect(action,&QAction::triggered,this,[this,color,text,value] {
-            chromaAlgorithm_=value;
-            for(auto &p:players_)if(p)p->setChromaAlgorithm(value);
-            color->setText(QStringLiteral("颜色处理：%1").arg(text));
-            color->setToolTip(QStringLiteral("当前色度上采样：%1").arg(text));
-        });
-    };
-    addKernel(colorMenu,QStringLiteral("Nearest"),0);
-    addKernel(colorMenu,QStringLiteral("Bilinear"),1);
-    auto *cubic=colorMenu->addMenu(QStringLiteral("Cubic"));
-    addKernel(cubic,QStringLiteral("Bicubic (Catmull-Rom)"),2);
-    addKernel(cubic,QStringLiteral("Softcubic (B-spline)"),7);
-    addKernel(cubic,QStringLiteral("Mitchell-Netravali"),8);
-    addKernel(colorMenu,QStringLiteral("Lanczos 3"),3);
-    auto *spline=colorMenu->addMenu(QStringLiteral("Spline"));
-    addKernel(spline,QStringLiteral("Spline36"),5);
-    addKernel(colorMenu,QStringLiteral("Jinc 2"),4);
-    addKernel(colorMenu,QStringLiteral("Bilateral"),9);
-    auto *reconstruction=colorMenu->addMenu(QStringLiteral("Reconstruction"));
-    addKernel(reconstruction,QStringLiteral("亮度引导双边重建"),10);
-    addKernel(colorMenu,QStringLiteral("Super-XBR（单阶段）"),6);
-    color->setToolTip(QStringLiteral("当前色度上采样：Bilinear。Super-XBR 使用开源 pass-0 对角核，不是完整三阶段算法。"));
+    color->setMinimumWidth(240);
+    const QStringList colorNames{QStringLiteral("Nearest"),QStringLiteral("Bilinear"),QStringLiteral("Bicubic (Catmull-Rom)"),
+        QStringLiteral("Lanczos 3"),QStringLiteral("Jinc 2"),QStringLiteral("Spline36"),QStringLiteral("Super-XBR（单阶段）"),
+        QStringLiteral("Softcubic (B-spline)"),QStringLiteral("Mitchell-Netravali"),QStringLiteral("Bilateral"),QStringLiteral("亮度引导双边重建")};
+    for(int i=0;i<colorNames.size();++i) color->addItem(QStringLiteral("颜色处理：%1").arg(colorNames[i]),i);
+    color->setCurrentIndex(chromaAlgorithm_);
+    color->setToolTip(color->currentText());
+    color->view()->setMinimumWidth(320);
+    connect(color,&QComboBox::currentIndexChanged,this,[this,color] {
+        chromaAlgorithm_=color->currentData().toInt();
+        color->setToolTip(color->currentText());
+        for(auto &p:players_)if(p)p->setChromaAlgorithm(chromaAlgorithm_);
+    });
     controls->addWidget(color);
     scaler_=new QComboBox(this); scaler_->setMaximumWidth(185);
     scaler_->addItems({QStringLiteral("放大：Nearest"),QStringLiteral("放大：Bilinear"),QStringLiteral("放大：Bicubic"),QStringLiteral("放大：Lanczos 3"),QStringLiteral("放大：Jinc 2"),QStringLiteral("放大：Spline36"),QStringLiteral("放大：Super-XBR（单阶段）")});
@@ -153,6 +136,31 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     status_=new QLabel(QStringLiteral("导入最多 9 个视频；每个视频独立保存对齐偏移。"),this); status_->setWordWrap(true); layout->addWidget(status_);
     auto *timer=new QTimer(this); connect(timer,&QTimer::timeout,this,&AnalysisPage::poll); timer->start(25);
     driftTime_.start();
+}
+
+void AnalysisPage::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    adjustTrackWidths();
+}
+void AnalysisPage::adjustTrackWidths()
+{
+    int desired = 160;
+    for (int row = 0; row < std::min({4, trackCount_, videoCount_}); ++row)
+        desired = std::max(desired, sources_[row]->fontMetrics().horizontalAdvance(sources_[row]->currentText()) + 42);
+    int fixed = 160 + 7 * 8;
+    if (rows_[0]) {
+        fixed += times_[0]->sizeHint().width();
+        for (auto *button : rows_[0]->findChildren<QPushButton *>()) fixed += button->sizeHint().width();
+    }
+    const int available = std::max(120, width() - 16 - fixed);
+    for (auto *source : sources_) if(source) {
+        source->setFixedWidth(std::clamp(desired,120,std::min(600,available)));
+        source->setToolTip(source->currentText());
+        int menuWidth=0;
+        for(int i=0;i<source->count();++i) menuWidth=std::max(menuWidth,source->fontMetrics().horizontalAdvance(source->itemText(i))+42);
+        source->view()->setMinimumWidth(std::min(900,menuWidth));
+    }
 }
 
 void AnalysisPage::configurePlayer(int i)
@@ -234,6 +242,7 @@ void AnalysisPage::refreshLayout()
         rows_[row]->setVisible(row<std::min(trackCount_,videoCount_));
         if(row<slots_.size()){QSignalBlocker block(sources_[row]);sources_[row]->setCurrentIndex(slots_[row]);}
     }
+    adjustTrackWidths();
     QTimer::singleShot(40,this,[this]{for(int i:visibleVideos())if(players_[i])players_[i]->redraw();});
 }
 

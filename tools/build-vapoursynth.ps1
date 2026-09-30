@@ -73,6 +73,9 @@ Copy-Item (Join-Path $source "src\py\*.py"), (Join-Path $source "src\py\*.pyi") 
 & (Join-Path $runtime "vspipe.exe") --version
 if ($LASTEXITCODE -ne 0) { throw "VapourSynth runtime smoke test failed." }
 
+& (Join-Path $PSScriptRoot "install-analysis-plugins.ps1") -Venv $venv -SevenZip $SevenZip
+if ($LASTEXITCODE -ne 0) { throw "Analysis plugin installation failed." }
+
 & (Join-Path $PSScriptRoot "stage-vapoursynth-runtime.ps1") -Venv $venv
 if ($LASTEXITCODE -ne 0) { throw "VapourSynth runtime staging failed." }
 

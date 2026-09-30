@@ -31,7 +31,8 @@ ParameterDefinition file(QString id, QString label, QString value)
     return {std::move(id), std::move(label), ParameterType::File, std::move(value), 0, 0, 0, {}};
 }
 
-const QList<FilterDefinition> kCatalog = {
+const QList<FilterDefinition> kCatalog = [] {
+    QList<FilterDefinition> catalog = {
     {"trim", "截取 Trim", "基础操作", "std", "按闭区间保留帧。",
      {integer("first", "起始帧", 0, 0, 100000000), integer("last", "结束帧", 239, 0, 100000000)}},
     {"crop", "裁切 Crop", "基础操作", "std", "从四边裁掉像素。",
@@ -124,7 +125,41 @@ const QList<FilterDefinition> kCatalog = {
       real("dupthresh", "重复帧阈值 %", 1.1, 0.0, 100.0, 0.1)}},
     {"grain_add", "添加颗粒 Grain", "颗粒", "grain", "加入动态或静态颗粒保护细节。",
      {real("var", "强度", 0.5, 0.0, 100.0, 0.1), boolean("constant", "静态颗粒", false)}},
-};
+    };
+    catalog.append(QList<FilterDefinition>{
+    {"temporal_median", "TemporalMedian 时域中值", "降噪", "zsmooth", "按邻帧取中值去除闪动噪点；半径越高越慢，运动纹理可能拖影。",
+     {integer("radius", "时域半径", 1, 1, 3)}},
+    {"flux_t", "FluxSmoothT 时域平滑", "降噪", "zsmooth", "只处理满足阈值的时间方向噪声；强度按 8-bit 标度。",
+     {real("threshold", "时域阈值", 7, 0, 32, 1)}},
+    {"flux_st", "FluxSmoothST 时空平滑", "降噪", "zsmooth", "联合空间与时间邻域平滑，适合轻度随机噪声。",
+     {real("temporal", "时域阈值", 7, 0, 32, 1), real("spatial", "空域阈值", 7, 0, 32, 1)}},
+    {"smart_median", "SmartMedian 自适应中值", "降噪", "zsmooth", "超过差异阈值才替换中值，减少细节损失。",
+     {integer("radius", "空间半径", 1, 1, 3), real("threshold", "差异阈值", 8, 0, 64, 1)}},
+    {"iq_mean", "InterQuartileMean 四分位均值", "降噪", "zsmooth", "去除邻域极端值再求平均，适合孤立噪点。",
+     {integer("radius", "空间半径", 1, 1, 3)}},
+    {"degrain_median", "DegrainMedian 去颗粒中值", "降噪", "zsmooth", "时空中值去颗粒；较高限制值会损失纹理。",
+     {real("limit", "修改限制", 4, 0, 32, 1), integer("mode", "邻域模式", 0, 0, 5)}},
+    {"cnr4", "Cnr4 色度降噪", "降噪", "zsmooth", "亮度保留，降低色度平面的时域噪声；控制半径和色度强度。",
+     {integer("radius", "时域半径", 1, 1, 5), integer("strength", "色度强度", 8, 1, 64)}},
+    {"ccd", "CCD 色度清理", "降噪", "zsmooth", "RGB 色差降噪，输入先转换 RGB，输出回到 16-bit YUV。",
+     {real("threshold", "颜色差异阈值", 4, 0, 32, 0.5), integer("radius", "时域半径", 0, 0, 2)}},
+    {"dct_filter", "DCTFilter 频域平滑", "降噪", "zsmooth", "保留低频、削弱高频；减少噪声也会降低锐度。",
+     {real("high", "高频保留系数", 0.5, 0, 1, 0.05)}},
+    {"temporal_soften", "TemporalSoften 时域柔化", "降噪", "zsmooth", "受阈值限制的邻帧平均，阈值按 8-bit 标度。",
+     {integer("radius", "时域半径", 1, 1, 3), real("threshold", "差异阈值", 4, 0, 32, 1)}},
+    {"vertical_cleaner", "VerticalCleaner 纵向清理", "降噪", "zsmooth", "纵向邻域清理噪点，细水平线素材应谨慎。",
+     {choice("mode", "清理模式", "1 - 中值", {"1 - 中值", "2 - 放松中值"})}},
+    {"clahe", "CLAHE 局部对比增强", "图像增强 Image enhancements", "vszip", "限制直方图均衡；提高暗部局部对比，可能放大噪声，使用 8-bit 亮度处理。",
+     {integer("limit", "对比限制", 2, 1, 16), integer("tiles", "分块数", 8, 2, 32)}},
+    {"descale", "Descale 反缩放", "格式与缩放", "descale", "反推曾被缩放的原始分辨率，适合动画线条恢复；必须选择原先的缩放核。仅处理亮度。",
+     {integer("width", "原始宽度", 1280, 16, 16384, 2), integer("height", "原始高度", 720, 16, 16384, 2),
+      choice("kernel", "原始缩放核", "Debicubic", {"Debilinear", "Debicubic", "Delanczos", "Despline36"})}},
+    {"rife", "RIFE 4.26 / Heavy 补帧", "GPU 补帧", "rife", "NCNN Vulkan 补帧，支持有 Vulkan 驱动的 NVIDIA/AMD/Intel。Heavy 更慢；能否实时取决于分辨率与 GPU。模型随程序附带。",
+     {choice("model", "模型", "4.26", {"4.26", "4.26 Heavy"}), integer("factor", "补帧倍数", 2, 2, 4),
+      integer("gpu", "Vulkan GPU 编号", 0, 0, 15), integer("threads", "GPU 工作线程", 1, 1, 4), boolean("scene", "镜头切换检测", true)}},
+    });
+    return catalog;
+}();
 
 }
 
