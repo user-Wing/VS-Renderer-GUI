@@ -2,6 +2,8 @@
 
 #include <QLibrary>
 #include <QString>
+#include <QImage>
+#include "backend/SubtitleAbi.h"
 
 #include <cstdint>
 
@@ -36,7 +38,8 @@ enum class ThreeFpScalingAlgorithm : std::uint32_t {
     Lanczos3 = 3,
     Jinc2 = 4,
     Spline36 = 5,
-    SuperXbrSinglePass = 6
+    SuperXbrSinglePass = 6,
+    D3D11Native = 7
 };
 
 struct ThreeFpConfiguration {
@@ -187,6 +190,9 @@ public:
     ThreeFpResult seek(void *handle, std::int64_t position100ns) const;
     ThreeFpResult seekFrame(void *handle, std::int64_t frame) const;
     ThreeFpResult stepFrame(void *handle, std::int32_t direction) const;
+    ThreeFpResult stepKeyframe(void *handle, int direction) const;
+    ThreeFpResult setPlaybackRate(void *handle, double rate) const;
+    QString mediaInfo(void *handle) const;
     ThreeFpResult setVolume(void *handle, float volume, std::uint32_t muted) const;
     ThreeFpResult setPresentConfig(void *handle, bool enabled) const;
     ThreeFpResult setPacingConfig(void *handle, bool enabled) const;
@@ -196,6 +202,9 @@ public:
     ThreeFpResult snapshot(void *handle, ThreeFpSnapshot *snapshot) const;
     ThreeFpResult readPixel(void *handle, ThreeFpPixelProbe *probe) const;
     ThreeFpResult submitExternalVideoFrame(void *handle, const ThreeFpExternalVideoFrame *frame) const;
+    ThreeFpResult setExternalOutputFormat(void *handle, const char *format) const;
+    ThreeFpResult setSubtitleLayer(void *handle, const TimedTextLayer *layer) const;
+    QImage capture(void *handle, int width, int height) const;
     ThreeFpResult redraw(void *handle) const;
     void destroy(void *handle) const;
 
@@ -213,6 +222,16 @@ private:
     using OpenFn = ThreeFpResult (*)(void *, const char *);
     using SeekFn = ThreeFpResult (*)(void *, std::int64_t);
     using StepFn = ThreeFpResult (*)(void *, std::int32_t);
+    using RateFn = ThreeFpResult (*)(void *, double);
+    using InfoFn = ThreeFpResult (*)(void *, char *, std::uint32_t, std::uint32_t *);
+    RateFn setPlaybackRate_ = nullptr;
+    StepFn stepKeyframe_ = nullptr;
+    InfoFn mediaInfo_ = nullptr;
+    OpenFn setExternalOutputFormat_ = nullptr;
+    using LayerFn = ThreeFpResult (*)(void *, const TimedTextLayer *);
+    using RegionFn = ThreeFpResult (*)(void *, uint32_t, uint32_t, uint32_t, uint32_t, float *, uint32_t, uint32_t *);
+    LayerFn setSubtitleLayer_ = nullptr;
+    RegionFn readRegion_ = nullptr;
     using VolumeFn = ThreeFpResult (*)(void *, float, std::uint32_t);
     using ToggleFn = ThreeFpResult (*)(void *, std::uint32_t);
     using ViewFn = ThreeFpResult (*)(void *, float, float, float);

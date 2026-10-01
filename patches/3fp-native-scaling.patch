@@ -1,0 +1,69 @@
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -2097,9 +2097,9 @@
+ FFFResult PlayerVideoRenderer::SetScalingAlgorithms(
+     const FFF3FPScalingAlgorithm upscale,
+     const FFF3FPScalingAlgorithm downscale) noexcept {
+-    if ((static_cast<std::uint32_t>(upscale) & 255u) > 6u ||
++    if ((static_cast<std::uint32_t>(upscale) & 255u) > 7u ||
+         ((static_cast<std::uint32_t>(upscale) >> 8) & 255u) > 11u ||
+-        static_cast<std::uint32_t>(downscale) > 6u)
++        static_cast<std::uint32_t>(downscale) > 7u)
+         return FFFResult::InvalidArgument;
+     upscaleAlgorithm_.store(static_cast<std::uint32_t>(upscale), std::memory_order_release);
+     downscaleAlgorithm_.store(static_cast<std::uint32_t>(downscale), std::memory_order_release);
+@@ -2916,6 +2916,8 @@
+     cachedVideoSettings_.projection360 = projection360;
+     cachedVideoSettings_.upscaleAlgorithm = upscaleAlgorithm_.load(std::memory_order_acquire);
+     cachedVideoSettings_.downscaleAlgorithm = downscaleAlgorithm_.load(std::memory_order_acquire);
++    if ((cachedVideoSettings_.upscaleAlgorithm & 255u) == 7u) cachedVideoSettings_.upscaleAlgorithm = 1u;
++    if (cachedVideoSettings_.downscaleAlgorithm == 7u) cachedVideoSettings_.downscaleAlgorithm = 1u;
+     cachedVideoSettings_.viewYaw = std::bit_cast<float>(
+         view360YawBits_.load(std::memory_order_acquire));
+     cachedVideoSettings_.viewPitch = std::bit_cast<float>(
+@@ -3145,7 +3147,7 @@
+             downscaleAlgorithm_.load(std::memory_order_acquire));
+         const std::uint32_t filter = downscale == FFF3FPScalingAlgorithm::Nearest ? 3u :
+             (downscale == FFF3FPScalingAlgorithm::Bicubic ? 0u :
+-             downscale == FFF3FPScalingAlgorithm::Bilinear ? 4u : 1u);
++             (downscale == FFF3FPScalingAlgorithm::Bilinear || static_cast<unsigned>(downscale)==7u) ? 4u : 1u);
+ 
+         auto* currentView = sourceViews_[plane];
+         auto currentWidth = planeWidth;
+@@ -3205,8 +3207,8 @@
+ 
+     D3D11_TEXTURE2D_DESC inputTextureDescription{};
+     inputTexture->GetDesc(&inputTextureDescription);
+-    const RECT source{0, 0, static_cast<LONG>(inputTextureDescription.Width),
+-        static_cast<LONG>(inputTextureDescription.Height)};
++    const RECT source{0, 0, static_cast<LONG>(sourceWidth_),
++        static_cast<LONG>(sourceHeight_)};
+     videoContext_->VideoProcessorSetStreamSourceRect(videoProcessor_, 0, TRUE, &source);
+     videoContext_->VideoProcessorSetStreamDestRect(videoProcessor_, 0, TRUE, &destination);
+     D3D11_VIDEO_PROCESSOR_STREAM stream{};
+@@ -4805,6 +4807,25 @@
+         cachedVideoSettings_.viewPanY = 0.0f;
+         cachedVideoSettings_.viewZoom = 1.0f;
+     }
++    const bool nativeScaling = std::min(drawWidth / sourceWidth_, drawHeight / sourceHeight_) >= 1.0f
++        ? (upscaleAlgorithm_.load() & 255u) == 7u : downscaleAlgorithm_.load() == 7u;
++    if (nativeScaling && !projection360 && zoom == 1.0f && CanUseDirectVideoProcessor()) {
++        ComPtr<ID3D11Resource> resource;
++        target->GetResource(&resource);
++        ComPtr<ID3D11Texture2D> texture;
++        if (SUCCEEDED(resource.As(&texture))) {
++            const RECT rectangle{static_cast<LONG>(drawX), static_cast<LONG>(drawY),
++                static_cast<LONG>(drawX + drawWidth), static_cast<LONG>(drawY + drawHeight)};
++            if (DrawWithVideoProcessor(sourceTextures_[0], texture.Get(), rectangle,
++                VideoProcessorInputColorSpace(sourceColorSpace_, sourceFullRange_, sourceWidth_),
++                DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709) == FFFResult::Success) {
++                lastDestX_ = destination.x; lastDestY_ = destination.y;
++                lastDestWidth_ = destination.width; lastDestHeight_ = destination.height;
++                actualVideoScalingMode_.store(FFF3FPVideoScalingMode::D3D11VideoProcessor);
++                return FFFResult::Success;
++            }
++        }
++    }
+     ID3D11ShaderResourceView* presentationViews[3]{};
+     if (projection360) {
+         // The panorama projection is view-dependent. Scaling the equirectangular

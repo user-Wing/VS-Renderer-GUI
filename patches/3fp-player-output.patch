@@ -1,0 +1,199 @@
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -641,3 +641,5 @@
+ FFF3FP_API void FFF3FP_DestroyAssSubtitle(FFF3FPAssSubtitleHandle renderer) noexcept;
+ 
+ FFF3FP_API FFFResult FFF3FP_SetPlaybackRate(FFF3FPHandle player, double rate) noexcept;
++
++FFF3FP_API FFFResult FFF3FP_SetExternalOutputFormat(FFF3FPHandle player, const char* pixelFormat) noexcept;
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -198,3 +198,5 @@
+ void FFF3FP_Destroy(const FFF3FPHandle player) noexcept { delete static_cast<PlayerSession*>(player); }
+ 
+ FFFResult FFF3FP_SetPlaybackRate(const FFF3FPHandle player, const double rate) noexcept { return player ? static_cast<PlayerSession*>(player)->SetPlaybackRate(rate) : FFFResult::InvalidArgument; }
++
++FFFResult FFF3FP_SetExternalOutputFormat(const FFF3FPHandle player, const char* format) noexcept { return player ? static_cast<PlayerSession*>(player)->SetExternalOutputFormat(format) : FFFResult::InvalidArgument; }
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -70,6 +70,8 @@
+     AVFilterContext* tempoOutput_ = nullptr;
+     FFFResult SetVolume(float volume, bool muted) noexcept;
+     FFFResult SetTimedTextLayer(const FFF3FPTimedTextLayer& layer) noexcept;
++    FFFResult SetExternalOutputFormat(const char* format) noexcept;
++    std::atomic<int> externalOutputFormat_{-1};
+     FFFResult SubmitExternalVideoFrame(const FFF3FPExternalVideoFrame& frame) noexcept;
+     FFFResult GetSnapshot(FFF3FPSnapshot& snapshot) const noexcept;
+     FFFResult ReadVideoPixel(FFF3FPVideoPixelProbe& probe) noexcept;
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -19,6 +19,7 @@
+ #include <libavutil/pixdesc.h>
+ #include <libavutil/dict.h>
+ #include <libavutil/samplefmt.h>
++#include <libswscale/swscale.h>
+ }
+ 
+ #include <filesystem>
+@@ -1541,8 +1542,13 @@
+     try {
+         std::lock_guard contentLock(timedTextContentMutex_);
+         const auto state = state_.load();
++        bool externalVideo = false;
++        if (state == FFF3FPState::Idle) {
++            std::lock_guard lock(snapshotMutex_);
++            externalVideo = publishedSnapshot_.videoWidth > 0 && publishedSnapshot_.selectedVideoStream < 0;
++        }
+         if (state != FFF3FPState::Ready && state != FFF3FPState::Playing &&
+-            state != FFF3FPState::Paused && state != FFF3FPState::Ended)
++            state != FFF3FPState::Paused && state != FFF3FPState::Ended && !externalVideo)
+             return FFFResult::InvalidState;
+         TimedTextRenderLayer layer;
+         layer.canvasWidth = input.canvasWidth;
+@@ -1699,6 +1705,13 @@
+     return result;
+ }
+ 
++FFFResult PlayerSession::SetExternalOutputFormat(const char* format) noexcept {
++    const auto value = !format || !*format ? AV_PIX_FMT_NONE : av_get_pix_fmt(format);
++    if (format && *format && (value == AV_PIX_FMT_NONE || !sws_isSupportedOutput(value))) return FFFResult::NotSupported;
++    externalOutputFormat_.store(static_cast<int>(value));
++    return FFFResult::Success;
++}
++
+ FFFResult PlayerSession::SubmitExternalVideoFrame(const FFF3FPExternalVideoFrame& source) noexcept {
+     if (source.size < sizeof(FFF3FPExternalVideoFrame) || source.version != 1 ||
+         source.width == 0 || source.height == 0 || source.data[0] == nullptr ||
+@@ -1733,7 +1746,25 @@
+         frame.linesize[plane] = source.linesize[plane];
+     }
+ 
+-    const auto result = videoRenderer_.Render(&frame);
++    AVFrame* converted = nullptr;
++    AVFrame* submitted = &frame;
++    const auto target = static_cast<AVPixelFormat>(externalOutputFormat_.load());
++    if (target != AV_PIX_FMT_NONE && target != pixelFormat) {
++        converted = av_frame_alloc();
++        if (!converted) return FFFResult::NativeFailure;
++        converted->width = frame.width; converted->height = frame.height; converted->format = target;
++        av_frame_copy_props(converted, &frame);
++        auto* scale = sws_getContext(frame.width, frame.height, pixelFormat, frame.width, frame.height, target, SWS_BICUBIC | SWS_ACCURATE_RND, nullptr, nullptr, nullptr);
++        if (!scale || av_frame_get_buffer(converted, 32) < 0) { sws_freeContext(scale); av_frame_free(&converted); return FFFResult::NativeFailure; }
++        const int space = frame.colorspace == AVCOL_SPC_BT2020_NCL ? SWS_CS_BT2020 : frame.colorspace == AVCOL_SPC_BT470BG || frame.colorspace == AVCOL_SPC_SMPTE170M ? SWS_CS_ITU601 : SWS_CS_ITU709;
++        const int range = frame.color_range == AVCOL_RANGE_JPEG;
++        const auto* coefficients = sws_getCoefficients(space);
++        sws_setColorspaceDetails(scale, coefficients, range, coefficients, range, 0, 1 << 16, 1 << 16);
++        sws_scale(scale, frame.data, frame.linesize, 0, frame.height, converted->data, converted->linesize);
++        sws_freeContext(scale); submitted = converted;
++    }
++    const auto result = videoRenderer_.Render(submitted);
++    av_frame_free(&converted);
+     if (result != FFFResult::Success) {
+         if (result == FFFResult::DeviceFailure) videoRenderer_.RequestRecoveryIfDeviceLost();
+         return result;
+@@ -1862,11 +1893,12 @@
+ FFFResult PlayerSession::OpenFormat(const std::string& path, AVFormatContext** output,
+     std::unique_ptr<SharedFileInput>& io, std::string& error) noexcept {
+     AVDictionary* options = nullptr;
+-    av_dict_set(&options, "protocol_whitelist", "file,crypto,data", 0);
+-    av_dict_set(&options, "protocol_blacklist", "http,https,tcp,tls,udp,rtp,rtsp,srt,rist,ftp,ssh", 0);
++    const bool remote = path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0;
++    av_dict_set(&options, "protocol_whitelist", remote ? "http,https,tcp,tls,crypto,data" : "file,crypto,data", 0);
++    av_dict_set(&options, "rw_timeout", "10000000", 0);
+     av_dict_set(&options, "ignore_loop", "0", 0);
+-    io = SharedFileInput::Open(path.c_str(), error);
+-    if (io == nullptr) {
++    io = remote ? nullptr : SharedFileInput::Open(path.c_str(), error);
++    if (!remote && io == nullptr) {
+         av_dict_free(&options);
+         return FFFResult::NativeFailure;
+     }
+@@ -1877,8 +1909,7 @@
+         error = "Could not allocate the FFmpeg input context.";
+         return FFFResult::NativeFailure;
+     }
+-    context->pb = io->Context();
+-    context->flags |= AVFMT_FLAG_CUSTOM_IO;
++    if(io) { context->pb = io->Context(); context->flags |= AVFMT_FLAG_CUSTOM_IO; }
+     *output = context;
+     auto result = avformat_open_input(output, path.c_str(), nullptr, &options);
+     av_dict_free(&options);
+@@ -1886,7 +1917,7 @@
+         if (*output != nullptr) avformat_free_context(*output);
+         *output = nullptr;
+         io.reset();
+-        error = "Could not open local media: " + FfmpegError(result);
++        error = "Could not open media: " + FfmpegError(result);
+         return FFFResult::FfmpegFailure;
+     }
+     if ((*output)->iformat == nullptr) {
+@@ -3482,6 +3513,11 @@
+ 
+ bool PlayerSession::NormalizeLocalPath(const char* path, std::string& normalized, std::string& error) noexcept {
+     try {
++        if(path && (std::string_view(path).rfind("http://",0)==0 || std::string_view(path).rfind("https://",0)==0)) {
++            normalized=path;
++            if(normalized.find_first_of("\r\n")!=std::string::npos) {error="The media URL is invalid.";return false;}
++            return true;
++        }
+         auto wide = FromUtf8(path); if (wide.empty()) { error = "A non-empty UTF-8 local path is required."; return false; }
+         if (wide.rfind(L"\\\\", 0) == 0 || wide.rfind(L"//", 0) == 0 || wide.find(L"://") != std::wstring::npos ||
+             wide.rfind(L"\\\\.\\", 0) == 0 || wide.rfind(L"\\\\?\\GLOBALROOT", 0) == 0) { error = "Network, device and pipe paths are disabled."; return false; }
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -530,7 +530,15 @@
+             weightTotal+=weight;
+         }
+     }
+-    return total/max(abs(weightTotal),0.000001);
++    float4 result=total/max(abs(weightTotal),0.000001);
++    if((UpscaleAlgorithm & 65536)!=0) {
++        float4 a=LoadClamped(sourceTexture,origin,dimensions);
++        float4 b=LoadClamped(sourceTexture,origin+int2(1,0),dimensions);
++        float4 c=LoadClamped(sourceTexture,origin+int2(0,1),dimensions);
++        float4 d=LoadClamped(sourceTexture,origin+int2(1,1),dimensions);
++        result=lerp(result,clamp(result,min(min(a,b),min(c,d)),max(max(a,b),max(c,d))),0.5);
++    }
++    return result;
+ }
+ float4 SampleLanczos3(Texture2D<float4> sourceTexture,float2 uv,uint2 dimensions, float2 outputSize) {
+     float2 position=uv*float2(dimensions)-0.5;
+@@ -661,7 +669,8 @@
+ }
+ float4 SampleChroma(Texture2D<float4> tex,float2 uv) {
+     uint w,h;tex.GetDimensions(w,h);uint2 dim=uint2(w,h);
+-    uint algorithm=(UpscaleAlgorithm>>8)==0?1:(UpscaleAlgorithm>>8)-1;
++    uint chroma=(UpscaleAlgorithm>>8)&255;
++    uint algorithm=chroma==0?1:chroma-1;
+     if(algorithm==0)return tex.SampleLevel(PointSampler,uv,0);
+     if(algorithm==1)return tex.SampleLevel(LinearSampler,uv,0);
+     if(algorithm==2)return SampleBicubic(tex,uv,dim);
+@@ -677,6 +686,7 @@
+     const uint2 dimensions=uint2(width,height);
+     float effectiveScale=min(OutputWidth/max(float(width),1.0),
+         OutputHeight/max(float(height),1.0))*max(ViewZoom,1.0);
++    if(abs(effectiveScale-1.0)<0.00001)return sourceTexture.SampleLevel(PointSampler,uv,0);
+     uint algorithm=effectiveScale>=1.0?(UpscaleAlgorithm & 255):DownscaleAlgorithm;
+     if(algorithm==0)return sourceTexture.SampleLevel(PointSampler,uv,0);
+     if(algorithm==1)return sourceTexture.SampleLevel(LinearSampler,uv,0);
+@@ -2088,8 +2098,8 @@
+     const FFF3FPScalingAlgorithm upscale,
+     const FFF3FPScalingAlgorithm downscale) noexcept {
+     if ((static_cast<std::uint32_t>(upscale) & 255u) > 6u ||
+-        (static_cast<std::uint32_t>(upscale) >> 8) > 11u ||
+-        downscale > FFF3FPScalingAlgorithm::Jinc2)
++        ((static_cast<std::uint32_t>(upscale) >> 8) & 255u) > 11u ||
++        static_cast<std::uint32_t>(downscale) > 6u)
+         return FFFResult::InvalidArgument;
+     upscaleAlgorithm_.store(static_cast<std::uint32_t>(upscale), std::memory_order_release);
+     downscaleAlgorithm_.store(static_cast<std::uint32_t>(downscale), std::memory_order_release);
+@@ -4923,6 +4933,9 @@
+     if (targetResult != FFFResult::Success) return targetResult;
+     const auto drawResult = DrawCachedVideo(target.Get());
+     if (drawResult != FFFResult::Success) return drawResult;
++    const auto subtitleResult = DrawTimedText(TimedTextLayerSlot::Subtitle);
++    if (subtitleResult != FFFResult::Success) return subtitleResult;
++    CompositeTimedText(target.Get(), TimedTextLayerSlot::Subtitle);
+ 
+     D3D11_TEXTURE2D_DESC description{};
+     backBuffer->GetDesc(&description);

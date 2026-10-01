@@ -16,6 +16,9 @@
 #include "backend/VapourSynthFrameServer.h"
 #include "backend/ThreeFpPlayer.h"
 #include "graph/FilterGraph.h"
+#include "graph/PresetStore.h"
+#include "ui/PresetDialog.h"
+#include <QUuid>
 #include "graph/VpyScriptBuilder.h"
 #include <QSignalSpy>
 #include <QFile>
@@ -51,6 +54,68 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void rendererLoadsPresetDuringStartup()
+    {
+        QTemporaryDir dir; const auto source = dir.filePath("source.mkv"); QVERIFY(QFile::copy(":/startup/warmup.mkv",source));
+        FilterGraph graph; const int row = graph.add("resize"); graph.setParameter(row,"width",160); graph.setParameter(row,"height",90);
+        const auto path = dir.filePath("preset.vpy"); QVERIFY(PresetStore::write(path,PresetStore::create(graph,SourceFilter::Ffms2,source,"test")));
+        MainWindow window; window.show(); QMimeData mime; mime.setUrls({QUrl::fromLocalFile(path)});
+        QDragEnterEvent enter(QPoint(400,300),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier); QApplication::sendEvent(&window,&enter); QVERIFY(enter.isAccepted());
+        QDropEvent drop(QPointF(400,300),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier); QApplication::sendEvent(&window,&drop); QVERIFY(drop.isAccepted());
+        const auto rendered = [&window] { for (auto *player : window.findChildren<ThreeFpPlayer *>()) if (player->snapshot().videoWidth == 160 && player->snapshot().presentedVideoFrames > 0) return true; return false; };
+        QTRY_VERIFY_WITH_TIMEOUT(rendered(),15000);
+    }
+    void presetManagementActions()
+    {
+        const QString name = "__test_" + QUuid::createUuid().toString(QUuid::Id128);
+        const QString target = QDir(PresetStore::directory()).filePath(name + ".vpy");
+        const QString renamed = QDir(PresetStore::directory()).filePath(name + "_renamed.vpy");
+        QString loaded;
+        PresetDialog dialog([](const QString &note) { return PresetStore::create(FilterGraph(), SourceFilter::Ffms2, "Z:/missing.mkv", note); },
+                            [&loaded](const QString &path) { loaded = path; }, [] {});
+        dialog.show(); auto *input = dialog.findChild<QLineEdit *>("presetName"); QVERIFY(input); input->setText(name);
+        const auto click = [&dialog](const QString &title) {
+            for (auto *button : dialog.findChildren<QPushButton *>()) if (button->text() == title) { button->click(); return true; }
+            return false;
+        };
+        QVERIFY(click(QStringLiteral("保存当前"))); QVERIFY(QFileInfo::exists(target));
+        auto *list = dialog.findChild<QListWidget *>("presetList"); QVERIFY(list);
+        for (int i = 0; i < list->count(); ++i) if (list->item(i)->text() == name) list->setCurrentRow(i);
+        QVERIFY(click(QStringLiteral("读取"))); QCOMPARE(loaded,target);
+        input->setText(name + "_renamed"); QVERIFY(click(QStringLiteral("变更名称"))); QVERIFY(QFileInfo::exists(renamed)); QVERIFY(!QFileInfo::exists(target));
+        QVERIFY(!PresetStore::metadata(PresetStore::load(renamed).script).isEmpty());
+        dialog.grab().save("build/mingw-release/preset-management-layout.png");
+        QVERIFY(QFile::remove(renamed));
+    }
+    void portablePreset()
+    {
+        QTemporaryDir dir;
+        const QString source = dir.filePath("source.mkv");
+        QVERIFY(QFile::copy(":/startup/warmup.mkv", source));
+        FilterGraph graph;
+        const int row = graph.add("resize");
+        graph.setParameter(row, "width", 160); graph.setParameter(row, "height", 90);
+        const auto text = PresetStore::create(graph, SourceFilter::Ffms2, "Z:/missing.mkv", QStringLiteral("测试预设"));
+        const QString preset = dir.filePath("滤镜.vpy");
+        QVERIFY(PresetStore::write(preset, text));
+        const auto loaded = PresetStore::load(preset, source);
+        QCOMPARE(PresetStore::metadata(loaded.script).value("note").toString(), QStringLiteral("测试预设"));
+        QCOMPARE(PresetStore::graph(PresetStore::metadata(loaded.script)).nodes().size(), 1);
+        VapourSynthFrameServer server;
+        QSignalSpy ready(&server, &VapourSynthFrameServer::scriptLoaded);
+        QSignalSpy frames(&server, &VapourSynthFrameServer::frameReady);
+        QSignalSpy errors(&server, &VapourSynthFrameServer::errorOccurred);
+        QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(), 15000);
+        QVERIFY(server.available());
+        server.loadScript(loaded.script, preset);
+        QTRY_VERIFY_WITH_TIMEOUT(ready.count() || errors.count(), 15000);
+        QVERIFY2(errors.isEmpty(), errors.isEmpty() ? "" : qPrintable(errors.first().first().toString()));
+        const auto info = qvariant_cast<VapourSynthClipInfo>(ready.first().first());
+        QCOMPARE(info.width, 160); QCOMPARE(info.height, 90);
+        server.requestFrame(0);
+        QTRY_VERIFY_WITH_TIMEOUT(frames.count() || errors.count(), 10000);
+        QVERIFY(errors.isEmpty()); QVERIFY(!frames.isEmpty());
+    }
     void directComparison()
     {
         QTemporaryDir dir;

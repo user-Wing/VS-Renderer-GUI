@@ -23,6 +23,8 @@ public:
     static ScriptBuildResult build(const QString &sourcePath, SourceFilter sourceFilter,
                                    const FilterGraph &graph);
     static QString pythonString(const QString &value);
+    static QString upgradeSharpen(const QString &script, const FilterGraph &graph);
+    static QString networkSource(const QString &script, const QString &source);
 };
 
 }

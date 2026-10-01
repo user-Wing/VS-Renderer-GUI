@@ -46,6 +46,7 @@ Copy-Item (Join-Path $package "*.py"),
               (Join-Path $package "*.exe") -Destination $sitePackage -Force
 
 $pluginFiles = @(
+    "plugins\mvtools.dll",
     "plugins\librife.dll",
     "plugins\vsrepo\libdescale.dll",
     "plugins\cas.dll",
@@ -107,5 +108,7 @@ Copy-Item (Join-Path $projectRoot "third_party\vapoursynth\COPYING.LESSER") `
     -Destination (Join-Path $OutputDirectory "VapourSynth-COPYING.LESSER.txt") -Force
 Copy-Item (Join-Path $OutputDirectory "LICENSE.txt") `
     -Destination (Join-Path $OutputDirectory "Python-LICENSE.txt") -Force
+Copy-Item (Join-Path $Venv "Lib\site-packages\vapoursynth_mvtools-29.dist-info\licenses\LICENSE") `
+    -Destination (Join-Path $OutputDirectory "MVTools-LICENSE.txt") -Force
 
 Write-Host "Bundled VapourSynth runtime ready: $OutputDirectory"

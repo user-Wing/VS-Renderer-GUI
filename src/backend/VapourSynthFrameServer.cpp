@@ -16,6 +16,8 @@
 #include <limits>
 #include <future>
 #include <vector>
+#include <map>
+#include <chrono>
 
 namespace vsr {
 namespace {
@@ -121,6 +123,29 @@ struct VapourSynthFrameServer::Impl {
     VSNode *node = nullptr;
     VSVideoInfo info{};
     QString error;
+    int threadLimit = qMax(4, QThread::idealThreadCount());
+    int cacheMiB = 1024;
+    struct RequestedFrame { const VSFrame *frame = nullptr; QString error; };
+    std::map<int, std::future<RequestedFrame>> ahead;
+
+    void schedule(int index) {
+        if (ahead.contains(index)) return;
+        auto *promise = new std::promise<RequestedFrame>;
+        ahead.emplace(index, promise->get_future());
+        vsApi->getFrameAsync(index, node, [](void *opaque, const VSFrame *frame, int, VSNode *, const char *error) {
+            std::unique_ptr<std::promise<RequestedFrame>> promise(static_cast<std::promise<RequestedFrame> *>(opaque));
+            promise->set_value({frame, error ? QString::fromUtf8(error) : QString()});
+        }, promise);
+    }
+
+    void trimAhead(int current) {
+        for (auto it = ahead.begin(); it != ahead.end();) {
+            if ((it->first < current || it->first > current + 16) && it->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                const auto result = it->second.get(); if (result.frame) vsApi->freeFrame(result.frame);
+                it = ahead.erase(it);
+            } else ++it;
+        }
+    }
 
     bool initialize(const QString &path)
     {
@@ -170,6 +195,8 @@ struct VapourSynthFrameServer::Impl {
 
     void clearScript()
     {
+        for (auto &[index, future] : ahead) { const auto result = future.get(); if (result.frame) vsApi->freeFrame(result.frame); }
+        ahead.clear();
         if (node && vsApi)
             vsApi->freeNode(node);
         node = nullptr;
@@ -228,37 +255,48 @@ bool VapourSynthFrameServer::available() const { return available_; }
 QString VapourSynthFrameServer::libraryPath() const { return libraryPath_; }
 QString VapourSynthFrameServer::errorString() const { return initError_; }
 
+void VapourSynthFrameServer::unloadScript()
+{
+    const auto scriptGeneration=++scriptGeneration_;
+    desiredFrame_.store(-1);
+    QMetaObject::invokeMethod(worker_, [this,scriptGeneration] { if(scriptGeneration==scriptGeneration_.load()){impl_->clearScript();QMetaObject::invokeMethod(this,[this,scriptGeneration]{if(scriptGeneration==scriptGeneration_.load())emit scriptUnloaded();});} }, Qt::QueuedConnection);
+}
+
 void VapourSynthFrameServer::loadScript(const QString &source, const QString &scriptPath)
 {
     if (!available_) {
         emit errorOccurred(initError_);
         return;
     }
+    const auto scriptGeneration=++scriptGeneration_;
     desiredFrame_.store(-1);
     const QByteArray scriptUtf8 = source.toUtf8();
     const QByteArray pathUtf8 = scriptPath.toUtf8();
-    QMetaObject::invokeMethod(worker_, [this, scriptUtf8, pathUtf8] {
+    QMetaObject::invokeMethod(worker_, [this, scriptUtf8, pathUtf8,scriptGeneration] {
+        if(scriptGeneration!=scriptGeneration_.load())return;
         impl_->clearScript();
         impl_->script = impl_->scriptApi->createScript(nullptr);
         if (!impl_->script) {
-            QMetaObject::invokeMethod(this, [this] { emit errorOccurred(QStringLiteral("无法创建 VapourSynth 脚本环境。")); });
+            QMetaObject::invokeMethod(this, [this,scriptGeneration] { if(scriptGeneration==scriptGeneration_.load())emit errorOccurred(QStringLiteral("无法创建 VapourSynth 脚本环境。")); });
             return;
         }
         if (impl_->scriptApi->evaluateBuffer(impl_->script, scriptUtf8.constData(), pathUtf8.constData()) != 0) {
             const char *detail = impl_->scriptApi->getError(impl_->script);
             const QString message = describeScriptError(
                 QString::fromUtf8(detail ? detail : "unknown error"));
-            QMetaObject::invokeMethod(this, [this, message] { emit errorOccurred(message); });
+            QMetaObject::invokeMethod(this, [this, message,scriptGeneration] { if(scriptGeneration==scriptGeneration_.load())emit errorOccurred(message); });
             return;
         }
         impl_->node = impl_->scriptApi->getOutputNode(impl_->script, 0);
         if (!impl_->node || impl_->vsApi->getNodeType(impl_->node) != mtVideo) {
-            QMetaObject::invokeMethod(this, [this] { emit errorOccurred(QStringLiteral("VPY 的 output 0 不是视频节点。")); });
+            QMetaObject::invokeMethod(this, [this,scriptGeneration] { if(scriptGeneration==scriptGeneration_.load())emit errorOccurred(QStringLiteral("VPY 的 output 0 不是视频节点。")); });
             return;
         }
         impl_->info = *impl_->vsApi->getVideoInfo(impl_->node);
-        if (VSCore *core = impl_->scriptApi->getCore(impl_->script))
-            impl_->vsApi->setThreadCount(qMax(4, QThread::idealThreadCount()), core);
+        if (VSCore *core = impl_->scriptApi->getCore(impl_->script)) {
+            impl_->vsApi->setThreadCount(impl_->threadLimit, core);
+            impl_->vsApi->setMaxCacheSize(static_cast<int64_t>(impl_->cacheMiB) * 1048576, core);
+        }
         const auto makeInfo = [this](const VSVideoInfo &info) {
             char formatName[32]{};
             VapourSynthClipInfo result;
@@ -278,7 +316,8 @@ void VapourSynthFrameServer::loadScript(const QString &source, const QString &sc
                 sourceInfo = makeInfo(*impl_->vsApi->getVideoInfo(sourceNode));
             impl_->vsApi->freeNode(sourceNode);
         }
-        QMetaObject::invokeMethod(this, [this, processedInfo, sourceInfo] {
+        QMetaObject::invokeMethod(this, [this, processedInfo, sourceInfo,scriptGeneration] {
+            if(scriptGeneration!=scriptGeneration_.load())return;
             emit scriptLoaded(processedInfo, sourceInfo);
         });
     }, Qt::QueuedConnection);
@@ -292,54 +331,38 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames)
     if (frameRequestScheduled_.exchange(true))
         return;
 
-    QMetaObject::invokeMethod(worker_, [this, frameIndex, prefetchFrames] {
+    const auto scriptGeneration=scriptGeneration_.load();
+    QMetaObject::invokeMethod(worker_, [this, frameIndex, prefetchFrames,scriptGeneration] {
         const auto finish = [this, frameIndex] {
             frameRequestScheduled_.store(false);
             const int latest = desiredFrame_.load();
             if (latest >= 0 && latest != frameIndex)
                 requestFrame(latest);
         };
-        if (!impl_->node || desiredFrame_.load() != frameIndex) {
+        if (scriptGeneration!=scriptGeneration_.load() || !impl_->node || desiredFrame_.load() != frameIndex) {
             finish();
             return;
         }
         const int bounded = impl_->info.numFrames > 0 ? qMin(frameIndex, impl_->info.numFrames - 1) : frameIndex;
-        struct PrefetchedFrames final {
-            const VSAPI *api = nullptr;
-            std::vector<std::future<const VSFrame *>> futures;
-            ~PrefetchedFrames()
-            {
-                for (auto &future : futures) {
-                    try {
-                        if (const VSFrame *frame = future.get())
-                            api->freeFrame(frame);
-                    } catch (...) {
-                    }
-                }
-            }
-        } prefetched{impl_->vsApi, {}};
+        impl_->trimAhead(bounded);
         const int availableAhead = impl_->info.numFrames > 0
             ? qMax(0, impl_->info.numFrames - bounded - 1) : 0;
-        const int warmCount = qBound(0, prefetchFrames, qMin(8, availableAhead));
-        prefetched.futures.reserve(static_cast<std::size_t>(warmCount));
+        const int warmCount = qBound(0, prefetchFrames, qMin(16, availableAhead));
+        impl_->schedule(bounded);
         for (int offset = 1; offset <= warmCount; ++offset) {
             const int warmFrame = bounded + offset;
-            const VSAPI *api = impl_->vsApi;
-            VSNode *node = impl_->node;
-            prefetched.futures.push_back(std::async(std::launch::async, [api, node, warmFrame] {
-                char ignoredError[1024]{};
-                return api->getFrame(warmFrame, node, ignoredError, sizeof(ignoredError));
-            }));
+            if (impl_->ahead.size() < 20) impl_->schedule(warmFrame);
         }
-        char errorBuffer[1024]{};
-        const VSFrame *source = impl_->vsApi->getFrame(bounded, impl_->node, errorBuffer, sizeof(errorBuffer));
+        const auto result = impl_->ahead.at(bounded).get();
+        impl_->ahead.erase(bounded);
+        const VSFrame *source = result.frame;
         if (!source) {
             const bool current = desiredFrame_.load() == frameIndex;
             const QString message = QStringLiteral("请求 VS 帧 %1 失败：%2")
-                .arg(bounded).arg(QString::fromUtf8(errorBuffer));
+                .arg(bounded).arg(result.error);
             finish();
             if (current)
-                QMetaObject::invokeMethod(this, [this, message] { emit errorOccurred(message); });
+                QMetaObject::invokeMethod(this, [this, message,scriptGeneration] { if(scriptGeneration==scriptGeneration_.load())emit errorOccurred(message); });
             return;
         }
         if (desiredFrame_.load() != frameIndex) {
@@ -361,7 +384,7 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames)
                 .arg(QString::fromLatin1(nameBuffer));
             finish();
             if (current)
-                QMetaObject::invokeMethod(this, [this, message] { emit errorOccurred(message); });
+                QMetaObject::invokeMethod(this, [this, message,scriptGeneration] { if(scriptGeneration==scriptGeneration_.load())emit errorOccurred(message); });
             return;
         }
 
@@ -404,7 +427,7 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames)
                 const QString message = QStringLiteral("VS 帧 %1 的 plane %2 stride 无效。").arg(bounded).arg(plane);
                 finish();
                 if (current)
-                    QMetaObject::invokeMethod(this, [this, message] { emit errorOccurred(message); });
+                    QMetaObject::invokeMethod(this, [this, message,scriptGeneration] { if(scriptGeneration==scriptGeneration_.load())emit errorOccurred(message); });
                 return;
             }
             frame.strides[plane] = static_cast<std::int32_t>(stride);
@@ -415,7 +438,19 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames)
         const bool current = desiredFrame_.load() == frameIndex;
         finish();
         if (current)
-            QMetaObject::invokeMethod(this, [this, frame = std::move(frame)] { emit frameReady(frame); });
+            QMetaObject::invokeMethod(this, [this, frame = std::move(frame),scriptGeneration] { if(scriptGeneration==scriptGeneration_.load())emit frameReady(frame); });
+    }, Qt::QueuedConnection);
+}
+
+void VapourSynthFrameServer::setResourceLimits(int threads, int cacheMiB)
+{
+    QMetaObject::invokeMethod(worker_, [this, threads, cacheMiB] {
+        impl_->threadLimit = qBound(1, threads, qMax(1, QThread::idealThreadCount()));
+        impl_->cacheMiB = qBound(64, cacheMiB, 8192);
+        if (impl_->script) if (auto *core = impl_->scriptApi->getCore(impl_->script)) {
+            impl_->vsApi->setThreadCount(impl_->threadLimit, core);
+            impl_->vsApi->setMaxCacheSize(static_cast<int64_t>(impl_->cacheMiB) * 1048576, core);
+        }
     }, Qt::QueuedConnection);
 }
 

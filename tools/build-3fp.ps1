@@ -10,7 +10,7 @@ $source = (Resolve-Path $FffProject).Path
 $nativeProject = Join-Path $source "FFF.Native\FFF.Native.vcxproj"
 if (-not (Test-Path $nativeProject)) { throw "FFF.Native.vcxproj not found under $source" }
 
-foreach ($patchName in @("3fp-vsrenderer-extensions.patch", "3fp-resize-flags.patch", "3fp-performance-chroma.patch")) {
+foreach ($patchName in @("3fp-vsrenderer-extensions.patch", "3fp-resize-flags.patch", "3fp-performance-chroma.patch", "3fp-player-rate.patch", "3fp-player-output.patch", "3fp-network-subtitles.patch", "3fp-native-scaling.patch")) {
     $patch = Join-Path $projectRoot "patches\$patchName"
     & git -C $source apply --reverse --check $patch 2>$null
     if ($LASTEXITCODE -ne 0) {

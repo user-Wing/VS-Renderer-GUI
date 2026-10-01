@@ -45,6 +45,8 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
     description->setTextFormat(Qt::PlainText);
     form_->addRow(description);
 
+    QComboBox *shaderMode = nullptr;
+    QLineEdit *shaderPath = nullptr;
     for (const auto &parameter : definition->parameters) {
         QWidget *editor = nullptr;
         const QVariant value = node->parameters.value(parameter.id, parameter.defaultValue);
@@ -78,6 +80,7 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         }
         case ParameterType::Choice: {
             auto *combo = new QComboBox(this);
+            if (definition->id == "anime4k" && id == "mode") shaderMode = combo;
             combo->setMinimumWidth(90);
             combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
             combo->setMinimumContentsLength(8);
@@ -98,6 +101,7 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             layout->setContentsMargins(0, 0, 0, 0);
             layout->setSpacing(4);
             auto *path = new QLineEdit(value.toString(), container);
+            if (definition->id == "anime4k" && id == "shader") shaderPath = path;
             auto *browse = new QPushButton(QStringLiteral("浏览…"), container);
             connect(path, &QLineEdit::editingFinished, this,
                     [this, id, path] { emit parameterChanged(id, path->text()); });
@@ -124,6 +128,14 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         editor->setMinimumWidth(0);
         form_->addRow(label, editor);
+    }
+    if (shaderMode && shaderPath) {
+        shaderPath->parentWidget()->setEnabled(shaderMode->currentText() == QStringLiteral("自定义 GLSL") || !shaderPath->text().isEmpty());
+        connect(shaderMode, &QComboBox::currentTextChanged, shaderPath, [shaderPath](const QString &mode) {
+            const bool custom = mode == QStringLiteral("自定义 GLSL");
+            shaderPath->parentWidget()->setEnabled(custom);
+            if (!custom) shaderPath->clear();
+        });
     }
     if (definition->parameters.isEmpty())
         form_->addRow(new QLabel(QStringLiteral("该节点没有可调参数。"), this));

@@ -35,8 +35,8 @@ bool ThreeFpPlayer::createSession()
     configuration.size = sizeof(configuration);
     configuration.version = api_.apiVersion();
     configuration.outputWindow = reinterpret_cast<void *>(surface_->winId());
-    configuration.decodeMode = 2;
-    configuration.colorMode = 0;
+    configuration.decodeMode = decodeMode_;
+    configuration.colorMode = automaticHdr_ ? 2 : 0;
     configuration.sdrPeakNits = 100.0f;
     configuration.hdrPeakNits = 0.0f;
     configuration.sdrPaperWhiteNits = 203.0f;
@@ -44,10 +44,11 @@ bool ThreeFpPlayer::createSession()
 
     if (!check(api_.create(&configuration, &handle_), QStringLiteral("创建 3FP 会话")))
         return false;
-    if (!check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale_) | ((chromaAlgorithm_ + 1) << 8)), downscale_), QStringLiteral("设置缩放算法")))
+    if (!check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale_) | ((chromaAlgorithm_ + 1) << 8) | (antiRinging_ ? 65536u : 0u)), downscale_), QStringLiteral("设置缩放算法")))
         return false;
     if (muted_)
         check(api_.setVolume(handle_, 1.0f, 1u), QStringLiteral("静音"));
+    if (!outputFormat_.isEmpty()) api_.setExternalOutputFormat(handle_, outputFormat_.toUtf8().constData());
     if (vrrPresent_)
         api_.setPresentConfig(handle_, true);
     if (vrrPacing_)
@@ -136,8 +137,15 @@ void ThreeFpPlayer::setMuted(bool m)
 {
     muted_ = m;
     if (handle_)
-        check(api_.setVolume(handle_, 1.0f, m ? 1u : 0u), QStringLiteral("静音"));
+        check(api_.setVolume(handle_, volume_, m ? 1u : 0u), QStringLiteral("静音"));
 }
+
+void ThreeFpPlayer::setVolume(float volume) { volume_ = volume; if (handle_) check(api_.setVolume(handle_, volume_, muted_ ? 1u : 0u), QStringLiteral("音量")); }
+bool ThreeFpPlayer::stepKeyframe(int d) { return handle_ && check(api_.stepKeyframe(handle_, d), QStringLiteral("关键帧")); }
+bool ThreeFpPlayer::setPlaybackRate(double rate) { return handle_ && check(api_.setPlaybackRate(handle_, rate), QStringLiteral("倍速")); }
+bool ThreeFpPlayer::setDecodeMode(unsigned mode) { decodeMode_ = mode; return resetVideoOutput(); }
+void ThreeFpPlayer::setAutomaticHdr(bool enabled) { automaticHdr_ = enabled; resetVideoOutput(); }
+QString ThreeFpPlayer::mediaInfo() const { return handle_ ? api_.mediaInfo(handle_) : QString(); }
 
 bool ThreeFpPlayer::setVrrPresent(bool enabled)
 {
@@ -156,7 +164,7 @@ bool ThreeFpPlayer::setScalingAlgorithms(ThreeFpScalingAlgorithm upscale,
 {
     upscale_ = upscale;
     downscale_ = downscale;
-    return handle_ && check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale) | ((chromaAlgorithm_ + 1) << 8)), downscale),
+    return handle_ && check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale) | ((chromaAlgorithm_ + 1) << 8) | (antiRinging_ ? 65536u : 0u)), downscale),
                             QStringLiteral("设置缩放算法"));
 }
 
@@ -177,6 +185,14 @@ void ThreeFpPlayer::setView(float zoom, float panX, float panY)
 }
 
 void ThreeFpPlayer::redraw() { if (handle_) api_.redraw(handle_); }
+bool ThreeFpPlayer::setOutputFormat(const QString &format) { outputFormat_=format; return handle_ && check(api_.setExternalOutputFormat(handle_,format.toUtf8().constData()),QStringLiteral("输出像素格式")); }
+void ThreeFpPlayer::setAntiRinging(bool enabled) { antiRinging_=enabled; setScalingAlgorithms(upscale_,downscale_); }
+QImage ThreeFpPlayer::capture() const { const auto size=surface_->size()*surface_->devicePixelRatioF(); return handle_ ? api_.capture(handle_,size.width(),size.height()) : QImage(); }
+bool ThreeFpPlayer::setSubtitle(const QImage &image) {
+    TimedTextCommand command; command.width=image.width(); command.height=image.height(); command.bitmap=image.constBits(); command.bitmapWidth=image.width(); command.bitmapHeight=image.height(); command.bitmapStride=image.bytesPerLine(); command.bitmapBytes=static_cast<uint32_t>(image.sizeInBytes()); command.contentId=++subtitleSequence_;
+    TimedTextLayer layer; layer.width=image.width(); layer.height=image.height(); layer.count=image.isNull()?0:1; layer.sequence=subtitleSequence_; layer.commands=&command;
+    return handle_ && api_.setSubtitleLayer(handle_,&layer)==ThreeFpResult::Success;
+}
 
 ThreeFpSnapshot ThreeFpPlayer::snapshot() const
 {

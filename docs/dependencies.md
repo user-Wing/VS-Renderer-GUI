@@ -8,6 +8,8 @@
 
 ## 源码构建依赖
 
+补帧新增 `vapoursynth-mvtools==29`，由 `build-vapoursynth.ps1` 固定安装，staging 携带 `plugins/mvtools.dll` 与 GPL-2.0 许可。不要使用 VSRepo 的旧 v24/API 3 版本；R80 已不能加载。现有开发环境可先运行 `.deps\vs-python\Scripts\python.exe -m pip install vapoursynth-mvtools==29`，再重跑 staging 或链接 GUI。
+
 - Git、CMake 3.25+、Ninja、7-Zip。
 - Qt 6.8+；官方构建使用 Qt 6.10.2 MinGW 64-bit 与配套 MinGW。
 - Python 3.12+。
@@ -69,3 +71,7 @@ Release 构建后运行 `vsr_frame_bridge_tests.exe startupWarmsDecodeAndBothRen
 `tools/install-analysis-plugins.ps1` 安装 Descale 并下载固定 r9_mod_v33 RIFE Vulkan DLL，校验 SHA-256，再从 `-ModelDirectory` 拷贝已转换的 `rife-v4.26` 与 `rife-v4.26-heavy` 目录（每个包含 flownet.param / flownet.bin）。默认采用用户的 FFmpegFreeUI VideoEnhancer 模型目录；模型清单见 third_party/rife/runtime-sha256.json。stage 脚本随后将这些文件放入便携运行时，发布脚本附带许可证。PKL 不能替代 NCNN 文件。
 
 14 个新增节点其余使用已固定的 Zsmooth / VSZip；不部署 VSRepo 返回的 API 3 旧二进制。源码依赖安装需要模型目录，最终便携使用无需下载。RIFE Vulkan 不要求 CUDA/TensorRT，需支持 Vulkan 的显卡驱动。
+
+## 1.0.2 本地 Player
+
+CMake 生成 VSRenderer.exe 与 vs-player.exe；播放器额外链接 Windows DirectShow / COM / DXGI / PSAPI / PDH / GDI 系统库，无新增 Qt 模块。3FP 构建增加 patches/3fp-player-rate.patch、patches/3fp-player-output.patch，API 14 版本兼容，新增 optional SetPlaybackRate / SetExternalOutputFormat 导出，字幕和位图读取复用已有 C ABI。tools/stage-1.0.2.ps1 只更新本地目录，不调用归档或 Git 工具，首次复制旧便携依赖，重复执行保留用户 VPY / INI。默认复制用户指定的 Anime4K / LAV / madVR 本机资源；madVR 通过随附 ax / DLL 实例化，不要求注册系统。VPY 位于应用旁 vpy；播放器所有设置位于 player.ini。PNG 源截图及嵌入 SRT 提取使用 runtime/ffmpeg/ffmpeg.exe，源码测试目录也需部署此 CLI。

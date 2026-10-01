@@ -4,12 +4,23 @@
 #include "graph/FilterGraph.h"
 
 #include <QLocale>
+#include <QCoreApplication>
 #include <QSet>
+#include <QFile>
+#include <QUrl>
+#include <QRegularExpression>
 
 #include <algorithm>
 
 namespace vsr {
 namespace {
+QString fuseSharpen(QString script) {
+    const QRegularExpression sequence("clip = _vsr_sharpen\\(clip, ([^\\n]+)\\)\\n((?:\\n|#[^\\n]*\\n)*)clip = _vsr_sharpen\\(clip, ([^\\n]+)\\)");
+    for(auto match=sequence.match(script);match.hasMatch();match=sequence.match(script))script.replace(match.capturedStart(),match.capturedLength(),match.captured(2)+"clip = _vsr_sharpen_chain(clip, [("+match.captured(1)+"), ("+match.captured(3)+")])");
+    const QRegularExpression more("clip = _vsr_sharpen_chain\\(clip, \\[(.+)\\]\\)\\n((?:\\n|#[^\\n]*\\n)*)clip = _vsr_sharpen\\(clip, ([^\\n]+)\\)");
+    for(auto match=more.match(script);match.hasMatch();match=more.match(script))script.replace(match.capturedStart(),match.capturedLength(),match.captured(2)+"clip = _vsr_sharpen_chain(clip, ["+match.captured(1)+", ("+match.captured(3)+")])");
+    return script;
+}
 
 QString number(const QVariantMap &p, const QString &key)
 {
@@ -54,7 +65,7 @@ QString preserveDoubleHeightAspect(const QVariantMap &p)
         : QString();
 }
 
-QString emitNode(const FilterNode &node)
+QString emitNode(const FilterNode &node, bool gpu = true)
 {
     const auto &p = node.parameters;
     if (node.definitionId == "trim")
@@ -82,7 +93,10 @@ QString emitNode(const FilterNode &node)
         const int scale = std::clamp(p.value("scale").toString().section(QChar(0x00d7), 0, 0).toInt(), 1, 4);
         return QString("clip = core.resize.Spline36(clip, format=vs.YUV420P16)\n"
                        "clip = core.placebo.Shader(clip, shader=%1, width=clip.width * %2, height=clip.height * %2)")
-            .arg(VpyScriptBuilder::pythonString(p.value("shader").toString())).arg(scale);
+            .arg((p.value("mode").toString() == QStringLiteral("自定义 GLSL") || !p.value("shader").toString().isEmpty()
+                 ? VpyScriptBuilder::pythonString(p.value("shader").toString())
+                 : QString("os.path.join(globals().get('_vsr_directory', %1), 'shaders', %2)")
+                     .arg(VpyScriptBuilder::pythonString(QCoreApplication::applicationDirPath()), VpyScriptBuilder::pythonString(p.value("mode").toString())))).arg(scale);
     }
     if (node.definitionId == "remove_grain")
         return QString("clip = core.rgvs.RemoveGrain(clip, mode=%1)").arg(number(p, "mode"));
@@ -114,6 +128,7 @@ QString emitNode(const FilterNode &node)
                        "clip = core.std.Merge(clip, _thin, weight=[%1, 0, 0] if clip.format.num_planes == 3 else [%1])")
             .arg(realNumber(p, "strength"));
     if (node.definitionId == "sharpen_edges" || node.definitionId == "crispen_edges" || node.definitionId == "enhance_detail") {
+        if(gpu) return QString("clip = _vsr_sharpen(clip, %1, %2, %3)").arg(VpyScriptBuilder::pythonString(node.definitionId),realNumber(p,"strength"),p.contains("threshold")?realNumber(p,"threshold"):QStringLiteral("0"));
         QString expression;
         if (node.definitionId == "sharpen_edges")
             expression = QString("x y - abs %1 {scale} * > x x y - %2 * + x ?")
@@ -124,14 +139,17 @@ QString emitNode(const FilterNode &node)
             expression = QString("x x y - y z - 0.5 * + %1 * +").arg(realNumber(p, "strength"));
         const QString matrix = node.definitionId == "crispen_edges"
             ? QStringLiteral("[0,1,0,1,4,1,0,1,0]") : QStringLiteral("[1,2,1,2,4,2,1,2,1]");
+        const bool detail = node.definitionId == "enhance_detail";
         return QString("_blur = core.std.Convolution(clip, matrix=%1, planes=[0])\n"
-                       "_wide = core.std.Convolution(_blur, matrix=[1,2,1,2,4,2,1,2,1], planes=[0])\n"
+                       "%3"
                        "_scale = 1 / 255 if clip.format.sample_type == vs.FLOAT else (1 << max(0, clip.format.bits_per_sample - 8))\n"
                        "_expr = %2.replace('{scale}', str(_scale))\n"
-                       "_sharp = core.std.Expr([clip, _blur, _wide], expr=[_expr, '', ''] if clip.format.num_planes == 3 else [_expr])\n"
+                       "_sharp = core.std.Expr(%4, expr=[_expr, '', ''] if clip.format.num_planes == 3 else [_expr])\n"
                        "_lo = core.std.Minimum(clip, planes=[0])\n_hi = core.std.Maximum(clip, planes=[0])\n"
                        "clip = core.std.Expr([_sharp, _lo, _hi], expr=['x y max z min', '', ''] if clip.format.num_planes == 3 else ['x y max z min'])")
-            .arg(matrix, VpyScriptBuilder::pythonString(expression));
+            .arg(matrix, VpyScriptBuilder::pythonString(expression),
+                 detail ? QStringLiteral("_wide = core.std.Convolution(_blur, matrix=[1,2,1,2,4,2,1,2,1], planes=[0])\n") : QString(),
+                 detail ? QStringLiteral("[clip, _blur, _wide]") : QStringLiteral("[clip, _blur]"));
     }
     if (node.definitionId == "cas")
         return QString("clip = core.cas.CAS(clip, sharpness=%1)").arg(realNumber(p, "sharpness"));
@@ -193,14 +211,17 @@ QString emitNode(const FilterNode &node)
                        "_descale_y = core.resize.Point(_descale_y, format=vs.GRAY16)\n"
                        "_descale_uv = core.resize.Spline36(clip, width=%2, height=%3, format=vs.YUV444P16)\n"
                        "clip = core.std.ShufflePlanes([_descale_y,_descale_uv], planes=[0,1,2], colorfamily=vs.YUV)").arg(p.value("kernel").toString(),number(p,"width"),number(p,"height"));
+    if (node.definitionId == "mvtools")
+        return QString("clip = _vsr_mvtools(clip, block=%1, pel=%2, overlap=%3, chroma=%4, searchparam=%5, blend=%6, scale=%7)")
+            .arg(p.value("block").toString(), p.value("pel").toString(), booleanValue(p,"overlap"),
+                 booleanValue(p,"chroma"), number(p,"searchparam"), booleanValue(p,"blend"))
+            .arg(qMax(1, choiceCode(p,"inference_scale")));
     if (node.definitionId == "rife")
-        return QString("import os\n"
-                       "_model = os.path.join(os.path.dirname(vs.__file__), 'plugins', 'models', %1)\n"
-                       "clip = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s='709')\n"
-                       "clip = core.rife.RIFE(clip, model_path=_model, factor_num=%2, gpu_id=%3, gpu_thread=%4, sc=%5)\n"
-                       "clip = core.resize.Bicubic(clip, format=vs.YUV444P16, matrix_s='709')")
+        return QString("_model = os.path.join(os.path.dirname(vs.__file__), 'plugins', 'models', %1)\n"
+                       "clip = _vsr_rife(clip, model=_model, factor=%2, gpu=%3, threads=%4, scene=%5, scale=%6)")
             .arg(VpyScriptBuilder::pythonString(p.value("model").toString()=="4.26 Heavy"?"rife-v4.26-heavy":"rife-v4.26"),
-                 number(p,"factor"),number(p,"gpu"),number(p,"threads"),booleanValue(p,"scene"));
+                 number(p,"factor"),number(p,"gpu"),number(p,"threads"),booleanValue(p,"scene"))
+            .arg(qMax(1, choiceCode(p,"inference_scale")));
     if (node.definitionId == "grain_add")
         return QString("clip = core.grain.Add(clip, var=%1, constant=%2)")
             .arg(realNumber(p, "var"), booleanValue(p, "constant"));
@@ -223,15 +244,15 @@ ScriptBuildResult VpyScriptBuilder::build(const QString &sourcePath, SourceFilte
 
     QStringList body;
     body << QStringLiteral("# Generated by VS Renderer. Edit the graph instead of this cache file.")
-         << QStringLiteral("import vapoursynth as vs")
+         << QStringLiteral("import vapoursynth as vs\nimport os")
          << QStringLiteral("core = vs.core")
          << QString();
 
-    const QString path = pythonString(sourcePath);
+    const QString path = QString("globals().get('_vsr_source', %1)").arg(pythonString(sourcePath));
     if (sourceFilter == SourceFilter::Lsmas)
-        body << QString("src = core.lsmas.LWLibavSource(source=%1)").arg(path);
+        body << QString("src = core.lsmas.LWLibavSource(source=%1, cache=0)").arg(path);
     else
-        body << QString("src = core.ffms2.Source(source=%1)").arg(path);
+        body << QString("src = core.ffms2.Source(source=%1, cache=False)").arg(path);
     body << QStringLiteral(
         "def _vsr_scene_detect(c):\n"
         "    nxt = c[1:] + c[-1] if c.num_frames > 1 else c\n"
@@ -246,6 +267,62 @@ ScriptBuildResult VpyScriptBuilder::build(const QString &sourcePath, SourceFilte
         "    return core.std.ModifyFrame(c, clips=[c, next_stats, prev_stats], selector=mark)\n");
     body << QStringLiteral("clip = src");
 
+    const bool hasInterpolation = std::any_of(graph.nodes().cbegin(), graph.nodes().cend(), [](const FilterNode &node) {
+        return node.enabled && (node.definitionId == "rife" || node.definitionId == "mvtools");
+    });
+    if (hasInterpolation)
+        body << QStringLiteral(R"PY(
+def _vsr_mvtools(c, block, pel, overlap, chroma, searchparam, blend, scale=1):
+    if c.format is None or c.fps_num <= 0:
+        raise ValueError('MVTools requires constant format and frame rate')
+    if c.format.color_family not in (vs.YUV, vs.GRAY) or c.format.sample_type != vs.INTEGER:
+        c = core.resize.Bicubic(c, format=vs.YUV444P16, matrix_s='709')
+    if c.num_frames == 1:
+        return core.std.Interleave([c, c])
+    work = c
+    if scale > 1:
+        work = core.resize.Bicubic(c, width=max(64, ((c.width + scale - 1) // scale + 1) // 2 * 2),
+                                   height=max(64, ((c.height + scale - 1) // scale + 1) // 2 * 2))
+    work_width, work_height = work.width, work.height
+    # FlowInter's vector masks need a usable block grid, including on tiny previews.
+    pad_w = max(128, (work.width + block - 1) // block * block) - work.width
+    pad_h = max(128, (work.height + block - 1) // block * block) - work.height
+    if pad_w or pad_h:
+        work = core.std.AddBorders(work, right=pad_w, bottom=pad_h)
+    # FlowInter needs populated UV planes even when Analyse searches luma only.
+    sup = core.mv.Super(work, pel=pel, chroma=True)
+    args = dict(blksize=block, overlap=block // 2 if overlap else 0,
+                search=2, searchparam=searchparam, chroma=chroma, truemotion=True)
+    backward = core.mv.Analyse(sup, isb=True, **args)
+    forward = core.mv.Analyse(sup, isb=False, **args)
+    middle = core.mv.FlowInter(work, sup, backward, forward, time=50, blend=blend)
+    if pad_w or pad_h:
+        middle = core.std.CropAbs(middle, width=work_width, height=work_height)
+    if scale > 1:
+        middle = core.resize.Bicubic(middle, width=c.width, height=c.height)
+    return core.std.Interleave([c, middle[:-1] + c[-1]])
+
+def _vsr_rife(c, model, factor, gpu, threads, scene, scale):
+    if c.format is None or c.fps_num <= 0:
+        raise ValueError('RIFE requires constant format and frame rate')
+    if c.num_frames == 1:
+        return core.std.Interleave([c] * factor)
+    w = max(32, ((c.width + scale - 1) // scale + 1) // 2 * 2) if scale > 1 else c.width
+    h = max(32, ((c.height + scale - 1) // scale + 1) // 2 * 2) if scale > 1 else c.height
+    rgb = core.resize.Bicubic(c, width=w, height=h, format=vs.RGBS,
+                              **({'matrix_in_s': '709'} if c.format.color_family == vs.YUV else {}))
+    generated = core.rife.RIFE(rgb, model_path=model, factor_num=factor,
+                               gpu_id=gpu, gpu_thread=threads, sc=scene)
+    branches = [c]
+    for offset in range(1, factor):
+        middle = core.std.SelectEvery(generated, cycle=factor, offsets=offset)
+        middle = core.resize.Bicubic(middle, width=c.width, height=c.height, format=c.format.id,
+                                     **({'matrix_s': '709'} if c.format.color_family == vs.YUV else {}))
+        # The final source frame has no successor: hold it without a RGB round trip.
+        branches.append(middle[:-1] + c[-1] if c.num_frames > 1 else c)
+    return core.std.Interleave(branches)
+)PY");
+
     int emitted = 0;
     for (const auto &node : graph.nodes()) {
         if (!node.enabled)
@@ -256,6 +333,7 @@ ScriptBuildResult VpyScriptBuilder::build(const QString &sourcePath, SourceFilte
             continue;
         }
         namespaces.insert(definition->pluginNamespace);
+        if(node.definitionId=="sharpen_edges" || node.definitionId=="crispen_edges" || node.definitionId=="enhance_detail") namespaces.insert(QStringLiteral("placebo"));
         if (node.definitionId == QStringLiteral("deband"))
             namespaces.insert(QStringLiteral("fmtc"));
         QString line = emitNode(node);
@@ -274,6 +352,28 @@ ScriptBuildResult VpyScriptBuilder::build(const QString &sourcePath, SourceFilte
     result.requiredNamespaces.sort(Qt::CaseInsensitive);
     body.insert(1, QString("# Required namespaces: %1").arg(result.requiredNamespaces.join(", ")));
     result.script = body.join('\n') + '\n';
+    if(result.script.contains("clip = _vsr_sharpen(")) {QFile helper(":/filters/gpu-sharpen.py");if(helper.open(QIODevice::ReadOnly))result.script.prepend(QString::fromUtf8(helper.readAll())+'\n');}
+    result.script = networkSource(fuseSharpen(result.script),sourcePath);
+    return result;
+}
+
+QString VpyScriptBuilder::upgradeSharpen(const QString &script,const FilterGraph &graph) {
+    QString result=script;
+    for(const auto &node:graph.nodes()) if(node.enabled && (node.definitionId=="sharpen_edges" || node.definitionId=="crispen_edges" || node.definitionId=="enhance_detail")) {
+        const auto cpu=emitNode(node,false),gpu=emitNode(node);
+        result.replace(cpu,gpu);
+        if(node.definitionId!="enhance_detail") {
+            auto legacy=cpu;legacy.replace("_scale =", "_wide = core.std.Convolution(_blur, matrix=[1,2,1,2,4,2,1,2,1], planes=[0])\n_scale =");legacy.replace("core.std.Expr([clip, _blur],", "core.std.Expr([clip, _blur, _wide],");result.replace(legacy,gpu);
+        }
+    }
+    if(result!=script) {QFile helper(":/filters/gpu-sharpen.py");if(helper.open(QIODevice::ReadOnly))result.prepend(QString::fromUtf8(helper.readAll())+'\n');}
+    return result.contains("def _vsr_sharpen_chain(")?fuseSharpen(result):result;
+}
+
+QString VpyScriptBuilder::networkSource(const QString &script,const QString &source) {
+    const QUrl url(source);if(url.scheme()!="http" && url.scheme()!="https")return script;
+    QString result=script;result.replace("core.lsmas.LWLibavSource(source=", "_vsr_network_source(source=");result.replace("core.ffms2.Source(source=", "_vsr_network_source(source=");
+    result.prepend("def _vsr_network_source(source, **options):\n    import vapoursynth as vs\n    return vs.core.ffms2.Source(source, cache=False, threads=options.get('threads', 0))\n\n");
     return result;
 }
 

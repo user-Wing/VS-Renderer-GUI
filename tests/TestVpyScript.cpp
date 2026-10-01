@@ -22,6 +22,12 @@ private slots:
                  QStringLiteral("\"C:\\\\video\\\\a\\\"b.mkv\""));
     }
 
+    void gpuSharpenAndLegacyUpgrade() {
+        FilterGraph graph;graph.add("sharpen_edges");graph.add("crispen_edges");graph.add("enhance_detail");const auto script=VpyScriptBuilder::build("input.mkv",SourceFilter::Ffms2,graph);
+        QVERIFY(script.script.contains("def _vsr_sharpen_shader"));QVERIFY(script.script.contains("clip = _vsr_sharpen_chain(clip, [(\"sharpen_edges\", 0.5, 2), (\"crispen_edges\", 0.25, 0), (\"enhance_detail\", 0.3, 0)])"));QVERIFY(script.requiredNamespaces.contains("placebo"));
+        const auto network=VpyScriptBuilder::build("https://example.org/video.mkv?token=value",SourceFilter::Lsmas,FilterGraph());QVERIFY(network.script.contains("def _vsr_network_source"));QVERIFY(network.script.contains("src = _vsr_network_source"));QVERIFY(network.script.contains("cache=False"));
+    }
+
     void preservesOrderAndParameters()
     {
         FilterGraph graph;
@@ -124,6 +130,27 @@ private slots:
         QVERIFY(result.script.contains(QStringLiteral("format=vs.YUV420P16")));
         QVERIFY(result.script.contains(QStringLiteral("shader=\"D:\\\\Shaders\\\\Anime4K.glsl\"")));
         QVERIFY(result.script.contains(QStringLiteral("width=clip.width * 3, height=clip.height * 3")));
+    }
+
+    void interpolationMapsParametersAndKeepsOriginalBranch()
+    {
+        FilterGraph graph;
+        const int mv = graph.add(QStringLiteral("mvtools"));
+        QVERIFY(mv >= 0);
+        QVERIFY(graph.setParameter(mv, QStringLiteral("block"), QStringLiteral("32")));
+        QVERIFY(graph.setParameter(mv, QStringLiteral("overlap"), true));
+        const int rife = graph.add(QStringLiteral("rife"));
+        QVERIFY(rife >= 0);
+        QVERIFY(graph.setParameter(rife, QStringLiteral("inference_scale"), QStringLiteral("2 - 半宽半高")));
+        const auto result = VpyScriptBuilder::build(QStringLiteral("D:\\source.mkv"), SourceFilter::Lsmas, graph);
+        QVERIFY(result.errors.isEmpty());
+        QVERIFY(result.requiredNamespaces.contains(QStringLiteral("mv")));
+        QVERIFY(result.requiredNamespaces.contains(QStringLiteral("rife")));
+        QVERIFY(result.script.contains(QStringLiteral("block=32, pel=1, overlap=True")));
+        QVERIFY(result.script.contains(QStringLiteral("core.mv.Super(work, pel=pel, chroma=True)")));
+        QVERIFY(result.script.contains(QStringLiteral("scene=True, scale=2")));
+        QVERIFY(result.script.contains(QStringLiteral("branches = [c]")));
+        QVERIFY(result.script.contains(QStringLiteral("middle[:-1] + c[-1]")));
     }
 };
 

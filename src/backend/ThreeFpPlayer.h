@@ -27,6 +27,12 @@ public:
     bool seekFrame(std::int64_t frame);
     bool stepFrame(int direction);
     void setMuted(bool muted);
+    void setVolume(float volume);
+    bool stepKeyframe(int direction);
+    bool setPlaybackRate(double rate);
+    bool setDecodeMode(unsigned mode);
+    void setAutomaticHdr(bool enabled);
+    QString mediaInfo() const;
     bool setVrrPresent(bool enabled);
     bool setVrrPacing(bool enabled);
     bool setScalingAlgorithms(ThreeFpScalingAlgorithm upscale, ThreeFpScalingAlgorithm downscale);
@@ -36,6 +42,10 @@ public:
     ThreeFpSnapshot snapshot() const;
     bool samplePixel(int x, int y, ThreeFpPixelProbe &sample) const;
     bool submitFrame(const VapourSynthFrame &frame);
+    bool setOutputFormat(const QString &format);
+    void setAntiRinging(bool enabled);
+    bool setSubtitle(const QImage &image);
+    QImage capture() const;
 
 signals:
     void errorOccurred(const QString &message);
@@ -50,6 +60,12 @@ private:
     QString lastError_;
     int chromaAlgorithm_ = 1;
     bool muted_ = false;
+    float volume_ = 1.0f;
+    unsigned decodeMode_ = 2;
+    bool automaticHdr_ = false;
+    bool antiRinging_ = false;
+    QString outputFormat_;
+    quint64 subtitleSequence_ = 0;
     bool vrrPresent_ = false;
     bool vrrPacing_ = false;
     float zoom_ = 1.0f;

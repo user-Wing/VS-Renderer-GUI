@@ -1,0 +1,70 @@
+--- a/FFF.Native/3FP/Subtitle/BitmapSubtitleDecoder.cpp
++++ b/FFF.Native/3FP/Subtitle/BitmapSubtitleDecoder.cpp
+@@ -32,13 +32,17 @@
+     FFFResult Open(const char* path, const std::int32_t requestedStream) noexcept {
+         if (path == nullptr || *path == '\0') return FFFResult::InvalidArgument;
+         try { path_ = path; } catch (...) { return FFFResult::NativeFailure; }
+-        sharedInput_ = SharedFileInput::Open(path, lastError_);
+-        if (sharedInput_ == nullptr) return FFFResult::NativeFailure;
++        const bool remote = path_.rfind("http://", 0) == 0 || path_.rfind("https://", 0) == 0;
++        sharedInput_ = remote ? nullptr : SharedFileInput::Open(path, lastError_);
++        if (!remote && sharedInput_ == nullptr) return FFFResult::NativeFailure;
+         format_ = avformat_alloc_context();
+         if (format_ == nullptr) return Fail("Could not allocate the bitmap subtitle input context.");
+-        format_->pb = sharedInput_->Context();
+-        format_->flags |= AVFMT_FLAG_CUSTOM_IO;
+-        const auto openResult = avformat_open_input(&format_, path, nullptr, nullptr);
++        if (sharedInput_) { format_->pb = sharedInput_->Context(); format_->flags |= AVFMT_FLAG_CUSTOM_IO; }
++        AVDictionary* options = nullptr;
++        av_dict_set(&options, "protocol_whitelist", remote ? "http,https,tcp,tls,crypto,data" : "file,crypto,data", 0);
++        av_dict_set(&options, "rw_timeout", "10000000", 0);
++        const auto openResult = avformat_open_input(&format_, path, nullptr, &options);
++        av_dict_free(&options);
+         if (openResult < 0) return Fail("Could not open the bitmap subtitle: " + FfmpegError(openResult));
+         const auto requestedStreamReady = requestedStream >= 0 &&
+             requestedStream < static_cast<std::int32_t>(format_->nb_streams) &&
+@@ -82,7 +86,7 @@
+     FFFResult Read(FFF3FPBitmapSubtitleFrame& output) noexcept {
+         if (output.size < sizeof(FFF3FPBitmapSubtitleFrame) || output.version != ApiVersion)
+             return FFFResult::InvalidArgument;
+-        if (hasPending_) return FFFResult::InvalidState;
++        if (!format_ || !codec_ || !packet_ || hasPending_) return FFFResult::InvalidState;
+         output = {};
+         output.size = sizeof(FFF3FPBitmapSubtitleFrame);
+         output.version = ApiVersion;
+@@ -136,6 +140,7 @@
+ 
+     FFFResult Seek(const std::int64_t position) noexcept {
+         if (position < 0) return FFFResult::InvalidArgument;
++        if (!format_ || !codec_ || !packet_ || streamIndex_ < 0) return FFFResult::InvalidState;
+         const auto* stream = format_->streams[streamIndex_];
+         const auto absolutePosition = position + timelineOrigin100ns_;
+         auto globalTimestamp = av_rescale_q(absolutePosition,
+--- a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
++++ b/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
+@@ -372,15 +372,20 @@
+ 
+         try {
+             std::string openError;
+-            sharedInput = SharedFileInput::Open(path, openError);
+-            if (sharedInput == nullptr)
++            const std::string source(path);
++            const bool remote = source.rfind("http://", 0) == 0 || source.rfind("https://", 0) == 0;
++            sharedInput = remote ? nullptr : SharedFileInput::Open(path, openError);
++            if (!remote && sharedInput == nullptr)
+                 throw std::runtime_error(openError);
+             format = avformat_alloc_context();
+             if (format == nullptr)
+                 throw std::runtime_error("Could not allocate the subtitle input context.");
+-            format->pb = sharedInput->Context();
+-            format->flags |= AVFMT_FLAG_CUSTOM_IO;
+-            auto result = avformat_open_input(&format, path, nullptr, nullptr);
++            if (sharedInput) { format->pb = sharedInput->Context(); format->flags |= AVFMT_FLAG_CUSTOM_IO; }
++            AVDictionary* options = nullptr;
++            av_dict_set(&options, "protocol_whitelist", remote ? "http,https,tcp,tls,crypto,data" : "file,crypto,data", 0);
++            av_dict_set(&options, "rw_timeout", "10000000", 0);
++            auto result = avformat_open_input(&format, path, nullptr, &options);
++            av_dict_free(&options);
+             if (result < 0)
+                 throw std::runtime_error("Could not open the subtitle container: " + FfmpegError(result));
+             result = avformat_find_stream_info(format, nullptr);

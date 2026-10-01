@@ -42,3 +42,5 @@ DFTTest、Neo FFT3D 与 HQDn3D 的 VSRepo Windows 包仍使用已被 R80 拒绝�
 已集成并执行验证：Zsmooth 的 TemporalMedian、FluxSmoothT、FluxSmoothST、SmartMedian、InterQuartileMean、DegrainMedian、Cnr4、CCD、DCTFilter、TemporalSoften、VerticalCleaner；VSZip CLAHE；Descale r11；RIFE NCNN Vulkan 4.26 / Heavy。界面新增 14 个节点，不是 14 个重复下载的插件。
 
 旧 API 3 版 DFTTest、CTMF、AWarpSharp2、Retinex、KNLMeansCL 等不能直接放入 R80 bundle；本轮使用其现代同类实现，不以不可加载的 DLL 充数。RIFE 核心与模型随包部署，不能直接加载 PKL 到 NCNN；性能记录见 README。
+
+MVTools 2× 补帧采用 `vapoursynth-mvtools==29` API 4 wheel（VSRepo v24 是 API 3，不可部署）。固定 Super → 双向 Analyse → FlowInter 50% → 原始/中间帧交错；标量/布尔参数适配现有 GUI。MVTools/RIFE 可选择中间帧计算分辨率，保留原始支路；只降低中间帧细节，不默认降低处理质量。

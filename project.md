@@ -1,5 +1,46 @@
 # VS Renderer 项目地图
 
+## 1.0.2 完整更新与发布（2026-10-01）
+
+- `src/update/PortableUpdater.*`：两程序共享 ModelScope 数字版本检查、分页、Revision 固定下载、aria2-next 2.8.3、异步分块 SHA-256、归档路径 / 必需组件 / 内部版本验证。仅新版本出现安装入口，不降级。
+- `tools/apply-update.ps1`：等待相关进程退出，同级完整目录交换与原目录备份，保留用户 INI / 自定义 VPY / 项目 / 截图，替换内置预设；占用 / 失败不强杀播放器、不把残缺文件覆盖原目录。
+- `PlayerWindow.cpp` / `PlayerSettings.cpp` / `MainWindow.cpp`：缩放后的左上角还原按钮，恢复适配与平移；版本和检查更新入口。语言两包同步，检查扩展到更新 UI。
+- `tools/stage-update-tools.ps1` / `tools/package-1.0.2.ps1`：固定 SHA-256 的下载工具部署、许可和完整包 manifest；干净暂存目录排除用户配置、缓存、测试与历史脚本；使用本机 Zstandard Ultra 22，归档不污染活跃目录。
+- 验证：Release、CTest 8/8；更新专项验证真实 aria2 下载 / 校验 / 解压、目录整体替换、INI / VPY 保留、旧备份和占用保护；缩放还原含全屏。日志 `build/release-update-*`。完整交付、归档及远程验证与历史测试分别记录。
+- 最新发布授权：ModelScope-Manager 本机 SDK 上传 `ARXChem/Software-List/VS-GUI/1.0.2.7z`；GitHub 推送代码并创建无附件草稿，GitHub 包由用户手动上传。开发日志落盘 Vibe Coding Guide 的 `results/2026.10`，采用用户指定 Distill 格式。当前版本仍 1.0.2。
+
+## 当前本地更新：1.0.2（2026-10-01，继续开发中）
+
+- 当前网络机制：HTTP / HTTPS 固定 3FP 原生直通，不加载 VS；`PlayerNetworkInput.*` 删除整文件临时准备，保留 AList / 重定向 / 有界 Range 代理。修复原生元数据平均帧率字段读取，网络逐帧定位和 Tab 源帧率正确。
+- `PlayerProfiles.cpp` / `patches/3fp-native-scaling.patch`：Anime / Realistic 增加 Jinc 后的 D3D11 Native；原生 VideoProcessor 支持的 SDR 硬解输入优先，其他输入 Bilinear 回退。降载恢复期 2 秒 + 稳定观察 5 秒，暂停 / seek / resize / 全屏 / 变速重新统计。修复内置 Resample 10-bit 输入，已有已知内置文件先备份再补转换。
+- `PlayerCache.*`：便携或自定义 FFMS2 / L-SMASH 索引位置、身份哈希、大小和定向清理。`PlayerSettings.cpp`：八页及完整 INI；独立音 / 视频解码、主题、自动播放、媒体时间记忆、多线程与快捷键跨度。`PlayerAssociations.*`：当前用户候选应用注册，默认交给 Windows。
+- `PlayerLanguage.*` / `assets/languages/*.json`：中文默认、英文外置包，新增字符串同步两包；`tools/check-player-languages.py` 加入 CTest。`LavPlayback.cpp` 支持独立 LAV 音频 / 视频图与两种配置属性页；不替换 VPY 内部源。
+- 当前性能复测使用真实 1920×1080 / 47.95 fps 的 02.mkv；与上一轮实际 4K 的 03 文件区分。完整证据、交付与边界见 `docs/player-performance-1.0.2.md`。
+
+- 本轮最终验证：Release / 原生 DLL、CTest 7/7，交付 Player 26/26 无跳过（两个真实链接）。证据 `build/player-settings-final-ctest.txt`、`build/player-settings-portable-results.txt`、`build/player-settings-delivery-audit.json`、`build/player-settings-startup-smoke.json`；用户 VPY / INI 保留，两个已知内置位深修复有完整备份。程序输出仍为本地 1.0.2，不发 Git、不打包。
+
+### 前一轮记录（其网络 VS 临时准备机制已由上述直通替换）
+
+- 本轮新路径：`PlayerNetworkInput.*` 独立 Qt 网络线程解析重定向 / AList API，代理分段转发 Range，HTTP/1.1 / 独立连接、限制读缓冲和待发送字节；VS 需要有进度的四路 Range 临时媒体准备；取消先于 VS / 字幕清理，失效脚本代次不再回调。`patches/3fp-network-subtitles.patch` 接入原生网络字幕并检查位图读取状态，Player 释放失败句柄，修复真实 ModelScope 闪退。
+- `PlayerProfiles.cpp`：可编辑 Anime / Realistic、A/M Fast 资源、画布目标 / SAR、5% 自动逐级降载及原生 4K 直通。`PlayerPlaylist.cpp`：停靠 QSplitter / 全屏悬停 / 宽度保存；右键滚轮音量与缩放。
+- 本轮最终验证：Release 成功、CTest 6/6、交付 Player 20/20 无跳过；两个真实链接原生播放与 ModelScope 完整 VPY 链通过。两个正式 EXE 独立启动 / 关闭、交付构建一致、GPU / 补帧 helper 与 Fast 资源校验通过，原有 VPY / INI 哈希未变。证据为 build/player-network-profile-* 与 build/player-real-network-http1.txt；AList VPY 完整 2.49 GiB 输入未另做长片测试。保持 1.0.2，不发 Git、不打包。
+- 本轮性能证据：`build/player-network-profile-targeted.txt`（4K48 原生 383 帧 / 8s、0 丢弃），`build/player-supplied-links-final.txt`（两个真实链接 + 降级顺序），`build/anime4k-fast-profile.json`（VL / M / 目标尺寸配对）。完整交付验证见本轮更新日志及性能文档末尾。
+
+- 本次继续更新：三个锐化节点的 YUV 路径迁至随附 vs-placebo Vulkan Shader，连续节点合并一次调用并保留原色度；Gray/RGB 保留 CPU。旧内置 CPU 代码在加载时精确匹配替换，不写回用户 VPY。`assets/gpu-sharpen.py` 为自包含预设 helper，嵌入两个 EXE。
+- `PlayerPlaylist.cpp`：右侧范围悬停或停靠显示播放列表，目录第一级包含文件和可展开的子目录；支持右键无视频打开文件 / 文件夹 / 链接、拖放目录与 URL、file URI。Enter 双向无边框全屏，底栏离开鼠标 2 秒隐藏、移到下方显示，输入与弹窗期间保留。
+- 3FP 原生 HTTP/HTTPS 输入 + FFMS2 网络源、内存索引，修复 ModelScope-Manager 直接传 URL 被误判为不存在；网络首次索引仍需扫描媒体。L-SMASH 网络输入转用 FFMS2，字幕暂停缓存避免重复生成 / 上传同一整幅覆盖图。
+- 最新配对实测：同一 MyGO 完整链 48 帧、四路请求，CPU 13.01 fps → GPU 合并 25.76 fps（76.88 → 38.82 ms/帧）；为短时暖态样本。详情与测试记录见 docs/player-performance-1.0.2.md。
+- 本次验证：CTest 6/6，交付目录 Player 15/15、无跳过；真实 2160p 输出在极致模式暂停后呈现计数不再增长，GPU 采样 0.3%。两个正式 EXE 独立启动 / 正常关闭，EXE 与 DLL 匹配构建，GPU helper 和完整补帧色度修复均在两程序内；全部用户 VPY 与 player.ini 哈希未变。证据：build/player-gpu-network-ctest.txt、build/player-gpu-network-portable-results.txt、build/player-gpu-network-delivery-audit.json、build/player-gpu-network-startup-smoke.json。
+
+- 先修 Renderer 再更新 Player：Sharpen edges / Crispen edges 去掉未使用的第二次卷积；旧 VPY 不改写，本机另附同参数的优化预设，三帧逐像素一致。
+- Player 的 Tab 使用真实 VS 跳帧计数及 GPU 引擎占用；资源采样在信息面板关闭时也继续，用于默认开启的异步预解码。CPU 控制线程，内存控制缓存目标，GPU / RAM / 进程显存预算超阈值则停止新增预取；无法强制插件瞬时占用不超限。
+- `PlayerMenus.cpp`：三级右键菜单、VPY 分组、主次字幕、SRT 样式、源 / 显示 PNG、Jinc / 抗振铃和全屏入口。`PlayerSettings.cpp`：四页设置及便携 player.ini 导入导出。`PlayerResources.cpp`：PDH / DXGI / 系统与进程资源。
+- `PlayerSubtitles.cpp`：独立字幕线程复用 3FP libass / 位图 C ABI。PGS 保留活动图像直到显式清屏或结束，复制并确认每个 native pending 事件，支持向前 / 后跳转。外部挂载在 VS 延迟初始化完成后恢复，媒体元数据不得覆盖挂载轨。
+- `LavPlayback.cpp`：直接实例化 LAV / madVR COM，madVR 图使用 LAV 解码，VS 不启用；倍速音频仍由 3FP atempo 提供。madVR 的全局回调 DLL 保持进程内加载，重复打开复用模块；字幕使用 OSD，截图使用厂商帧接口，未注册系统。
+- `patches/3fp-player-output.patch`：输出像素格式、同尺寸采样、Jinc relaxed 局部约束、扩展缩小算法、外部帧会话字幕及显示截图合成；叠加在速度补丁之后。本机在独立 .deps/fff-player 构建，补丁反向校验通过。
+- 验证：Release / 原生 DLL 成功、CTest 6/6、Player 13/13（无跳过），真实 01.mkv 输出 3840×2160、Tab GPU 数字和跳帧、内置 PGS、外部 SRT、PNG、七种输出格式、madVR 实播 / OSD / 不变调倍速及 RIFE 精确帧回归。日志：build/player-final-ctest.txt、build/mingw-release/player-test-results.txt；性能详见 docs/player-performance-1.0.2.md。
+- 交付保持 dist/VS-Renderer-GUI-1.0.2-windows-x64，保留用户 VPY / INI，更新两程序与匹配原生 DLL；交付目录 Player 13/13 通过，移出测试 EXE / Qt6Test.dll 后两主程序独立启动并正常关闭，三文件与构建 SHA-256 一致，完整补帧 helper 及色度修复仍在两 EXE 内。证据：build/player-oct01-delivery-audit.json、build/1.0.2-portable-player-results.txt、build/player-oct01-startup-smoke.json。不发 Git、不归档。HDR 显示器、多显示器 DPI 和长片持续播放仍未人工验证；HDR 实画面 PNG 目前为 8-bit 显示截取。
+
 ## 1. 发心
 
 面向了解视频处理概念、但不愿反复编写脚本且需要快速 A/B 验证参数的用户。GUI 负责组织模块、顺序与参数，VapourSynth 负责处理，3FP 负责双路呈现和帧级检查。成功标准是用户能从“打开源”走到“生成并验证脚本、同步比较结果”，并把当前处理链交给熟悉的 3FUI FFmpeg 参数导出。非目标：首阶段不实现任意 Python IDE、矩阵表达式可视化编辑器、完整编码参数面板。
@@ -67,7 +108,7 @@ third_party/   官方 VapourSynth Git 工作树；其他二进制不入库
 
 ## 10. 当前状态
 
-- 版本：`1.0.1`。
+- 版本：`1.0.2`。
 - 已完成：项目基线、UI 规格、VapourSynth Git 源码固定、内置便携 Python/VS/API 4 插件、滤镜图/VPY 生成、教程向插件扩展、Anime4K GLSL、API 14 外部帧桥、左右同帧预览、A/B 滑块、3FUI 参数兼容导出、源像素密度感知缩放、缩放拖拽与全局空格播放。
 - 下一步：扩充 VCB 全量 catalog、插件管理与 NGU 等独立高级缩放后端。
 - 限制：当前帧桥支持常用整数 planar 格式，不支持 VS float/GPU-resident frame；Anime4K 在 VS 内使用 GPU，但输出仍经 CPU plane copy 提交给 3FP，4K 重 shader 未必能实时；NGU 属于独立 GPU 推理实现；处理后音频未接入，左路始终是音频时钟；3FUI 兼容导出拒绝 `filter_complex`/`lavfi`，仅自动重写常规视频 `-map` 与单路 `-filter:v`。
@@ -175,3 +216,33 @@ third_party/   官方 VapourSynth Git 工作树；其他二进制不入库
 - 验证：所有 AB/ABC/ABCD 子模式及九路网格在缩放/平移后实际取帧；四颜色 MKV 实际编码并逐象限检查、最大尺寸包含隐藏源，长名称与最小进度条、禁止覆盖非主源、设置入口验证。14 新滤镜和两个 RIFE 模型实际输出。
 
 - 最终回归：Release 构建，CTest 5/5 通过；RIFE 实际主页面 700ms 测试提交 29 帧，其中 13 帧为补出来的奇数中间帧。日志 build/rife-preview.txt、build/new-filters.txt、build/composition-final.txt、build/rife-1080p.txt、build/rife-amd.txt。
+
+## 20. MVTools 与补帧计算优化（2026-09-30）
+
+- 文件：FilterCatalog.cpp、VpyScriptBuilder.cpp、TestVpyScript.cpp、build-vapoursynth.ps1、stage-vapoursynth-runtime.ps1、verify-interpolation.py 和本轮文档。播放器/主窗口/3FP ABI 不在本轮编辑范围；保留另一任务已存在的 Anime4K 和播放器改动。
+- MVTools：API 4 v29 wheel，VSRepo v24 已验证为旧 API 3 并排除部署。Super/双向 Analyse/FlowInter 50% 构成固定节点，仅按需生成中间帧，与输入交错；镜头默认保持而非混合，最后一帧保持。小图填充至有效块网格，再裁回，以避免原生插件小尺寸堆损坏。
+- RIFE：上游本来只推理非原始时间点，不声称新增 50% 推理节省；新增原格式原帧支路，避免偶数帧 RGB 往返，仅取/转换插值支路。保留场景属性检测和已有 3×/4×；单帧输入直接重复。
+- 速度：两者可显式选择低分辨率计算，原始帧保持；默认原尺寸，低分辨率中间帧会损失细节。原节点按 VS 请求缓存共享相邻源/运动向量，不生成完整临时高帧率流。
+- 验证：独立 Release GUI 构建、graph-and-vpy 通过；API 4 实际执行覆盖 MVTools 三组质量参数、两档缩小、镜头切换、单帧；RIFE 两模型三档尺寸、3×/4×、单帧。逐像素检查原帧、2× 帧数/FPS/帧时长、乱序 seek 和尾帧；推理陷阱确认原帧不请求生成支路。
+- 性能：本机 1080p FFV1 testsrc2，源帧预取，12 张插值帧暖态：MVTools 原尺寸 block16 19.28、半尺寸 69.33 张/秒；RIFE 4.26 GPU0/线程1 原尺寸 11.59、半尺寸 38.84、四分之一 97.07 张/秒。合成短片且不含显示，不承诺所有核显/真实媒体实时；日志 build/interpolation-verification.txt。
+- 交付：独立 build/mingw-interpolation，依赖安装/staging 已更新；不覆盖 dist/现有 Release 归档，最终播放器任务可直接使用本轮源码和插件。补帧速度仍受后续滤镜、CPU copy、显示与材质复杂度限制；既有 RIFE 色彩转换沿用 709，不新增 HDR 色彩语义。
+
+## 21. MVTools 绿色闪烁修复（2026-09-30）
+
+- 根因：将色度搜索开关同时传入 Super 与 Analyse；默认关闭时 Super 不携带 U/V 数据，FlowInter 插值帧色度为零，原帧和插值帧交替呈现绿色。跳帧是暴露现象，调度本身不是此问题的根因。此前中性灰测试及只校验原始支路未能检测插值帧色度异常。
+- 修改：VpyScriptBuilder.cpp 的 Super 固定 chroma=True，Analyse 继续保留用户 chroma 开关。未改变跳帧机制、RIFE 和播放器路径。
+- 验证：verify-interpolation.py 添加彩色 8/10/16-bit、两种色度搜索状态、三档尺寸、并发及乱序请求，逐平面校验中间帧；实际 D:\TEST.mkv 的输出 771/770/1201/7/771 帧 U/V 均非零，第 771 帧平均 U=0.441132、V=0.538802。其余 MVTools/RIFE 回归全部通过，独立 Release 构建与图脚本测试通过。
+- 性能复测：修复后 1080p testsrc2 MVTools block16 原尺寸 28.04、半尺寸 93.29 张插值帧/秒；RIFE 原尺寸 13.11、半尺寸 47.14。短片暖态单次测量、未含显示，机器并发负载影响结果；上一节数据保留历史记录，以本轮有效色度输出复测为准。完整日志 build/mvtools-green-regression.txt。
+- 交付：更新 build/mingw-interpolation/VSRenderer.exe，未覆盖并行播放器的 dist 或发行归档；旧生成/保存的 VPY 必须重新生成，已有脚本需将 Super 的 chroma 改为 True。实际 GUI 可见播放手势本轮未自动检查，已直接验证用户媒体的 VS 插值输出。
+
+## 22. Renderer 预设与 VS Player 1.0.2（2026-09-30）
+
+- 新增 PresetStore / PresetDialog / MainWindowPresets：便携 vpy 目录、三栏管理、原子写入、图元数据和源覆盖；外部 VPY 直接运行，图修改恢复生成路径。Anime4K 下拉模式与本机 14 文件部署、自定义路径。
+- 新增独立 VSPlayer CMake 目标，输出 vs-player.exe；共享 VS 帧服务、3FP 外部帧、PreviewPane 与图生成器，播放器 UI/控制/信息分文件。音频播放源为时间基准，VS 按目标时间请求最新帧；暂停时支持输出帧独立选择。
+- 原生补丁在独立 FFF.Native 副本开发：optional SetPlaybackRate C ABI、atempo 0.5–2 分段链、速率音频时钟、暂停位置保护、滤镜 seek 重置与尾部排空、真实章节媒体信息。
+- LAV 不注册 COM：直接从随附 AX 调用类工厂建立 DirectShow 图，原速提供时钟/音频；VS 输入仍由 VPY 源负责，变速显式使用 3FP 保持音调。madVR 仅携带，用户已确认后续接入。
+- 输出 dist/VS-Renderer-GUI-1.0.2-windows-x64，两程序与 Shader / vpy / LAVFilters64 / madVR09217 目录；不推送、不打包。不覆盖旧 dist 1.0.1，也保留并行补帧专项的源码与依赖。
+- 验证覆盖：真实 VPY 输入替换及尺寸变化、章节、中文空格路径、精确输出帧、时间输入、关键帧、两种速率与暂停改速、原速 LAV、VS 画面及 LAV→不变调变速。Qt 抓图只验证控件，视频通过原生呈现计数/输出帧号验证。
+- 最终交付验证：CTest 6/6 通过；交付目录播放回归 5/5 通过，包含 RIFE 48fps 输出帧号 7（从 0 起）的精确定位；14 个 Anime4K 文件逐一实际取帧成功。移出测试可执行文件与 Qt6Test.dll 后，两主程序从交付目录独立启动通过。MVTools 补帧与绿色闪烁修复已合入本次构建。
+- 限制：任意 VPY 对时间轴的剪辑不会自动重建音频；LAV 的缓冲/PCM 细节未提供时如实显示。真实 HDR 显示器、多显示器和长片持续播放待人工验证。
+- 补帧接入复核：两份 1.0.2 交付 EXE 与 Release 构建文件 SHA-256 一致，程序内完整补帧 helper 与最新源码一致。直接提取交付 EXE 的 helper，在交付 Python/VS/MVTools/RIFE 下运行回归，彩色 8/10/16-bit、并发跳帧、D:\TEST.mkv 色度、两套 RIFE 三档计算尺寸及 3×/4× 全部通过；graph-and-vpy 通过。已正常接入，无需重新构建。证据：build/interpolation-build-audit.json、build/1.0.2-packaged-interpolation.txt。

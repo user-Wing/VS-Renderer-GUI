@@ -1,0 +1,223 @@
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -3,6 +3,9 @@
+ 
+ extern "C" {
+ #include <libavcodec/avcodec.h>
++#include <libavfilter/avfilter.h>
++#include <libavfilter/buffersrc.h>
++#include <libavfilter/buffersink.h>
+ #include <libavcodec/codec_desc.h>
+ #include <libavcodec/packet.h>
+ #include <libavformat/avformat.h>
+@@ -1448,6 +1451,77 @@
+             (exclusive ? "true}" : "false}"));
+     });
+     return FFFResult::Success;
++}
++// VS Player: rate-aware clock and pitch-preserving FFmpeg atempo chain.
++FFFResult PlayerSession::SetPlaybackRate(const double rate) noexcept {
++    if (!std::isfinite(rate) || rate < 0.1 || rate > 16.0) return FFFResult::InvalidArgument;
++    Enqueue([this, rate] {
++        const auto position = state_.load() == FFF3FPState::Playing ? ClockPosition() : snapshot_.position100ns;
++        playbackRate_ = rate;
++        DoSeek(position);
++    });
++    return FFFResult::Success;
++}
++void PlayerSession::ResetTempo(const std::int64_t position) noexcept {
++    if (tempoGraph_) avfilter_graph_free(&tempoGraph_);
++    tempoInput_ = nullptr; tempoOutput_ = nullptr; tempoSamples_ = 0; tempoOrigin_ = position;
++}
++FFFResult PlayerSession::TempoAudio(AVFrame* frame, const std::int64_t position) noexcept {
++    const double rate = playbackRate_.load();
++    if (rate == 1.0) return audioRenderer_->Enqueue(frame, position);
++    if (!tempoGraph_) {
++        if (!frame) return FFFResult::Success;
++        tempoGraph_ = avfilter_graph_alloc();
++        if (!tempoGraph_) return FFFResult::NativeFailure;
++        char layout[128]{}; av_channel_layout_describe(&frame->ch_layout, layout, sizeof(layout));
++        std::ostringstream args;
++        args << "time_base=1/" << frame->sample_rate << ":sample_rate=" << frame->sample_rate
++             << ":sample_fmt=" << av_get_sample_fmt_name(static_cast<AVSampleFormat>(frame->format)) << ":channel_layout=" << layout;
++        if (avfilter_graph_create_filter(&tempoInput_, avfilter_get_by_name("abuffer"), "input", args.str().c_str(), nullptr, tempoGraph_) < 0 ||
++            avfilter_graph_create_filter(&tempoOutput_, avfilter_get_by_name("abuffersink"), "output", nullptr, nullptr, tempoGraph_) < 0) return FFFResult::FfmpegFailure;
++        AVFilterContext* previous = tempoInput_;
++        double remainder = rate; int index = 0;
++        do {
++            const auto factor = std::clamp(remainder, 0.5, 2.0);
++            AVFilterContext* filter = nullptr;
++            const auto name = "tempo" + std::to_string(index++);
++            const auto factorText = std::to_string(factor);
++            if (avfilter_graph_create_filter(&filter, avfilter_get_by_name("atempo"), name.c_str(), factorText.c_str(), nullptr, tempoGraph_) < 0 ||
++                avfilter_link(previous, 0, filter, 0) < 0) return FFFResult::FfmpegFailure;
++            previous = filter; remainder /= factor;
++        } while (std::abs(remainder - 1.0) > 0.00001);
++        if (avfilter_link(previous, 0, tempoOutput_, 0) < 0 || avfilter_graph_config(tempoGraph_, nullptr) < 0) return FFFResult::FfmpegFailure;
++    }
++    AVFrame* input = frame ? av_frame_clone(frame) : nullptr;
++    if (frame && !input) return FFFResult::NativeFailure;
++    if (input) {
++        const auto skipped = position != AV_NOPTS_VALUE && position < tempoOrigin_
++            ? std::min<std::int64_t>(input->nb_samples, av_rescale_rnd(tempoOrigin_ - position, input->sample_rate, 10000000, AV_ROUND_UP)) : 0;
++        if (skipped >= input->nb_samples) { av_frame_free(&input); return FFFResult::Success; }
++        if (skipped) {
++            const auto format = static_cast<AVSampleFormat>(input->format);
++            const auto planar = av_sample_fmt_is_planar(format);
++            const auto planes = planar ? input->ch_layout.nb_channels : 1;
++            const auto offset = skipped * av_get_bytes_per_sample(format) * (planar ? 1 : input->ch_layout.nb_channels);
++            for (int plane = 0; plane < planes; ++plane) { input->extended_data[plane] += offset; if (plane < AV_NUM_DATA_POINTERS) input->data[plane] = input->extended_data[plane]; }
++            input->nb_samples -= static_cast<int>(skipped);
++        }
++        input->pts = position == AV_NOPTS_VALUE ? AV_NOPTS_VALUE : av_rescale_q(position - tempoOrigin_, AVRational{1, 10000000}, AVRational{1, frame->sample_rate}) + skipped;
++    }
++    const auto sent = av_buffersrc_add_frame_flags(tempoInput_, input, AV_BUFFERSRC_FLAG_KEEP_REF);
++    av_frame_free(&input);
++    if (sent < 0) return FFFResult::FfmpegFailure;
++    AVFrame* output = av_frame_alloc();
++    if (!output) return FFFResult::NativeFailure;
++    FFFResult result = FFFResult::Success;
++    while (av_buffersink_get_frame(tempoOutput_, output) >= 0) {
++        const auto outputPosition = tempoOrigin_ + av_rescale(tempoSamples_, 10000000, output->sample_rate);
++        result = audioRenderer_->Enqueue(output, outputPosition);
++        tempoSamples_ += output->nb_samples;
++        av_frame_unref(output);
++        if (result != FFFResult::Success) break;
++    }
++    av_frame_free(&output); return result;
+ }
+ FFFResult PlayerSession::SetVolume(const float volume, const bool muted) noexcept { if (!std::isfinite(volume) || volume < 0 || volume > 1) return FFFResult::InvalidArgument; Enqueue([this, volume, muted] { volume_ = volume; muted_ = muted; if (audioRenderer_) audioRenderer_->SetVolume(volume_, muted_); }); return FFFResult::Success; }
+ 
+@@ -1718,7 +1792,7 @@
+         LARGE_INTEGER now{};
+         QueryPerformanceCounter(&now);
+         const auto elapsed = sampledQpc > 0 && now.QuadPart > sampledQpc && qpcFrequency_ > 0
+-            ? (now.QuadPart - sampledQpc) * TicksPerSecond / qpcFrequency_ : 0;
++            ? static_cast<std::int64_t>((now.QuadPart - sampledQpc) * static_cast<double>(TicksPerSecond) * playbackRate_.load() / qpcFrequency_) : 0;
+         output.position100ns = sampledPosition + std::min(elapsed,
+             std::max<std::int64_t>(0, limit - sampledPosition));
+         if (output.duration100ns > 0) output.position100ns = std::min(output.position100ns, output.duration100ns);
+@@ -2564,6 +2638,7 @@
+ 
+     if (keyframeSeekPending_) {
+         keyframeSeekPending_ = false;
++        ResetTempo(position);
+         seekTarget100ns_ = -1;
+         seekTargetFrame_ = -1;
+         ResetClock(position);
+@@ -2677,7 +2752,7 @@
+         if (position + av_rescale(frame->nb_samples, TicksPerSecond, frame->sample_rate) < seekTarget100ns_) return;
+     }
+     ++snapshot_.decodedAudioFrames;
+-    const auto result = audioRenderer_->Enqueue(frame, position);
++    const auto result = TempoAudio(frame, position);
+     if (result == FFFResult::Success && owner == format_) internalAudioDecodeErrorCount_ = 0;
+     if (result == FFFResult::BufferTooSmall) ++snapshot_.audioRejectedFrames;
+     else if (result != FFFResult::Success) {
+@@ -2836,7 +2911,10 @@
+         if (videoDecoder_) DecodePacket(videoDecoder_, nullptr, true, format_);
+         if (audioBlockedUntilVideoFrame_ && videoFrameQueue_.empty())
+             ReleaseAudioWithoutVideo();
+-        if (audioDecoder_ && externalFormat_ == nullptr) DecodePacket(audioDecoder_, nullptr, false, format_);
++        if (audioDecoder_ && externalFormat_ == nullptr) {
++            DecodePacket(audioDecoder_, nullptr, false, format_);
++            if (audioRenderer_ && tempoGraph_) TempoAudio(nullptr, 0);
++        }
+     }
+     // Some single-frame image decoders publish their only frame while draining.
+     // Do not enter Ended before that queued frame has reached the renderer.
+@@ -2887,6 +2965,7 @@
+             "FFmpeg could not seek to the requested position; playback remained active.", "seek");
+         return;
+     }
++    ResetTempo(position);
+     ClearVideoQueue();
+     ResetBitRateTracking();
+     if (videoDecoder_) avcodec_flush_buffers(videoDecoder_); if (audioDecoder_) avcodec_flush_buffers(audioDecoder_);
+@@ -3001,6 +3080,7 @@
+ }
+ 
+ void PlayerSession::DoClose(const FFF3FPState finalState, const bool preserveVideoOutput) noexcept {
++    ResetTempo(0);
+     if (audioRenderer_) { audioRenderer_->Stop(); audioRenderer_.reset(); }
+     // SetTimedTextLayer is intentionally callable outside the session command
+     // queue. Gate renderer teardown with its content lock so a final timer tick
+@@ -3305,6 +3385,14 @@
+         AVDictionaryEntry* title = av_dict_get(stream->metadata, "title", nullptr, 0);
+         json << ",\"language\":\"" << EscapeJson(language ? language->value : "") << "\",\"title\":\"" << EscapeJson(title ? title->value : "") << "\"}";
+     }
++    json << "],\"chapters\":[";
++    for (unsigned index = 0; index < format_->nb_chapters; ++index) {
++        if (index) json << ',';
++        const auto* chapter = format_->chapters[index];
++        const auto* title = av_dict_get(chapter->metadata, "title", nullptr, 0);
++        json << "{\"start100ns\":" << av_rescale_q(chapter->start, chapter->time_base, AVRational{1, 10000000})
++             << ",\"title\":\"" << EscapeJson(title ? title->value : "Chapter " + std::to_string(index + 1)) << "\"}";
++    }
+     json << "]}"; std::lock_guard lock(mutex_); mediaInfoJson_ = json.str();
+ }
+ 
+@@ -3346,17 +3434,17 @@
+ 
+ std::int64_t PlayerSession::ClockPosition() const noexcept {
+     if (audioRenderer_ && (audioStream_ >= 0 || externalAudioStream_ >= 0)) {
+-        const auto audioPosition = audioRenderer_->Position100ns();
++        const auto audioPosition = tempoOrigin_ + static_cast<std::int64_t>((audioRenderer_->Position100ns() - tempoOrigin_) * playbackRate_.load());
+         const auto buffered = audioRenderer_->Buffered100ns();
+         if (externalFormat_ == nullptr || audioPosition > clockOriginPosition100ns_.load() ||
+             buffered > 0) {
+-            PublishPlaybackClock(audioPosition, audioRenderer_->TimelineLimit100ns());
++            PublishPlaybackClock(audioPosition, tempoOrigin_ + static_cast<std::int64_t>((audioRenderer_->TimelineLimit100ns() - tempoOrigin_) * playbackRate_.load()));
+             return audioPosition;
+         }
+     }
+     LARGE_INTEGER now{}; QueryPerformanceCounter(&now);
+     const auto origin = clockOriginQpc_.load(); if (origin == 0 || qpcFrequency_ <= 0) return clockOriginPosition100ns_.load();
+-    const auto position = clockOriginPosition100ns_.load() + (now.QuadPart - origin) * TicksPerSecond / qpcFrequency_;
++    const auto position = clockOriginPosition100ns_.load() + static_cast<std::int64_t>((now.QuadPart - origin) * static_cast<double>(TicksPerSecond) * playbackRate_.load() / qpcFrequency_);
+     PublishPlaybackClock(position, snapshot_.duration100ns > 0
+         ? snapshot_.duration100ns : (std::numeric_limits<std::int64_t>::max)());
+     return position;
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -23,6 +23,8 @@
+ struct AVFrame;
+ struct AVPacket;
+ struct AVBufferRef;
++struct AVFilterGraph;
++struct AVFilterContext;
+ 
+ class PlayerSession final {
+ public:
+@@ -57,6 +59,15 @@
+     FFFResult Set360View(bool enabled, float yaw, float pitch, float fovY) noexcept;
+     FFFResult SetAudioEndpoint(const char* endpointIdUtf8) noexcept;
+     FFFResult SetAudioExclusiveMode(bool exclusive) noexcept;
++    FFFResult SetPlaybackRate(double rate) noexcept;
++    FFFResult TempoAudio(AVFrame* frame, std::int64_t position) noexcept;
++    void ResetTempo(std::int64_t position) noexcept;
++    std::atomic<double> playbackRate_{1.0};
++    std::int64_t tempoOrigin_ = 0;
++    std::int64_t tempoSamples_ = 0;
++    AVFilterGraph* tempoGraph_ = nullptr;
++    AVFilterContext* tempoInput_ = nullptr;
++    AVFilterContext* tempoOutput_ = nullptr;
+     FFFResult SetVolume(float volume, bool muted) noexcept;
+     FFFResult SetTimedTextLayer(const FFF3FPTimedTextLayer& layer) noexcept;
+     FFFResult SubmitExternalVideoFrame(const FFF3FPExternalVideoFrame& frame) noexcept;
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -196,3 +196,5 @@
+ FFFResult FFF3FP_GetLastError(const FFF3FPHandle player, char* output, const std::uint32_t size,
+     std::uint32_t* required) noexcept { if (!player) return FFFResult::InvalidArgument; try { return CopyUtf8(static_cast<PlayerSession*>(player)->LastError(), output, size, required); } catch (...) { return FFFResult::NativeFailure; } }
+ void FFF3FP_Destroy(const FFF3FPHandle player) noexcept { delete static_cast<PlayerSession*>(player); }
++
++FFFResult FFF3FP_SetPlaybackRate(const FFF3FPHandle player, const double rate) noexcept { return player ? static_cast<PlayerSession*>(player)->SetPlaybackRate(rate) : FFFResult::InvalidArgument; }
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -639,3 +639,5 @@
+ FFF3FP_API FFFResult FFF3FP_GetAssSubtitleLastError(FFF3FPAssSubtitleHandle renderer,
+     char* outputUtf8, std::uint32_t outputSize, std::uint32_t* requiredSize) noexcept;
+ FFF3FP_API void FFF3FP_DestroyAssSubtitle(FFF3FPAssSubtitleHandle renderer) noexcept;
++
++FFF3FP_API FFFResult FFF3FP_SetPlaybackRate(FFF3FPHandle player, double rate) noexcept;

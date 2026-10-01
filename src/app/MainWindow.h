@@ -2,6 +2,7 @@
 
 #include "backend/ThreeFpApi.h"
 #include "graph/FilterGraph.h"
+#include "graph/VpyScriptBuilder.h"
 
 #include <QMainWindow>
 
@@ -66,6 +67,10 @@ private:
     QString writePreviewScript(QString *error = nullptr) const;
     void saveProject();
     void openProject();
+    void showPresets();
+    void loadPreset(const QString &path);
+    ScriptBuildResult currentScript(const QString &source = {}) const;
+    QString activePreset_;
     void updatePlaybackState();
     void updatePixel(ThreeFpPlayer *player, PreviewPane *pane, int x, int y);
     void setStatus(const QString &text, bool error = false);

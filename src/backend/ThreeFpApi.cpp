@@ -3,6 +3,8 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <vector>
+#include <algorithm>
 
 namespace vsr {
 
@@ -39,6 +41,12 @@ ThreeFpApi::ThreeFpApi()
     ok &= resolve(submitExternalVideoFrame_, "FFF3FP_SubmitExternalVideoFrame");
     ok &= resolve(redraw_, "FFF3FP_Redraw");
     ok &= resolve(destroy_, "FFF3FP_Destroy");
+    stepKeyframe_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_StepKeyframe"));
+    setPlaybackRate_ = reinterpret_cast<RateFn>(library_.resolve("FFF3FP_SetPlaybackRate"));
+    mediaInfo_ = reinterpret_cast<InfoFn>(library_.resolve("FFF3FP_GetMediaInfo"));
+    setExternalOutputFormat_ = reinterpret_cast<OpenFn>(library_.resolve("FFF3FP_SetExternalOutputFormat"));
+    setSubtitleLayer_ = reinterpret_cast<LayerFn>(library_.resolve("FFF3FP_SetTimedTextLayer"));
+    readRegion_ = reinterpret_cast<RegionFn>(library_.resolve("FFF3FP_ReadVideoPixelRegion"));
     if (!ok)
         library_.unload();
 }
@@ -74,8 +82,28 @@ ThreeFpResult ThreeFpApi::setScalingAlgorithms(void *h, ThreeFpScalingAlgorithm 
 ThreeFpResult ThreeFpApi::snapshot(void *h, ThreeFpSnapshot *s) const { return available() ? snapshot_(h, s) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::readPixel(void *h, ThreeFpPixelProbe *p) const { return available() ? readPixel_(h, p) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::submitExternalVideoFrame(void *h, const ThreeFpExternalVideoFrame *f) const { return available() ? submitExternalVideoFrame_(h, f) : ThreeFpResult::NativeFailure; }
+ThreeFpResult ThreeFpApi::setExternalOutputFormat(void *h, const char *f) const { return setExternalOutputFormat_ ? setExternalOutputFormat_(h,f) : ThreeFpResult::NotSupported; }
+ThreeFpResult ThreeFpApi::setSubtitleLayer(void *h, const TimedTextLayer *layer) const { return setSubtitleLayer_ ? setSubtitleLayer_(h,layer) : ThreeFpResult::NotSupported; }
+QImage ThreeFpApi::capture(void *h, int width, int height) const {
+    if (!readRegion_ || width <= 0 || height <= 0 || static_cast<qint64>(width)*height > 40000000) return {};
+    std::vector<float> pixels(static_cast<size_t>(width)*height*4); uint32_t depth=0;
+    if (readRegion_(h,0,0,width,height,pixels.data(),static_cast<uint32_t>(pixels.size()),&depth) != ThreeFpResult::Success) return {};
+    QImage image(width,height,QImage::Format_RGB32);
+    for (int y=0;y<height;++y) { auto *row=reinterpret_cast<QRgb *>(image.scanLine(y)); for(int x=0;x<width;++x) { const auto at=(static_cast<size_t>(y)*width+x)*4; row[x]=qRgb(qRound(std::clamp(pixels[at],0.0f,1.0f)*255),qRound(std::clamp(pixels[at+1],0.0f,1.0f)*255),qRound(std::clamp(pixels[at+2],0.0f,1.0f)*255)); } }
+    return image;
+}
 ThreeFpResult ThreeFpApi::redraw(void *h) const { return available() ? redraw_(h) : ThreeFpResult::NativeFailure; }
 void ThreeFpApi::destroy(void *h) const { if (available() && h) destroy_(h); }
+
+ThreeFpResult ThreeFpApi::stepKeyframe(void *h, int d) const { return stepKeyframe_ ? stepKeyframe_(h, d) : ThreeFpResult::NotSupported; }
+ThreeFpResult ThreeFpApi::setPlaybackRate(void *h, double rate) const { return setPlaybackRate_ ? setPlaybackRate_(h, rate) : ThreeFpResult::NotSupported; }
+QString ThreeFpApi::mediaInfo(void *h) const {
+    if (!mediaInfo_ || !h) return {};
+    std::uint32_t length = 0; mediaInfo_(h, nullptr, 0, &length);
+    if (!length || length > 16 * 1024 * 1024) return {};
+    QByteArray text(length, '\0');
+    return mediaInfo_(h, text.data(), length, &length) == ThreeFpResult::Success ? QString::fromUtf8(text.constData()) : QString();
+}
 
 QString ThreeFpApi::resultText(ThreeFpResult result)
 {

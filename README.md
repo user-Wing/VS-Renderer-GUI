@@ -1,8 +1,64 @@
-# VS Renderer
+# VS Renderer / VS Player
+
+## 1.0.2 完整更新与便携发布（2026-10-01）
+
+播放器滚轮缩放后，左上角“还原画面”恢复默认适配并清除拖动偏移，普通窗口 / 全屏都可用。Renderer 设置和 Player 基本设置增加版本与检查更新，读取 ModelScope `ARXChem/Software-List/VS-GUI` 最新完整包；随附已核验的 aria2-next 2.8.3 与 7-Zip Zstandard。下载、哈希与解压异步执行，验证后完整替换目录，保留配置、自定义 VPY 和旧目录备份，不降级安装旧版本。
+
+包由独立干净目录生成，排除缓存、测试程序、截图、个人配置、历史 VPY 与未使用的 madVR 注册/重置脚本；活跃程序目录的用户文件保留。输出 `dist/1.0.2.7z`（Zstandard Ultra 22）与 SHA-256，使用本机 ModelScope-Manager SDK 上传指定目录。GitHub 源码更新及无附件 Release 草稿；压缩包不自动传 GitHub。规则与结构见 [完整更新说明](docs/portable-updates.md)。
+
+本轮 Release 构建、完整 CTest **8/8**（含更新专项）、缩放还原与全屏测试通过。构建后验证真实便携目录的程序与更新工具，再进行归档完整性和远程大小/哈希核对。语言包同步新增字符串。此前各轮“不发 Git / 不打包”属于历史阶段，本轮以最新授权发布源码、上传 ModelScope 和创建草稿。
+
+从源码复现更新专项测试前运行 `powershell -File tools/stage-update-tools.ps1` 部署对应工具；二进制和原生播放运行时仍按依赖文档准备。
+
+本轮验证：CTest **7/7**、交付 Player **26/26**（含两个真实链接）。本地版本继续保持 **1.0.2**，输出在 `dist/VS-Renderer-GUI-1.0.2-windows-x64`，包含 `VSRenderer.exe` 与 `vs-player.exe`。不推送 Git、不生成压缩包；本轮记录见 [播放器性能与验证](docs/player-performance-1.0.2.md)。
+
+HTTP / HTTPS 自动走 **3FPlayer 原生直通，不执行 VS / VPY**，无需完整下载或建立 VS 索引；保留 Jinc 等显示缩放。AList 文件 API 解析和 ModelScope 重定向仍使用独立 Qt 网络线程与有界 HTTP Range 代理。播放器的本地 FFMS2 / L-SMASH 寻帧索引默认保存在软件 `cache/indexes`，可选自定义位置、查看大小及清除；不在视频旁新建索引。Renderer 自身源配置不受播放器缓存设置影响。
+
+开发者内置 **Anime / Realistic** 位于 `vpy/builtin`。Anime 低于 2160p 的源先 GPU 细节增强再 A/M Fast，直接输出到实际画布尺寸（最大 3840×2160，保留宽高比）。持续丢帧超过 5% 按增强 → A/Fast → Jinc 直通 → D3D11 Native 降载；Realistic 和 4K 源从 Jinc 原生直通开始。暂停、跳转、改速、调整窗口或分辨率之后重新统计，恢复 2 秒后再观察 5 秒，不把操作停顿用于降载。“先 Jinc 再增强”修复 10-bit 输入报错；已有带内置标记的已知脚本仅补位深转换，先留 `.before-bitdepth-fix` 备份，其他用户脚本不改写。
+
+播放列表进入右侧整个范围即可悬停打开；右键“播放列表”可永久停靠并扩宽窗口，拖动分隔栏调整宽度，× 关闭；全屏改为悬停，退出恢复停靠。长文件名随宽度中间截断，悬停可见完整路径。右键滚轮切换音量（默认）/ 视频缩放；Tab 尺寸按当前画布物理像素与缩放更新，菜单箭头增加间距。
+
+本机标准功耗模式下，真实 3840×2160 / 47.95 fps AV1 的原生路径 8 秒样本呈现 383 帧，丢弃 / 合并为 0；不代表长片或其他硬件保证。MyGO 的 96 帧配对暖态：A/VL 到 2160p 24.18 fps，A/M Fast 到 2160p 31.09 fps，直接到 1264×710 画布 97.17 fps。用户图中的 Fast 5 ms 未标明版本 / 测法；早期非 CNN 与当前 v4.x A/M 也不能混为一谈，见 [性能记录](docs/player-performance-1.0.2.md) 和 [Fast 来源](docs/anime4k-fast-source.md)。
 
 Windows 上用图形化滤镜链生成 VapourSynth 脚本，并以双路画面对照源视频与处理结果的 Qt 6 桌面工具。
 
-> 当前版本：`1.0.1`。已具备紧凑型双路 UI、滤镜链编辑、参数面板、VPY 生成，以及 VapourSynth → 3FP 同帧实时预览。
+> 当前版本：`1.0.2`（继续开发中）。包含 VS Renderer 与 VS Player；本轮仅更新本地程序目录。
+
+
+## 1.0.2 本地程序与预设
+
+本轮输出到 `dist/VS-Renderer-GUI-1.0.2-windows-x64`，包含更新后的 `VSRenderer.exe` 和独立播放器 `vs-player.exe`。只生成便携目录，不推送 GitHub、不生成压缩包。旧 1.0.1 目录保留。
+
+Renderer 第一页顶部新增 **预设管理** 和 **加载 VPY**。管理窗采用列表 / 参数总览 / 脚本预览三栏，支持保存当前处理链、读取、导入、导出、重命名、备注、拖动排序、删除到回收站与重置处理链。VPY 保存到 exe 旁的 `vpy` 文件夹，内嵌可恢复的图元数据；脚本本体可直接执行。读取原始 VPY 后播放/导出直接使用其脚本，修改图参数则切回图生成模式。保存的是脚本快照，不会因之后修改处理链而变化。
+
+本程序生成的预设使用 `_vsr_source` 输入覆盖机制，播放器/Renderer 可把同一滤镜用于当前视频；单独运行 VPY 使用保存时的源路径。外部 VPY 可定义 `_vsr_source`，并输出视频到 0（可选源输出 1）；其自写死的路径不会被盲目改写。没有视频时也可保存滤镜预设，使用前选择视频。内置 Anime4K 着色器位于 `shaders`，下拉列表涵盖本机已有的 14 个 GLSL；自定义模式可选择文件路径，不要求另外下载。
+
+**VS Player**：拖入视频或 Ctrl+O 打开，Ctrl+P 加载 VPY，Space 播放/暂停，Enter / F11 切换无边框全屏、Esc 退出，Tab 切换真实媒体信息。第一排时间轴显示章节标记及静音/音量；第二排提供播放、±帧/±秒/±关键帧、前后文件、可输入时间与输出帧号、0.10–16.00× 倍速和配置弹窗，右侧显示编码、实际内核、HDR/SDR 与当前渲染器。倍速弹窗支持连续点击，点击外部或再次点下拉关闭。单文件打开后前后文件按所在目录名称排序；多文件拖入按拖入顺序。输出帧号从 0 开始，暂停时可精确显示补帧后的中间帧。
+
+右键视频区域提供三级菜单及蓝色悬停：开发者 / 用户 VPY、主次字幕、PNG 截图、放大 / 缩小算法、全屏和多页设置。默认 Jinc + relaxed 抗振铃，同尺寸直接采样；抗振铃采用强度 0.5 的开放局部范围约束，不是 madVR 专有实现的复刻。源截图为 VS 原分辨率 16-bit RGB PNG，实画面截图包含字幕及显示效果；HDR 实画面截图目前为截取显示层的 8-bit RGB，未实现 HDR PNG 色彩管理。
+
+字幕支持 MKV 内置 ASS/SRT/PGS 与外部 ASS/SSA/SRT/SUP；挂载外部字幕时停用内置选择，主字幕在底部、次字幕在顶部，可交换及关闭覆盖层。ASS 保留原始样式与特效，SUP 保留位图，样式窗仅控制 SRT。字幕使用原生 D3D11 独立覆盖层；madVR 模式使用其 OSD，不烧入 VS 输出，也未切换到 EVR 内核。
+
+设置分基本、主题、播放、性能、解码、渲染、缓存、文件关联八页，自动保存到便携目录 `player.ini`，可导入 / 导出单个完整 INI（VPY 文件仍单独保存，LAV / madVR 原生属性由各组件管理）。预解码默认开启，常规 / 极致分别设置四项阈值为 50% / 100%，可自定义 CPU / GPU / 内存 / 进程显存预算及提前帧数。阈值控制后台追加，CPU 同时控制 VS 线程数、内存控制缓存目标；插件和其他程序的瞬时占用不受硬限制。Tab 顶部显示进程 CPU、系统最忙 GPU 引擎占用、进程内存；丢帧拆分为 VS 跳过、渲染丢弃及合并，seek 不算跳过帧。
+
+基本设置新增中文 / English 外置语言包和自动播放（默认开）；关闭自动播放时准备首帧并暂停。主题可改中 / 西文字体、背景（默认 `#202124`）和不透明度（默认 100%）。播放设置默认记忆视频 / 音频位置、后台多线程打开，按媒体时间恢复并映射到 VS 输出帧率；左右默认 ±1 秒，可选帧 / 关键帧，Ctrl ±10 秒、Ctrl+Alt ±60 秒可调。关闭多线程时 VS 源限制为单解码线程，3FP 保留后台工作线程。
+
+视频 / 音频解码器独立选择 `3FPlayer (FFF.Native.dll)` 或 `LAVVideo.ax` / `LAVAudio.ax`，提供各自原生配置按钮。VS 源仍由 VPY 定义，LAV 视频选择控制本地时钟图；网络及内置原生视频路径固定 3FP。倍速音频使用 3FP / atempo。右键缩放支持 `D3D11 Native`：支持的 SDR 硬解源用 VideoProcessor，HDR / 软件源 / 交互放大等情况轻量 Bilinear 回退以保持原有颜色处理。Anti-ringing relaxed 当前仅作用于 Jinc（强度 0.5），不适用于菜单全部算法。
+
+文件关联支持常用视频 / 音频格式及全选视频、全选音频、全选所有、取消所有。点击“注册所选格式”在当前用户注册候选播放器，再通过 Windows 默认应用完成默认选择；不改写系统保护的 UserChoice，也不抢占已有默认应用。语言文件为 `languages/zh_CN.json` / `en_US.json`，新增界面文字时同步两包并运行 `tools/check-player-languages.py`；该检查已加入 CTest。
+
+3FP 倍速使用 FFmpeg atempo 分段链保留音调，时钟和画面请求同步改变速度；重滤镜来不及处理时跳过落后请求。LAV 随目录携带并直接实例化，无需注册系统滤镜；设置可选 3FP / LAV。LAV 原速提供播放时钟和音频，最终画面仍由 VPY 的源滤镜和 VS 处理。不变调变速时自动改用 3FP / atempo，显示实际内核，LAV 设置保留。硬件/软件按钮控制 3FP 播放源的解码方式，不改变 VPY 自身源滤镜。选择新的内核或文件会重新打开；不宣称 LAV 代替了 VPY 内部的解码源。
+
+HDR 自动请求由 3FP 检查显示输出能力；HDR 源在 SDR 显示器映射，底部仍标 HDR。未在真实 HDR 显示器上验证；VPY 需要保留相应颜色/传递属性。会改变视频时间轴的任意脚本（例如剪辑、倒放或任意 FrameEval）不会自动重建音频时间轴。Tab 没有可取得的数据明确显示未知/未提供。
+
+madVR `madVR09217` 现可实际加载随附 `madVR64.ax`，无需系统注册，任务栏控制器由随附 `madHcCtrl.exe` 提供。此模式使用 LAV DirectShow 视频输入，绕过 VS；Tab 显示 `madshi video renderer`，尝试切换 VPY 时顶部提示不生效。原速音频使用 LAV，非原速用 3FP / atempo 保持音调。madVR 不接收 VS 处理后的帧；其画质、HDR 和缩放配置交给原生控制器。启动参数可传入视频与 VPY（含空格路径需引用），例如 `vs-player.exe "video.mkv" "vpy/preset.vpy"`。
+
+性能实测及 3840→4096 尺寸问题的分析见 [播放器性能记录](docs/player-performance-1.0.2.md)。三个边缘 / 细节锐化滤镜的 YUV 路径现由 vs-placebo Vulkan GPU 执行，相邻锐化合并调用，色度保留；Gray/RGB 仍用 CPU。Renderer / Player 加载已有预设时，仅精确识别的旧内置锐化块转为 GPU，不覆盖用户 VPY；新保存的预设自带 helper。
+
+Enter 双向切换无边框全屏，底栏离开鼠标 2 秒隐藏，鼠标移到底部显示。鼠标进入右侧面板所在范围显示播放列表；右键即使没有视频也可打开文件、文件夹或链接，子目录可展开。支持 `vs-player.exe "https://…/video.mkv"`、file URI 和拖放 URL；HTTP/HTTPS 原生直通通过 Range 代理；网络始终不执行 VPY，所选预设保留给下一本地视频。目录显示所有文件，上一 / 下一视频按媒体文件列表切换。
+
+构建两个目标后运行 `tools/stage-1.0.2.ps1`，首次复用上一便携目录的 Qt/FFmpeg 和缓存，重复执行时保留现有用户 VPY / INI，再更新 VS 运行时与原生 DLL并复制本机 Shader/LAV/madVR。本机原生 DLL 在独立 `.deps/fff-player` 副本构建，新增速度/章节补丁位于 `patches/3fp-player-rate.patch`，输出格式、抗振铃和字幕覆盖补丁位于 `patches/3fp-player-output.patch`，没有改写另一项目的原始 checkout。
+
 
 ## 核心能力
 
@@ -64,6 +120,18 @@ VS 的 PyTorch 路线支持 `.pkl` 权重，Windows 常见 CUDA/TensorRT 配置�
 本机 1920×1080 合成输入、GPU 0、单工作线程、四张插值帧的暖态测试：4.26 约 12.88 张插值帧/秒，Heavy 约 10.97 张/秒（不含解码、帧桥和显示开销），达不到该配置下 24→48 fps 实时播放；小分辨率预览已验证中间帧确实提交。补帧播放使用更密的时间轮询，慢滤镜仍跳过落后目标，离线导出保持完整帧数。
 
 来源：[Zsmooth](https://github.com/adworacz/zsmooth)、[VSZip](https://github.com/dnjulek/vapoursynth-zip)、[Descale](https://github.com/Irrational-Encoding-Wizardry/descale)、[NCNN RIFE](https://github.com/styler00dollar/VapourSynth-RIFE-ncnn-Vulkan)、[PyTorch RIFE](https://github.com/HolyWu/vs-rife)。
+
+## MVTools 与 2× 补帧优化
+
+新增 `MVTools 2× 实时补帧`，使用随运行时部署的 API 4 MVTools v29。原始时间点直接取输入帧，中间时间点才请求双向运动向量与 `FlowInter(time=50)`；两路通过 VS Interleave 交错，末帧保持，不预生成整段高帧率视频。运动块、pel、重叠、色度搜索与镜头切换混合可调。传统 CPU 运动补偿不依赖 AI GPU，遮挡及快速运动仍可能产生扭曲。[MVTools 上游](https://github.com/dubhatervapoursynth/vapoursynth-mvtools)
+
+RIFE 上游本来就跳过原始时间点的神经网络推理；本轮进一步让原始帧绕过 RGB 往返转换，保留输入格式和像素，只对中间帧进行推理与输出转换。两种补帧均可选择半宽半高或四分之一宽高计算，再把中间帧恢复到原尺寸。默认原分辨率，低分辨率计算会损失中间帧细节，原始帧保持不变。RIFE 3×/4× 同样保留原帧支路。[RIFE 上游实现](https://github.com/styler00dollar/VapourSynth-RIFE-ncnn-Vulkan/blob/r9_mod_v33/RIFE/plugin.cpp)
+
+修复绿色闪烁后，本机 1080p FFV1 testsrc2、预先取源帧、12 张中间帧暖态单次测量：MVTools block=16 原尺寸 28.04、半尺寸 93.29 张/秒；RIFE 4.26（RTX 4070 Laptop，单 GPU 工作线程）原尺寸 13.11、半尺寸 47.14、四分之一尺寸 118.95 张/秒。24→48 fps 需要每秒 24 张中间帧；不含显示开销，不代表所有素材/核显均实时。完整记录 `build/mvtools-green-regression.txt`，复测脚本 `tools/verify-interpolation.py`。
+
+MVTools 的“色度参与运动搜索”只控制 Analyse 搜索，Super 始终保留色度供 FlowInter 重建；否则原帧正常、中间帧 U/V 为零会造成绿色闪烁。修复无需打开色度运动搜索，原有快速亮度搜索继续可用。
+
+补帧专项最初使用独立的 `build/mingw-interpolation`；现已合入 `dist/VS-Renderer-GUI-1.0.2-windows-x64` 的 Renderer 和 Player。交付程序内的补帧代码与当前源码一致，并用随附运行时通过彩色 8/10/16-bit、并发跳帧、真实媒体及两套 RIFE 模型回归。旧保存的 VPY 不会自动改写，需重新生成；旧 MVTools 脚本的 `Super` 应使用 `chroma=True`。旧版压缩包未修改。
 
 ## 启动性能与 VS 增强
 

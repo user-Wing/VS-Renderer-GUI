@@ -4,11 +4,13 @@
 #include "backend/StartupWarmup.h"
 #include "ui/ExportWindow.h"
 #include "ui/AnalysisPage.h"
+#include "graph/PresetStore.h"
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QStyle>
 #include <QProgressBar>
 #include <QSettings>
+#include "update/PortableUpdater.h"
 #include <QDialogButtonBox>
 #include <QCloseEvent>
 #include "backend/ThreeFpPlayer.h"
@@ -353,6 +355,9 @@ void MainWindow::showSettings()
     layout->addWidget(source);
     auto *hint = new QLabel(QStringLiteral("用于 VS 预览与导出。更改后重新生成并验证脚本生效。"), &dialog);
     hint->setWordWrap(true); layout->addWidget(hint);
+    layout->addWidget(new QLabel(QStringLiteral("当前版本：")+VSR_VERSION,&dialog));
+    auto *updates=new QPushButton(QStringLiteral("检查更新"),&dialog);layout->addWidget(updates);
+    connect(updates,&QPushButton::clicked,&dialog,[&]{PortableUpdater updater(&dialog);updater.check();updater.exec();});
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -383,6 +388,14 @@ void MainWindow::buildToolbar()
     auto *openSourceAction = bar->addAction(QStringLiteral("打开源"));
     auto *openProjectAction = bar->addAction(QStringLiteral("打开项目"));
     auto *saveProjectAction = bar->addAction(QStringLiteral("保存项目"));
+    auto *presetsAction = bar->addAction(QStringLiteral("预设管理"));
+    presetsAction->setObjectName("presetManagement");
+    auto *loadVpyAction = bar->addAction(QStringLiteral("加载 VPY"));
+    connect(presetsAction, &QAction::triggered, this, &MainWindow::showPresets);
+    connect(loadVpyAction, &QAction::triggered, this, [this] {
+        const auto path = QFileDialog::getOpenFileName(this, QStringLiteral("加载 VPY"), PresetStore::directory(), "VapourSynth (*.vpy)");
+        if (!path.isEmpty()) loadPreset(path);
+    });
     bar->addSeparator();
     auto *viewScriptAction = bar->addAction(QStringLiteral("查看 VPY"));
     auto *validateAction = bar->addAction(QStringLiteral("生成并验证"));
@@ -482,6 +495,7 @@ QWidget *MainWindow::buildSidebar()
         const auto *item = catalogList_->currentItem();
         if (!item)
             return;
+        activePreset_.clear();
         const int row = graph_.add(item->data(Qt::UserRole).toString());
         refreshPipeline(row);
         setStatus(QStringLiteral("已添加滤镜，VPY 待验证。"));
@@ -489,19 +503,23 @@ QWidget *MainWindow::buildSidebar()
     connect(catalogList_, &QListWidget::itemDoubleClicked, add, &QPushButton::click);
     connect(pipelineList_, &QListWidget::currentRowChanged, this, &MainWindow::selectPipelineRow);
     connect(pipelineList_, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) {
+        activePreset_.clear();
         graph_.setEnabled(pipelineList_->row(item), item->checkState() == Qt::Checked);
         setStatus(QStringLiteral("节点状态已更改，VPY 待验证。"));
     });
     connect(up, &QPushButton::clicked, this, [this] {
         const int row = pipelineList_->currentRow();
+        activePreset_.clear();
         if (row > 0 && graph_.move(row, row - 1)) refreshPipeline(row - 1);
     });
     connect(down, &QPushButton::clicked, this, [this] {
         const int row = pipelineList_->currentRow();
+        activePreset_.clear();
         if (row >= 0 && row + 1 < graph_.nodes().size() && graph_.move(row, row + 1)) refreshPipeline(row + 1);
     });
     connect(remove, &QPushButton::clicked, this, [this] {
         const int row = pipelineList_->currentRow();
+        activePreset_.clear();
         if (graph_.remove(row)) refreshPipeline(std::min(row, static_cast<int>(graph_.nodes().size()) - 1));
     });
 
@@ -516,6 +534,9 @@ QWidget *MainWindow::buildSidebar()
     connect(script, &QPushButton::clicked, this, &MainWindow::showScript);
     connect(parameterEditor_, &ParameterEditor::parameterChanged, this,
             [this](const QString &id, const QVariant &value) {
+        activePreset_.clear();
+        if (id == "mode" && value.toString() != QStringLiteral("自定义 GLSL")) graph_.setParameter(pipelineList_->currentRow(), "shader", "");
+        if (id == "shader" && !value.toString().isEmpty()) graph_.setParameter(pipelineList_->currentRow(), "mode", QStringLiteral("自定义 GLSL"));
         if (graph_.setParameter(pipelineList_->currentRow(), id, value))
             setStatus(QStringLiteral("参数已更新，VPY 待验证。"));
     });
@@ -732,13 +753,14 @@ void MainWindow::selectPipelineRow(int row)
 void MainWindow::openSource()
 {
     const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("打开源视频"), {},
-        QStringLiteral("视频与图像 (*.mkv *.mp4 *.m2ts *.ts *.mov *.avi *.webm *.png *.jpg *.tif);;所有文件 (*.*)"));
+        QStringLiteral("视频与图像 (*.mkv *.mp4 *.m2ts *.ts *.mov *.avi *.webm *.vpy *.png *.jpg *.tif);;所有文件 (*.*)"));
     if (!path.isEmpty())
         loadSource(path);
 }
 
 bool MainWindow::loadSource(const QString &path)
 {
+    if (QFileInfo(path).suffix().compare("vpy", Qt::CaseInsensitive) == 0) { loadPreset(path); return true; }
     if (!QFileInfo(path).isFile()) {
         setStatus(QStringLiteral("源文件不存在：%1").arg(path), true);
         return false;
@@ -778,13 +800,13 @@ bool MainWindow::loadSource(const QString &path)
     sourcePrimeStarted_ = false;
     setStatus(left ? QStringLiteral("源已打开；正在预取首帧，点击“渲染预览”可生成右侧 VS 输出。")
                    : QStringLiteral("3FP 打开源失败。"), !left);
+    if (left && !activePreset_.isEmpty()) QTimer::singleShot(0, this, &MainWindow::validateScript);
     return left;
 }
 
 void MainWindow::showScript()
 {
-    const auto filter = static_cast<SourceFilter>(sourceFilter_->currentData().toInt());
-    const auto result = VpyScriptBuilder::build(sourcePath_->text(), filter, graph_);
+    const auto result = currentScript();
     if (!result.errors.isEmpty()) {
         QMessageBox::warning(this, QStringLiteral("无法生成 VPY"), result.errors.join('\n'));
         return;
@@ -820,8 +842,7 @@ void MainWindow::validateScript()
         setStatus(frameServer_->errorString(), true);
         return;
     }
-    const auto filter = static_cast<SourceFilter>(sourceFilter_->currentData().toInt());
-    const auto result = VpyScriptBuilder::build(sourcePath_->text(), filter, graph_);
+    const auto result = currentScript();
     vsScriptReady_ = false;
     sourceTotalFrames_ = 0;
     sourceFpsNumerator_ = 0;
@@ -854,7 +875,7 @@ void MainWindow::exportCurrentResult()
             setStatus(message);
         });
         exportWindow_->setScriptBuilder([this](const QString &source) {
-            return VpyScriptBuilder::build(source, static_cast<SourceFilter>(sourceFilter_->currentData().toInt()), graph_);
+            return currentScript(source);
         });
     }
     exportWindow_->setCurrentSource(sourcePath_->text());
@@ -923,8 +944,7 @@ void MainWindow::requestProcessedFrame(int frameIndex)
 
 QString MainWindow::writePreviewScript(QString *error) const
 {
-    const auto filter = static_cast<SourceFilter>(sourceFilter_->currentData().toInt());
-    const auto result = VpyScriptBuilder::build(sourcePath_->text(), filter, graph_);
+    const auto result = currentScript();
     if (!result.errors.isEmpty()) {
         if (error) *error = result.errors.join('\n');
         return {};
@@ -999,6 +1019,7 @@ void MainWindow::openProject()
         for (auto it = parameters.cbegin(); it != parameters.cend(); ++it)
             loaded.setParameter(row, it.key(), it.value());
     }
+    activePreset_.clear();
     graph_ = std::move(loaded);
     sourceFilter_->setCurrentIndex(sourceFilter_->findData(root.value(QStringLiteral("sourceFilter")).toInt()));
     refreshPipeline(graph_.nodes().isEmpty() ? -1 : 0);

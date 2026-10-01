@@ -1,0 +1,182 @@
+#pragma once
+#include "backend/ThreeFpApi.h"
+#include "backend/VapourSynthFrameServer.h"
+#include <QMainWindow>
+#include <QJsonObject>
+#include <memory>
+#include <QPointer>
+#include <QElapsedTimer>
+#include "player/PlayerResources.h"
+class QSlider;
+class QSettings;
+class QLineEdit;
+class QDoubleSpinBox;
+class QPushButton;
+class QLabel;
+class QTimer;
+class QVBoxLayout;
+class QSplitter;
+class QTreeWidget;
+class QTreeWidgetItem;
+namespace vsr {
+class ThreeFpPlayer;
+class LavPlayback;
+class PreviewPane;
+class ChapterTimeline;
+class PlayerSubtitles;
+class PlayerNetworkInput;
+class PlayerLanguage;
+class PlayerWindow final : public QMainWindow {
+    Q_OBJECT
+public:
+    PlayerWindow();
+    ~PlayerWindow() override;
+    bool openFile(const QString &path);
+    bool openFolder(const QString &path);
+    void loadPreset(const QString &path);
+    void togglePlayback();
+    void seekTime(qint64 time);
+    void seekFrame(qint64 frame);
+    void setRate(double rate);
+    qint64 position() const;
+    ThreeFpSnapshot snapshot() const;
+    ThreeFpSnapshot outputSnapshot() const;
+    static double normalizedRate(double rate);
+    quint64 skippedFrames() const { return skippedFrames_; }
+    int qualityStage() const { return qualityStage_; }
+    bool saveConfiguration(const QString &path);
+    bool loadConfiguration(const QString &path);
+    void toggleFullscreen();
+protected:
+    bool eventFilter(QObject *, QEvent *) override;
+    void dragEnterEvent(QDragEnterEvent *) override;
+    void dropEvent(QDropEvent *) override;
+private:
+    void buildTransport(QVBoxLayout *layout);
+    void buildPlaylist(QWidget *parent);
+    void updateChrome();
+    void updatePlaylist();
+    void populateFolder(QTreeWidgetItem *parent, const QString &path);
+    void chooseFiles();
+    void chooseFolder();
+    void chooseLink();
+    void updateState();
+    void requestFrame(int frame);
+    void refreshScript();
+    bool openMedia();
+    bool networkSource() const;
+    void savePosition();
+    void suspendQualityCheck();
+    void applyScaling();
+    void setDirectMode(bool enabled);
+    void ensureProfiles();
+    QString profile() const;
+    QSize profileTarget() const;
+    void updateProfile();
+    void setPlaylistPinned(bool pinned);
+    void dockPlaylist();
+    void showSettings();
+    void showSpeedPopup();
+    void updateInfo();
+    void nextFile(int direction);
+    void setError(const QString &message);
+    void showContextMenu(const QPoint &position);
+    void showSubtitleStyle();
+    void selectSubtitle(int slot, int stream);
+    void attachSubtitle(const QString &path);
+    void captureImage(bool source);
+    void applySettings(bool reopen);
+    void applyAppearance();
+    bool madvrMode() const;
+    int prefetchCount() const;
+    void resetStatistics();
+    std::unique_ptr<QSettings> settings_;
+    std::unique_ptr<PlayerSubtitles> subtitles_;
+    std::unique_ptr<PlayerNetworkInput> network_;
+    std::unique_ptr<PlayerLanguage> language_;
+    PlayerResources resources_;
+    ResourceUsage usage_;
+    ThreeFpApi api_;
+    std::unique_ptr<ThreeFpPlayer> clock_;
+    std::unique_ptr<ThreeFpPlayer> output_;
+    std::unique_ptr<VapourSynthFrameServer> server_;
+    std::unique_ptr<LavPlayback> lav_;
+    PreviewPane *pane_ = nullptr;
+    QWidget *hidden_ = nullptr;
+    QLabel *info_ = nullptr;
+    QLabel *message_ = nullptr;
+    QLabel *videoBadge_ = nullptr;
+    QLabel *audioBadge_ = nullptr;
+    QPushButton *decoderBadge_ = nullptr;
+    QLabel *hdrBadge_ = nullptr;
+    QLabel *rendererBadge_ = nullptr;
+    QSlider *timeline_ = nullptr;
+    QSlider *volume_ = nullptr;
+    QPushButton *mute_ = nullptr;
+    QPushButton *play_ = nullptr;
+    QPushButton *resetZoom_ = nullptr;
+    QLineEdit *time_ = nullptr;
+    QLineEdit *frame_ = nullptr;
+    QLabel *duration_ = nullptr;
+    QDoubleSpinBox *rate_ = nullptr;
+    QTimer *timer_ = nullptr;
+    QTimer *chromeTimer_ = nullptr;
+    QWidget *controls_ = nullptr;
+    QWidget *playlistPanel_ = nullptr;
+    QSplitter *videoSplit_ = nullptr;
+    bool playlistPinned_ = false;
+    bool playlistDismissed_ = false;
+    int playlistWidth_ = 320;
+    int playlistExpansion_ = 0;
+    QTreeWidget *playlist_ = nullptr;
+    QString playlistDirectory_;
+    QElapsedTimer chromeIdle_;
+    QString source_;
+    QString mediaInput_;
+    bool direct_ = false;
+    int qualityStage_ = 0;
+    QSize profileSize_;
+    QElapsedTimer qualityTimer_;
+    QElapsedTimer qualitySettling_;
+    QElapsedTimer positionTimer_;
+    bool positionRestored_ = false;
+    quint64 qualityDropped_ = 0, qualitySubmitted_ = 0;
+    qint64 resumeAt_ = -1;
+    QTimer *profileResize_ = nullptr;
+    QString preset_;
+    QString deferred_;
+    QString deferredSubtitle_;
+    QStringList files_;
+    int fileIndex_ = -1;
+    VapourSynthClipInfo clip_;
+    QJsonObject media_;
+    bool ready_ = false;
+    bool pending_ = false;
+    bool playing_ = false;
+    bool autoPlay_ = false;
+    bool seekPending_ = false;
+    bool useLav_ = false;
+    bool lavVideo_ = false;
+    bool lavAudio_ = false;
+    bool infoVisible_ = false;
+    bool rateApplied_ = false;
+    bool lavKeyPending_ = false;
+    int manualFrame_ = -1;
+    int requested_ = -1;
+    int lastFrame_ = -1;
+    int infoTick_ = 0;
+    quint64 generation_ = 0;
+    double speed_ = 1;
+    QPointer<QWidget> speedPopup_;
+    QPushButton *speedButton_ = nullptr;
+    QByteArray normalGeometry_;
+    quint64 skippedFrames_ = 0, submittedFrames_ = 0;
+    QElapsedTimer frameTimer_;
+    double frameMilliseconds_ = 0;
+    VapourSynthFrame displayedFrame_;
+    QString externalSubtitle_;
+    int primarySubtitle_ = -1, secondarySubtitle_ = -1;
+    bool subtitleVisible_ = true;
+    int subtitleTick_ = 0;
+};
+}
