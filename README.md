@@ -4,7 +4,7 @@ Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜�
 
 ## 下载与启动
 
-1. 从 [GitHub Releases](https://github.com/user-Wing/VS-Renderer-GUI/releases) 或 [ModelScope 更新源](https://www.modelscope.cn/datasets/ARXChem/Software-List/files?Root=VS-GUI) 下载完整便携包。
+1. 从 [GitHub Releases](https://github.com/user-Wing/VS-Renderer-GUI/releases) 或 [ModelScope 更新源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) 下载完整便携包。
 2. 解压整个目录，运行 `VSRenderer.exe` 或 `vs-player.exe`。无需另外安装 Qt、Python、VapourSynth。
 3. 系统要求：Windows 10 22H2 或更新的 64 位 Windows，支持 Direct3D 11 的显卡与驱动；RIFE 补帧需要 Vulkan 驱动。
 
