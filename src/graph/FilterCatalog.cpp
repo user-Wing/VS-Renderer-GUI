@@ -1,6 +1,9 @@
 #include "graph/FilterCatalog.h"
 
 #include <QSet>
+#include <QCoreApplication>
+#include <QDirIterator>
+#include <QDir>
 
 namespace vsr {
 namespace {
@@ -31,7 +34,8 @@ ParameterDefinition file(QString id, QString label, QString value)
     return {std::move(id), std::move(label), ParameterType::File, std::move(value), 0, 0, 0, {}};
 }
 
-const QList<FilterDefinition> kCatalog = [] {
+const QList<FilterDefinition> &catalog() {
+    static const QList<FilterDefinition> result = [] {
     QList<FilterDefinition> catalog = {
     {"trim", "截取 Trim", "基础操作", "std", "按闭区间保留帧。",
      {integer("first", "起始帧", 0, 0, 100000000), integer("last", "结束帧", 239, 0, 100000000)}},
@@ -47,10 +51,10 @@ const QList<FilterDefinition> kCatalog = [] {
      {integer("width", "宽度", 1920, 16, 16384, 2), integer("height", "高度", 1080, 16, 16384, 2),
       choice("kernel", "算法", "Spline36", {"Point", "Bicubic", "Lanczos", "Spline36"}),
       integer("taps", "Lanczos taps", 3, 2, 16)}},
-    {"anime4k", "Anime4K GLSL", "GPU 超分与着色器", "placebo",
+    {"anime4k", "mpv GLSL 着色器", "GPU 超分与着色器", "placebo",
      "由 vs-placebo 在 VapourSynth 中直接执行 mpv/libplacebo GLSL；GPU 实时性取决于 shader、倍率、分辨率与显卡。输入会转成 16-bit YUV，输出为 YUV444P16。",
-     {choice("mode", "Anime4K 模式", "anime4k-v4-a.glsl", {"anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-no-cnn.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL 位置", ""),
-      choice("scale", "输出倍率", "2×", {"1×", "2×", "3×", "4×"})}},
+     {choice("mode", "着色器", "anime4k-v4-a.glsl", {"anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-no-cnn.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL 位置", ""),
+      choice("scale", "输出倍率", "2×", {"0.5×", "1×", "2×", "3×", "4×"})}},
     {"remove_grain", "RemoveGrain", "降噪", "rgvs", "VCB 教程中的基础空间降噪。",
      {integer("mode", "模式", 20, 0, 28)}},
     {"bilateral", "Bilateral", "降噪", "vszip", "VSZip 双边滤波，注意纹理损失。",
@@ -167,19 +171,30 @@ const QList<FilterDefinition> kCatalog = [] {
       integer("gpu", "Vulkan GPU 编号", 0, 0, 15), integer("threads", "GPU 工作线程", 1, 1, 4), boolean("scene", "镜头切换检测", true),
       choice("inference_scale", "推理分辨率（仅影响中间帧）", "1 - 原始", {"1 - 原始", "2 - 半宽半高", "4 - 四分之一宽高"})}},
     });
+    const QDir shaders(QDir(QCoreApplication::applicationDirPath()).filePath("shaders"));
+    QDirIterator files(shaders.path(),{"*.glsl","*.hook"},QDir::Files,QDirIterator::Subdirectories);QStringList choices;
+    while(files.hasNext())choices.append(shaders.relativeFilePath(files.next()));
+    choices.sort(Qt::CaseInsensitive);
+    for(auto &definition:catalog)if(definition.id=="anime4k")for(auto &parameter:definition.parameters)if(parameter.id=="mode") {
+        parameter.choices.removeAll("自定义 GLSL");
+        for(const auto &name:choices)if(!parameter.choices.contains(name))parameter.choices.append(name);
+        parameter.choices.append("自定义 GLSL");
+    }
     return catalog;
-}();
+    }();
+    return result;
+}
 
 }
 
 const QList<FilterDefinition> &FilterCatalog::all()
 {
-    return kCatalog;
+    return catalog();
 }
 
 const FilterDefinition *FilterCatalog::find(const QString &id)
 {
-    for (const auto &definition : kCatalog) {
+    for (const auto &definition : catalog()) {
         if (definition.id == id)
             return &definition;
     }
@@ -190,7 +205,7 @@ QStringList FilterCatalog::categories()
 {
     QStringList result;
     QSet<QString> seen;
-    for (const auto &definition : kCatalog) {
+    for (const auto &definition : catalog()) {
         if (!seen.contains(definition.category)) {
             seen.insert(definition.category);
             result.append(definition.category);

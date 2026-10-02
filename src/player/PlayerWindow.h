@@ -35,6 +35,8 @@ public:
     bool openFile(const QString &path);
     bool openFolder(const QString &path);
     void loadPreset(const QString &path);
+    void setInterpolation(int stage, bool automatic = false);
+    int interpolationStage() const;
     void togglePlayback();
     void seekTime(qint64 time);
     void seekFrame(qint64 frame);
@@ -77,6 +79,8 @@ private:
     int fixedAnimeStage() const;
     int initialQualityStage() const;
     QStringList qualityNames() const;
+    QStringList interpolationNames() const;
+    bool advanceInterpolation();
     QSize profileTarget() const;
     void updateProfile();
     void setPlaylistPinned(bool pinned);
@@ -150,6 +154,7 @@ private:
     QString mediaInput_;
     bool direct_ = false;
     int qualityStage_ = 0;
+    bool interpolationAuto_ = false;
     QSize profileSize_;
     QElapsedTimer qualityTimer_;
     QElapsedTimer qualitySettling_;

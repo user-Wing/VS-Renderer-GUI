@@ -103,7 +103,8 @@ void PlayerWindow::updateInfo() {
           << (lavAudio ? tr("  缓冲时间：未提供 · 同步偏移：未提供") : tr("  缓冲时间：%1 ms · 同步偏移：%2 ms · 时间戳抖动帧：%3")
               .arg(source.bufferedAudio100ns/10000.0,0,'f',1).arg((source.audioPosition100ns-at)/10000.0,0,'f',1).arg(source.audioTimestampJitterFrames))
           << tr("倍速：%1× · %2").arg(speed_,0,'f',2).arg(preset_.isEmpty() ? tr("原画") : QFileInfo(preset_).fileName());
-    if(fixedAnimeStage()>=0)lines << tr("手动固定级别：%1 · 不自动切换").arg(qualityNames().at(qualityStage_));
+    if(interpolationStage()>=0)lines << tr("补帧：%1 · %2 · Jinc 直通 YUV444P16").arg(interpolationNames().at(interpolationStage()),interpolationAuto_?tr("自动降档"):tr("手动固定"));
+    else if(fixedAnimeStage()>=0)lines << tr("手动固定级别：%1 · 不自动切换").arg(qualityNames().at(qualityStage_));
     else if(!profile().isEmpty() || networkSource())lines << tr("自适应级别：%1 · 超过 5% 丢帧逐级降载").arg(qualityNames().at(direct_?qMax(4,qualityStage_):qualityStage_));
     const QString text = lines.join('\n');
     info_->setMaximumWidth(qMax(300, pane_->surface()->width()-24)); info_->setText(text); info_->adjustSize(); info_->move(12, 12); info_->raise();

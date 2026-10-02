@@ -26,6 +26,7 @@ public:
     static QList<PortableRelease> releases(const QJsonArray &files);
     static bool newer(const QString &version, const QString &current);
     static bool safeArchiveListing(const QString &listing);
+    static QString payloadDirectory(const QString &directory);
     void check();
     void prepare(const PortableRelease &release);
 signals:

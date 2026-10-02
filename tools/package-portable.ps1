@@ -20,7 +20,7 @@ New-Item -ItemType Directory -Path $payload -Force | Out-Null
 if ($LASTEXITCODE -ge 8) { throw 'Clean payload copy failed' }
 $builtin = Join-Path $payload 'vpy/builtin'
 New-Item -ItemType Directory -Path $builtin -Force | Out-Null
-foreach ($name in @('Anime.vpy','Realistic.vpy','Anime-0-CNN-Enhanced.vpy','Anime-1-CNN.vpy','Anime-2-No-CNN-Enhanced.vpy','Anime-3-No-CNN.vpy','Anime-4-Jinc.vpy','Anime-5-D3D11.vpy')) {
+foreach ($name in @('Anime.vpy','Realistic.vpy','Anime-0-CNN-Enhanced.vpy','Anime-1-CNN.vpy','Anime-2-No-CNN-Enhanced.vpy','Anime-3-No-CNN.vpy','Anime-4-Jinc.vpy','Anime-5-D3D11.vpy','Interpolation-0-RIFE.vpy','Interpolation-1-RIFE-Half.vpy','Interpolation-2-MVTools-HQ.vpy','Interpolation-3-MVTools.vpy')) {
     Copy-Item -LiteralPath (Join-Path $program "vpy/builtin/$name") -Destination $builtin -Force
 }
 # These scripts register/reset the third-party renderer globally; portable COM loading does not use them.

@@ -88,7 +88,7 @@
   "全选视频": "Select all video",
   "全选音频": "Select all audio",
   "关键帧": "Keyframe",
-  "关闭": "Close",
+  "关闭": "Off",
   "关闭当前视频，单独播放音频": "Close current video and play audio only",
   "内存最大占用": "Maximum memory usage",
   "切换 3FP 硬件 / 软件解码": "Toggle 3FPlayer hardware / software decoding",
@@ -326,5 +326,17 @@
   "默认": "Default",
   "默认字体": "Default font",
   "默认音量": "Default volume",
-  "鼠标滚轮": "Mouse wheel"
+  "鼠标滚轮": "Mouse wheel",
+  "图像处理": "Image processing",
+  "补帧": "Frame interpolation",
+  "自动补帧切换": "Automatic interpolation fallback",
+  "RIFE 4.26 · 4queue": "RIFE 4.26 - 4 GPU threads",
+  "RIFE 4.26 · 4queue · 半宽高": "RIFE 4.26 - 4 GPU threads - half width/height",
+  "MVTools · 最高质量": "MVTools - highest quality",
+  "MVTools · 低质量": "MVTools - low quality",
+  "自动降档": "Automatic fallback",
+  "手动固定": "Fixed stage",
+  "自动补帧：切换到 %1。": "Automatic interpolation: switched to %1.",
+  "补帧：%1 · %2 · Jinc 直通 YUV444P16": "Interpolation: %1 - %2 - Jinc passthrough YUV444P16",
+  "更新包顶层或下一层必须包含唯一完整便携目录。": "The archive must contain exactly one complete portable directory at the root or one level below."
 }

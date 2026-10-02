@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <algorithm>
 #include <QComboBox>
+#include <QCompleter>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QGridLayout>
@@ -15,6 +16,7 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QAbstractItemView>
+#include <QScreen>
 
 namespace vsr {
 
@@ -90,15 +92,16 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
             combo->setMinimumContentsLength(8);
             combo->addItems(parameter.choices);
+            if(combo==shaderMode){combo->setEditable(true);combo->setInsertPolicy(QComboBox::NoInsert);combo->completer()->setCompletionMode(QCompleter::PopupCompletion);combo->completer()->setFilterMode(Qt::MatchContains);combo->completer()->setCaseSensitivity(Qt::CaseInsensitive);}
             int popupWidth = 0;
             for (const auto &item : parameter.choices) popupWidth = std::max(popupWidth, combo->fontMetrics().horizontalAdvance(item) + 48);
-            combo->view()->setMinimumWidth(popupWidth);
+            combo->view()->setMinimumWidth(combo==shaderMode && screen()?std::min(popupWidth,screen()->availableGeometry().width()-32):popupWidth);
             combo->setToolTip(value.toString());
             combo->setCurrentText(value.toString());
-            const auto fit = [combo] { combo->setFixedWidth(std::max(70, combo->fontMetrics().horizontalAdvance(combo->currentText()) + 40)); };
+            const auto fit = [combo, shaderMode] { const int width=std::max(70, combo->fontMetrics().horizontalAdvance(combo->currentText()) + 40);combo->setFixedWidth(combo==shaderMode?std::min(300,width):width); };
             fit();
             connect(combo, &QComboBox::currentTextChanged, this,
-                    [this, id, combo, fit](const QString &v) { fit(); combo->setToolTip(v); emit parameterChanged(id, v); });
+                    [this, id, combo, fit, shaderMode](const QString &v) { fit(); combo->setToolTip(v); if(combo!=shaderMode || combo->findText(v)>=0)emit parameterChanged(id, v); });
             editor = combo;
             break;
         }
@@ -115,7 +118,7 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             connect(browse, &QPushButton::clicked, this, [this, id, path] {
                 const QString selected = QFileDialog::getOpenFileName(
                     this, QStringLiteral("选择 libplacebo GLSL"), path->text(),
-                    QStringLiteral("GLSL shader (*.glsl);;所有文件 (*.*)"));
+                    QStringLiteral("mpv shader (*.glsl *.hook);;所有文件 (*.*)"));
                 if (!selected.isEmpty()) {
                     path->setText(selected);
                     emit parameterChanged(id, selected);
@@ -146,10 +149,11 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
     }
     if (shaderMode && shaderPath) {
         shaderPath->parentWidget()->setEnabled(shaderMode->currentText() == QStringLiteral("自定义 GLSL") || !shaderPath->text().isEmpty());
-        connect(shaderMode, &QComboBox::currentTextChanged, shaderPath, [shaderPath](const QString &mode) {
+        connect(shaderMode, &QComboBox::currentTextChanged, shaderPath, [this, shaderPath, shaderMode](const QString &mode) {
+            if(shaderMode->findText(mode)<0)return;
             const bool custom = mode == QStringLiteral("自定义 GLSL");
             shaderPath->parentWidget()->setEnabled(custom);
-            if (!custom) shaderPath->clear();
+            if (!custom && !shaderPath->text().isEmpty()){shaderPath->clear();emit parameterChanged("shader",QString());}
         });
     }
     if (definition->parameters.isEmpty())

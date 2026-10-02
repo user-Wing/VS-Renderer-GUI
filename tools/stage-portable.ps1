@@ -27,6 +27,7 @@ Copy-Item -LiteralPath (Join-Path $buildRoot "runtime/python") -Destination (Joi
 New-Item -ItemType Directory -Path (Join-Path $output "shaders"), (Join-Path $output "vpy") -Force | Out-Null
 Get-ChildItem -LiteralPath $ShaderDirectory -Filter "*Anime4K*.glsl" -File | Copy-Item -Destination (Join-Path $output "shaders") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets/anime4k-a-fast.glsl"), (Join-Path $projectRoot "assets/anime4k-no-cnn.glsl") -Destination (Join-Path $output "shaders") -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "assets/mpv-shaders") -Destination (Join-Path $output "shaders") -Recurse -Force
 & (Join-Path $PSScriptRoot 'stage-update-tools.ps1') -OutputDirectory (Join-Path $output 'runtime/tools')
 @{version=$version;schema=1;platform='windows-x64'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release.json') -Encoding UTF8
 New-Item -ItemType Directory -Path (Join-Path $output "languages") -Force | Out-Null
@@ -50,3 +51,4 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "assets/image-runtime-LICENSE.txt
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/player-apply-avif-1.0.3.md") -Destination (Join-Path $output "docs") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/player-manual-presets-1.0.3.md") -Destination (Join-Path $output "docs") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/release-1.0.3.md"), (Join-Path $projectRoot "docs/avif-large-yuv444-analysis.md"), (Join-Path $projectRoot "docs/renderer-panels-1.0.3.md"), (Join-Path $projectRoot "docs/renderer-ui-export-1.0.3.md"), (Join-Path $projectRoot "docs/icons-integration.md") -Destination (Join-Path $output "docs") -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "docs/mpv-shaders-interpolation-1.0.3.md") -Destination (Join-Path $output "docs") -Force

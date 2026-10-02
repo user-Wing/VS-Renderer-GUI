@@ -1,0 +1,29 @@
+//!DESC lensfix
+//!HOOK MAIN
+//!BIND HOOKED
+
+// The following parameters are calibrated by opencv.
+// See More:
+// https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html
+// https://www.learnopencv.com/camera-calibration-using-opencv/
+// https://docs.opencv.org/2.4/doc/tutorials/calib3d/camera_calibration/camera_calibration.html#cameracalibrationopencv
+//
+// 1. Print https://github.com/opencv/opencv/blob/master/doc/pattern.png
+// 2. Take photos of the pattern with camera from different angles
+// 3. $ ./calibrate.py photo1.png photo2.png ...
+//    Press any key for each shown photos.
+
+#define K1 -0.36273784475910814
+#define K2 0.14395222613195036
+#define K3 -0.02752716367238447
+#define ZOOM 1.1045972020461248
+
+vec4 hook() {
+    vec2 unit_rect = HOOKED_size / length(HOOKED_size);
+    vec2 pos = (HOOKED_pos - 0.5) * 2.0 * unit_rect;
+    pos *= ZOOM;
+    float r2 = pos.x * pos.x + pos.y * pos.y;
+    pos *= 1.0 + (((K3) * r2 + (K2)) * r2 + (K1)) * r2;
+    pos = pos / unit_rect / 2.0 + 0.5;
+    return HOOKED_tex(pos);
+}

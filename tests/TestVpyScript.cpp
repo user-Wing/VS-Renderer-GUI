@@ -1,5 +1,6 @@
 #include "graph/FilterGraph.h"
 #include "graph/VpyScriptBuilder.h"
+#include "graph/FilterCatalog.h"
 
 #include <QTest>
 
@@ -8,6 +9,13 @@ using namespace vsr;
 class TestVpyScript final : public QObject {
     Q_OBJECT
 private slots:
+    void bundledMpvShaderAndDownscale() {
+        const auto *definition=FilterCatalog::find("anime4k");QVERIFY(definition);
+        QStringList choices;for(const auto &p:definition->parameters)if(p.id=="mode")choices=p.choices;
+        QVERIFY(choices.contains("anime4k-a-fast.glsl"));QVERIFY(choices.contains("自定义 GLSL"));
+        FilterGraph graph;const int node=graph.add("anime4k");graph.setParameter(node,"mode","mpv-shaders/gist--test/downscale.hook");graph.setParameter(node,"scale","0.5×");
+        const auto result=VpyScriptBuilder::build("input.mkv",SourceFilter::Ffms2,graph);QVERIFY(result.errors.isEmpty());QVERIFY(result.script.contains("mpv-shaders/gist--test/downscale.hook"));QVERIFY(result.script.contains("int(clip.width * 0.5)"));
+    }
     void rejectsMissingSource()
     {
         FilterGraph graph;
@@ -127,10 +135,10 @@ private slots:
         const auto result = VpyScriptBuilder::build(QStringLiteral("D:\\src.mkv"), SourceFilter::Lsmas, graph);
         QVERIFY2(result.errors.isEmpty(), qPrintable(result.errors.join('\n')));
         QVERIFY(result.requiredNamespaces.contains(QStringLiteral("placebo")));
-        QVERIFY(result.script.contains(QStringLiteral("clip.format.replace(bits_per_sample=16)")));
+        QVERIFY(result.script.contains(QStringLiteral("clip.format.replace(bits_per_sample=16, sample_type=vs.INTEGER)")));
         QVERIFY(!result.script.contains(QStringLiteral("format=vs.YUV420P16")));
-        QVERIFY(result.script.contains(QStringLiteral("shader=\"D:\\\\Shaders\\\\Anime4K.glsl\"")));
-        QVERIFY(result.script.contains(QStringLiteral("width=clip.width * 3, height=clip.height * 3")));
+        QVERIFY(result.script.contains(QStringLiteral("open(\"D:\\\\Shaders\\\\Anime4K.glsl\"")));
+        QVERIFY(result.script.contains(QStringLiteral("width=max(2, int(clip.width * 3)), height=max(2, int(clip.height * 3))")));
     }
 
     void interpolationMapsParametersAndKeepsOriginalBranch()
@@ -155,6 +163,6 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(TestVpyScript)
+QTEST_GUILESS_MAIN(TestVpyScript)
 
 #include "TestVpyScript.moc"

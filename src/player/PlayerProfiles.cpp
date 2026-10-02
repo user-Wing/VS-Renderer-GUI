@@ -19,6 +19,7 @@ QString PlayerWindow::profile() const {
     if(file.absolutePath()!=QDir(PresetStore::directory()).filePath("builtin"))return {};
     if(file.fileName()=="Anime.vpy" || fixedAnimeStage()>=0)return "Anime";
     if(file.fileName()=="Realistic.vpy")return "Realistic";
+    if(interpolationStage()>=0)return "Interpolation";
     return {};
 }
 int PlayerWindow::fixedAnimeStage() const {
@@ -28,11 +29,34 @@ int PlayerWindow::fixedAnimeStage() const {
     return names.indexOf(file.fileName());
 }
 int PlayerWindow::initialQualityStage() const {
+    if(interpolationStage()>=0)return 4;
     const int fixed=fixedAnimeStage();
     return fixed>=0?fixed:profile()=="Anime"?std::clamp(settings_->value("player/animeStage",0).toInt(),0,5):0;
 }
 QStringList PlayerWindow::qualityNames() const {
     return {tr("Anime4K CNN + 额外增强"),tr("Anime4K CNN"),tr("Anime4K no CNN + 额外增强"),tr("Anime4K no CNN"),tr("Jinc 直通"),tr("D3D11 原生直通")};
+}
+int PlayerWindow::interpolationStage() const {
+    const QFileInfo file(preset_);
+    if(file.absolutePath()!=QDir(PresetStore::directory()).filePath("builtin"))return -1;
+    const QStringList names{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};
+    return names.indexOf(file.fileName());
+}
+QStringList PlayerWindow::interpolationNames() const {
+    return {tr("RIFE 4.26 · 4queue"),tr("RIFE 4.26 · 4queue · 半宽高"),tr("MVTools · 最高质量"),tr("MVTools · 低质量"),tr("关闭")};
+}
+void PlayerWindow::setInterpolation(int stage,bool automatic) {
+    if(madvrMode() || imageMode_ || networkSource())return;
+    const QStringList names{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};
+    preset_=QDir(PresetStore::directory()).filePath("builtin/"+(stage>=0 && stage<names.size()?names[stage]:QString("Anime.vpy")));
+    interpolationAuto_=automatic && stage>=0 && stage<names.size();qualityStage_=interpolationStage()>=0?4:0;
+    settings_->setValue("player/preset",preset_);settings_->setValue("player/interpolationAuto",interpolationAuto_);
+    if(!source_.isEmpty())refreshScript();
+}
+bool PlayerWindow::advanceInterpolation() {
+    const int stage=interpolationStage();if(stage<0 || !interpolationAuto_)return false;
+    if(resumeAt_<0)resumeAt_=position();autoPlay_=playing_ || autoPlay_;
+    setInterpolation(stage+1,true);message_->setText(tr("自动补帧：切换到 %1。").arg(interpolationNames().at(stage+1)));return true;
 }
 void PlayerWindow::ensureProfiles() {
     const QDir shaders(QDir(QCoreApplication::applicationDirPath()).filePath("shaders"));QDir().mkpath(shaders.absolutePath());
@@ -51,6 +75,16 @@ void PlayerWindow::ensureProfiles() {
         "    if clip.format.bits_per_sample != 16: clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16))\n"
         "    clip = core.placebo.Shader(clip, shader_s=_shader, width=_w, height=_h)\n");
     const QDir builtin(QDir(PresetStore::directory()).filePath("builtin"));QDir().mkpath(builtin.absolutePath());
+    const QStringList interpolationFiles{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};
+    for(int stage=0;stage<interpolationFiles.size();++stage) {
+        const auto path=builtin.filePath(interpolationFiles[stage]);if(QFileInfo::exists(path))continue;
+        FilterGraph graph;const int node=graph.add(stage<2?"rife":"mvtools");
+        if(stage<2){graph.setParameter(node,"threads",4);graph.setParameter(node,"inference_scale",stage==0?"1 - 原始":"2 - 半宽半高");}
+        else if(stage==2){graph.setParameter(node,"block","8");graph.setParameter(node,"pel","2");graph.setParameter(node,"overlap",true);graph.setParameter(node,"chroma",true);}
+        auto script=PresetStore::create(graph,SourceFilter::Ffms2,{},interpolationNames().at(stage));
+        script.replace("clip = src","clip = core.resize.Point(src, format=vs.YUV444P16, matrix_s='709' if src.format.color_family == vs.RGB else None)");
+        PresetStore::write(path,script);
+    }
     for(const auto &mode:QStringList{"Anime","Realistic"}) {
         const auto path=builtin.filePath(mode+".vpy");if(QFileInfo::exists(path)) {
             QFile existing(path);if(existing.open(QIODevice::ReadOnly)){const auto original=existing.readAll();auto text=QString::fromUtf8(original);existing.close();
@@ -138,7 +172,7 @@ void PlayerWindow::setDirectMode(bool enabled) {
     if(opened){clock_->openFile(mediaInput_);rateApplied_=false;resumeAt_=at;}
 }
 void PlayerWindow::updateProfile() {
-    if(fixedAnimeStage()>=0 || madvrMode() || (profile().isEmpty() && !networkSource()) || qualityStage_>=5 || !ready_ || !playing_ || seekPending_ || profileResize_->isActive() || !qualitySettling_.isValid() || qualitySettling_.elapsed()<2000) {qualityTimer_.invalidate();return;}
+    if((interpolationStage()>=0 && !interpolationAuto_) || fixedAnimeStage()>=0 || madvrMode() || (profile().isEmpty() && !networkSource()) || qualityStage_>=5 || !ready_ || !playing_ || seekPending_ || profileResize_->isActive() || !qualitySettling_.isValid() || qualitySettling_.elapsed()<2000) {qualityTimer_.invalidate();return;}
     const auto output=outputSnapshot();const auto dropped=skippedFrames_+output.droppedVideoFrames+output.coalescedVideoFrames;
     if(!qualityTimer_.isValid()){qualityTimer_.start();qualityDropped_=dropped;qualitySubmitted_=direct_?output.presentedVideoFrames:submittedFrames_;return;}
     if(qualityTimer_.elapsed()<5000)return;
@@ -147,6 +181,7 @@ void PlayerWindow::updateProfile() {
     const auto missed=dropped-qualityDropped_;
     const auto frames=(direct_?output.presentedVideoFrames:submittedFrames_)-qualitySubmitted_;
     if(frames+missed<48 || double(missed)/(frames+missed)<=.05)return;
+    if(advanceInterpolation())return;
     if(direct_)qualityStage_=4;
     resumeAt_=position();autoPlay_=true;++qualityStage_;refreshScript();
     message_->setText(tr("丢帧超过 5%：切换到 %1。").arg(qualityNames().at(qualityStage_)));
@@ -155,6 +190,6 @@ void PlayerWindow::suspendQualityCheck() {qualityTimer_.invalidate();qualitySett
 void PlayerWindow::applyScaling() {
     auto *visible=direct_?clock_.get():output_.get();const bool native=qualityStage_>=5;
     visible->setAntiRinging(!native && settings_->value("render/antiring",true).toBool());
-    visible->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(native?7:fixedAnimeStage()==4?4:settings_->value("render/upscale",4).toInt()),static_cast<ThreeFpScalingAlgorithm>(native?7:fixedAnimeStage()==4?4:settings_->value("render/downscale",4).toInt()));
+    visible->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(native?7:interpolationStage()>=0 || fixedAnimeStage()==4?4:settings_->value("render/upscale",4).toInt()),static_cast<ThreeFpScalingAlgorithm>(native?7:interpolationStage()>=0 || fixedAnimeStage()==4?4:settings_->value("render/downscale",4).toInt()));
 }
 }

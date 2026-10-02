@@ -8,6 +8,10 @@
 #include "update/PortableUpdater.h"
 #include <QColorDialog>
 #include <QFontComboBox>
+#include <QFontDatabase>
+#include <QApplication>
+#include <QTreeWidgetItemIterator>
+#include <QTreeWidget>
 #include <QLineEdit>
 #include <QDesktopServices>
 #include <QUrl>
@@ -74,10 +78,15 @@ void PlayerWindow::applyAppearance() {
     language_->setLanguage(settings_->value("basic/language","zh_CN").toString());
     language_->updateWidgets(this);
     pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nCtrl+P 加载 VPY 预设 · Tab 视频信息"));
-    QFont font;font.setFamilies({settings_->value("theme/latinFont","Segoe UI").toString(),settings_->value("theme/chineseFont","Microsoft YaHei UI").toString()});font.setPixelSize(13);setFont(font);
     const QColor color(settings_->value("theme/background","#202124").toString());
-    if(color.isValid())setStyleSheet(property("playerBaseStyle").toString().replace("#202124",color.name()));
+    QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han,{settings_->value("theme/chineseFont","Microsoft YaHei UI").toString()});
+    const auto latin=settings_->value("theme/latinFont","Segoe UI").toString();
+    QFont font(latin);font.setPointSizeF(9.75);qApp->setFont(font);setFont(font);
+    auto style=property("playerBaseStyle").toString();if(color.isValid())style.replace("#202124",color.name());
+    auto family=latin;family.replace('\\',"\\\\").replace('"',"\\\"");setStyleSheet(style+QString("QWidget{font-family:\"%1\";font-size:9.75pt;}").arg(family));
     setWindowOpacity(std::clamp(settings_->value("theme/opacity",100).toInt(),10,100)/100.0);
+    for(auto *dialog:findChildren<QDialog *>())dialog->setFont(font);
+    for(QTreeWidgetItemIterator item(playlist_);*item;++item){auto itemFont=(*item)->font(0);itemFont.setFamilies(font.families());(*item)->setFont(0,itemFont);}
 }
 bool PlayerWindow::saveConfiguration(const QString &path) {
     settings_->sync(); if(QFileInfo(path).absoluteFilePath()==QFileInfo(settings_->fileName()).absoluteFilePath()) return settings_->status()==QSettings::NoError;
@@ -87,7 +96,7 @@ bool PlayerWindow::loadConfiguration(const QString &path) {
     if(!QFileInfo(path).isFile()) return false; QSettings input(path,QSettings::IniFormat);QVariantMap values;
     for(const auto &key:input.allKeys()) values.insert(key,input.value(key)); if(input.status()!=QSettings::NoError || values.isEmpty()) return false;
     settings_->clear(); for(auto it=values.begin();it!=values.end();++it) settings_->setValue(it.key(),it.value());
-    preset_=settings_->value("player/preset").toString(); if(!QFileInfo::exists(preset_)) preset_.clear(); applySettings(true); return true;
+    preset_=settings_->value("player/preset").toString(); if(!QFileInfo::exists(preset_)) preset_.clear(); interpolationAuto_=interpolationStage()>=0 && settings_->value("player/interpolationAuto",false).toBool(); applySettings(true); return true;
 }
 void PlayerWindow::showSettings() {
     QDialog dialog(this); dialog.setObjectName("playerSettings");dialog.setWindowTitle(tr("VS Player 设置 · %1").arg(VSR_VERSION));dialog.resize(880,620);

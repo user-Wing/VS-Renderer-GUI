@@ -35,6 +35,10 @@ Hyllian, Copyright (c) 2015. MIT License. Adapted from the pass-0 diagonal kerne
 - `anime4k-a-fast.glsl`：官方 Anime4K Windows Low-end Mode A (Fast) 的六段组合，算法未修改，保留上游版权 / MIT 等原文件许可；commit `7684e9586f8dcc738af08a1cdceb024cc184f426`。文件顺序和来源见 `docs/anime4k-fast-source.md`。
 - `anime4k-no-cnn.glsl`：同一 Anime4K commit 的 Clamp_Highlights + Thin_HQ + Darken_HQ 组合，保留原 MIT 许可与系数；传统梯度 / DoG 线条处理，不含神经网络。来源见 `docs/player-six-stage-1.0.3.md`。
 
+## mpv 用户着色器库
+
+`assets/mpv-shaders` 收录维护者指定的 mpv User Shaders 与 hooke007 列表中的 GLSL / hook 文件，按上游来源保留目录、版权头和许可证。`manifest.json` 固定每个源文件的 URL、修订、字节数和 SHA-256；相同内容只携带一份，其他来源列入 aliases。这些着色器不是本项目 MIT 许可的原创代码，遵循各文件/上游目录的许可。使用前请查看对应许可；上游未给单独许可的 gist 不另行宣称 MIT。来源与执行兼容说明见 `docs/mpv-shaders-interpolation-1.0.3.md`。
+
 ## 便携更新工具
 
 - aria2-next 2.8.3：独立下载进程，GPL-2.0-or-later；[上游版本与对应源码](https://github.com/AnInsomniacy/aria2-next/tree/v2.8.3)，完整许可随包 `runtime/tools/aria2-COPYING.txt`。Windows x86_64 官方资产 SHA-256：`08afaf2a44811d38e7ce538da719ab06d6925bcaad1231ee7b92c497f58e5aac`。

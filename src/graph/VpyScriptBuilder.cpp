@@ -90,9 +90,11 @@ QString emitNode(const FilterNode &node, bool gpu = true)
             .arg(kernel, number(p, "width"), number(p, "height"), suffix);
     }
     if (node.definitionId == "anime4k") {
-        const int scale = std::clamp(p.value("scale").toString().section(QChar(0x00d7), 0, 0).toInt(), 1, 4);
-        return QString("if clip.format.bits_per_sample != 16: clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16))\n"
-                       "clip = core.placebo.Shader(clip, shader=%1, width=clip.width * %2, height=clip.height * %2)")
+        const double scale = std::clamp(p.value("scale").toString().section(QChar(0x00d7), 0, 0).toDouble(), .5, 4.0);
+        return QString("if clip.format.color_family != vs.YUV: clip = core.resize.Bicubic(clip, format=vs.YUV444P16, matrix_s='709')\n"
+                       "if clip.format.bits_per_sample != 16 or clip.format.sample_type != vs.INTEGER: clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16, sample_type=vs.INTEGER))\n"
+                       "with open(%1, encoding='utf-8') as _shader_file: _shader_text = _shader_file.read().lstrip('\\ufeff')\n"
+                       "clip = core.placebo.Shader(clip, shader_s=_shader_text, width=max(2, int(clip.width * %2)), height=max(2, int(clip.height * %2)))")
             .arg((p.value("mode").toString() == QStringLiteral("自定义 GLSL") || !p.value("shader").toString().isEmpty()
                  ? VpyScriptBuilder::pythonString(p.value("shader").toString())
                  : QString("os.path.join(globals().get('_vsr_directory', %1), 'shaders', %2)")

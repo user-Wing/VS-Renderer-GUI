@@ -27,7 +27,8 @@ private slots:
         const auto found=PortableUpdater::releases(entries);QCOMPARE(found.size(),1);QCOMPARE(found.first().version,QString("1.0.10"));QVERIFY(found.first().url.path().contains("/resolve/abc/VS-GUI/"));}
     void archivePaths(){const QString root="VS-Renderer-GUI-1.0.3-windows-x64";QVERIFY(PortableUpdater::safeArchiveListing("header\n----------\nPath = "+root+"\nPath = "+root+"/vs-player.exe\n"));
         QVERIFY(PortableUpdater::safeArchiveListing("----------\nPath = VS-Renderer-GUI-windows-x64\nPath = VS-Renderer-GUI-windows-x64/vs-player.exe\n"));
-        QVERIFY(!PortableUpdater::safeArchiveListing("----------\nPath = VS-Renderer-GUI-anything-windows-x64/vs-player.exe\n"));
+        QVERIFY(PortableUpdater::safeArchiveListing("----------\nPath = Arbitrary folder/vs-player.exe\n"));
+        QVERIFY(PortableUpdater::safeArchiveListing("----------\nPath = vs-player.exe\nPath = runtime/python/python.exe\n"));
         for(const auto &path:QStringList{"/abs","C:/abs",root+"/../evil",root+"/x:stream",root+"/CON.txt",root+"/bad.",root+"/bad ",root+"//x"})QVERIFY2(!PortableUpdater::safeArchiveListing("----------\nPath = "+path+"\n"),qPrintable(path));
         QVERIFY(!PortableUpdater::safeArchiveListing("----------\nPath = "+root+"/x\nSymbolic Link = ../outside\n"));QVERIFY(!PortableUpdater::safeArchiveListing("----------\nPath = "+root+"/X\nPath = "+root+"/x\n"));}
     void releasedPackageCompatibility(){
@@ -37,8 +38,16 @@ private slots:
         for(const auto &entry:entries)if(entry.startsWith("Path = ")){auto path=entry.mid(7).trimmed();path.replace('\\','/');QVERIFY2(QRegularExpression("^VS-Renderer-GUI-[0-9.]+-windows-x64$").match(path.section('/',0,0)).hasMatch(),qPrintable(path));++paths;}
         QVERIFY(paths>10);
     }
-    void downloadVerifyAndCancel(){QTemporaryDir dir;const auto root=dir.filePath("VS-Renderer-GUI-windows-x64");payload(root);
-        QProcess zip;zip.setWorkingDirectory(dir.path());zip.start(tool("7z.exe"),{"a","-t7z",dir.filePath("test.7z"),QFileInfo(root).fileName(),"-mx=1"});QVERIFY(zip.waitForFinished(15000));QCOMPARE(zip.exitCode(),0);QFile file(dir.filePath("test.7z"));QVERIFY(file.open(QIODevice::ReadOnly));const auto bytes=file.readAll();
+    void payloadLayouts(){
+        QTemporaryDir flat;payload(flat.path());QCOMPARE(PortableUpdater::payloadDirectory(flat.path()),flat.path());
+        QTemporaryDir wrapped;const auto child=wrapped.filePath("Any name 1.0.3");payload(child);QCOMPARE(PortableUpdater::payloadDirectory(wrapped.path()),child);
+        payload(wrapped.filePath("second"));QVERIFY(PortableUpdater::payloadDirectory(wrapped.path()).isEmpty());
+        QTemporaryDir deep;payload(deep.filePath("one/two"));QVERIFY(PortableUpdater::payloadDirectory(deep.path()).isEmpty());
+        QFile::remove(flat.filePath("Qt6Core.dll"));QVERIFY(PortableUpdater::payloadDirectory(flat.path()).isEmpty());
+    }
+    void downloadVerifyAndCancel_data(){QTest::addColumn<QString>("wrapper");QTest::newRow("flat")<<QString();QTest::newRow("arbitrary-wrapper")<<QString("Any portable folder");}
+    void downloadVerifyAndCancel(){QFETCH(QString,wrapper);QTemporaryDir dir;const auto root=wrapper.isEmpty()?dir.path():dir.filePath(wrapper);payload(root);
+        QTemporaryDir archive;QProcess zip;zip.setWorkingDirectory(dir.path());zip.start(tool("7z.exe"),{"a","-t7z",archive.filePath("test.7z"),wrapper.isEmpty()?"*":wrapper,"-mx=1"});QVERIFY(zip.waitForFinished(15000));QCOMPARE(zip.exitCode(),0);QFile file(archive.filePath("test.7z"));QVERIFY(file.open(QIODevice::ReadOnly));const auto bytes=file.readAll();
         QTcpServer server;QVERIFY(server.listen(QHostAddress::LocalHost));connect(&server,&QTcpServer::newConnection,this,[&]{while(auto *socket=server.nextPendingConnection()){connect(socket,&QTcpSocket::disconnected,socket,&QObject::deleteLater);connect(socket,&QTcpSocket::readyRead,socket,[socket,&bytes]{const auto request=socket->readAll();QByteArray response="HTTP/1.1 200 OK\r\nContent-Length: "+QByteArray::number(bytes.size())+"\r\nConnection: close\r\n\r\n";if(!request.startsWith("HEAD "))response+=bytes;socket->write(response);socket->disconnectFromHost();});}});
         PortableRelease release{"1.0.3",QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex()),QUrl(QString("http://127.0.0.1:%1/test.7z").arg(server.serverPort())),bytes.size()};
         PortableUpdater updater;QSignalSpy ready(&updater,&PortableUpdater::prepared),fail(&updater,&PortableUpdater::failed);updater.prepare(release);QTRY_VERIFY_WITH_TIMEOUT(!ready.isEmpty() || !fail.isEmpty(),30000);QVERIFY2(fail.isEmpty(),fail.isEmpty()?"":qPrintable(fail.first().first().toString()));QCOMPARE(ready.size(),1);QVERIFY(QFileInfo(ready.first().first().toString()+"/release.json").exists());

@@ -105,7 +105,6 @@ bool PortableUpdater::safeArchiveListing(const QString &listing) {
         if(line.startsWith("Symbolic Link =") || line.startsWith("Hard Link =") || line.startsWith("Alternate Stream ="))return false;
         if(!line.startsWith("Path = "))continue;auto path=line.mid(7);if(path.endsWith('\r'))path.chop(1);path.replace('\\','/');const auto parts=path.split('/');
         if(path.isEmpty() || path.startsWith('/') || path.contains(':') || parts.contains("..") || parts.contains(".") || parts.contains("") || paths.contains(path.toLower()))return false;
-        if(!QRegularExpression("^VS-Renderer-GUI-(?:[0-9.]+-)?windows-x64$").match(parts.first()).hasMatch())return false;
         for(const auto &part:parts){if(part.endsWith('.') || part.endsWith(' ') || QRegularExpression("^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$)",QRegularExpression::CaseInsensitiveOption).match(part).hasMatch())return false;}
         paths.insert(path.toLower());found=true;
     }
@@ -123,11 +122,20 @@ void PortableUpdater::extractArchive() {
     connect(process_,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus){if(cancelled_)return;if(code){fail(tr("更新包解压失败。"));return;}verifyPayload();});
     process_->start(tool("7z.exe"),{"x",work_->filePath("update.7z"),"-o"+work_->filePath("payload"),"-y","-bb0"});
 }
+QString PortableUpdater::payloadDirectory(const QString &directory) {
+    const QDir folder(directory);QStringList candidates{folder.absolutePath()},valid;
+    for(const auto &child:folder.entryList(QDir::Dirs|QDir::NoDotAndDotDot|QDir::Hidden))candidates.append(folder.filePath(child));
+    for(const auto &candidate:candidates) {
+        const QDir payload(candidate);bool complete=true;
+        for(const auto &name:QStringList{"VSRenderer.exe","vs-player.exe","FFF.Native.dll","Qt6Core.dll","runtime/python/python.exe","runtime/tools/aria2-next.exe","runtime/tools/7z.exe","runtime/tools/7z.dll","runtime/tools/apply-update.ps1","languages/en_US.json","languages/zh_CN.json","release.json"})if(!QFileInfo(payload.filePath(name)).isFile()){complete=false;break;}
+        if(complete)valid.append(payload.absolutePath());
+    }
+    return valid.size()==1?valid.first():QString();
+}
 void PortableUpdater::verifyPayload() {
-    const QDir folder(work_->filePath("payload"));const auto children=folder.entryList(QDir::Dirs|QDir::NoDotAndDotDot);
-    if(children.size()!=1){fail(tr("更新包不是完整便携目录。"));return;}
-    const QDir payload(folder.filePath(children.first()));
-    for(const auto &name:QStringList{"VSRenderer.exe","vs-player.exe","FFF.Native.dll","Qt6Core.dll","runtime/python/python.exe","runtime/tools/aria2-next.exe","runtime/tools/7z.exe","runtime/tools/7z.dll","runtime/tools/apply-update.ps1","languages/en_US.json","languages/zh_CN.json"})if(!QFileInfo(payload.filePath(name)).isFile()){fail(tr("完整包缺少：%1").arg(name));return;}
+    const auto directory=payloadDirectory(work_->filePath("payload"));
+    if(directory.isEmpty()){fail(tr("更新包顶层或下一层必须包含唯一完整便携目录。"));return;}
+    const QDir payload(directory);
     QFile manifest(payload.filePath("release.json"));if(!manifest.open(QIODevice::ReadOnly) || QJsonDocument::fromJson(manifest.readAll()).object().value("version").toString()!=selected_.version){fail(tr("更新包内部版本不匹配。"));return;}
     payload_=payload.path();busy_=false;progress_->hide();status_->setText(tr("版本 %1 已验证。安装将关闭本程序，完成后重新打开；旧目录保留备份。").arg(selected_.version));action_->setEnabled(true);action_->setText(tr("安装并重启"));emit prepared(payload_);
 }

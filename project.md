@@ -1,5 +1,13 @@
 # VS Renderer 项目地图
 
+## 1.0.3 mpv 着色器与内置补帧（2026-10-02）
+
+- `PortableUpdater`：按必要文件识别解压顶层或下一层任意名称的唯一完整便携目录；保留路径、哈希和版本检查。
+- `assets/mpv-shaders` / `FilterCatalog` / `VpyScriptBuilder`：915 份 GLSL / hook，固定来源与哈希，目录发现、名称搜索、缩小倍率及旧纹理格式兼容；打包与运行时部署携带库。
+- `PlayerProfiles` / `PlayerMenus`：Anime 自动版和 Realistic 置顶；内置补帧自动链及四个固定档，开启采用 Jinc YUV444P16，关闭恢复 Anime 自动超分。
+- `PlayerSettings`：修复字体只保存但子控件/设置窗口未应用，显式配置中文 Han 字体回退。
+- 使用本轮专项验证，详细边界见 `docs/mpv-shaders-interpolation-1.0.3.md`。
+
 ## 1.0.3 更新包兼容修复（2026-10-02）
 
 - ModelScope 文件大小和 SHA-256 与本地包一致；使用已发布1.0.2更新器源码复现：固定归档根目录被路径验证拒绝。

@@ -93,6 +93,7 @@ PlayerWindow::PlayerWindow() {
     for(auto it=defaults.begin();it!=defaults.end();++it)if(!settings_->contains(it.key()))settings_->setValue(it.key(),it.value());
     preset_=settings_->value("player/preset").toString();
     if (!QFileInfo::exists(preset_)) preset_.clear();
+    interpolationAuto_=interpolationStage()>=0 && settings_->value("player/interpolationAuto",false).toBool();
     subtitleVisible_=settings_->value("subtitle/visible",true).toBool();
     setWindowTitle("VS Player"); resize(1280, 760); setMinimumSize(1000, 500); setAcceptDrops(true);
     setStyleSheet(QStringLiteral(
@@ -144,7 +145,7 @@ PlayerWindow::PlayerWindow() {
         if (!ok && !imageMode_ && !madvrMode() && !networkSource() && !direct_) { setError(server_->errorString()); return; }
         if (!deferred_.isEmpty()) { const auto path = deferred_; const auto subtitle=deferredSubtitle_;const int slot=deferredSubtitleSlot_;const auto audio=deferredAudio_; deferred_.clear(); deferredSubtitle_.clear();deferredAudio_.clear(); openFile(path); if(!subtitle.isEmpty())attachSubtitle(subtitle,slot);if(!audio.isEmpty())attachAudio(audio); }
     });
-    connect(server_.get(), &VapourSynthFrameServer::errorOccurred, this, [this](const QString &error) { if(imageMode_ || madvrMode() || direct_) return; ready_ = pending_ = false; autoPlay_ = false; clock_->pause(); if (lav_) lav_->pause(); playing_ = false; setError(error); });
+    connect(server_.get(), &VapourSynthFrameServer::errorOccurred, this, [this](const QString &error) { if(imageMode_ || madvrMode() || direct_) return; if(advanceInterpolation())return; ready_ = pending_ = false; autoPlay_ = false; clock_->pause(); if (lav_) lav_->pause(); playing_ = false; setError(error); });
     connect(server_.get(), &VapourSynthFrameServer::scriptLoaded, this, [this](const VapourSynthClipInfo &clip, const VapourSynthClipInfo &) {
         if(imageMode_ || madvrMode() || direct_) return;
         clip_ = clip; if(resumeAt_>=0){clock_->seek(resumeAt_);resumeAt_=-1;} ready_ = true; pending_ = false; requested_ = lastFrame_ = -1; pane_->setVideoSize(QSize(clip.width, clip.height)); pane_->setSurfaceActive(true); requestFrame(frameAtPosition100ns(position(), clip.totalFrames, clip.fpsNumerator, clip.fpsDenominator));
@@ -164,7 +165,7 @@ PlayerWindow::PlayerWindow() {
     });
     connect(pane_, &PreviewPane::viewChanged, this, [this](float z, float x, float y) { resetZoom_->setVisible(z!=1 || x!=0 || y!=0);if(resetZoom_->isVisible())resetZoom_->raise();if(imageMode_){pane_->adoptView(z,x,y);updateInfo();return;}suspendQualityCheck();if(!madvrMode()) (direct_?clock_:output_)->setView(z, x, y); });
     connect(pane_, &PreviewPane::redrawRequested, this, [this] { if(imageMode_){pane_->surface()->update();return;}if(madvrMode()) { if(lav_) { const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height()); } } else (direct_?clock_:output_)->redraw();
-        if(ready_)suspendQualityCheck();if(!profile().isEmpty() && ready_ && !networkSource())profileResize_->start(); });
+        if(ready_)suspendQualityCheck();if(!profile().isEmpty() && interpolationStage()<0 && ready_ && !networkSource())profileResize_->start(); });
     ensureProfiles();
     profileResize_=new QTimer(this);profileResize_->setSingleShot(true);profileResize_->setInterval(350);
     connect(profileResize_,&QTimer::timeout,this,[this]{if(!source_.isEmpty() && !profile().isEmpty() && !media_.isEmpty() && profileTarget()!=profileSize_) {resumeAt_=position();autoPlay_=playing_ || autoPlay_;refreshScript();}});
@@ -187,6 +188,7 @@ bool PlayerWindow::openFile(const QString &input) {
     imageMode_=image;pane_->setImage({});pane_->adoptView(1,0,0);resetZoom_->hide();
     for(auto *control:QList<QWidget *>{timeline_,play_,time_,frame_,rate_,speedButton_})control->setEnabled(!image);
     lav_.reset(); clock_->pause(); playing_ = false; autoPlay_ = settings_->value("basic/autoplay",true).toBool(); ready_ = pending_ = seekPending_ = rateApplied_ = false;
+    if(interpolationAuto_)preset_=QDir(PresetStore::directory()).filePath("builtin/Interpolation-0-RIFE.vpy");
     manualFrame_ = -1;clip_={};positionRestored_=false;qualityStage_=initialQualityStage();resumeAt_=settingsPosition_=-1;profileSize_={};resetStatistics(); displayedFrame_={};
     const auto actual=remote?path:QFileInfo(path).absoluteFilePath();
     const auto mounted=actual==source_?externalSubtitle_:QString();
@@ -241,6 +243,7 @@ void PlayerWindow::refreshScript() {
     const bool native=networkSource() || audioOnly || mode=="Realistic" || (mode=="Anime" && ((high && fixedAnimeStage()<0) || qualityStage_>=4));
     if(native && qualityStage_<4)qualityStage_=4;
     setDirectMode(native);
+    applyScaling();
     profileSize_=profileTarget();autoPlay_=resume;
     if(direct_) {server_->unloadScript();ready_=true;lastFrame_=-1;applyScaling();message_->setText(networkSource()?tr("网络视频 · 3FPlayer 直通，VS 预设不生效"):(qualityStage_>=5 || (settings_->value("render/upscale",4).toInt()==7 && settings_->value("render/downscale",4).toInt()==7))?tr("D3D11 原生直通（不使用 Jinc）"):tr("%1 · Jinc 原生直通（无增强）").arg(mode));return;}
     output_->resetVideoOutput(); output_->setMuted(true);
@@ -253,7 +256,7 @@ void PlayerWindow::refreshScript() {
     const auto literal=[](QString text){return "'"+text.replace('\\',"/").replace("'","\\'")+"'";};
     result.script.prepend(QString("import vapoursynth as _vsr_vs\ndef _vsr_player_ffms(*args, **options):\n    options['cache'] = %1\n    options['cachefile'] = %2\n    options.setdefault('threads', %5)\n    try:\n        return _vsr_vs.core.ffms2.Source(*args, **options)\n    except _vsr_vs.Error as error:\n        if 'Source: No video track found' not in str(error): raise\n        if 'track' in options: options['stream_index'] = options.pop('track')\n        return _vsr_player_lsmas(*args, **options)\ndef _vsr_player_lsmas(*args, **options):\n    options.pop('cachedir', None)\n    options['cache'] = %3\n    options['cachefile'] = %4\n    options.setdefault('threads', %5)\n    return _vsr_vs.core.lsmas.LWLibavSource(*args, **options)\n")
         .arg(ffindex.isEmpty()?"False":"True",literal(ffindex),lwi.isEmpty()?"0":"1",literal(lwi),settings_->value("playback/multithread",true).toBool()?"0":"1"));
-    if(!mode.isEmpty())result.script.prepend(QString("_vsr_target_width = %1\n_vsr_target_height = %2\n_vsr_quality_stage = %3\n_vsr_resize_before_enhance = %4\n").arg(profileSize_.width()).arg(profileSize_.height()).arg(qualityStage_).arg(settings_->value("performance/resizeBeforeEnhance",false).toBool()?"True":"False"));
+    if(!mode.isEmpty() && interpolationStage()<0)result.script.prepend(QString("_vsr_target_width = %1\n_vsr_target_height = %2\n_vsr_quality_stage = %3\n_vsr_resize_before_enhance = %4\n").arg(profileSize_.width()).arg(profileSize_.height()).arg(qualityStage_).arg(settings_->value("performance/resizeBeforeEnhance",false).toBool()?"True":"False"));
     server_->loadScript(result.script, preset_.isEmpty() ? QDir(QCoreApplication::applicationDirPath()).filePath("vpy/player.vpy") : preset_);
     message_->setText(preset_.isEmpty() ? tr("正在加载 VS 原画播放…") : tr("正在加载 VPY：%1").arg(QFileInfo(preset_).fileName()));
     if(QUrl(source_).scheme()=="http" || QUrl(source_).scheme()=="https")message_->setText(tr("正在读取网络视频并建立帧索引；首次索引需要扫描视频…"));
@@ -266,6 +269,7 @@ void PlayerWindow::savePosition() {
 }
 void PlayerWindow::loadPreset(const QString &path) {
     if(madvrMode()) { const auto text=tr("工作在 madVR 模式下，VS 预设不生效。");setError(text);QToolTip::showText(pane_->mapToGlobal(QPoint(20,20)),text,pane_,QRect(),4000);return; }
+    interpolationAuto_=false;settings_->setValue("player/interpolationAuto",false);
     preset_ = path; qualityStage_=initialQualityStage();settings_->setValue("player/preset",path); if (!source_.isEmpty() && !imageMode_) refreshScript();
 }
 void PlayerWindow::togglePlayback() {

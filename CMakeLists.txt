@@ -116,6 +116,13 @@ target_include_directories(VSPlayer PRIVATE src third_party/vapoursynth/include)
 target_link_libraries(VSPlayer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
 target_compile_definitions(VSPlayer PRIVATE VSR_VERSION="${PROJECT_VERSION}")
 
+foreach(program VSRenderer VSPlayer)
+    add_custom_command(TARGET ${program} POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory
+            "${CMAKE_SOURCE_DIR}/assets/mpv-shaders" "$<TARGET_FILE_DIR:${program}>/shaders/mpv-shaders"
+        VERBATIM)
+endforeach()
+
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test Network)

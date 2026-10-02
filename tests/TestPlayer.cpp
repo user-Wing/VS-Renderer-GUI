@@ -54,6 +54,10 @@
 #include <QMimeData>
 #include <QImageReader>
 #include <QColorSpace>
+#include <QFontComboBox>
+#include <QFontDatabase>
+#include <QFontInfo>
+#include <QTextLayout>
 #include "player/PlayerMenu.h"
 #include <windows.h>
 using namespace vsr;
@@ -283,6 +287,27 @@ private slots:
         player.resize(960,640);player.seekFrame(17);QTRY_COMPARE_WITH_TIMEOUT(player.outputSnapshot().frameIndex,17,10000);QCOMPARE(player.qualityStage(),stage);
         auto *pane=player.findChild<PreviewPane *>();QContextMenuEvent event(QContextMenuEvent::Mouse,QPoint(30,30),pane->surface()->mapToGlobal(QPoint(30,30)));QApplication::sendEvent(pane->surface(),&event);auto *menu=player.findChild<QMenu *>("playerContextMenu");QVERIFY(menu);QMenu *builtins=nullptr;for(auto *child:menu->findChildren<QMenu *>())if(child->title()==QStringLiteral("开发者内置"))builtins=child;QVERIFY(builtins);QCOMPARE(builtins->actions().size(),8);int checked=0;for(auto *action:builtins->actions())if(action->isChecked()){++checked;QVERIFY(action->text().startsWith(QStringLiteral("手动")));}QCOMPARE(checked,1);menu->close();
         if(stage==0){player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Playing);QTest::qWait(9500);QVERIFY(player.skippedFrames()>10);QCOMPARE(player.qualityStage(),0);player.togglePlayback();}
+    }
+    void builtinInterpolation() {
+        QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",false);settings.setValue("performance/predecode",false);settings.setValue("player/renderer","VS");settings.setValue("render/upscale",7);settings.setValue("render/downscale",7);settings.sync();
+        QTemporaryDir dir;const auto video=dir.filePath("interpolation.mkv");QProcess ffmpeg;ffmpeg.start("C:/PortableSoft/FFmpegFreeUI ReadyToRun x64/ffmpeg.exe",{"-v","error","-f","lavfi","-i","testsrc2=size=160x96:rate=24:duration=30","-c:v","ffv1","-y",video});QVERIFY(ffmpeg.waitForFinished(10000));QCOMPARE(ffmpeg.exitCode(),0);
+        PlayerWindow player;player.show();player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime.vpy"));QVERIFY(player.openFile(video));QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>0,20000);
+        for(int stage=0;stage<4;++stage){player.setInterpolation(stage);QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>0,20000);QCOMPARE(player.interpolationStage(),stage);QCOMPARE(player.outputSnapshot().videoWidth,160u);QCOMPARE(player.outputSnapshot().videoHeight,96u);QVERIFY(player.snapshot().state!=ThreeFpState::Playing);player.seekFrame(3);QTRY_COMPARE_WITH_TIMEOUT(player.outputSnapshot().frameIndex,3,10000);QVERIFY(std::abs(player.position()-625000)<50000);}
+        auto *pane=player.findChild<PreviewPane *>();QContextMenuEvent event(QContextMenuEvent::Mouse,QPoint(30,30),pane->surface()->mapToGlobal(QPoint(30,30)));QApplication::sendEvent(pane->surface(),&event);auto *menu=player.findChild<QMenu *>("playerContextMenu");QVERIFY(menu);QMenu *builtins=nullptr,*interpolation=nullptr;for(auto *child:menu->findChildren<QMenu *>()){if(child->title()==QStringLiteral("开发者内置"))builtins=child;if(child->title()==QStringLiteral("补帧"))interpolation=child;}QVERIFY(builtins);QCOMPARE(builtins->actions()[0]->text(),QStringLiteral("Anime · 自动切换"));QCOMPARE(builtins->actions()[1]->text(),QStringLiteral("Realistic.vpy"));QVERIFY(interpolation);int checked=0;for(auto *action:interpolation->actions())if(action->isChecked())++checked;QCOMPARE(checked,1);menu->close();
+        player.setInterpolation(-1);QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>0,15000);QCOMPARE(player.interpolationStage(),-1);QCOMPARE(player.qualityStage(),0);QVERIFY(player.outputSnapshot().videoWidth>160u);QVERIFY(player.snapshot().state!=ThreeFpState::Playing);
+    }
+    void interpolationAdaptiveFallback() {
+        QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",true);settings.setValue("performance/predecode",false);settings.sync();
+        QTemporaryDir dir;const auto video=dir.filePath("fallback.mkv");QProcess ffmpeg;ffmpeg.start("C:/PortableSoft/FFmpegFreeUI ReadyToRun x64/ffmpeg.exe",{"-v","error","-f","lavfi","-i","testsrc2=size=160x96:rate=48:duration=90","-c:v","ffv1","-y",video});QVERIFY(ffmpeg.waitForFinished(10000));QCOMPARE(ffmpeg.exitCode(),0);
+        PlayerWindow player;player.show();const QDir builtin(QDir(PresetStore::directory()).filePath("builtin"));QMap<QString,QString> originals;
+        const auto restore=qScopeGuard([&]{for(auto it=originals.begin();it!=originals.end();++it)PresetStore::write(it.key(),it.value());});
+        for(const auto &name:QStringList{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"}){const auto path=builtin.filePath(name);QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));originals.insert(path,QString::fromUtf8(file.readAll()));file.close();QVERIFY(PresetStore::write(path,"import vapoursynth as vs\nimport time\ncore=vs.core\nclip=core.std.BlankClip(width=160,height=96,length=8640,fpsnum=96,format=vs.YUV444P16)\ndef slow(n,f):\n    time.sleep(0.08)\n    return f\nclip=core.std.ModifyFrame(clip,clip,slow)\nclip.set_output()\n"));}
+        player.setInterpolation(0,true);QVERIFY(player.openFile(video));QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Playing,15000);
+        for(int stage=1;stage<4;++stage)QTRY_COMPARE_WITH_TIMEOUT(player.interpolationStage(),stage,15000);
+        QTRY_COMPARE_WITH_TIMEOUT(player.interpolationStage(),-1,15000);QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>0,15000);QCOMPARE(player.qualityStage(),0);QCOMPARE(player.snapshot().state,ThreeFpState::Playing);player.togglePlayback();
+        // A load failure also walks the automatic chain while retaining pause state.
+        for(auto it=originals.begin();it!=originals.end();++it)QVERIFY(PresetStore::write(it.key(),"raise RuntimeError('forced unavailable interpolation')\n"));
+        player.setInterpolation(0,true);QTRY_COMPARE_WITH_TIMEOUT(player.interpolationStage(),-1,10000);QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>0,10000);QVERIFY(player.snapshot().state!=ThreeFpState::Playing);
     }
     void imageAssociations() {
         const auto registry="HKEY_CURRENT_USER\\Software\\VSRendererTests\\"+QUuid::createUuid().toString(QUuid::WithoutBraces);const auto cleanup=qScopeGuard([&]{QSettings erase(registry,QSettings::NativeFormat);erase.clear();});
@@ -560,6 +585,18 @@ private slots:
         QVERIFY(player.openFile(links.last()));QTRY_COMPARE_WITH_TIMEOUT(player.outputSnapshot().videoWidth,3840u,40000);QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Playing,10000);QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>5,10000);qInfo()<<"AList native playback"<<player.outputSnapshot().videoWidth<<player.outputSnapshot().videoHeight;
         }
 
+    }
+    void uiFontsApplyAndPersist() {
+        const auto oldFont=qApp->font();const auto oldFallback=QFontDatabase::applicationFallbackFontFamilies(QChar::Script_Han);
+        const auto restore=qScopeGuard([&]{qApp->setFont(oldFont);QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han,oldFallback);});
+        const QString latin="Times New Roman",chinese="SimSun";QVERIFY(QFontDatabase::families().contains(latin));QVERIFY(QFontDatabase::families().contains(chinese));
+        QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/language","zh_CN");settings.sync();
+        PlayerWindow player;player.show();auto *pane=player.findChild<PreviewPane *>();QContextMenuEvent event(QContextMenuEvent::Mouse,QPoint(30,30),pane->surface()->mapToGlobal(QPoint(30,30)));QApplication::sendEvent(pane->surface(),&event);auto *menu=player.findChild<QMenu *>("playerContextMenu");QVERIFY(menu);QAction *action=nullptr;for(auto *a:menu->actions())if(a->text()==QStringLiteral("设置…"))action=a;QVERIFY(action);menu->close();bool applied=false;
+        QTimer::singleShot(100,&player,[&]{auto *dialog=player.findChild<QDialog *>("playerSettings");QVERIFY(dialog);const auto close=qScopeGuard([dialog]{dialog->reject();});dialog->findChild<QFontComboBox *>("playerChineseFont")->setCurrentFont(QFont(chinese));dialog->findChild<QFontComboBox *>("playerLatinFont")->setCurrentFont(QFont(latin));dialog->findChild<QPushButton *>("playerApplySettings")->click();
+            QCOMPARE(QFontInfo(player.font()).family(),latin);QCOMPARE(QFontInfo(dialog->font()).family(),latin);QCOMPARE(QFontInfo(player.findChild<QLabel *>("playerStatus")->font()).family(),latin);QCOMPARE(QFontInfo(dialog->findChild<QPushButton *>("playerCancelSettings")->font()).family(),latin);QCOMPARE(dialog->findChild<QFontComboBox *>("playerChineseFont")->currentFont().family(),chinese);QCOMPARE(dialog->findChild<QFontComboBox *>("playerLatinFont")->currentFont().family(),latin);
+            QTextLayout layout(QStringLiteral("应用"),player.font());layout.beginLayout();layout.createLine();layout.endLayout();QVERIFY(!layout.glyphRuns().isEmpty());QCOMPARE(layout.glyphRuns().first().rawFont().familyName(),chinese);dialog->grab().save("build/player-ui-fonts.png");applied=true;});
+        action->trigger();QVERIFY(applied);settings.sync();QCOMPARE(settings.value("theme/chineseFont").toString(),chinese);QCOMPARE(settings.value("theme/latinFont").toString(),latin);
+        PlayerWindow reopened;reopened.show();QCOMPARE(QFontInfo(reopened.findChild<QLabel *>("playerStatus")->font()).family(),latin);
     }
     void settingsPagesAndLanguage() {
         PlayerWindow player;player.show();auto *pane=player.findChild<PreviewPane *>();

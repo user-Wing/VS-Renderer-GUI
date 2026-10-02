@@ -1,0 +1,20 @@
+//!DESC hyperview
+//!HOOK MAIN
+//!WHEN OUTPUT.width OUTPUT.height / MAIN.width MAIN.height / / 0.667 >
+//!WIDTH OUTPUT.width
+//!BIND HOOKED
+
+vec4 hook() {
+    float r = (target_size.x / target_size.y) / (HOOKED_size.x / HOOKED_size.y);
+
+    // y = (r - 1) * x^3 + x
+
+    float y = (HOOKED_pos.x - 0.5) * 2.0 * r;
+    float x = y / r;
+    x -= ((r - 1.0) * x * x * x + x - y) / (3 * (r - 1.0) * x * x + 1.0);
+    x -= ((r - 1.0) * x * x * x + x - y) / (3 * (r - 1.0) * x * x + 1.0);
+    x -= ((r - 1.0) * x * x * x + x - y) / (3 * (r - 1.0) * x * x + 1.0);
+    x -= ((r - 1.0) * x * x * x + x - y) / (3 * (r - 1.0) * x * x + 1.0);
+    x -= ((r - 1.0) * x * x * x + x - y) / (3 * (r - 1.0) * x * x + 1.0);
+    return HOOKED_tex(vec2(x / 2.0 + 0.5, HOOKED_pos.y));
+}
