@@ -4,7 +4,7 @@ Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜�
 
 ## 下载与启动
 
-1. 从 [GitHub Releases](https://github.com/user-Wing/VS-Renderer-GUI/releases) 或 [ModelScope 更新源](https://www.modelscope.cn/datasets/ARXChem/Software-List/files?Root=VS-GUI) 下载完整便携包。
+1. 从 [GitHub Releases](https://github.com/user-Wing/VS-Renderer-GUI/releases) 或 [ModelScope 更新源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) 下载完整便携包。
 2. 解压整个目录，运行 `VSRenderer.exe` 或 `vs-player.exe`。无需另外安装 Qt、Python、VapourSynth。
 3. 系统要求：Windows 10 22H2 或更新的 64 位 Windows，支持 Direct3D 11 的显卡与驱动；RIFE 补帧需要 Vulkan 驱动。
 
@@ -13,10 +13,10 @@ Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜�
 | 程序 | 功能 |
 | --- | --- |
 | VS Renderer | 可排序、可开关的滤镜链；参数编辑与 VPY 预设；源画面和处理结果同步预览 |
-| VS Renderer | Anime4K、降噪、锐化、去伪影、反交错，以及 MVTools / RIFE 补帧 |
-| VS Renderer | 最多九路视频比对、时间对齐、并排/网格/滑块；单文件、批量及对比画布 MKV 导出 |
+|  | Anime4K、降噪、锐化、去伪影、反交错，以及 MVTools / RIFE 补帧 |
+|  | 最多九路视频比对、时间对齐、并排/网格/滑块；单文件、批量及对比画布 MKV 导出 |
 | VS Player | 视频、音频、网络链接与超大图片；倍速、逐帧、章节、播放列表、缩放与截图 |
-| VS Player | VPY 实时处理，自动或手动 Anime 档位；主次字幕、音轨切换、同步与均衡器 |
+| | VPY 实时处理，自动或手动 Anime 档位；主次字幕、音轨切换、同步与均衡器 |
 | 两个程序 | 随包运行时、便携配置、检查更新 |
 
 ## VS Renderer 操作
