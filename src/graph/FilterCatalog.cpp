@@ -49,7 +49,7 @@ const QList<FilterDefinition> kCatalog = [] {
       integer("taps", "Lanczos taps", 3, 2, 16)}},
     {"anime4k", "Anime4K GLSL", "GPU 超分与着色器", "placebo",
      "由 vs-placebo 在 VapourSynth 中直接执行 mpv/libplacebo GLSL；GPU 实时性取决于 shader、倍率、分辨率与显卡。输入会转成 16-bit YUV，输出为 YUV444P16。",
-     {choice("mode", "Anime4K 模式", "anime4k-v4-a.glsl", {"anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL 位置", ""),
+     {choice("mode", "Anime4K 模式", "anime4k-v4-a.glsl", {"anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-no-cnn.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL 位置", ""),
       choice("scale", "输出倍率", "2×", {"1×", "2×", "3×", "4×"})}},
     {"remove_grain", "RemoveGrain", "降噪", "rgvs", "VCB 教程中的基础空间降噪。",
      {integer("mode", "模式", 20, 0, 28)}},

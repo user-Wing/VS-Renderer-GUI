@@ -193,6 +193,10 @@ public:
     ThreeFpResult stepKeyframe(void *handle, int direction) const;
     ThreeFpResult setPlaybackRate(void *handle, double rate) const;
     QString mediaInfo(void *handle) const;
+    ThreeFpResult selectAudio(void *handle, int stream) const;
+    ThreeFpResult loadExternalAudio(void *handle, const char *path) const;
+    ThreeFpResult clearExternalAudio(void *handle) const;
+    ThreeFpResult setAudioEffects(void *handle, bool enabled, const float *gains, float wave, qint64 delay) const;
     ThreeFpResult setVolume(void *handle, float volume, std::uint32_t muted) const;
     ThreeFpResult setPresentConfig(void *handle, bool enabled) const;
     ThreeFpResult setPacingConfig(void *handle, bool enabled) const;
@@ -224,6 +228,12 @@ private:
     using StepFn = ThreeFpResult (*)(void *, std::int32_t);
     using RateFn = ThreeFpResult (*)(void *, double);
     using InfoFn = ThreeFpResult (*)(void *, char *, std::uint32_t, std::uint32_t *);
+    using ExternalAudioFn = ThreeFpResult (*)(void *, const char *, int, std::int64_t);
+    using EffectsFn = ThreeFpResult (*)(void *, std::uint32_t, const float *, float, std::int64_t);
+    StepFn selectAudio_ = nullptr;
+    ExternalAudioFn loadExternalAudio_ = nullptr;
+    HandleFn clearExternalAudio_ = nullptr;
+    EffectsFn setAudioEffects_ = nullptr;
     RateFn setPlaybackRate_ = nullptr;
     StepFn stepKeyframe_ = nullptr;
     InfoFn mediaInfo_ = nullptr;

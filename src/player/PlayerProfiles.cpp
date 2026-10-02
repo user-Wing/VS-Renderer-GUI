@@ -17,13 +17,39 @@ namespace vsr {
 QString PlayerWindow::profile() const {
     const QFileInfo file(preset_);
     if(file.absolutePath()!=QDir(PresetStore::directory()).filePath("builtin"))return {};
-    if(file.fileName()=="Anime.vpy")return "Anime";
+    if(file.fileName()=="Anime.vpy" || fixedAnimeStage()>=0)return "Anime";
     if(file.fileName()=="Realistic.vpy")return "Realistic";
     return {};
+}
+int PlayerWindow::fixedAnimeStage() const {
+    const QFileInfo file(preset_);
+    if(file.absolutePath()!=QDir(PresetStore::directory()).filePath("builtin"))return -1;
+    const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy"};
+    return names.indexOf(file.fileName());
+}
+int PlayerWindow::initialQualityStage() const {
+    const int fixed=fixedAnimeStage();
+    return fixed>=0?fixed:profile()=="Anime"?std::clamp(settings_->value("player/animeStage",0).toInt(),0,5):0;
+}
+QStringList PlayerWindow::qualityNames() const {
+    return {tr("Anime4K CNN + 额外增强"),tr("Anime4K CNN"),tr("Anime4K no CNN + 额外增强"),tr("Anime4K no CNN"),tr("Jinc 直通"),tr("D3D11 原生直通")};
 }
 void PlayerWindow::ensureProfiles() {
     const QDir shaders(QDir(QCoreApplication::applicationDirPath()).filePath("shaders"));QDir().mkpath(shaders.absolutePath());
     if(!QFileInfo::exists(shaders.filePath("anime4k-a-fast.glsl")))QFile::copy(":/filters/anime4k-a-fast.glsl",shaders.filePath("anime4k-a-fast.glsl"));
+    if(!QFileInfo::exists(shaders.filePath("anime4k-no-cnn.glsl")))QFile::copy(":/filters/anime4k-no-cnn.glsl",shaders.filePath("anime4k-no-cnn.glsl"));
+    const auto oldProcessing=QStringLiteral(
+        "    if _stage == 0:\n"
+        "        clip = _vsr_sharpen_chain(clip, [('sharpen_edges', 0.3, 2), ('enhance_detail', 0.3, 2)])\n"
+        "    clip = core.resize.Spline36(clip, format=vs.YUV420P16)\n"
+        "    clip = core.placebo.Shader(clip, shader=os.path.join(_vsr_directory, 'shaders', 'anime4k-a-fast.glsl'), width=_w, height=_h)\n");
+    const auto processing=QStringLiteral(
+        "    _shader_name = 'anime4k-a-fast.glsl' if _stage < 2 else 'anime4k-no-cnn.glsl'\n"
+        "    with open(os.path.join(_vsr_directory, 'shaders', _shader_name), encoding='utf-8') as _file: _shader = _file.read()\n"
+        "    if _stage in (0, 2):\n"
+        "        _shader = '\\n'.join(_vsr_sharpen_shader(*s) for s in [('sharpen_edges', 0.3, 2), ('enhance_detail', 0.3, 2)]) + '\\n' + _shader\n"
+        "    if clip.format.bits_per_sample != 16: clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16))\n"
+        "    clip = core.placebo.Shader(clip, shader_s=_shader, width=_w, height=_h)\n");
     const QDir builtin(QDir(PresetStore::directory()).filePath("builtin"));QDir().mkpath(builtin.absolutePath());
     for(const auto &mode:QStringList{"Anime","Realistic"}) {
         const auto path=builtin.filePath(mode+".vpy");if(QFileInfo::exists(path)) {
@@ -32,6 +58,10 @@ void PlayerWindow::ensureProfiles() {
                 const auto conversion=QStringLiteral("    if clip.format.bits_per_sample not in (8, 16, 32): clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16))\n");
                 if(text.startsWith("# VSR_PLAYER_PROFILE ") && text.contains(line) && !text.contains(conversion.trimmed())) {
                     text.replace(line,conversion+line);const auto backup=path+".before-bitdepth-fix";
+                    if(QFile::exists(backup) || QFile::copy(path,backup))PresetStore::write(path,text);
+                }
+                if(mode=="Anime" && text.startsWith("# VSR_PLAYER_PROFILE Anime\n") && text.contains(oldProcessing) && text.contains("_stage < 2\n")) {
+                    text.replace(oldProcessing,processing);text.replace("_stage < 2\n","_stage < 4\n");const auto backup=path+".before-six-stage";
                     if(QFile::exists(backup) || QFile::copy(path,backup))PresetStore::write(path,text);
                 }
             }continue;
@@ -52,15 +82,12 @@ void PlayerWindow::ensureProfiles() {
             "if _rw % 2 or _rh % 2: _mul = _mul // 2 * 2\n"
             "if _mul > 0: _w, _h = _rw * _mul, _rh * _mul\n"
             "_stage = int(globals().get('_vsr_quality_stage', 0))\n"
-            "_anime = %1 and clip.width < 3840 and clip.height < 2160 and _stage < 2\n"
+            "_anime = %1 and clip.width < 3840 and clip.height < 2160 and _stage < 4\n"
             "if globals().get('_vsr_resize_before_enhance', False) and (_w < clip.width or _h < clip.height):\n"
             "    if clip.format.bits_per_sample not in (8, 16, 32): clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16))\n"
             "    clip = core.placebo.Resample(clip, width=_w, height=_h, filter='ewa_lanczos', antiring=0.5)\n"
             "if _anime:\n"
-            "    if _stage == 0:\n"
-            "        clip = _vsr_sharpen_chain(clip, [('sharpen_edges', 0.3, 2), ('enhance_detail', 0.3, 2)])\n"
-            "    clip = core.resize.Spline36(clip, format=vs.YUV420P16)\n"
-            "    clip = core.placebo.Shader(clip, shader=os.path.join(_vsr_directory, 'shaders', 'anime4k-a-fast.glsl'), width=_w, height=_h)\n"
+            "%2"
             "elif clip.width != _w or clip.height != _h:\n"
             "    if clip.format.bits_per_sample not in (8, 16, 32): clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16))\n"
             "    clip = core.placebo.Resample(clip, width=_w, height=_h, filter='ewa_lanczos', antiring=0.5)\n"
@@ -70,8 +97,21 @@ void PlayerWindow::ensureProfiles() {
             "_sd = src.height * _w * int(_props.get('_SARDen', 1))\n"
             "_g = math.gcd(_sn, _sd)\n"
             "clip = core.std.SetFrameProps(clip, _SARNum=_sn // _g, _SARDen=_sd // _g)\n"
-            "clip.set_output(0)").arg(mode=="Anime"?"True":"False"));
+            "clip.set_output(0)").arg(mode=="Anime"?"True":"False",processing));
         PresetStore::write(path,script);
+    }
+    QFile anime(builtin.filePath("Anime.vpy"));
+    if(anime.open(QIODevice::ReadOnly)) {
+        const auto automatic=QString::fromUtf8(anime.readAll());
+        const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy"};
+        for(int stage=0;stage<names.size();++stage) {
+            const auto path=builtin.filePath(names[stage]);if(QFileInfo::exists(path))continue;
+            auto script=automatic;
+            script.replace("# VSR_PLAYER_PROFILE Anime\n",QString("# VSR_PLAYER_PROFILE Anime\n# VSR_PLAYER_FIXED_STAGE %1\n").arg(stage));
+            script.replace("_stage = int(globals().get('_vsr_quality_stage', 0))",QString("_stage = %1").arg(stage));
+            script.replace("_anime = True and clip.width < 3840 and clip.height < 2160 and _stage < 4","_anime = _stage < 4");
+            PresetStore::write(path,script);
+        }
     }
 }
 QSize PlayerWindow::profileTarget() const {
@@ -98,7 +138,7 @@ void PlayerWindow::setDirectMode(bool enabled) {
     if(opened){clock_->openFile(mediaInput_);rateApplied_=false;resumeAt_=at;}
 }
 void PlayerWindow::updateProfile() {
-    if(madvrMode() || (profile().isEmpty() && !networkSource()) || qualityStage_>=3 || !ready_ || !playing_ || seekPending_ || profileResize_->isActive() || !qualitySettling_.isValid() || qualitySettling_.elapsed()<2000) {qualityTimer_.invalidate();return;}
+    if(fixedAnimeStage()>=0 || madvrMode() || (profile().isEmpty() && !networkSource()) || qualityStage_>=5 || !ready_ || !playing_ || seekPending_ || profileResize_->isActive() || !qualitySettling_.isValid() || qualitySettling_.elapsed()<2000) {qualityTimer_.invalidate();return;}
     const auto output=outputSnapshot();const auto dropped=skippedFrames_+output.droppedVideoFrames+output.coalescedVideoFrames;
     if(!qualityTimer_.isValid()){qualityTimer_.start();qualityDropped_=dropped;qualitySubmitted_=direct_?output.presentedVideoFrames:submittedFrames_;return;}
     if(qualityTimer_.elapsed()<5000)return;
@@ -107,14 +147,14 @@ void PlayerWindow::updateProfile() {
     const auto missed=dropped-qualityDropped_;
     const auto frames=(direct_?output.presentedVideoFrames:submittedFrames_)-qualitySubmitted_;
     if(frames+missed<48 || double(missed)/(frames+missed)<=.05)return;
-    if(direct_)qualityStage_=2;
+    if(direct_)qualityStage_=4;
     resumeAt_=position();autoPlay_=true;++qualityStage_;refreshScript();
-    message_->setText(qualityStage_==1?tr("丢帧超过 5%：关闭细节增强，保留 Anime4K A/Fast。") :qualityStage_==2?tr("丢帧仍超过 5%：切换 Jinc 原生直通。"):tr("Jinc 丢帧超过 5%：切换 D3D11 原生直通。"));
+    message_->setText(tr("丢帧超过 5%：切换到 %1。").arg(qualityNames().at(qualityStage_)));
 }
 void PlayerWindow::suspendQualityCheck() {qualityTimer_.invalidate();qualitySettling_.restart();}
 void PlayerWindow::applyScaling() {
-    auto *visible=direct_?clock_.get():output_.get();const bool native=qualityStage_>=3;
+    auto *visible=direct_?clock_.get():output_.get();const bool native=qualityStage_>=5;
     visible->setAntiRinging(!native && settings_->value("render/antiring",true).toBool());
-    visible->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(native?7:settings_->value("render/upscale",4).toInt()),static_cast<ThreeFpScalingAlgorithm>(native?7:settings_->value("render/downscale",4).toInt()));
+    visible->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(native?7:fixedAnimeStage()==4?4:settings_->value("render/upscale",4).toInt()),static_cast<ThreeFpScalingAlgorithm>(native?7:fixedAnimeStage()==4?4:settings_->value("render/downscale",4).toInt()));
 }
 }

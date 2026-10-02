@@ -12,19 +12,33 @@
 #include <algorithm>
 
 namespace vsr {
+QSize AnalysisPage::compositionSize() const
+{
+    QSize output;
+    for (int i=0;i<videoCount_;++i) {
+        const auto snap=snapshot(i);
+        if (qint64(snap.videoWidth)*snap.videoHeight>qint64(output.width())*output.height())
+            output=QSize(snap.videoWidth,snap.videoHeight);
+    }
+    return output;
+}
 ScriptBuildResult AnalysisPage::compositionScript() const
 {
     ScriptBuildResult result;
     const auto visible = visibleVideos();
     if(visible.isEmpty() || busy()) {result.errors << QStringLiteral("请等待视频加载与对齐完成。");return result;}
+    const auto layout = static_cast<MultiCompareView::Layout>(layoutChoice_->currentData().toInt());
+    const bool supported = (visible.size() == 2 && layout == MultiCompareView::Wipe) ||
+        (visible.size() == 3 && (layout == MultiCompareView::ThreeLeft || layout == MultiCompareView::ThreeRight)) ||
+        (visible.size() == 4 && (layout == MultiCompareView::Four || layout == MultiCompareView::FourWipe));
+    if (!supported) {
+        result.errors << QStringLiteral("当前布局不支持导出。仅支持 AB 滑块、ABC 2+1 和 ABCD 2×2；输出分辨率保持最大源视频分辨率。");
+        return result;
+    }
     if(scaler_->currentIndex()==4 || scaler_->currentIndex()==6 || chromaAlgorithm_==4 || chromaAlgorithm_==6 || chromaAlgorithm_>=9) {
         result.errors << QStringLiteral("当前 GPU Jinc/Super-XBR/双边核尚无一致的 VS 导出实现，请选用 Nearest/Bilinear/Bicubic/Lanczos/Spline36。导出不会静默替换算法。");return result;
     }
-    QSize output;
-    for(int i=0;i<videoCount_;++i) {
-        const auto snap=snapshot(i);
-        if(qint64(snap.videoWidth)*snap.videoHeight>qint64(output.width())*output.height()) output=QSize(snap.videoWidth,snap.videoHeight);
-    }
+    const QSize output=compositionSize();
     if(output.isEmpty()) {result.errors << QStringLiteral("尚未取得视频分辨率。");return result;}
     double duration=std::numeric_limits<double>::max();
     QJsonArray sources;
@@ -66,8 +80,10 @@ void AnalysisPage::exportComparison()
     const int audio=audio_->currentData().toInt();
     exportWindow_->setCurrentSource(paths_[audio<0?masterVideo():audio]);
     QStringList inputs; for(int i=0;i<videoCount_;++i) inputs << paths_[i];
+    const auto output=compositionSize();
     exportWindow_->setComposition(script.script,inputs,audio<0?0:offsets_[audio]/10000000.0,audio<0,
-        QStringLiteral("当前对比快照：%1 路，最大源分辨率；保留布局、切割、缩放、偏移和音频选择，从全局时间 0 导出。参数中的缩放/裁切会继续改变成片。").arg(visibleVideos().size()));
+        QStringLiteral("当前对比快照：%1 路，输出 %2×%3（最大源视频分辨率）；保留布局、切割、缩放、偏移和音频选择，从全局时间 0 导出。")
+            .arg(visibleVideos().size()).arg(output.width()).arg(output.height()),output);
     exportWindow_->showNormal(); exportWindow_->raise(); exportWindow_->activateWindow();
 }
 

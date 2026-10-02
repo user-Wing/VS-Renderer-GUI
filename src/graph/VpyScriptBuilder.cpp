@@ -91,7 +91,7 @@ QString emitNode(const FilterNode &node, bool gpu = true)
     }
     if (node.definitionId == "anime4k") {
         const int scale = std::clamp(p.value("scale").toString().section(QChar(0x00d7), 0, 0).toInt(), 1, 4);
-        return QString("clip = core.resize.Spline36(clip, format=vs.YUV420P16)\n"
+        return QString("if clip.format.bits_per_sample != 16: clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16))\n"
                        "clip = core.placebo.Shader(clip, shader=%1, width=clip.width * %2, height=clip.height * %2)")
             .arg((p.value("mode").toString() == QStringLiteral("自定义 GLSL") || !p.value("shader").toString().isEmpty()
                  ? VpyScriptBuilder::pythonString(p.value("shader").toString())

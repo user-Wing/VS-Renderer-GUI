@@ -127,7 +127,8 @@ private slots:
         const auto result = VpyScriptBuilder::build(QStringLiteral("D:\\src.mkv"), SourceFilter::Lsmas, graph);
         QVERIFY2(result.errors.isEmpty(), qPrintable(result.errors.join('\n')));
         QVERIFY(result.requiredNamespaces.contains(QStringLiteral("placebo")));
-        QVERIFY(result.script.contains(QStringLiteral("format=vs.YUV420P16")));
+        QVERIFY(result.script.contains(QStringLiteral("clip.format.replace(bits_per_sample=16)")));
+        QVERIFY(!result.script.contains(QStringLiteral("format=vs.YUV420P16")));
         QVERIFY(result.script.contains(QStringLiteral("shader=\"D:\\\\Shaders\\\\Anime4K.glsl\"")));
         QVERIFY(result.script.contains(QStringLiteral("width=clip.width * 3, height=clip.height * 3")));
     }

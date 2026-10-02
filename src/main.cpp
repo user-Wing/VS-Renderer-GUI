@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QFont>
+#include <QIcon>
 
 int main(int argc, char *argv[])
 {
@@ -10,6 +11,7 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName(QStringLiteral("VS Renderer"));
     QApplication::setOrganizationName(QStringLiteral("VSRenderer"));
     QApplication::setApplicationVersion(QStringLiteral(VSR_VERSION));
+    app.setWindowIcon(QIcon(QStringLiteral(":/icons/renderer.ico")));
 
     QFont font(QStringLiteral("Segoe UI Variable"));
     font.setPixelSize(13);

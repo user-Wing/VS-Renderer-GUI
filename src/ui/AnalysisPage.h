@@ -53,6 +53,7 @@ protected:
 
 private:
     void exportComparison();
+    QSize compositionSize() const;
     void poll();
     void resizeEvent(QResizeEvent *event) override;
     void adjustTrackWidths();

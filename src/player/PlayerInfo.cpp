@@ -11,20 +11,40 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QThread>
+#include <QColorSpace>
 #include <windows.h>
 #include <psapi.h>
 #include <dxgi.h>
 
 namespace vsr {
 void PlayerWindow::updateInfo() {
+    if(imageMode_){
+        if(!infoVisible_)return;
+        usage_=resources_.sample();const auto image=pane_->image();const QFileInfo file(source_);
+        const auto fitted=QSizeF(image.size()).scaled(QSizeF(pane_->surface()->size()),Qt::KeepAspectRatio)*pane_->zoom();
+        const auto color=image.colorSpace().isValid()?image.colorSpace().description():tr("未提供");
+        QStringList lines;
+        lines<<tr("文件名：%1").arg(file.fileName())<<tr("路径：%1").arg(file.absoluteFilePath())
+             <<tr("文件大小：%1 MiB · 格式：%2").arg(file.size()/1048576.0,0,'f',2).arg(file.suffix().toUpper())
+             <<tr("输入图片：%1 × %2 · %3 MP · 颜色空间：%4").arg(image.width()).arg(image.height()).arg(double(image.width())*image.height()/1e6,0,'f',2).arg(color)
+             <<tr("源像素：%1 · 原始位深：%2 bit/channel").arg(image.text("sourcePixelFormat").isEmpty()?file.suffix().toUpper():image.text("sourcePixelFormat"),image.text("sourceBitDepth").isEmpty()?tr("未提供"):image.text("sourceBitDepth"))
+             <<tr("解码器：%1 · 耗时：%2 ms").arg(image.text("decoder"),image.text("decodeMilliseconds"))
+             <<tr("解码像素：%1 bit/pixel · Alpha：%2 · 像素内存：%3 MiB").arg(image.depth()).arg(image.hasAlphaChannel()?tr("是"):tr("否")).arg(image.sizeInBytes()/1048576.0,0,'f',1)
+             <<tr("输出：%1 × %2 · 视口：%3 × %4 · 缩放：%5%").arg(fitted.width(),0,'f',0).arg(fitted.height(),0,'f',0).arg(pane_->surface()->width()).arg(pane_->surface()->height()).arg(pane_->zoom()*100,0,'f',1)
+             <<tr("图片渲染器：Qt Raster · 可见区域裁切 · SDR")
+             <<tr("VS 滤镜：未启用 · 预解码：未启用")
+             <<tr("CPU：%1 · GPU：%2 · 内存：%3 MiB").arg(usage_.processCpu>=0?QString::number(usage_.processCpu,'f',1)+"%":tr("采样中"),usage_.gpu>=0?QString::number(usage_.gpu,'f',1)+"%":tr("未提供")).arg(usage_.memoryMiB);
+        info_->setMaximumWidth(qMax(300,pane_->surface()->width()-24));info_->setText(lines.join('\n'));info_->adjustSize();info_->move(12,12);info_->raise();return;
+    }
     usage_=resources_.sample();
     const auto refreshed = QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();
     if (!refreshed.isEmpty()) media_ = refreshed;
+    const auto selectedAudio=clock_->snapshot().selectedAudioStream;
     QJsonObject video, audio;
     for (const auto &entry : media_.value("streams").toArray()) {
         const auto stream = entry.toObject();
         if (stream.value("type").toString() == "video" && video.isEmpty()) video = stream;
-        if (stream.value("type").toString() == "audio" && audio.isEmpty()) audio = stream;
+        if (stream.value("type").toString() == "audio" && stream.value("index").toInt()==selectedAudio) audio = stream;
     }
     videoBadge_->setText(video.value("codec").toString("—")); audioBadge_->setText(audio.value("codec").toString("—"));
     const auto source = clock_->snapshot(); const auto rendered = outputSnapshot();
@@ -83,7 +103,8 @@ void PlayerWindow::updateInfo() {
           << (lavAudio ? tr("  缓冲时间：未提供 · 同步偏移：未提供") : tr("  缓冲时间：%1 ms · 同步偏移：%2 ms · 时间戳抖动帧：%3")
               .arg(source.bufferedAudio100ns/10000.0,0,'f',1).arg((source.audioPosition100ns-at)/10000.0,0,'f',1).arg(source.audioTimestampJitterFrames))
           << tr("倍速：%1× · %2").arg(speed_,0,'f',2).arg(preset_.isEmpty() ? tr("原画") : QFileInfo(preset_).fileName());
-    if(!profile().isEmpty() || networkSource())lines << tr("自适应级别：%1 · 超过 5% 丢帧逐级降载").arg((direct_ && qualityStage_<3)?tr("Jinc 直通"):qualityStage_==0?tr("细节增强 + A/Fast"):qualityStage_==1?QStringLiteral("A/Fast"):qualityStage_>=3?tr("D3D11 原生直通"):tr("Jinc 直通"));
+    if(fixedAnimeStage()>=0)lines << tr("手动固定级别：%1 · 不自动切换").arg(qualityNames().at(qualityStage_));
+    else if(!profile().isEmpty() || networkSource())lines << tr("自适应级别：%1 · 超过 5% 丢帧逐级降载").arg(qualityNames().at(direct_?qMax(4,qualityStage_):qualityStage_));
     const QString text = lines.join('\n');
     info_->setMaximumWidth(qMax(300, pane_->surface()->width()-24)); info_->setText(text); info_->adjustSize(); info_->move(12, 12); info_->raise();
 }

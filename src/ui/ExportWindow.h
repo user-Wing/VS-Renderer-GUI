@@ -4,6 +4,7 @@
 #include "graph/VpyScriptBuilder.h"
 #include <QElapsedTimer>
 #include <QHash>
+#include <QSize>
 #include <QWidget>
 #include <functional>
 #include <memory>
@@ -29,7 +30,7 @@ public:
     void setScriptBuilder(std::function<ScriptBuildResult(const QString &)> builder);
     bool addJob(const QString &command, const QString &output, const QString &source,
                 const QString &script, double durationSeconds, QString *error = nullptr);
-    void setComposition(const QString &script, const QStringList &sources, double audioOffset, bool muted, const QString &description);
+    void setComposition(const QString &script, const QStringList &sources, double audioOffset, bool muted, const QString &description, const QSize &outputSize);
     bool isBusy() const;
     void stopAll();
     static QString outputPath(const QString &source, const QString &directory, bool timestamp);
@@ -82,6 +83,7 @@ private:
     QStringList compositionSources_;
     double compositionAudioOffset_ = 0;
     bool compositionMuted_ = false;
+    QSize compositionSize_;
     std::function<ScriptBuildResult(const QString &)> scriptBuilder_;
 };
 

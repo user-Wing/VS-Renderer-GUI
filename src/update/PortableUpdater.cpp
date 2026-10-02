@@ -105,7 +105,7 @@ bool PortableUpdater::safeArchiveListing(const QString &listing) {
         if(line.startsWith("Symbolic Link =") || line.startsWith("Hard Link =") || line.startsWith("Alternate Stream ="))return false;
         if(!line.startsWith("Path = "))continue;auto path=line.mid(7);if(path.endsWith('\r'))path.chop(1);path.replace('\\','/');const auto parts=path.split('/');
         if(path.isEmpty() || path.startsWith('/') || path.contains(':') || parts.contains("..") || parts.contains(".") || parts.contains("") || paths.contains(path.toLower()))return false;
-        if(!QRegularExpression("^VS-Renderer-GUI-[0-9.]+-windows-x64$").match(parts.first()).hasMatch())return false;
+        if(!QRegularExpression("^VS-Renderer-GUI-(?:[0-9.]+-)?windows-x64$").match(parts.first()).hasMatch())return false;
         for(const auto &part:parts){if(part.endsWith('.') || part.endsWith(' ') || QRegularExpression("^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$)",QRegularExpression::CaseInsensitiveOption).match(part).hasMatch())return false;}
         paths.insert(path.toLower());found=true;
     }

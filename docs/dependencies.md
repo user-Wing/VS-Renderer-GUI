@@ -8,6 +8,8 @@
 
 ## 源码构建依赖
 
+本轮便携LAV运行时采用 `LAVFilters-0.83-x64.zip`，解压到 `.deps/lav/0.83` 后由 `tools/stage-portable.ps1` 默认携带；也可以通过 `-LavDirectory` 指定准备好的解码器目录。三个AX为0.83.0，完整依赖和GPL `COPYING` 一起分发，不运行注册批处理。源包SHA-256：`0126982f47157bb86a6dbb43c4f332f7f98beba9ad552c19b65f9db2e7d4f186`。
+
 补帧新增 `vapoursynth-mvtools==29`，由 `build-vapoursynth.ps1` 固定安装，staging 携带 `plugins/mvtools.dll` 与 GPL-2.0 许可。不要使用 VSRepo 的旧 v24/API 3 版本；R80 已不能加载。现有开发环境可先运行 `.deps\vs-python\Scripts\python.exe -m pip install vapoursynth-mvtools==29`，再重跑 staging 或链接 GUI。
 
 - Git、CMake 3.25+、Ninja、7-Zip。
@@ -74,4 +76,4 @@ Release 构建后运行 `vsr_frame_bridge_tests.exe startupWarmsDecodeAndBothRen
 
 ## 1.0.2 本地 Player
 
-CMake 生成 VSRenderer.exe 与 vs-player.exe；播放器额外链接 Windows DirectShow / COM / DXGI / PSAPI / PDH / GDI 系统库，无新增 Qt 模块。3FP 构建增加 patches/3fp-player-rate.patch、patches/3fp-player-output.patch，API 14 版本兼容，新增 optional SetPlaybackRate / SetExternalOutputFormat 导出，字幕和位图读取复用已有 C ABI。tools/stage-1.0.2.ps1 只更新本地目录，不调用归档或 Git 工具，首次复制旧便携依赖，重复执行保留用户 VPY / INI。默认复制用户指定的 Anime4K / LAV / madVR 本机资源；madVR 通过随附 ax / DLL 实例化，不要求注册系统。VPY 位于应用旁 vpy；播放器所有设置位于 player.ini。PNG 源截图及嵌入 SRT 提取使用 runtime/ffmpeg/ffmpeg.exe，源码测试目录也需部署此 CLI。
+CMake 生成 VSRenderer.exe 与 vs-player.exe；播放器额外链接 Windows DirectShow / COM / DXGI / PSAPI / PDH / GDI 系统库，无新增 Qt 模块。3FP 构建增加 patches/3fp-player-rate.patch、patches/3fp-player-output.patch，API 14 版本兼容，新增 optional SetPlaybackRate / SetExternalOutputFormat 导出，字幕和位图读取复用已有 C ABI。tools/stage-portable.ps1 只更新本地目录，不调用归档或 Git 工具，首次复制旧便携依赖，重复执行保留用户 VPY / INI。默认复制用户指定的 Anime4K / LAV / madVR 本机资源；madVR 通过随附 ax / DLL 实例化，不要求注册系统。VPY 位于应用旁 vpy；播放器所有设置位于 player.ini。PNG 源截图及嵌入 SRT 提取使用 runtime/ffmpeg/ffmpeg.exe，源码测试目录也需部署此 CLI。

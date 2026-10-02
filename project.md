@@ -1,11 +1,105 @@
 # VS Renderer 项目地图
 
+## 1.0.3 打包与源码发布（2026-10-02）
+
+- tools/package-portable.ps1：标准 7z LZMA2 / mx=9 / 256 MiB 字典，完整运行时及8个开发者内置预设，清理缓存/个人配置/测试文件，生成内部资源清单与归档 SHA-256。
+- docs/release-1.0.3.md：汇总整轮 Player、Renderer、图片、音频、图标与 LAV 更新，说明已知边界和首次手动迁移要求。
+- 用户授权推送源码、创建 GitHub Release 草稿；二进制和 ModelScope 更新源由用户手动上传。
+
+## 图标接入（2026-10-02）
+
+- 用户选定 Renderer R3、Player P2、视频 V1、图片 I3；稳定资源保存于 `assets/icons/`。Windows RC 嵌入 EXE，Qt 应用图标覆盖窗口 / 任务栏，ICO 保留10档32位尺寸。
+- Player 分类注册 `VSPlayer.Video/Image/Audio`，视频 / 图片 `DefaultIcon` 与 `TypeOverlay` 分别引用 EXE 资源102 / 103；应用图标101。保留旧 `VSPlayer.Media` 打开命令。首次运行迁移已有本程序注册格式，不修改 Windows UserChoice，不替换缩略图处理程序。
+- Release 构建、相关三项测试含初始化清理5/5通过；正式两EXE窗口图标句柄有效、启动 / WM_CLOSE退出0，构建与交付哈希一致。原有INI / VPY / 原生DLL20项哈希保持。记录 `docs/icons-integration.md`；只更新两个EXE及文档，未打包发布。
+
+## 图标候选设计（2026-10-02，未嵌入）
+
+- AI 生成 Renderer / Player 各三款原始图，以及视频 / 图片缩略图右下角标记；PNG 为1254×1254透明底。八款可选图标附10档32位ICO候选稿，结构与逐尺寸解码通过；两份异常透明试稿保留但不作为候选。
+- 选图页、原图、提示词和交付说明位于 `assets/icon-concepts/2026-10-02/`。等待用户选型与改进；本轮只整理设计资源，未嵌入应用、未变更文件关联或正式程序。
+
+## 1.0.3：播放器设置与手动 Anime（2026-10-02）
+
+- PlayerSettings.cpp：左侧完整 INI 预设加载/保存，右侧取消/确定/应用，图片关联分组选择。
+- PlayerAssociations.cpp：常用图片扩展名及当前用户打开方式注册。
+- PlayerProfiles.cpp / PlayerWindow.cpp / PlayerMenus.cpp / PlayerInfo.cpp：生成六个固定 Anime VPY，手动版本禁止丢帧/高分辨率自动降档，Jinc/D3D11 固定算法，菜单及 Tab 信息标注。
+- TestPlayer.cpp：对应专项 17/17，含实际丢帧不降档验证；保留原有 INI/VPY，不运行无关回归。详见 docs/player-manual-presets-1.0.3.md。
+
+## 1.0.3：Renderer 三栏与内嵌设置（2026-10-02）
+
+- `MainWindow.cpp/h`：默认窗口1800×900逻辑像素；处理链、参数、视频三栏。参数移出左侧，取消高度上限，处理链获得更多纵向空间；设置改为导航独立页面，保留应用保存、版本及检查更新。分析页仍按需初始化，设置先打开也不会错位。
+- `ParameterEditor.cpp`：说明、标签和空白区白底，灰底只留在输入控件内。无源查看VPY的警告加宽，完整保留标题。
+- `ExportWindow.cpp`：顶部栏目左边缘对齐页内控件；编码队列表头增加明显竖向分隔线。
+- `tests/TestAnalysis.cpp`：五个相关专项含初始化/清理7/7通过，真实预设加载与合成导出回归通过；截图已检查。记录 `docs/renderer-panels-1.0.3.md`。
+- 仅更新本地Renderer及文档，共享构建与便携EXE哈希一致，启动/正常关闭退出0；播放器/native/LAV/INI/VPY56项哈希保留。审计 `build/renderer-panels-delivery-audit.json`。
+
+## 1.0.3：Renderer 布局与对比导出（2026-10-02）
+
+- `MainWindow.cpp`：导航间距、同排输入、对比标题预热状态、视频工作区内三行控制区及中央播放组、滤镜库空间和参数滚动区；移除实验设置/重复VPY按钮。
+- `ParameterEditor.*`：两列 grid，标签弹性换行、bool/数值/下拉右对齐，当前文本决定下拉宽度、弹出按最长选项显示；文件位置整行。
+- `AnalysisExport.cpp` / `AnalysisPage.h`：限定 AB、ABC2+1、ABCD2×2，合成尺寸和编码约束均取最大源。
+- `ExportWindow.*`：栏目选中样式；对比任务拒绝3FUI几何变换参数，普通单文件导出保留原机制。
+- `tests/TestAnalysis.cpp`：只跑本轮四个专项，含初始化/清理6/6通过，实际VPY/MKV尺寸/像素及不支持模式提示验证。详见 `docs/renderer-ui-export-1.0.3.md`，交接记录 `build/renderer-handoff-result.md`。
+- 本地只更新VSRenderer.exe及文档；共享构建哈希一致，启动/关闭退出0，播放器/原生DLL/INI/VPY17项哈希保留。审计 `build/renderer-ui-delivery-audit.json`。
+
+## 1.0.3：应用设置与AVIF内容更正（2026-10-02）
+
+后续受控分析：同尺寸安全平面输入的YUV444巨图正常解码（7996 ms），证实首次故障是编码端RGB扫描行32位偏移回绕；预测黑块边界69.399%，实际抽样69.525%。未改播放器/正式程序，证据见 `docs/avif-large-yuv444-analysis.md`。
+
+- `PlayerSettings.cpp` / `PlayerWindow.*`：新增Apply，保留窗口、暂停/播放状态与本次媒体时间；图片应用不重新解码。
+- `tools/stage-portable.ps1`：LAV默认改用 `.deps/lav/0.83`，由用户新版x64 ZIP解压；构建/便携21份根级文件哈希一致，三个AX为0.83.0，LAV播放/暂停/寻址专项通过，12份配置保留。
+- `PlayerImage.cpp` / `tools/image-runtime.cmake`：AVIF显示CICP/GBR信息，静态编译libyuv SIMD转换，实际完整YUV420巨图23.675s降至6.380s。
+- 首次生成的AVIF已被像素对比证实存在编码端32位扫描行偏移溢出，不能再用旧流程测试声称其内容完整。新的31604×65278 YUV420样本与原JPG整图/底部抽样对比通过，仅补一列边缘像素。
+- Release、语言包312条、相关设置/GBR/grid功能6/6通过；仅处理本次专项。完整证据和TEST.avif边界见 `docs/player-apply-avif-1.0.3.md`。
+
+## 1.0.3：图片性能与音频处理（2026-10-02）
+
+- `PlayerImage.*` / `tools/image-runtime.cmake`：JPEG映射输入、libjpeg-turbo 3.2.0直接BGRA SIMD输出，使用当前MinGW+NASM编译，保留ICC/EXIF与原始像素；解码元数据用于Tab。真实巨图12.477s vs Qt23.262s，49个抽样像素一致。
+- `PlayerInfo.cpp` / `PreviewPane.cpp`：完整图片输入/输出信息；图片独立缩放上限65536，先裁可见区域避免巨大绘制坐标，视频范围保持原值。尚无GPU图片解码/整图显存缓存。
+- `PlayerAudio.cpp` / `PlayerMenus.cpp` / `ThreeFpApi.*` / `ThreeFpPlayer.*` / `patches/3fp-player-audio-effects.patch`：音轨、外部音频、同步、非模态十频段均衡器、PCM音量和WASAPI声道协商；gain参数更新不暂停视频。当前DLL增加可选ABI，原有ABI保持兼容。
+- `PlayerMediaMatching.*` / `PlayerWindow.*`：同目录集数/名称匹配；视口音频上/下50%分区、字幕上40%/下60%分区，拖悬提示及独立主次外部字幕。新音频格式纳入现有列表。
+
+只验证本次相关功能，未运行无关导出/整套回归。版本保持1.0.3，交付记录和完整边界见 `docs/player-images-audio-1.0.3.md`。
+
+验证：Release与语言包检查通过，交付目录相关专项9/9通过；两EXE及原生DLL哈希匹配，12份INI/VPY哈希保留。
+
+## 1.0.3：图片与菜单（2026-10-02）
+
+- `PlayerImage.*`：单后台线程解码当前图片；Qt与FFmpeg覆盖常用图片，libavif/dav1d直接解码AVIF。Unicode路径通过QFile流式读取，grid不经VS或巨大临时PNG；保留高位深与透明通道，切图丢弃失效结果。
+- `PlayerWindow.*` / `PlayerPlaylist.cpp` / `PreviewPane.*`：图片模式关闭播放时间轴、预解码和VS滤镜；同目录名称排序左右切图、滚轮缩放、拖动与还原。CPU图像绘制避免视频纹理边长限制；视频路径保持独立。
+- `PlayerMenu.*` / `PlayerMenus.cpp`：各级右键菜单180 ms缓出展开、8 ms精确定时、圆角透明窗口；方框中心位于左缘与文字之间，布尔与单选都明确显示状态。
+- `tools/image-runtime.cmake`：固定来源和SHA-256，静态编译libavif1.4.2与dav1d1.5.3；仅扩大上游显式像素上限的guard，保留格式/尺寸算术/网格/AV1验证。完整许可随包IMAGE-LICENSE.txt。
+- 实际巨图与回归证据见 `docs/player-images-menu-1.0.3.md`。版本保持1.0.3。
+
+历史验证：Release、图片/菜单流程及尺寸专项通过；AVIF内容验证不足，首次生成样本后来证实编码损坏，已在本页最新记录更正。本地程序及配置保留记录见 `docs/player-images-menu-1.0.3.md`。
+
+## 1.0.3：Anime4K 六档（2026-10-02）
+
+- `PlayerProfiles.cpp` / `PlayerSettings.cpp` / `PlayerInfo.cpp`：CNN+增强、CNN、no CNN+增强、no CNN、Jinc、D3D11 六档，起始档位进 INI；保留稳定播放 5% 门槛及操作恢复期。
+- `assets/anime4k-no-cnn.glsl`：上游 Clamp / Thin_HQ / Darken_HQ 组合，无神经网络；嵌入程序并部署到 shaders，Renderer 下拉增加此模式。
+- 内置 Anime 将增强 hooks 与 Anime4K 融合成一次 Shader；普通 Anime4K 节点也不再强制降成 420。已知旧默认内置片段定向迁移并备份，用户预设不整体覆盖。
+- 10 位 / Y410 格式边界及真实 1080p48 短样本见 `docs/player-six-stage-1.0.3.md`。当前插件仍固定 16 位平面输入 / 输出；不把额外 CPU 降位深当成带宽优化。
+- 交付固定 dist 目录：Player 36/0/7（通过/失败/条件跳过），八组最终验证完成（导出原代码单组复验）；两正式 EXE 启动/关闭和构建哈希、73 项资源、原有 INI、12 个其他预设及 Anime 原件备份核验通过。证据 `build/six-stage-delivery-audit.json`、`build/six-stage-smoke.json`。
+
+2026-10-01 分辨率性能诊断：真实 1080p47.95 的 2304×1296 恰好位于 Fast 的严格 1.2 倍 CNN 放大分界；2368×1332 会执行额外 CNN 并先生成 4K 中间结果。增强链实际播放器短样本复现 3.1% → 35.1% VS 跳帧。全屏纯 A 的重复结果波动，调度 / 搬运 / 最终缩放需分段测量，未部署诊断中的 5 ms 定时器或 shader 控制。详见 `docs/player-resolution-threshold-1.0.3.md`。
+
+## 1.0.3 本地开发：固定目录与 VVC 修复（2026-10-01）
+
+活跃程序目录改为 `dist/VS-Renderer-GUI-windows-x64`，保留原有用户 VPY、缓存和配置；原 INI 已备份，仅迁移指向旧程序目录的路径。程序版本为 1.0.3，归档名称仍使用版本号。部署与打包脚本改为 `tools/stage-portable.ps1` / `tools/package-portable.ps1`，从 CMake 读取版本；新版更新器兼容固定根目录和历史版本根目录。
+
+实际 VVC 样本为 1920×804、24 fps、10-bit、Opus。随包 FFMS2 返回 `Source: No video track found`，L-Smash 可以读取首帧。Player 对这一项特定的 FFMS2 源错误尝试 L-Smash，沿用软件自身目录的索引缓存，继续执行当前 VS 滤镜链；其他错误仍正常报告。选择 LAV 不会替换 VPY 的源插件。
+
+同步修复了连续缩放重建 VS 链时丢失继续播放标记的问题；回归测试等待实际播放 / 暂停状态后再验证降载。旧 1.0.2 二进制可复现该失败，修复后增强 → A/Fast → 直通测试通过。
+
+验证：Release 成功，八个 CTest 组最终均通过。最后一轮整套运行仅比较滑块 100 次拖动的 1500 ms 耗时断言超限；单独复测通过，未改该性能门槛。Player 31 项通过、0 失败，远程链接专项未启用而跳过；固定目录专项 Player 10/10、Updater 7/7，无跳过，包括真实 VVC 的五种配置、帧 37 / 61 精确定位、暂停 / 播放与预设切换。移出测试 EXE / Qt6Test.dll 后，两正式程序独立启动并正常关闭。13 个用户 VPY 哈希不变，INI 除程序路径迁移外全部原有设置保持，两 EXE / 原生 DLL 与构建一致，GPU / 补帧 helper 校验通过。证据：`build/vvc-*`；原 1.0.2 压缩包 SHA-256 不变。
+
+本轮仅本地开发，不创建压缩包、不推送源码、不发布新版本。已发布 1.0.2 归档保持不变。
+
 ## 1.0.2 完整更新与发布（2026-10-01）
 
 - `src/update/PortableUpdater.*`：两程序共享 ModelScope 数字版本检查、分页、Revision 固定下载、aria2-next 2.8.3、异步分块 SHA-256、归档路径 / 必需组件 / 内部版本验证。仅新版本出现安装入口，不降级。
 - `tools/apply-update.ps1`：等待相关进程退出，同级完整目录交换与原目录备份，保留用户 INI / 自定义 VPY / 项目 / 截图，替换内置预设；占用 / 失败不强杀播放器、不把残缺文件覆盖原目录。
 - `PlayerWindow.cpp` / `PlayerSettings.cpp` / `MainWindow.cpp`：缩放后的左上角还原按钮，恢复适配与平移；版本和检查更新入口。语言两包同步，检查扩展到更新 UI。
-- `tools/stage-update-tools.ps1` / `tools/package-1.0.2.ps1`：固定 SHA-256 的下载工具部署、许可和完整包 manifest；干净暂存目录排除用户配置、缓存、测试与历史脚本；使用本机 Zstandard Ultra 22，归档不污染活跃目录。
+- `tools/stage-update-tools.ps1` / `tools/package-portable.ps1`：固定 SHA-256 的下载工具部署、许可和完整包 manifest；干净暂存目录排除用户配置、缓存、测试与历史脚本；使用本机 Zstandard Ultra 22，归档不污染活跃目录。
 - 验证：Release、CTest 8/8；更新专项验证真实 aria2 下载 / 校验 / 解压、目录整体替换、INI / VPY 保留、旧备份和占用保护；缩放还原含全屏。日志 `build/release-update-*`。完整交付、归档及远程验证与历史测试分别记录。
 - 最新发布授权：ModelScope-Manager 本机 SDK 上传 `ARXChem/Software-List/VS-GUI/1.0.2.7z`；GitHub 推送代码并创建无附件草稿，GitHub 包由用户手动上传。开发日志落盘 Vibe Coding Guide 的 `results/2026.10`，采用用户指定 Distill 格式。当前版本仍 1.0.2。
 
@@ -108,7 +202,7 @@ third_party/   官方 VapourSynth Git 工作树；其他二进制不入库
 
 ## 10. 当前状态
 
-- 版本：`1.0.2`。
+- 版本：`1.0.3`。
 - 已完成：项目基线、UI 规格、VapourSynth Git 源码固定、内置便携 Python/VS/API 4 插件、滤镜图/VPY 生成、教程向插件扩展、Anime4K GLSL、API 14 外部帧桥、左右同帧预览、A/B 滑块、3FUI 参数兼容导出、源像素密度感知缩放、缩放拖拽与全局空格播放。
 - 下一步：扩充 VCB 全量 catalog、插件管理与 NGU 等独立高级缩放后端。
 - 限制：当前帧桥支持常用整数 planar 格式，不支持 VS float/GPU-resident frame；Anime4K 在 VS 内使用 GPU，但输出仍经 CPU plane copy 提交给 3FP，4K 重 shader 未必能实时；NGU 属于独立 GPU 推理实现；处理后音频未接入，左路始终是音频时钟；3FUI 兼容导出拒绝 `filter_complex`/`lavfi`，仅自动重写常规视频 `-map` 与单路 `-filter:v`。

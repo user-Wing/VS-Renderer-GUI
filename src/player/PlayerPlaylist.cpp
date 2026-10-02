@@ -1,5 +1,6 @@
 #include "player/PlayerWindow.h"
 #include "ui/PreviewPane.h"
+#include "player/PlayerImage.h"
 #include <QApplication>
 #include <QCursor>
 #include <QDir>
@@ -22,7 +23,7 @@
 
 namespace vsr {
 void PlayerWindow::chooseFiles() {
-    const auto paths=QFileDialog::getOpenFileNames(this,tr("打开视频"));
+    const auto paths=QFileDialog::getOpenFileNames(this,tr("打开视频或图片"));
     if(paths.isEmpty())return;playlistDirectory_.clear();files_=paths;openFile(paths.first());
 }
 void PlayerWindow::chooseFolder() {
@@ -52,8 +53,10 @@ void PlayerWindow::populateFolder(QTreeWidgetItem *parent,const QString &path) {
 }
 bool PlayerWindow::openFolder(const QString &path) {
     if(!QFileInfo(path).isDir())return false;playlistDirectory_=QFileInfo(path).absoluteFilePath();files_.clear();
-    QDirIterator iterator(playlistDirectory_,{"*.mkv","*.mp4","*.mov","*.avi","*.webm","*.ts","*.m2ts","*.wmv","*.flv","*.mp3","*.flac","*.wav","*.m4a","*.ogg","*.opus"},QDir::Files|QDir::NoSymLinks,QDirIterator::Subdirectories);
-    while(iterator.hasNext())files_<<iterator.next();files_.sort(Qt::CaseInsensitive);updatePlaylist();playlistPanel_->show();playlistPanel_->raise();
+    QDirIterator iterator(playlistDirectory_,QDir::Files|QDir::NoSymLinks,QDirIterator::Subdirectories);
+    const QStringList mediaExtensions{"mkv","mp4","mov","avi","webm","ts","m2ts","wmv","flv","mp3","flac","wav","m4a","ogg","opus"};
+    while(iterator.hasNext()){const auto file=iterator.next();if(mediaExtensions.contains(QFileInfo(file).suffix().toLower()) || PlayerImage::supports(file))files_<<file;}
+    files_.sort(Qt::CaseInsensitive);updatePlaylist();playlistPanel_->show();playlistPanel_->raise();
     if(files_.isEmpty()){setError(tr("目录已加入列表，未找到可播放媒体。"));return true;}
     return openFile(files_.first());
 }

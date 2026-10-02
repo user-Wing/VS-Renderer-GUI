@@ -9,6 +9,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QPainter>
 
 #include <algorithm>
 
@@ -17,15 +18,31 @@ namespace {
 
 class NativeVideoSurface final : public QWidget {
 public:
+    QImage image;
+    float zoom = 1, panX = 0, panY = 0;
     explicit NativeVideoSurface(QWidget *parent) : QWidget(parent)
     {
         setAttribute(Qt::WA_NativeWindow);
         setAttribute(Qt::WA_PaintOnScreen);
         setAttribute(Qt::WA_NoSystemBackground);
     }
-    QPaintEngine *paintEngine() const override { return nullptr; }
+    QPaintEngine *paintEngine() const override { return image.isNull() ? nullptr : QWidget::paintEngine(); }
 protected:
-    void paintEvent(QPaintEvent *) override {}
+    void paintEvent(QPaintEvent *) override {
+        if(image.isNull())return;
+        QPainter painter(this);painter.fillRect(rect(),QColor("#101010"));
+        const QSizeF fitted=QSizeF(image.size().scaled(size(),Qt::KeepAspectRatio))*zoom;
+        const QPointF origin((width()-fitted.width())/2+panX*std::max(0.0,fitted.width()-width())/2,
+                             (height()-fitted.height())/2+panY*std::max(0.0,fitted.height()-height())/2);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        // Clip before mapping into painter coordinates: huge zooms exceed raster's coordinate range.
+        const QRectF destination=QRectF(origin,fitted).intersected(QRectF(rect()));
+        if(destination.isEmpty())return;
+        const QRectF source((destination.x()-origin.x())*image.width()/fitted.width(),
+                            (destination.y()-origin.y())*image.height()/fitted.height(),
+                            destination.width()*image.width()/fitted.width(),destination.height()*image.height()/fitted.height());
+        painter.drawImage(destination,image,source);
+    }
 };
 
 }
@@ -99,6 +116,14 @@ float PreviewPane::zoom() const { return zoom_; }
 QPointF PreviewPane::pan() const { return QPointF(panX_, panY_); }
 void PreviewPane::setChromeVisible(bool visible) { titleBar_->setVisible(visible); }
 void PreviewPane::setVideoSize(const QSize &size) { videoSize_ = size; }
+void PreviewPane::setImage(const QImage &image) {
+    auto *surface=static_cast<NativeVideoSurface *>(surface_);surface->image=image;
+    surface->setAttribute(Qt::WA_PaintOnScreen,image.isNull());
+    surface->setAttribute(Qt::WA_NoSystemBackground,image.isNull());
+    if(!image.isNull()){setVideoSize(image.size());setSurfaceActive(true);}
+    adoptView(zoom_,panX_,panY_);surface->update();
+}
+QImage PreviewPane::image() const { return static_cast<NativeVideoSurface *>(surface_)->image; }
 
 void PreviewPane::adoptView(float zoom, float panX, float panY)
 {
@@ -107,6 +132,9 @@ void PreviewPane::adoptView(float zoom, float panX, float panY)
     panY_ = panY;
     zoomBadge_->setText(QStringLiteral("%1%").arg(qRound(zoom_ * 100.0f)));
     surface_->setCursor(zoom_ > 1.0f ? Qt::OpenHandCursor : Qt::CrossCursor);
+    auto *surface=static_cast<NativeVideoSurface *>(surface_);
+    surface->zoom=zoom_;surface->panX=panX_;surface->panY=panY_;
+    if(!surface->image.isNull())surface->update();
 }
 
 void PreviewPane::setActive(bool active)
@@ -226,7 +254,7 @@ void PreviewPane::scheduleRedraw()
 
 void PreviewPane::updateZoom(float next, const QPointF &anchor)
 {
-    next = std::clamp(next, 0.25f, 16.0f);
+    next = std::clamp(next, 0.25f, image().isNull()?16.0f:65536.0f);
     const float ax = surface_->width() > 0 ? static_cast<float>(anchor.x() / surface_->width() * 2.0 - 1.0) : 0.0f;
     const float ay = surface_->height() > 0 ? static_cast<float>(anchor.y() / surface_->height() * 2.0 - 1.0) : 0.0f;
     const float delta = next > 0.0f ? (next - zoom_) / next : 0.0f;

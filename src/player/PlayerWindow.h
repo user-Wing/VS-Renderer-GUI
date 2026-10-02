@@ -26,6 +26,7 @@ class ChapterTimeline;
 class PlayerSubtitles;
 class PlayerNetworkInput;
 class PlayerLanguage;
+class PlayerImage;
 class PlayerWindow final : public QMainWindow {
     Q_OBJECT
 public:
@@ -51,6 +52,8 @@ protected:
     bool eventFilter(QObject *, QEvent *) override;
     void dragEnterEvent(QDragEnterEvent *) override;
     void dropEvent(QDropEvent *) override;
+    void dragMoveEvent(QDragMoveEvent *) override;
+    void dragLeaveEvent(QDragLeaveEvent *) override;
 private:
     void buildTransport(QVBoxLayout *layout);
     void buildPlaylist(QWidget *parent);
@@ -71,6 +74,9 @@ private:
     void setDirectMode(bool enabled);
     void ensureProfiles();
     QString profile() const;
+    int fixedAnimeStage() const;
+    int initialQualityStage() const;
+    QStringList qualityNames() const;
     QSize profileTarget() const;
     void updateProfile();
     void setPlaylistPinned(bool pinned);
@@ -83,7 +89,13 @@ private:
     void showContextMenu(const QPoint &position);
     void showSubtitleStyle();
     void selectSubtitle(int slot, int stream);
-    void attachSubtitle(const QString &path);
+    void attachSubtitle(const QString &path, int slot = 0);
+    void attachAudio(const QString &path);
+    void selectAudio(int stream);
+    void applyAudioEffects();
+    void showEqualizer();
+    void matchExternalTracks();
+    void useNativeAudio();
     void captureImage(bool source);
     void applySettings(bool reopen);
     void applyAppearance();
@@ -94,6 +106,8 @@ private:
     std::unique_ptr<PlayerSubtitles> subtitles_;
     std::unique_ptr<PlayerNetworkInput> network_;
     std::unique_ptr<PlayerLanguage> language_;
+    std::unique_ptr<PlayerImage> imageLoader_;
+    bool imageMode_ = false;
     PlayerResources resources_;
     ResourceUsage usage_;
     ThreeFpApi api_;
@@ -105,6 +119,7 @@ private:
     QWidget *hidden_ = nullptr;
     QLabel *info_ = nullptr;
     QLabel *message_ = nullptr;
+    QLabel *dragHint_ = nullptr;
     QLabel *videoBadge_ = nullptr;
     QLabel *audioBadge_ = nullptr;
     QPushButton *decoderBadge_ = nullptr;
@@ -142,10 +157,13 @@ private:
     bool positionRestored_ = false;
     quint64 qualityDropped_ = 0, qualitySubmitted_ = 0;
     qint64 resumeAt_ = -1;
+    qint64 settingsPosition_ = -1;
     QTimer *profileResize_ = nullptr;
     QString preset_;
     QString deferred_;
     QString deferredSubtitle_;
+    int deferredSubtitleSlot_ = 0;
+    QString deferredAudio_, pendingExternalAudio_;
     QStringList files_;
     int fileIndex_ = -1;
     VapourSynthClipInfo clip_;
@@ -175,6 +193,12 @@ private:
     double frameMilliseconds_ = 0;
     VapourSynthFrame displayedFrame_;
     QString externalSubtitle_;
+    QString externalSecondarySubtitle_;
+    QString externalAudio_;
+    bool matchedTracks_ = false;
+    qint64 audioDelay_ = 0;
+    QPointer<QWidget> equalizerWindow_;
+    QString dragStatus_;
     int primarySubtitle_ = -1, secondarySubtitle_ = -1;
     bool subtitleVisible_ = true;
     int subtitleTick_ = 0;

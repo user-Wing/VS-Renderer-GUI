@@ -2,6 +2,7 @@
 
 #include <QPointF>
 #include <QWidget>
+#include <QImage>
 
 class QLabel;
 class QStackedLayout;
@@ -19,6 +20,8 @@ public:
     QPointF pan() const;
     void setChromeVisible(bool visible);
     void setVideoSize(const QSize &size);
+    void setImage(const QImage &image);
+    QImage image() const;
     void adoptView(float zoom, float panX, float panY);
     void setActive(bool active);
     void setSurfaceActive(bool active);

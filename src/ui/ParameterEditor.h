@@ -2,7 +2,7 @@
 
 #include <QWidget>
 
-class QFormLayout;
+class QGridLayout;
 
 namespace vsr {
 
@@ -20,7 +20,7 @@ signals:
 
 private:
     void clear();
-    QFormLayout *form_ = nullptr;
+    QGridLayout *form_ = nullptr;
 };
 
 }

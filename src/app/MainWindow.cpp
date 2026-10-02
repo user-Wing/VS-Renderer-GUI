@@ -11,7 +11,6 @@
 #include <QProgressBar>
 #include <QSettings>
 #include "update/PortableUpdater.h"
-#include <QDialogButtonBox>
 #include <QCloseEvent>
 #include "backend/ThreeFpPlayer.h"
 #include "backend/VapourSynthFrameServer.h"
@@ -36,6 +35,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -49,6 +49,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSaveFile>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSplitter>
@@ -58,12 +59,30 @@
 #include <QToolBar>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QPainter>
+#include <QStyleOptionToolButton>
 
 #include <algorithm>
 #include <utility>
 
 namespace vsr {
 namespace {
+
+class NavigationButton final : public QToolButton {
+public:
+    using QToolButton::QToolButton;
+protected:
+    void paintEvent(QPaintEvent *event) override {
+        if (toolButtonStyle() == Qt::ToolButtonIconOnly) { QToolButton::paintEvent(event); return; }
+        QStyleOptionToolButton option; initStyleOption(&option);
+        option.text.clear(); option.icon = QIcon();
+        QPainter painter(this);
+        style()->drawComplexControl(QStyle::CC_ToolButton, &option, &painter, this);
+        icon().paint(&painter, QRect(10, (height() - 16) / 2, 16, 16));
+        painter.setPen(palette().color(QPalette::ButtonText));
+        painter.drawText(QRect(38, 0, width() - 48, height()), Qt::AlignLeft | Qt::AlignVCenter, text());
+    }
+};
 
 QString formatTime(std::int64_t value100ns)
 {
@@ -91,7 +110,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     setWindowTitle(QStringLiteral("VS Renderer — VapourSynth 实时滤镜工作台"));
     setAcceptDrops(true);
-    resize(1440, 900);
+    resize(1800, 900);
     setMinimumSize(1120, 700);
     buildToolbar();
 
@@ -103,12 +122,13 @@ MainWindow::MainWindow(QWidget *parent)
     auto *content = new QSplitter(Qt::Horizontal, root);
     content->setHandleWidth(1);
     content->addWidget(buildSidebar());
+    content->addWidget(buildParameterPanel());
     content->addWidget(buildWorkspace());
-    content->setSizes({328, 1112});
+    content->setSizes({280, 320, 1156});
     content->setStretchFactor(0, 0);
-    content->setStretchFactor(1, 1);
+    content->setStretchFactor(1, 0);
+    content->setStretchFactor(2, 1);
     rootLayout->addWidget(content, 1);
-    rootLayout->addWidget(buildTransport());
     auto *shell = new QWidget(this);
     auto *shellLayout = new QHBoxLayout(shell);
     shellLayout->setContentsMargins(0, 0, 0, 0);
@@ -119,7 +139,7 @@ MainWindow::MainWindow(QWidget *parent)
     auto *navigationLayout = new QVBoxLayout(navigation_);
     navigationLayout->setContentsMargins(2, 4, 2, 4);
     for (int i = 0; i < 2; ++i) {
-        auto *button = new QToolButton(navigation_);
+        auto *button = new NavigationButton(navigation_);
         button->setText(i == 0 ? QStringLiteral("VS 实时渲染") : QStringLiteral("图像分析比对"));
         button->setToolTip(button->text());
         button->setIcon(style()->standardIcon(i == 0 ? QStyle::SP_ComputerIcon : QStyle::SP_FileDialogContentsView));
@@ -133,12 +153,13 @@ MainWindow::MainWindow(QWidget *parent)
         connect(button, &QToolButton::clicked, this, [this, i] { selectPage(i); });
     }
     navigationLayout->addStretch();
-    auto *settings = new QToolButton(navigation_);
+    auto *settings = new NavigationButton(navigation_);
     settings->setObjectName(QStringLiteral("applicationSettings"));
     settings->setText(QStringLiteral("设置"));
     settings->setToolTip(settings->text());
     settings->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
     settings->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    settings->setCheckable(true);
     settings->setMinimumHeight(36);
     settings->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     navigationButtons_.append(settings);
@@ -146,6 +167,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(settings, &QToolButton::clicked, this, &MainWindow::showSettings);
     pages_ = new QStackedWidget(shell);
     pages_->addWidget(root);
+    pages_->addWidget(new QWidget(pages_)); // Reserve the lazily initialized analysis page.
+    pages_->addWidget(buildSettingsPage());
     shellLayout->addWidget(navigation_);
     shellLayout->addWidget(pages_, 1);
     setCentralWidget(shell);
@@ -162,11 +185,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     processedPlayer_->setMuted(true);
 
-    const QString fp = api_.available()
-        ? QStringLiteral("3FP API %1").arg(api_.apiVersion())
-        : QStringLiteral("3FP 未加载");
-    const QString vs = frameServer_->available() ? QStringLiteral("VapourSynth 帧接口已就绪") : QStringLiteral("VapourSynth 未加载");
-    runtimeStatus_->setText(fp + QStringLiteral(" · ") + vs);
+    runtimeStatus_->setText(QStringLiteral("预热中"));
     runtimeStatus_->setToolTip(QStringLiteral("3FP: %1\nVSScript: %2")
         .arg(api_.available() ? api_.libraryPath() : api_.errorString(),
              frameServer_->available() ? frameServer_->libraryPath() : frameServer_->errorString()));
@@ -256,10 +275,13 @@ MainWindow::MainWindow(QWidget *parent)
     connect(startupWarmup_.get(), &StartupWarmup::progress, this, [this, warmupProgress](int value, const QString &stage) {
         warmupProgress->setValue(value);
         warmupProgress->setToolTip(stage);
-        runtimeStatus_->setText(stage);
+        runtimeStatus_->setText(QStringLiteral("预热中"));
+        runtimeStatus_->setToolTip(stage);
         if (value == 100) warmupProgress->hide();
     });
     connect(startupWarmup_.get(), &StartupWarmup::finished, this, [this](bool success, const QString &message) {
+        runtimeStatus_->setText(success ? QStringLiteral("已预热") : QStringLiteral("预热中"));
+        runtimeStatus_->setToolTip(message);
         primedProcessedOutput_ = success;
         sourcePane_->setSurfaceActive(false);
         processedPane_->setSurfaceActive(false);
@@ -328,44 +350,59 @@ void MainWindow::selectPage(int index)
 {
     if (index == 1 && !analysisPage_) {
         analysisPage_ = std::make_unique<AnalysisPage>(api_);
-        pages_->addWidget(analysisPage_.get());
+        auto *placeholder = pages_->widget(1);
+        pages_->removeWidget(placeholder);
+        delete placeholder;
+        pages_->insertWidget(1, analysisPage_.get());
     }
     if (index != pages_->currentIndex()) {
-        if (index == 1 && sourcePlayer_ && sourcePlayer_->snapshot().state == ThreeFpState::Playing)
+        if (index != 0 && sourcePlayer_ && sourcePlayer_->snapshot().state == ThreeFpState::Playing)
             sourcePlayer_->pause();
-        if (index == 0 && analysisPage_) analysisPage_->pause();
+        if (index != 1 && analysisPage_) analysisPage_->pause();
         pages_->setCurrentIndex(index);
     }
     for (int i = 0; i < navigationButtons_.size(); ++i) navigationButtons_[i]->setChecked(i == index);
     for (auto *action : vsActions_) action->setVisible(index == 0);
     frameStatus_->setVisible(index == 0);
-    setStatus(index == 0 ? QStringLiteral("VS 实时渲染") : QStringLiteral("图像分析比对 · 双路直接解码"));
+    setStatus(index == 0 ? QStringLiteral("VS 实时渲染") : index == 1 ? QStringLiteral("图像分析比对 · 双路直接解码") : QStringLiteral("设置"));
 }
 
 void MainWindow::showSettings()
 {
-    QDialog dialog(this);
-    dialog.setWindowTitle(QStringLiteral("设置"));
-    auto *layout = new QVBoxLayout(&dialog);
-    auto *label = new QLabel(QStringLiteral("VapourSynth 源滤镜"), &dialog);
+    selectPage(2);
+}
+
+QWidget *MainWindow::buildSettingsPage()
+{
+    auto *page = new QWidget(this);
+    page->setObjectName(QStringLiteral("rendererSettingsPage"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(20, 16, 20, 16);
+    layout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    layout->addWidget(new QLabel(QStringLiteral("设置"), page));
+    auto *label = new QLabel(QStringLiteral("VapourSynth 源滤镜"), page);
     layout->addWidget(label);
-    auto *source = new QComboBox(&dialog);
+    auto *source = new QComboBox(page);
+    source->setObjectName(QStringLiteral("rendererSettingsSource"));
     source->addItems({QStringLiteral("L-SMASH Works"), QStringLiteral("FFMS2")});
     source->setCurrentIndex(sourceFilter_->currentIndex());
+    connect(sourceFilter_, &QComboBox::currentIndexChanged, source, &QComboBox::setCurrentIndex);
     layout->addWidget(source);
-    auto *hint = new QLabel(QStringLiteral("用于 VS 预览与导出。更改后重新生成并验证脚本生效。"), &dialog);
+    auto *hint = new QLabel(QStringLiteral("用于 VS 预览与导出。更改后重新生成并验证脚本生效。"), page);
     hint->setWordWrap(true); layout->addWidget(hint);
-    layout->addWidget(new QLabel(QStringLiteral("当前版本：")+VSR_VERSION,&dialog));
-    auto *updates=new QPushButton(QStringLiteral("检查更新"),&dialog);layout->addWidget(updates);
-    connect(updates,&QPushButton::clicked,&dialog,[&]{PortableUpdater updater(&dialog);updater.check();updater.exec();});
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    layout->addWidget(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    if (dialog.exec() == QDialog::Accepted) {
+    auto *apply = new QPushButton(QStringLiteral("应用"), page);
+    apply->setObjectName(QStringLiteral("rendererApplySettings"));
+    layout->addWidget(apply);
+    connect(apply, &QPushButton::clicked, this, [this, source] {
         sourceFilter_->setCurrentIndex(source->currentIndex());
         QSettings().setValue(QStringLiteral("sourceFilter"), source->currentIndex());
-    }
+        setStatus(QStringLiteral("设置已保存，重新生成并验证脚本后生效。"));
+    });
+    layout->addWidget(new QLabel(QStringLiteral("当前版本：") + VSR_VERSION, page));
+    auto *updates = new QPushButton(QStringLiteral("检查更新"), page);
+    layout->addWidget(updates);
+    connect(updates, &QPushButton::clicked, page, [page] { PortableUpdater updater(page); updater.check(); updater.exec(); });
+    return page;
 }
 
 void MainWindow::buildToolbar()
@@ -406,7 +443,6 @@ void MainWindow::buildToolbar()
     auto *spacer = new QWidget(bar);
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     bar->addWidget(spacer);
-    auto *settingsAction = bar->addAction(QStringLiteral("实验设置"));
 
     vsActions_ = bar->actions();
     vsActions_.removeFirst();
@@ -418,17 +454,13 @@ void MainWindow::buildToolbar()
     connect(validateAction, &QAction::triggered, this, &MainWindow::validateScript);
     connect(previewAction, &QAction::triggered, this, &MainWindow::validateScript);
     connect(exportAction, &QAction::triggered, this, &MainWindow::exportCurrentResult);
-    connect(settingsAction, &QAction::triggered, this, [this] {
-        vrrPresent_->setFocus(Qt::ShortcutFocusReason);
-        setStatus(QStringLiteral("实验设置位于比较栏：VRR low-latency present 与 VRR Pacing。"));
-    });
 }
 
 QWidget *MainWindow::buildSidebar()
 {
     auto *sidebar = new QWidget(this);
-    sidebar->setMinimumWidth(296);
-    sidebar->setMaximumWidth(460);
+    sidebar->setMinimumWidth(250);
+    sidebar->setMaximumWidth(360);
     sidebar->setObjectName(QStringLiteral("processingSidebar"));
     sidebar->setStyleSheet(QStringLiteral("#processingSidebar{background:#ffffff;border-right:1px solid #d1d1d1;}"));
     auto *layout = new QVBoxLayout(sidebar);
@@ -440,6 +472,8 @@ QWidget *MainWindow::buildSidebar()
     inputLayout->setContentsMargins(8, 8, 8, 8);
     inputLayout->setSpacing(4);
     sourcePath_ = new QLineEdit(input);
+    sourcePath_->setObjectName(QStringLiteral("rendererSourcePath"));
+    sourcePath_->setMinimumWidth(0);
     sourcePath_->setReadOnly(true);
     sourcePath_->setAcceptDrops(false);
     sourcePath_->setPlaceholderText(QStringLiteral("尚未选择视频"));
@@ -450,15 +484,11 @@ QWidget *MainWindow::buildSidebar()
     sourceFilter_->addItem(QStringLiteral("L-SMASH Works"), static_cast<int>(SourceFilter::Lsmas));
     sourceFilter_->addItem(QStringLiteral("FFMS2"), static_cast<int>(SourceFilter::Ffms2));
     auto *browse = compactButton(QStringLiteral("浏览…"), input);
+    browse->setObjectName(QStringLiteral("rendererBrowse"));
     sourceFilter_->setCurrentIndex(QSettings().value(QStringLiteral("sourceFilter"),0).toInt());
-    inputRow->addStretch();
+    inputRow->addWidget(sourcePath_, 1);
     inputRow->addWidget(browse);
-    runtimeStatus_ = new QLabel(input);
-    runtimeStatus_->setWordWrap(true);
-    runtimeStatus_->setStyleSheet(QStringLiteral("color:#5c5c5c;border:0;"));
-    inputLayout->addWidget(sourcePath_);
     inputLayout->addLayout(inputRow);
-    inputLayout->addWidget(runtimeStatus_);
     connect(browse, &QPushButton::clicked, this, &MainWindow::openSource);
     connect(sourceFilter_, &QComboBox::currentIndexChanged, this, [this] { setStatus(QStringLiteral("源滤镜已更改，脚本待验证。")); });
 
@@ -469,8 +499,10 @@ QWidget *MainWindow::buildSidebar()
     catalogSearch_ = new QLineEdit(filters);
     catalogSearch_->setPlaceholderText(QStringLiteral("搜索滤镜"));
     catalogList_ = new QListWidget(filters);
-    catalogList_->setMaximumHeight(150);
+    catalogList_->setObjectName(QStringLiteral("rendererCatalog"));
+    catalogList_->setMinimumHeight(190);
     pipelineList_ = new QListWidget(filters);
+    pipelineList_->setMinimumHeight(68);
     pipelineList_->setSelectionMode(QAbstractItemView::SingleSelection);
     auto *add = compactButton(QStringLiteral("添加到处理链"), filters);
     auto *nodeButtons = new QHBoxLayout;
@@ -481,7 +513,7 @@ QWidget *MainWindow::buildSidebar()
     nodeButtons->addWidget(down);
     nodeButtons->addWidget(remove);
     filtersLayout->addWidget(catalogSearch_);
-    filtersLayout->addWidget(catalogList_);
+    filtersLayout->addWidget(catalogList_, 3);
     filtersLayout->addWidget(add);
     filtersLayout->addWidget(new QLabel(QStringLiteral("处理链（自上而下执行）"), filters));
     filtersLayout->addWidget(pipelineList_, 1);
@@ -489,7 +521,7 @@ QWidget *MainWindow::buildSidebar()
 
     connect(catalogSearch_, &QLineEdit::textChanged, this, [this](const QString &text) {
         for (int i = 0; i < catalogList_->count(); ++i)
-            catalogList_->item(i)->setHidden(!catalogList_->item(i)->text().contains(text, Qt::CaseInsensitive));
+            catalogList_->item(i)->setHidden(!catalogList_->item(i)->data(Qt::UserRole + 1).toString().contains(text, Qt::CaseInsensitive));
     });
     connect(add, &QPushButton::clicked, this, [this] {
         const auto *item = catalogList_->currentItem();
@@ -523,15 +555,42 @@ QWidget *MainWindow::buildSidebar()
         if (graph_.remove(row)) refreshPipeline(std::min(row, static_cast<int>(graph_.nodes().size()) - 1));
     });
 
-    auto *parameters = new QWidget(sidebar);
+    auto *inputSection = new CollapsibleSection(QStringLiteral("输入与环境"), input, sidebar);
+    auto *filterSection = new CollapsibleSection(QStringLiteral("滤镜库与处理链"), filters, sidebar);
+    layout->addWidget(inputSection);
+    layout->addWidget(filterSection, 1);
+
+    const auto keepOneOpen = [inputSection, filterSection](bool) {
+        if (!inputSection->isExpanded() && !filterSection->isExpanded())
+            filterSection->setExpanded(true);
+    };
+    connect(inputSection, &CollapsibleSection::expandedChanged, sidebar, keepOneOpen);
+    connect(filterSection, &CollapsibleSection::expandedChanged, sidebar, keepOneOpen);
+    return sidebar;
+}
+
+QWidget *MainWindow::buildParameterPanel()
+{
+    auto *parameters = new QWidget(this);
+    parameters->setObjectName(QStringLiteral("rendererParameterPanel"));
+    parameters->setMinimumWidth(260);
+    parameters->setStyleSheet(QStringLiteral("#rendererParameterPanel{background:#ffffff;}"));
     auto *parameterLayout = new QVBoxLayout(parameters);
-    parameterLayout->setContentsMargins(0, 0, 0, 8);
-    parameterLayout->setSpacing(4);
+    parameterLayout->setContentsMargins(0, 0, 0, 0);
+    parameterLayout->setSpacing(0);
+    auto *header = new QLabel(QStringLiteral("参数与脚本"), parameters);
+    header->setFixedHeight(32);
+    header->setStyleSheet(QStringLiteral("background:#eaeaea;font-weight:600;padding:0 8px;"));
+    parameterLayout->addWidget(header);
     parameterEditor_ = new ParameterEditor(parameters);
-    auto *script = compactButton(QStringLiteral("查看生成的 VPY"), parameters);
-    parameterLayout->addWidget(parameterEditor_);
-    parameterLayout->addWidget(script, 0, Qt::AlignRight);
-    connect(script, &QPushButton::clicked, this, &MainWindow::showScript);
+    auto *parameterScroll = new QScrollArea(parameters);
+    parameterScroll->setObjectName(QStringLiteral("rendererParameters"));
+    parameterScroll->setWidgetResizable(true);
+    parameterScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    parameterScroll->setStyleSheet(QStringLiteral("QScrollArea#rendererParameters{background:#ffffff;border:0;}"));
+    parameterScroll->viewport()->setStyleSheet(QStringLiteral("background:#ffffff;"));
+    parameterScroll->setWidget(parameterEditor_);
+    parameterLayout->addWidget(parameterScroll, 1);
     connect(parameterEditor_, &ParameterEditor::parameterChanged, this,
             [this](const QString &id, const QVariant &value) {
         activePreset_.clear();
@@ -541,21 +600,7 @@ QWidget *MainWindow::buildSidebar()
             setStatus(QStringLiteral("参数已更新，VPY 待验证。"));
     });
 
-    auto *inputSection = new CollapsibleSection(QStringLiteral("输入与环境"), input, sidebar);
-    auto *filterSection = new CollapsibleSection(QStringLiteral("滤镜库与处理链"), filters, sidebar);
-    auto *parameterSection = new CollapsibleSection(QStringLiteral("参数与脚本"), parameters, sidebar);
-    layout->addWidget(inputSection);
-    layout->addWidget(filterSection, 1);
-    layout->addWidget(parameterSection);
-
-    const auto keepOneOpen = [inputSection, filterSection, parameterSection](bool) {
-        if (!inputSection->isExpanded() && !filterSection->isExpanded() && !parameterSection->isExpanded())
-            filterSection->setExpanded(true);
-    };
-    connect(inputSection, &CollapsibleSection::expandedChanged, sidebar, keepOneOpen);
-    connect(filterSection, &CollapsibleSection::expandedChanged, sidebar, keepOneOpen);
-    connect(parameterSection, &CollapsibleSection::expandedChanged, sidebar, keepOneOpen);
-    return sidebar;
+    return parameters;
 }
 
 QWidget *MainWindow::buildWorkspace()
@@ -572,6 +617,10 @@ QWidget *MainWindow::buildWorkspace()
     compareLayout->setContentsMargins(8, 2, 8, 2);
     compareLayout->setSpacing(12);
     compareLayout->addWidget(new QLabel(QStringLiteral("双路对比 · 左侧播放时钟 / 右侧 VS 同帧"), compareBar));
+    runtimeStatus_ = new QLabel(QStringLiteral("预热中"), compareBar);
+    runtimeStatus_->setObjectName(QStringLiteral("rendererWarmupState"));
+    runtimeStatus_->setStyleSheet(QStringLiteral("color:#5c5c5c;border:0;"));
+    compareLayout->addWidget(runtimeStatus_);
     compareLayout->addStretch();
     syncView_ = new QCheckBox(QStringLiteral("同步视图"), compareBar);
     syncView_->setChecked(true);
@@ -591,12 +640,14 @@ QWidget *MainWindow::buildWorkspace()
 
     layout->addWidget(compareBar);
     layout->addWidget(compareView_, 1);
+    layout->addWidget(buildTransport());
     return workspace;
 }
 
 QWidget *MainWindow::buildTransport()
 {
     auto *transport = new QWidget(this);
+    transport->setObjectName(QStringLiteral("rendererTransport"));
     transport->setFixedHeight(76);
     transport->setStyleSheet(QStringLiteral("background:#f9f9f9;border-top:1px solid #d1d1d1;"));
     auto *layout = new QVBoxLayout(transport);
@@ -605,18 +656,24 @@ QWidget *MainWindow::buildTransport()
 
     auto *timelineRow = new QHBoxLayout;
     positionLabel_ = new QLabel(QStringLiteral("00:00:00.000"), transport);
+    positionLabel_->setObjectName(QStringLiteral("rendererPosition"));
     durationLabel_ = new QLabel(QStringLiteral("00:00:00.000"), transport);
     positionLabel_->setFixedWidth(92);
     durationLabel_->setFixedWidth(92);
     durationLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     timeline_ = new QSlider(Qt::Horizontal, transport);
+    timeline_->setObjectName(QStringLiteral("rendererTimeline"));
     timeline_->setRange(0, 100000);
     timelineRow->addWidget(positionLabel_);
-    timelineRow->addWidget(timeline_, 1);
+    timelineRow->addStretch();
     timelineRow->addWidget(durationLabel_);
 
-    auto *controlRow = new QHBoxLayout;
+    auto *controlRow = new QGridLayout;
+    controlRow->setContentsMargins(0, 0, 0, 0);
+    controlRow->setColumnStretch(0, 1);
+    controlRow->setColumnStretch(2, 1);
     auto *mode = new QComboBox(transport);
+    mode->setObjectName(QStringLiteral("rendererCompareMode"));
     mode->addItems({QStringLiteral("并排"), QStringLiteral("A/B 滑块")});
     auto *previous = compactButton(QStringLiteral("◀ 帧"), transport);
     playButton_ = compactButton(QStringLiteral("播放"), transport);
@@ -630,14 +687,16 @@ QWidget *MainWindow::buildTransport()
     scaler->addItem(QStringLiteral("放大：Spline36"), static_cast<int>(ThreeFpScalingAlgorithm::Spline36));
     scaler->addItem(QStringLiteral("放大：Super-XBR（单阶段）"), static_cast<int>(ThreeFpScalingAlgorithm::SuperXbrSinglePass));
     scaler->setToolTip(QStringLiteral("仅超过源像素密度后使用所选算法；缩小固定使用 Lanczos 3。"));
-    controlRow->addWidget(mode);
-    controlRow->addStretch();
-    controlRow->addWidget(previous);
-    controlRow->addWidget(playButton_);
-    controlRow->addWidget(next);
-    controlRow->addStretch();
-    controlRow->addWidget(scaler);
+    auto *frameControls = new QWidget(transport);
+    frameControls->setObjectName(QStringLiteral("rendererFrameControls"));
+    auto *frames = new QHBoxLayout(frameControls);
+    frames->setContentsMargins(0, 0, 0, 0);
+    frames->addWidget(previous); frames->addWidget(playButton_); frames->addWidget(next);
+    controlRow->addWidget(mode, 0, 0, Qt::AlignLeft);
+    controlRow->addWidget(frameControls, 0, 1);
+    controlRow->addWidget(scaler, 0, 2, Qt::AlignRight);
 
+    layout->addWidget(timeline_);
     layout->addLayout(timelineRow);
     layout->addLayout(controlRow);
 
@@ -721,11 +780,17 @@ void MainWindow::connectPlayback()
 
 void MainWindow::populateCatalog()
 {
+    int textWidth = 0;
     for (const auto &definition : FilterCatalog::all()) {
-        auto *item = new QListWidgetItem(QStringLiteral("%1  ·  %2").arg(definition.name, definition.category), catalogList_);
+        auto *item = new QListWidgetItem(definition.name, catalogList_);
+        textWidth = std::max(textWidth, catalogList_->fontMetrics().horizontalAdvance(definition.name));
         item->setData(Qt::UserRole, definition.id);
-        item->setToolTip(QStringLiteral("%1\n依赖 namespace: %2").arg(definition.description, definition.pluginNamespace));
+        item->setData(Qt::UserRole + 1, definition.name + ' ' + definition.category);
+        item->setToolTip(QStringLiteral("%1 · %2\n%3\n依赖 namespace: %4").arg(definition.name, definition.category, definition.description, definition.pluginNamespace));
     }
+    auto *sidebar = findChild<QWidget *>(QStringLiteral("processingSidebar"));
+    sidebar->setMinimumWidth(std::max(250, textWidth + 44));
+    sidebar->setMaximumWidth(std::max(360, sidebar->minimumWidth()));
     if (catalogList_->count() > 0)
         catalogList_->setCurrentRow(0);
 }
@@ -808,7 +873,10 @@ void MainWindow::showScript()
 {
     const auto result = currentScript();
     if (!result.errors.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("无法生成 VPY"), result.errors.join('\n'));
+        QMessageBox warning(QMessageBox::Warning, QStringLiteral("无法生成 VPY"), result.errors.join('\n'), QMessageBox::Ok, this);
+        warning.setObjectName(QStringLiteral("rendererVpyWarning"));
+        warning.setStyleSheet(QStringLiteral("QLabel#qt_msgbox_label{min-width:480px;}"));
+        warning.exec();
         return;
     }
     QDialog dialog(this);

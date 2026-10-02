@@ -17,7 +17,7 @@ QNetworkRequest request(const QUrl &url) {
     result.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     result.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     result.setTransferTimeout(15000);
-    result.setRawHeader("User-Agent", "VS-Player/1.0.2");
+    result.setRawHeader("User-Agent", "VS-Player/" VSR_VERSION);
     result.setRawHeader("Accept-Encoding", "identity");
     return result;
 }

@@ -145,6 +145,10 @@ bool ThreeFpPlayer::stepKeyframe(int d) { return handle_ && check(api_.stepKeyfr
 bool ThreeFpPlayer::setPlaybackRate(double rate) { return handle_ && check(api_.setPlaybackRate(handle_, rate), QStringLiteral("倍速")); }
 bool ThreeFpPlayer::setDecodeMode(unsigned mode) { decodeMode_ = mode; return resetVideoOutput(); }
 void ThreeFpPlayer::setAutomaticHdr(bool enabled) { automaticHdr_ = enabled; resetVideoOutput(); }
+bool ThreeFpPlayer::selectAudio(int stream) {return handle_ && check(api_.selectAudio(handle_,stream),QStringLiteral("Select audio track"));}
+bool ThreeFpPlayer::loadExternalAudio(const QString &path) {return handle_ && check(api_.loadExternalAudio(handle_,path.toUtf8().constData()),QStringLiteral("Load external audio"));}
+bool ThreeFpPlayer::clearExternalAudio() {return handle_ && check(api_.clearExternalAudio(handle_),QStringLiteral("Clear external audio"));}
+bool ThreeFpPlayer::setAudioEffects(bool enabled,const float *gains,float wave,qint64 delay) {return handle_ && check(api_.setAudioEffects(handle_,enabled,gains,wave,delay),QStringLiteral("Audio effects"));}
 QString ThreeFpPlayer::mediaInfo() const { return handle_ ? api_.mediaInfo(handle_) : QString(); }
 
 bool ThreeFpPlayer::setVrrPresent(bool enabled)

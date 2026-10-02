@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.0.2 LANGUAGES CXX)
+project(VSRenderer VERSION 1.0.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,8 +10,13 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network)
+if(MINGW)
+    # These icon-only resources need no C++ include paths or definitions.
+    set(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> -O coff <SOURCE> <OBJECT>")
+endif()
 
 qt_add_executable(VSRenderer WIN32
+    assets/icons/icons.qrc
     src/update/PortableUpdater.cpp src/update/PortableUpdater.h
     assets/startup.qrc
     src/backend/StartupWarmup.cpp
@@ -63,6 +68,9 @@ target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Ne
 target_compile_definitions(VSRenderer PRIVATE VSR_VERSION="${PROJECT_VERSION}")
 
 if(WIN32)
+    configure_file(assets/icons/renderer.rc "${CMAKE_CURRENT_BINARY_DIR}/renderer-icons.rc" @ONLY)
+    set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/renderer-icons.rc" PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/renderer.ico")
+    target_sources(VSRenderer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/renderer-icons.rc")
     add_custom_command(TARGET VSRenderer POST_BUILD
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_SOURCE_DIR}/tools/stage-vapoursynth-runtime.ps1"
@@ -79,11 +87,13 @@ else()
 endif()
 
 qt_add_executable(VSPlayer WIN32
+    assets/icons/icons.qrc
     src/update/PortableUpdater.cpp src/update/PortableUpdater.h
     assets/startup.qrc
+    src/player/PlayerImage.cpp src/player/PlayerImage.h src/player/PlayerMenu.cpp src/player/PlayerMenu.h
     src/player/main.cpp src/player/PlayerWindow.cpp src/player/PlayerControls.cpp src/player/PlayerInfo.cpp
     src/player/PlayerWindow.h
-    src/player/PlayerSettings.cpp src/player/PlayerMenus.cpp src/player/PlayerPlaylist.cpp
+    src/player/PlayerSettings.cpp src/player/PlayerMenus.cpp src/player/PlayerPlaylist.cpp src/player/PlayerAudio.cpp src/player/PlayerMediaMatching.cpp
     src/player/PlayerNetworkInput.cpp src/player/PlayerNetworkInput.h
     src/player/PlayerProfiles.cpp src/player/PlayerCache.cpp src/player/PlayerLanguage.cpp src/player/PlayerAssociations.cpp
     src/player/PlayerResources.cpp src/player/PlayerResources.h
@@ -94,6 +104,14 @@ qt_add_executable(VSPlayer WIN32
     src/ui/PreviewPane.cpp
 )
 set_target_properties(VSPlayer PROPERTIES OUTPUT_NAME "vs-player")
+if(WIN32)
+    configure_file(assets/icons/player.rc "${CMAKE_CURRENT_BINARY_DIR}/player-icons.rc" @ONLY)
+    set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/player-icons.rc" PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/player.ico;${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/video.ico;${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/image.ico")
+    target_sources(VSPlayer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/player-icons.rc")
+endif()
+include(tools/image-runtime.cmake)
+target_link_libraries(VSPlayer PRIVATE avif)
+
 target_include_directories(VSPlayer PRIVATE src third_party/vapoursynth/include)
 target_link_libraries(VSPlayer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
 target_compile_definitions(VSPlayer PRIVATE VSR_VERSION="${PROJECT_VERSION}")
@@ -174,6 +192,7 @@ if(BUILD_TESTING)
     qt_add_executable(vsr_player_tests tests/TestPlayer.cpp ${player_test_sources})
     target_include_directories(vsr_player_tests PRIVATE src third_party/vapoursynth/include)
     target_link_libraries(vsr_player_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
+    target_link_libraries(vsr_player_tests PRIVATE avif vsr_turbojpeg)
     target_compile_definitions(vsr_player_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME vs-player-playback COMMAND vsr_player_tests -o player-test-results.txt,txt)
     add_test(NAME player-language-packs COMMAND "${CMAKE_BINARY_DIR}/runtime/python/python.exe" "${CMAKE_SOURCE_DIR}/tools/check-player-languages.py")

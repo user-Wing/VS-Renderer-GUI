@@ -47,6 +47,8 @@ protected:
 
 private:
     QWidget *buildSidebar();
+    QWidget *buildParameterPanel();
+    QWidget *buildSettingsPage();
     QWidget *buildWorkspace();
     QWidget *buildTransport();
     void buildToolbar();

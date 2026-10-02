@@ -1,0 +1,3 @@
+101 ICON "@CMAKE_CURRENT_SOURCE_DIR@/assets/icons/player.ico"
+102 ICON "@CMAKE_CURRENT_SOURCE_DIR@/assets/icons/video.ico"
+103 ICON "@CMAKE_CURRENT_SOURCE_DIR@/assets/icons/image.ico"

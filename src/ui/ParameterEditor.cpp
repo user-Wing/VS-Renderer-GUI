@@ -8,7 +8,7 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
-#include <QFormLayout>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -21,29 +21,35 @@ namespace vsr {
 ParameterEditor::ParameterEditor(QWidget *parent)
     : QWidget(parent)
 {
-    form_ = new QFormLayout(this);
+    setObjectName(QStringLiteral("parameterEditor"));
+    setStyleSheet(QStringLiteral(
+        "#parameterEditor,#parameterEditor QWidget{background:#ffffff;}"
+        "#parameterEditor QComboBox,#parameterEditor QSpinBox,#parameterEditor QDoubleSpinBox,#parameterEditor QLineEdit{background:#f3f3f3;}"
+        "#parameterEditor QComboBox:hover{background:#e9e9e9;}"));
+    form_ = new QGridLayout(this);
     form_->setContentsMargins(8, 8, 8, 8);
     form_->setHorizontalSpacing(8);
     form_->setVerticalSpacing(10);
-    form_->setRowWrapPolicy(QFormLayout::WrapLongRows);
-    form_->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    form_->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    form_->setColumnStretch(0, 1);
+    form_->setColumnStretch(1, 0);
+    form_->setAlignment(Qt::AlignTop);
     clear();
-    form_->addRow(new QLabel(QStringLiteral("选择处理链中的节点以编辑参数。"), this));
+    form_->addWidget(new QLabel(QStringLiteral("选择处理链中的节点以编辑参数。"), this), 0, 0, 1, 2);
 }
 
 void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNode *node)
 {
     clear();
     if (!definition || !node) {
-        form_->addRow(new QLabel(QStringLiteral("选择处理链中的节点以编辑参数。"), this));
+        form_->addWidget(new QLabel(QStringLiteral("选择处理链中的节点以编辑参数。"), this), 0, 0, 1, 2);
         return;
     }
 
     auto *description = new QLabel(definition->description, this);
     description->setWordWrap(true);
     description->setTextFormat(Qt::PlainText);
-    form_->addRow(description);
+    form_->addWidget(description, 0, 0, 1, 2);
+    int row = 1;
 
     QComboBox *shaderMode = nullptr;
     QLineEdit *shaderPath = nullptr;
@@ -81,7 +87,6 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         case ParameterType::Choice: {
             auto *combo = new QComboBox(this);
             if (definition->id == "anime4k" && id == "mode") shaderMode = combo;
-            combo->setMinimumWidth(90);
             combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
             combo->setMinimumContentsLength(8);
             combo->addItems(parameter.choices);
@@ -90,8 +95,10 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             combo->view()->setMinimumWidth(popupWidth);
             combo->setToolTip(value.toString());
             combo->setCurrentText(value.toString());
+            const auto fit = [combo] { combo->setFixedWidth(std::max(70, combo->fontMetrics().horizontalAdvance(combo->currentText()) + 40)); };
+            fit();
             connect(combo, &QComboBox::currentTextChanged, this,
-                    [this, id, combo](const QString &v) { combo->setToolTip(v); emit parameterChanged(id, v); });
+                    [this, id, combo, fit](const QString &v) { fit(); combo->setToolTip(v); emit parameterChanged(id, v); });
             editor = combo;
             break;
         }
@@ -121,13 +128,21 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         }
         }
         auto *label = new QLabel(parameter.label, this);
+        label->setObjectName(QStringLiteral("parameterLabel_") + id);
         label->setWordWrap(true);
-        label->setMinimumWidth(70);
-        label->setMaximumWidth(150);
+        label->setMinimumWidth(0);
         label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-        editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        editor->setMinimumWidth(0);
-        form_->addRow(label, editor);
+        editor->setObjectName(QStringLiteral("parameter_") + id);
+        if (parameter.type == ParameterType::File) {
+            form_->addWidget(label, row++, 0, 1, 2);
+            editor->setMinimumWidth(0);
+            editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+            form_->addWidget(editor, row++, 0, 1, 2);
+        } else {
+            editor->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            form_->addWidget(label, row, 0, Qt::AlignVCenter);
+            form_->addWidget(editor, row++, 1, Qt::AlignRight | Qt::AlignVCenter);
+        }
     }
     if (shaderMode && shaderPath) {
         shaderPath->parentWidget()->setEnabled(shaderMode->currentText() == QStringLiteral("自定义 GLSL") || !shaderPath->text().isEmpty());
@@ -138,13 +153,15 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         });
     }
     if (definition->parameters.isEmpty())
-        form_->addRow(new QLabel(QStringLiteral("该节点没有可调参数。"), this));
+        form_->addWidget(new QLabel(QStringLiteral("该节点没有可调参数。"), this), row, 0, 1, 2);
 }
 
 void ParameterEditor::clear()
 {
-    while (form_->rowCount() > 0)
-        form_->removeRow(0);
+    while (auto *item = form_->takeAt(0)) {
+        delete item->widget();
+        delete item;
+    }
 }
 
 }

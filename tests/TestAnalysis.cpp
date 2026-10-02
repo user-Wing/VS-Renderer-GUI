@@ -18,6 +18,20 @@
 #include "graph/FilterGraph.h"
 #include "graph/PresetStore.h"
 #include "ui/PresetDialog.h"
+#include "ui/CompareView.h"
+#include "ui/ParameterEditor.h"
+#include "graph/FilterCatalog.h"
+#include <QCheckBox>
+#include <QFont>
+#include <QGridLayout>
+#include <QScrollArea>
+#include <QTabWidget>
+#include <QTabBar>
+#include <QScopeGuard>
+#include <QSettings>
+#include <QStackedWidget>
+#include <QMessageBox>
+#include <QHeaderView>
 #include <QUuid>
 #include "graph/VpyScriptBuilder.h"
 #include <QSignalSpy>
@@ -54,6 +68,117 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void rendererLayoutAndParameterSizing()
+    {
+        const auto oldFont=qApp->font();const auto oldStyle=qApp->styleSheet();
+        const auto restore=qScopeGuard([&]{qApp->setFont(oldFont);qApp->setStyleSheet(oldStyle);});
+        QFont font("Segoe UI Variable");font.setPixelSize(13);qApp->setFont(font);qApp->setStyleSheet(applicationStyleSheet());
+        MainWindow window;QVERIFY(window.width()>=1440);window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *view=window.findChild<CompareView *>();auto *transport=window.findChild<QWidget *>("rendererTransport");
+        auto *frames=window.findChild<QWidget *>("rendererFrameControls");auto *mode=window.findChild<QComboBox *>("rendererCompareMode");
+        auto *position=window.findChild<QLabel *>("rendererPosition");auto *timeline=window.findChild<QSlider *>("rendererTimeline");
+        auto *source=window.findChild<QLineEdit *>("rendererSourcePath");auto *browse=window.findChild<QPushButton *>("rendererBrowse");
+        auto *catalog=window.findChild<QListWidget *>("rendererCatalog");auto *sidebar=window.findChild<QWidget *>("processingSidebar");
+        auto *parameters=window.findChild<QWidget *>("rendererParameterPanel");
+        auto *scroll=window.findChild<QScrollArea *>("rendererParameters");
+        QVERIFY(view && transport && frames && mode && position && timeline && source && browse && catalog && sidebar);
+        QVERIFY(parameters && scroll);QVERIFY(!sidebar->isAncestorOf(parameters));
+        auto *toggle=window.findChild<QAction *>("navigationToggle");QVERIFY(toggle);
+        for(auto size:{QSize(1440,900),QSize(1280,820),QSize(1700,950)}) {
+            window.resize(size);toggle->trigger();QTest::qWait(80);
+            QCOMPARE(transport->mapToGlobal(QPoint(0,0)).x(),view->mapToGlobal(QPoint(0,0)).x());
+            QCOMPARE(transport->width(),view->width());
+            QVERIFY(std::abs(frames->mapToGlobal(frames->rect().center()).x()-view->mapToGlobal(view->rect().center()).x())<=2);
+            QCOMPARE(position->mapToGlobal(QPoint()).x(),mode->mapToGlobal(QPoint()).x());
+            QCOMPARE(timeline->mapToGlobal(QPoint()).x(),position->mapToGlobal(QPoint()).x());
+            QCOMPARE(source->mapToGlobal(source->rect().center()).y(),browse->mapToGlobal(browse->rect().center()).y());
+            QVERIFY(catalog->height()>=190);QVERIFY(sidebar->width()<360);
+            QVERIFY(sidebar->mapToGlobal(QPoint(sidebar->width(),0)).x()<=parameters->mapToGlobal(QPoint()).x());
+            QVERIFY(parameters->mapToGlobal(QPoint(parameters->width(),0)).x()<=view->mapToGlobal(QPoint()).x());
+            QVERIFY(scroll->height()>500);
+        }
+        for(int i=0;i<catalog->count();++i)
+            QVERIFY2(catalog->fontMetrics().horizontalAdvance(catalog->item(i)->text())+12<=catalog->viewport()->width(),qPrintable(catalog->item(i)->text()));
+        auto *warmup=window.findChild<QLabel *>("rendererWarmupState");QVERIFY(warmup);
+        QVERIFY(warmup->parentWidget()!=source->parentWidget());
+        QTRY_COMPARE_WITH_TIMEOUT(warmup->text(),QStringLiteral("已预热"),15000);
+        for(auto *action:window.findChildren<QAction *>())QVERIFY(action->text()!=QStringLiteral("实验设置"));
+        for(auto *button:window.findChildren<QPushButton *>())QVERIFY(button->text()!=QStringLiteral("查看生成的 VPY"));
+        window.grab().save(QCoreApplication::applicationDirPath()+"/renderer-ui-layout.png");
+        QCOMPARE(scroll->viewport()->grab().toImage().pixelColor(10,scroll->viewport()->height()-10),QColor(Qt::white));
+        ParameterEditor editor;editor.resize(scroll->viewport()->width(),600);editor.show();
+        for(const auto &definition:FilterCatalog::all()) {
+            FilterGraph graph;graph.add(definition.id);editor.setNode(&definition,&graph.nodes().first());QCoreApplication::processEvents();
+            for(const auto &parameter:definition.parameters) {
+                auto *label=editor.findChild<QLabel *>("parameterLabel_"+parameter.id);auto *field=editor.findChild<QWidget *>("parameter_"+parameter.id);
+                QVERIFY(label && field);QVERIFY2(!label->geometry().intersects(field->geometry()),qPrintable(definition.id+":"+parameter.id));
+                if(parameter.type==ParameterType::Boolean)QVERIFY(std::abs(field->geometry().right()-(editor.width()-9))<=1);
+                if(auto *combo=qobject_cast<QComboBox *>(field)) {
+                    QVERIFY(combo->width()>=combo->fontMetrics().horizontalAdvance(combo->currentText())+34);
+                    QVERIFY(combo->width()<220);
+                }
+            }
+            if(definition.id=="mvtools" || definition.id=="rife")editor.grab().save(QCoreApplication::applicationDirPath()+"/renderer-parameters-"+definition.id+".png");
+            const auto image=editor.grab().toImage();
+            QCOMPARE(image.pixelColor(4,editor.height()-4),QColor(Qt::white));
+            auto *description=editor.findChildren<QLabel *>().first();
+            QCOMPARE(image.pixelColor(description->geometry().right(),description->geometry().top()),QColor(Qt::white));
+        }
+    }
+    void exportTabsShowSelection()
+    {
+        ExportWindow window;window.show();auto *tabs=window.findChild<QTabWidget *>("exportTabs");QVERIFY(tabs);QCOMPARE(tabs->count(),3);
+        const auto sample=[&](int selected,int tab){tabs->setCurrentIndex(selected);QTest::qWait(40);const auto rectangle=tabs->tabBar()->tabRect(tab);return tabs->tabBar()->grab().toImage().pixelColor(rectangle.left()+10,rectangle.top()+10);};
+        const auto selected=sample(0,0),idle=sample(1,0);QVERIFY(selected!=idle);QVERIFY(selected.blue()>selected.red());
+        tabs->setCurrentIndex(0);QCoreApplication::processEvents();
+        auto *command=window.findChild<QPlainTextEdit *>("exportCommand");QVERIFY(command);
+        QCOMPARE(tabs->tabBar()->mapToGlobal(tabs->tabBar()->tabRect(0).topLeft()).x(),command->mapToGlobal(QPoint()).x());
+        tabs->setCurrentIndex(2);QCoreApplication::processEvents();
+        auto *queue=window.findChild<QTreeWidget *>("encodingQueue");QVERIFY(queue);
+        const auto header=queue->header()->grab().toImage().scaled(queue->header()->size(),Qt::IgnoreAspectRatio,Qt::FastTransformation);
+        for(int section=0;section<4;++section) {
+            const int boundary=queue->header()->sectionViewportPosition(section)+queue->header()->sectionSize(section)-1;
+            if(boundary<header.width()) QCOMPARE(header.pixelColor(boundary,8),QColor("#999999"));
+        }
+        tabs->setCurrentIndex(2);window.grab().save(QCoreApplication::applicationDirPath()+"/renderer-export-tabs.png");
+    }
+    void rendererSettingsPageAndVpyWarning()
+    {
+        const auto oldOrganization=QCoreApplication::organizationName(),oldApplication=QCoreApplication::applicationName();
+        const auto restoreNames=qScopeGuard([&]{QCoreApplication::setOrganizationName(oldOrganization);QCoreApplication::setApplicationName(oldApplication);});
+        QCoreApplication::setOrganizationName("VSRendererTests");QCoreApplication::setApplicationName("renderer-settings-page-test");
+        QSettings settings;const auto saved=settings.value("sourceFilter");
+        const auto restore=qScopeGuard([&]{if(saved.isValid())settings.setValue("sourceFilter",saved);else settings.remove("sourceFilter");});
+        MainWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *pages=window.findChild<QStackedWidget *>();auto *button=window.findChild<QToolButton *>("applicationSettings");
+        auto *page=window.findChild<QWidget *>("rendererSettingsPage");QVERIFY(pages && button && page);
+        button->click();QCOMPARE(pages->currentWidget(),page);QVERIFY(button->isChecked());QVERIFY(!QApplication::activeModalWidget());
+        auto *source=window.findChild<QComboBox *>("rendererSettingsSource");
+        auto *apply=window.findChild<QPushButton *>("rendererApplySettings");QVERIFY(source && apply);
+        const int choice=1-source->currentIndex();source->setCurrentIndex(choice);apply->click();
+        QCOMPARE(window.findChild<QComboBox *>("sourceFilter")->currentIndex(),choice);QCOMPARE(settings.value("sourceFilter").toInt(),choice);
+        for(auto *nav:window.findChild<QWidget *>("pageNavigation")->findChildren<QToolButton *>())
+            if(nav->text()==QStringLiteral("图像分析比对"))nav->click();
+        QVERIFY(qobject_cast<AnalysisPage *>(pages->currentWidget()));QCOMPARE(pages->currentIndex(),1);QVERIFY(!button->isChecked());
+        button->click();QCOMPARE(pages->currentWidget(),page);QCOMPARE(pages->currentIndex(),2);
+        page->grab().save(QCoreApplication::applicationDirPath()+"/renderer-settings-page.png");
+        for(auto *nav:window.findChild<QWidget *>("pageNavigation")->findChildren<QToolButton *>())
+            if(nav->text()==QStringLiteral("VS 实时渲染"))nav->click();
+        QCOMPARE(pages->currentIndex(),0);
+        bool warningSeen=false;int warningWidth=0;bool titleFits=false;
+        QTimer::singleShot(0,&window,[&] {
+            auto *warning=window.findChild<QMessageBox *>("rendererVpyWarning");
+            if(warning) {
+                warningSeen=true;warningWidth=warning->width();
+                titleFits=warning->fontMetrics().horizontalAdvance(warning->windowTitle())+100<warningWidth;
+                warning->grab().save(QCoreApplication::applicationDirPath()+"/renderer-vpy-warning.png");
+                warning->accept();
+            }
+        });
+        bool actionFound=false;
+        for(auto *action:window.findChildren<QAction *>())if(action->text()==QStringLiteral("查看 VPY")){actionFound=true;action->trigger();break;}
+        QVERIFY(actionFound);QVERIFY(warningSeen);QVERIFY(warningWidth>=520);QVERIFY(titleFits);
+    }
     void rendererLoadsPresetDuringStartup()
     {
         QTemporaryDir dir; const auto source = dir.filePath("source.mkv"); QVERIFY(QFile::copy(":/startup/warmup.mkv",source));
@@ -356,6 +481,10 @@ private slots:
         QString overwriteError;
         QVERIFY(!window->addJob("ffmpeg -y -i <输入文件> -c:v ffv1 <输出文件>",paths[2],paths[0],script.script,1,&overwriteError));
         QVERIFY(overwriteError.contains(QStringLiteral("覆盖")));
+        for(const auto &parameter:QStringList{"-vf scale=160:90","-filter:v:0 crop=160:90","-s 160x90","-filter scale=160:90","-vf scale\\_cuda=160:90"}) {
+            QString error;QVERIFY(!window->addJob("ffmpeg -y -i <输入文件> "+parameter+" -c:v ffv1 <输出文件>",output,paths[2],script.script,1,&error));
+            QVERIFY(error.contains(QStringLiteral("分辨率")));
+        }
         window->findChild<QPlainTextEdit *>("exportCommand")->setPlainText("ffmpeg -y -i <输入文件> -map 0:v -c:v ffv1 <输出文件>");
         window->findChild<QLineEdit *>("singleOutput")->setText(output);
         QTest::mouseClick(window->findChild<QPushButton *>("exportSingle"),Qt::LeftButton);
@@ -390,7 +519,16 @@ private slots:
                 QTest::qWait(50);
                 auto *pane=view->pane(page.visibleVideos().first());
                 pane->adoptView(1.25f,.2f,-.1f);
-                const auto composition=page.compositionScript();QVERIFY2(composition.errors.isEmpty(),qPrintable(composition.errors.join(";")));
+                const auto composition=page.compositionScript();
+                const int mode=layout->currentData().toInt();
+                const bool supported=mode==MultiCompareView::Wipe || mode==MultiCompareView::ThreeLeft || mode==MultiCompareView::ThreeRight || mode==MultiCompareView::Four || mode==MultiCompareView::FourWipe;
+                if(!supported) {
+                    QVERIFY(composition.errors.join(';').contains(QStringLiteral("不支持导出")));
+                    QTest::mouseClick(page.findChild<QPushButton *>("exportComparison"),Qt::LeftButton);
+                    bool visibleError=false;for(auto *label:page.findChildren<QLabel *>())if(label->isVisible() && label->text().contains(QStringLiteral("不支持导出")))visibleError=true;
+                    QVERIFY(visibleError);continue;
+                }
+                QVERIFY2(composition.errors.isEmpty(),qPrintable(composition.errors.join(";")));
                 loaded.clear();errors.clear();frames.clear();
                 server.loadScript(composition.script,dir.filePath("layout.vpy"));
                 QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !errors.isEmpty(),15000);

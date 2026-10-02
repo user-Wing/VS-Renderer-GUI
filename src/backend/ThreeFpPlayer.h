@@ -33,6 +33,10 @@ public:
     bool setDecodeMode(unsigned mode);
     void setAutomaticHdr(bool enabled);
     QString mediaInfo() const;
+    bool selectAudio(int stream);
+    bool loadExternalAudio(const QString &path);
+    bool clearExternalAudio();
+    bool setAudioEffects(bool enabled, const float *gains, float wave, qint64 delay);
     bool setVrrPresent(bool enabled);
     bool setVrrPacing(bool enabled);
     bool setScalingAlgorithms(ThreeFpScalingAlgorithm upscale, ThreeFpScalingAlgorithm downscale);

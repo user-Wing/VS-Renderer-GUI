@@ -1,5 +1,7 @@
 # Anime4K A/Fast 来源
 
+2026-10-02：新增独立 `anime4k-no-cnn.glsl`，由同一 commit 的 Clamp_Highlights、Experimental-Effects/Thin_HQ、Darken_HQ 组合，保留各段 MIT 许可与原系数；采用梯度 / DoG 线条处理，没有 CNN 或 2× CNN 中间图。CNN 文件仍为下面的 A/Fast。两种画质不等价，六档与格式限制见 [实现记录](player-six-stage-1.0.3.md)。
+
 `assets/anime4k-a-fast.glsl` 及便携 `shaders/anime4k-a-fast.glsl` 按官方 Windows Low-end 的 Mode A (Fast) 顺序组合，未改动六段算法，保留各段原有版权与许可。
 
 上游：[bloc97/Anime4K](https://github.com/bloc97/Anime4K)，commit `7684e9586f8dcc738af08a1cdceb024cc184f426`。配置：[GLSL_Windows_Low-end/mpv.conf](https://github.com/bloc97/Anime4K/blob/7684e9586f8dcc738af08a1cdceb024cc184f426/md/Template/GLSL_Windows_Low-end/mpv.conf)。

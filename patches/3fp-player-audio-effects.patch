@@ -1,0 +1,218 @@
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -69,6 +69,7 @@
+     AVFilterContext* tempoInput_ = nullptr;
+     AVFilterContext* tempoOutput_ = nullptr;
+     FFFResult SetVolume(float volume, bool muted) noexcept;
++    FFFResult SetAudioEffects(bool enabled, const float* gains, float waveVolume, std::int64_t delay) noexcept;
+     FFFResult SetTimedTextLayer(const FFF3FPTimedTextLayer& layer) noexcept;
+     FFFResult SetExternalOutputFormat(const char* format) noexcept;
+     std::atomic<int> externalOutputFormat_{-1};
+@@ -214,6 +215,10 @@
+     std::int32_t externalAudioStream_;
+     std::int64_t externalAudioOffset100ns_;
+     std::string externalAudioPath_;
++    bool equalizerEnabled_ = false;
++    float equalizerGains_[10]{};
++    float waveVolume_ = 1;
++    std::int64_t audioDelay100ns_ = 0;
+     PlayerAudioRuntimeState audioRuntimeState_;
+     std::unique_ptr<PlayerWasapiRenderer> audioRenderer_;
+     PlayerVideoRenderer videoRenderer_;
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -1134,7 +1134,10 @@
+     try {
+         audioRenderer_.reset();
+         auto replacement = std::make_unique<PlayerWasapiRenderer>(endpointId, exclusive,
+-            &audioRuntimeState_, [this] { NotifyAudioRestart(); });
++            &audioRuntimeState_, [this] { NotifyAudioRestart(); },
++            externalAudioDecoder_?externalAudioDecoder_->ch_layout.nb_channels:
++            audioDecoder_?audioDecoder_->ch_layout.nb_channels:
++            format_ && audioStream_>=0?format_->streams[audioStream_]->codecpar->ch_layout.nb_channels:0);
+         const auto result = replacement->Start();
+         if (result != FFFResult::Success) {
+             error = replacement->LastError();
+@@ -1469,12 +1472,16 @@
+ }
+ FFFResult PlayerSession::TempoAudio(AVFrame* frame, const std::int64_t position) noexcept {
+     const double rate = playbackRate_.load();
+-    if (rate == 1.0) return audioRenderer_->Enqueue(frame, position);
++    if (rate == 1.0 && !equalizerEnabled_ && waveVolume_ == 1) return audioRenderer_->Enqueue(frame, position);
+     if (!tempoGraph_) {
+         if (!frame) return FFFResult::Success;
++        if(position!=AV_NOPTS_VALUE)tempoOrigin_=std::max(tempoOrigin_,position);
+         tempoGraph_ = avfilter_graph_alloc();
+         if (!tempoGraph_) return FFFResult::NativeFailure;
+-        char layout[128]{}; av_channel_layout_describe(&frame->ch_layout, layout, sizeof(layout));
++        char layout[128]{};AVChannelLayout channels{};
++        if(frame->ch_layout.order==AV_CHANNEL_ORDER_UNSPEC)av_channel_layout_default(&channels,frame->ch_layout.nb_channels);
++        else av_channel_layout_copy(&channels,&frame->ch_layout);
++        av_channel_layout_describe(&channels,layout,sizeof(layout));av_channel_layout_uninit(&channels);
+         std::ostringstream args;
+         args << "time_base=1/" << frame->sample_rate << ":sample_rate=" << frame->sample_rate
+              << ":sample_fmt=" << av_get_sample_fmt_name(static_cast<AVSampleFormat>(frame->format)) << ":channel_layout=" << layout;
+@@ -1491,11 +1498,28 @@
+                 avfilter_link(previous, 0, filter, 0) < 0) return FFFResult::FfmpegFailure;
+             previous = filter; remainder /= factor;
+         } while (std::abs(remainder - 1.0) > 0.00001);
++        if (equalizerEnabled_) {
++            constexpr int frequencies[]{60,170,310,600,1000,3000,6000,12000,14000,16000};
++            for (int band=0;band<10;++band) {
++                if (frequencies[band]>=frame->sample_rate/2) continue;
++                AVFilterContext* filter=nullptr;
++                const auto name="eq"+std::to_string(band);
++                const auto options="f="+std::to_string(frequencies[band])+":t=o:w=1:g="+std::to_string(equalizerGains_[band]);
++                if(avfilter_graph_create_filter(&filter,avfilter_get_by_name("equalizer"),name.c_str(),options.c_str(),nullptr,tempoGraph_)<0 || avfilter_link(previous,0,filter,0)<0)return FFFResult::FfmpegFailure;
++                previous=filter;
++            }
++        }
++        if(waveVolume_!=1) {
++            AVFilterContext* filter=nullptr;const auto options=std::to_string(waveVolume_);
++            if(avfilter_graph_create_filter(&filter,avfilter_get_by_name("volume"),"wave",options.c_str(),nullptr,tempoGraph_)<0 || avfilter_link(previous,0,filter,0)<0)return FFFResult::FfmpegFailure;
++            previous=filter;
++        }
+         if (avfilter_link(previous, 0, tempoOutput_, 0) < 0 || avfilter_graph_config(tempoGraph_, nullptr) < 0) return FFFResult::FfmpegFailure;
+     }
+     AVFrame* input = frame ? av_frame_clone(frame) : nullptr;
+     if (frame && !input) return FFFResult::NativeFailure;
+     if (input) {
++        if(input->ch_layout.order==AV_CHANNEL_ORDER_UNSPEC){const int count=input->ch_layout.nb_channels;av_channel_layout_uninit(&input->ch_layout);av_channel_layout_default(&input->ch_layout,count);}
+         const auto skipped = position != AV_NOPTS_VALUE && position < tempoOrigin_
+             ? std::min<std::int64_t>(input->nb_samples, av_rescale_rnd(tempoOrigin_ - position, input->sample_rate, 10000000, AV_ROUND_UP)) : 0;
+         if (skipped >= input->nb_samples) { av_frame_free(&input); return FFFResult::Success; }
+@@ -1523,6 +1547,23 @@
+         if (result != FFFResult::Success) break;
+     }
+     av_frame_free(&output); return result;
++}
++FFFResult PlayerSession::SetAudioEffects(const bool enabled,const float* gains,const float wave,const std::int64_t delay) noexcept {
++    if(!gains || !std::isfinite(wave) || wave<0 || wave>1)return FFFResult::InvalidArgument;
++    std::array<float,10> values{};for(int i=0;i<10;++i){if(!std::isfinite(gains[i]) || gains[i]<-12 || gains[i]>12)return FFFResult::InvalidArgument;values[i]=gains[i];}
++    Enqueue([this,enabled,values,wave,delay]{
++        const bool shifted=audioDelay100ns_!=delay;
++        const bool reuse=tempoGraph_ && equalizerEnabled_==enabled && waveVolume_==wave && !shifted;
++        equalizerEnabled_=enabled;waveVolume_=wave;audioDelay100ns_=delay;
++        for(int i=0;i<10;++i)equalizerGains_[i]=values[i];
++        if(reuse) {
++            bool updated=true;
++            for(int i=0;enabled && i<10;++i){const auto name="eq"+std::to_string(i);if(!avfilter_graph_get_filter(tempoGraph_,name.c_str()))continue;const auto gain=std::to_string(values[i]);if(avfilter_graph_send_command(tempoGraph_,name.c_str(),"gain",gain.c_str(),nullptr,0,0)<0)updated=false;}
++            if(updated)return;
++        }
++        if(shifted && format_)DoSeek(snapshot_.position100ns);
++        else ResetTempo(audioRenderer_?audioRenderer_->Position100ns():snapshot_.position100ns);
++    });return FFFResult::Success;
+ }
+ FFFResult PlayerSession::SetVolume(const float volume, const bool muted) noexcept { if (!std::isfinite(volume) || volume < 0 || volume > 1) return FFFResult::InvalidArgument; Enqueue([this, volume, muted] { volume_ = volume; muted_ = muted; if (audioRenderer_) audioRenderer_->SetVolume(volume_, muted_); }); return FFFResult::Success; }
+ 
+@@ -2778,6 +2819,7 @@
+     if (pts != AV_NOPTS_VALUE) {
+         position = StreamTimestampPosition100ns(owner, streamIndex, pts);
+         if (owner == externalFormat_) position += externalAudioOffset100ns_;
++        position += audioDelay100ns_;
+     }
+     if (pts != AV_NOPTS_VALUE && seekTarget100ns_ >= 0) {
+         if (position + av_rescale(frame->nb_samples, TicksPerSecond, frame->sample_rate) < seekTarget100ns_) return;
+@@ -3067,6 +3109,7 @@
+     else {
+         if (audioDecoder_) avcodec_free_context(&audioDecoder_);
+         audioDecoder_ = replacement; audioStream_ = index; snapshot_.selectedAudioStream = index;
++        if(audioRenderer_ && audioRenderer_->OutputChannels()!=audioDecoder_->ch_layout.nb_channels){std::string error;const auto result=RecreateAudioRenderer(audioEndpointId_,audioExclusive_,snapshot_.state!=FFF3FPState::Playing,error);if(result!=FFFResult::Success)ReportError(result,std::move(error),"audio-layout");}
+         internalAudioFailurePending_ = false;
+         internalAudioFailureResult_ = FFFResult::Success;
+         internalAudioDecodeErrorCount_ = 0;
+@@ -3105,6 +3148,7 @@
+     externalFormat_ = replacementFormat; externalAudioDecoder_ = replacementDecoder; externalAudioStream_ = index;
+     externalFormatIo_ = std::move(replacementIo);
+     externalAudioOffset100ns_ = offset; externalAudioPath_ = std::move(path);
++    if(audioRenderer_ && audioRenderer_->OutputChannels()!=replacementDecoder->ch_layout.nb_channels){std::string error;const auto result=RecreateAudioRenderer(audioEndpointId_,audioExclusive_,snapshot_.state!=FFF3FPState::Playing,error);if(result!=FFFResult::Success)ReportError(result,std::move(error),"audio-layout");}
+     snapshot_.isExternalAudio = 1; snapshot_.externalAudioOffset100ns = offset; DoSeek(snapshot_.position100ns);
+     ApplyAudioPlaybackPause(snapshot_.state == FFF3FPState::Playing);
+     Emit(FFF3FPEvent::OperationCompleted, "{\"operation\":\"load-external-audio\",\"stream\":" + std::to_string(index) + "}");
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -503,6 +503,7 @@
+ FFF3FP_API FFFResult FFF3FP_StepKeyframe(FFF3FPHandle player, std::int32_t direction) noexcept;
+ FFF3FP_API FFFResult FFF3FP_SelectVideoStream(FFF3FPHandle player,
+     std::int32_t streamIndex) noexcept;
++FFF3FP_API FFFResult FFF3FP_SetAudioEffects(FFF3FPHandle player, std::uint32_t enabled, const float* gains, float waveVolume, std::int64_t delay100ns) noexcept;
+ FFF3FP_API FFFResult FFF3FP_SelectAudioStream(FFF3FPHandle player,
+     std::int32_t streamIndex) noexcept;
+ FFF3FP_API FFFResult FFF3FP_LoadExternalAudio(FFF3FPHandle player,
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -71,6 +71,7 @@
+ FFFResult FFF3FP_StepFrame(const FFF3FPHandle player, const std::int32_t direction) noexcept { return player ? static_cast<PlayerSession*>(player)->StepFrame(direction) : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_StepKeyframe(const FFF3FPHandle player, const std::int32_t direction) noexcept { return player ? static_cast<PlayerSession*>(player)->StepKeyframe(direction) : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_SelectVideoStream(const FFF3FPHandle player, const std::int32_t stream) noexcept { return player ? static_cast<PlayerSession*>(player)->SelectVideoStream(stream) : FFFResult::InvalidArgument; }
++FFFResult FFF3FP_SetAudioEffects(const FFF3FPHandle player, const std::uint32_t enabled, const float* gains, const float wave, const std::int64_t delay) noexcept { return player && enabled<=1 ? static_cast<PlayerSession*>(player)->SetAudioEffects(enabled!=0,gains,wave,delay) : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_SelectAudioStream(const FFF3FPHandle player, const std::int32_t stream) noexcept { return player ? static_cast<PlayerSession*>(player)->SelectAudioStream(stream) : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_LoadExternalAudio(const FFF3FPHandle player, const char* path, const std::int32_t stream,
+     const std::int64_t offset) noexcept { return player ? static_cast<PlayerSession*>(player)->LoadExternalAudio(path, stream, offset) : FFFResult::InvalidArgument; }
+--- a/FFF.Native/3FP/Audio/WasapiRenderer.h
++++ b/FFF.Native/3FP/Audio/WasapiRenderer.h
+@@ -72,7 +72,7 @@
+ public:
+     explicit PlayerWasapiRenderer(std::wstring endpointId, bool exclusive = false,
+         PlayerAudioRuntimeState* runtimeState = nullptr,
+-        std::function<void()> restartCallback = {});
++        std::function<void()> restartCallback = {}, unsigned preferredChannels = 0);
+     ~PlayerWasapiRenderer();
+ 
+     FFFResult Start() noexcept;
+@@ -113,6 +113,7 @@
+ 
+     std::wstring endpointId_;
+     bool exclusive_;
++    unsigned preferredChannels_;
+     PlayerAudioRuntimeState* runtimeState_;
+     std::function<void()> restartCallback_;
+     HANDLE stopEvent_;
+--- a/FFF.Native/3FP/Audio/WasapiRenderer.cpp
++++ b/FFF.Native/3FP/Audio/WasapiRenderer.cpp
+@@ -71,8 +71,8 @@
+ }
+ 
+ PlayerWasapiRenderer::PlayerWasapiRenderer(std::wstring endpointId, const bool exclusive,
+-    PlayerAudioRuntimeState* const runtimeState, std::function<void()> restartCallback)
+-    : endpointId_(std::move(endpointId)), exclusive_(exclusive), runtimeState_(runtimeState),
++    PlayerAudioRuntimeState* const runtimeState, std::function<void()> restartCallback, const unsigned preferredChannels)
++    : endpointId_(std::move(endpointId)), exclusive_(exclusive), preferredChannels_(preferredChannels), runtimeState_(runtimeState),
+       restartCallback_(std::move(restartCallback)),
+       stopEvent_(nullptr), sampleEvent_(nullptr), controlEvent_(nullptr),
+       initializationFinished_(false), initializationResult_(FFFResult::InvalidState), queuedBytes_(0),
+@@ -197,6 +197,7 @@
+         // this path may trim preroll or synthesize leading silence.
+         preRollFrames = static_cast<std::uint64_t>(std::max<std::int64_t>(0, -signedStartFrame));
+         gapFrames = static_cast<std::uint64_t>(std::max<std::int64_t>(0, signedStartFrame));
++        insertedSilenceFrames_ += gapFrames;droppedOverlapFrames_ += preRollFrames;
+         timelineAnchored_ = true;
+     } else if (position100ns != AV_NOPTS_VALUE) {
+         const auto delta = signedStartFrame - static_cast<std::int64_t>(producedTimelineFrames_);
+@@ -457,6 +458,26 @@
+     // endpoint format and the client owns the complete hardware period.
+     WAVEFORMATEX* activeFormat = format.get();
+     WAVEFORMATEXTENSIBLE exclusiveCandidate{};
++    WAVEFORMATEXTENSIBLE sharedCandidate{};
++    if(!exclusive_ && preferredChannels_) {
++        const unsigned channels=(preferredChannels_==2 || preferredChannels_==6 || preferredChannels_==8)?preferredChannels_:2;
++        for(const unsigned count:{channels,2u}) {
++            sharedCandidate.Format.wFormatTag=WAVE_FORMAT_EXTENSIBLE;
++            sharedCandidate.Format.nChannels=static_cast<WORD>(count);
++            sharedCandidate.Format.nSamplesPerSec=format->nSamplesPerSec;
++            sharedCandidate.Format.wBitsPerSample=32;
++            sharedCandidate.Format.nBlockAlign=static_cast<WORD>(count*4);
++            sharedCandidate.Format.nAvgBytesPerSec=sharedCandidate.Format.nSamplesPerSec*sharedCandidate.Format.nBlockAlign;
++            sharedCandidate.Format.cbSize=22;
++            sharedCandidate.Samples.wValidBitsPerSample=32;
++            sharedCandidate.SubFormat=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
++            sharedCandidate.dwChannelMask=count==8?KSAUDIO_SPEAKER_7POINT1:count==6?KSAUDIO_SPEAKER_5POINT1:KSAUDIO_SPEAKER_STEREO;
++            WAVEFORMATEX* closest=nullptr;
++            const auto supported=client->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED,&sharedCandidate.Format,&closest);
++            if(closest)CoTaskMemFree(closest);
++            if(supported==S_OK){activeFormat=&sharedCandidate.Format;break;}
++        }
++    }
+     // Legacy shared-mode IAudioClient still lets us request a buffer duration.
+     // Three engine periods absorb normal scheduling jitter without making the
+     // device queue dominate the end-to-end playback latency.

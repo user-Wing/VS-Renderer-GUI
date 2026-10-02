@@ -41,6 +41,10 @@ ThreeFpApi::ThreeFpApi()
     ok &= resolve(submitExternalVideoFrame_, "FFF3FP_SubmitExternalVideoFrame");
     ok &= resolve(redraw_, "FFF3FP_Redraw");
     ok &= resolve(destroy_, "FFF3FP_Destroy");
+    selectAudio_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SelectAudioStream"));
+    loadExternalAudio_ = reinterpret_cast<ExternalAudioFn>(library_.resolve("FFF3FP_LoadExternalAudio"));
+    clearExternalAudio_ = reinterpret_cast<HandleFn>(library_.resolve("FFF3FP_ClearExternalAudio"));
+    setAudioEffects_ = reinterpret_cast<EffectsFn>(library_.resolve("FFF3FP_SetAudioEffects"));
     stepKeyframe_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_StepKeyframe"));
     setPlaybackRate_ = reinterpret_cast<RateFn>(library_.resolve("FFF3FP_SetPlaybackRate"));
     mediaInfo_ = reinterpret_cast<InfoFn>(library_.resolve("FFF3FP_GetMediaInfo"));
@@ -97,6 +101,10 @@ void ThreeFpApi::destroy(void *h) const { if (available() && h) destroy_(h); }
 
 ThreeFpResult ThreeFpApi::stepKeyframe(void *h, int d) const { return stepKeyframe_ ? stepKeyframe_(h, d) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setPlaybackRate(void *h, double rate) const { return setPlaybackRate_ ? setPlaybackRate_(h, rate) : ThreeFpResult::NotSupported; }
+ThreeFpResult ThreeFpApi::selectAudio(void *h,int stream) const {return selectAudio_?selectAudio_(h,stream):ThreeFpResult::NotSupported;}
+ThreeFpResult ThreeFpApi::loadExternalAudio(void *h,const char *path) const {return loadExternalAudio_?loadExternalAudio_(h,path,-1,0):ThreeFpResult::NotSupported;}
+ThreeFpResult ThreeFpApi::clearExternalAudio(void *h) const {return clearExternalAudio_?clearExternalAudio_(h):ThreeFpResult::NotSupported;}
+ThreeFpResult ThreeFpApi::setAudioEffects(void *h,bool enabled,const float *gains,float wave,qint64 delay) const {return setAudioEffects_?setAudioEffects_(h,enabled?1u:0u,gains,wave,delay):ThreeFpResult::NotSupported;}
 QString ThreeFpApi::mediaInfo(void *h) const {
     if (!mediaInfo_ || !h) return {};
     std::uint32_t length = 0; mediaInfo_(h, nullptr, 0, &length);

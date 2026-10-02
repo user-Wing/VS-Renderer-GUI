@@ -13,6 +13,8 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QProcess>
+#include <QRegularExpression>
 #include <QTreeWidget>
 #include <QTabWidget>
 #include <QTemporaryDir>
@@ -36,12 +38,20 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     resize(1050, 620);
     auto *layout = new QVBoxLayout(this);
     tabs_ = new QTabWidget(this);
+    tabs_->setObjectName(QStringLiteral("exportTabs"));
+    tabs_->setStyleSheet(QStringLiteral(
+        "QTabWidget::pane{border:1px solid #c8c8c8;}"
+        "QTabWidget::tab-bar{left:13px;}"
+        "QTabBar::tab{background:#e9e9e9;color:#4a4a4a;border:1px solid #c8c8c8;padding:9px 20px;margin-right:4px;}"
+        "QTabBar::tab:selected{background:#d9ebf7;color:#005a9e;border-bottom:3px solid #0067c0;font-weight:600;}"
+        "QTabBar::tab:hover:!selected{background:#f0f6fb;border-color:#7baed6;}"));
     layout->addWidget(tabs_);
     message_ = new QLabel(this);
     message_->setWordWrap(true);
     layout->addWidget(message_);
     auto *settings = new QWidget(tabs_);
     auto *form = new QVBoxLayout(settings);
+    form->setContentsMargins(12, 12, 12, 12);
     form->addWidget(new QLabel(QStringLiteral("3FUI 参数（单文件与批处理共用，VS 设置取自主界面）"), settings));
     command_ = new QPlainTextEdit(settings);
     command_->setObjectName(QStringLiteral("exportCommand"));
@@ -65,6 +75,7 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
 
     auto *prepare = new QWidget(tabs_);
     auto *prepareLayout = new QVBoxLayout(prepare);
+    prepareLayout->setContentsMargins(12, 12, 12, 12);
     prepareLayout->addWidget(new QLabel(QStringLiteral("将视频拖入下方列表；全部复用当前 VS 设置与“导出设置”中的 3FUI 参数。"), prepare));
     prepared_ = new PreparedFiles(prepare);
     prepared_->setObjectName(QStringLiteral("preparedFiles"));
@@ -103,6 +114,7 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
 
     auto *queue = new QWidget(tabs_);
     auto *queueLayout = new QVBoxLayout(queue);
+    queueLayout->setContentsMargins(12, 12, 12, 12);
     table_ = new QTreeWidget(queue);
     table_->setObjectName(QStringLiteral("encodingQueue"));
     table_->setColumnCount(5);
@@ -117,6 +129,8 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     table_->header()->setSectionsMovable(true);
     table_->header()->setStretchLastSection(false);
     table_->header()->setSectionResizeMode(QHeaderView::Interactive);
+    table_->header()->setStyleSheet(QStringLiteral(
+        "QHeaderView::section{background:#eeeeee;color:#1b1b1b;border:0;border-right:2px solid #999999;border-bottom:1px solid #aaaaaa;padding:6px 8px;}"));
     table_->setColumnWidth(0, 420);
     table_->setColumnWidth(1, 230);
     queueLayout->addWidget(table_, 1);
@@ -200,11 +214,12 @@ void ExportWindow::setCurrentSource(const QString &source)
     singleOutput_->setText(source.isEmpty() ? QString() : outputPath(source, {}, true));
 }
 
-void ExportWindow::setComposition(const QString &script, const QStringList &sources, double audioOffset, bool muted, const QString &description)
+void ExportWindow::setComposition(const QString &script, const QStringList &sources, double audioOffset, bool muted, const QString &description, const QSize &outputSize)
 {
     compositionSources_ = sources;
     compositionAudioOffset_ = audioOffset;
     compositionMuted_ = muted;
+    compositionSize_ = outputSize;
     setScriptBuilder([script](const QString &) { ScriptBuildResult result; result.script = script; return result; });
     tabs_->setTabEnabled(1, false);
     sourceLabel_->setText(description);
@@ -268,6 +283,19 @@ bool ExportWindow::addJob(const QString &command, const QString &output, const Q
                           const QString &script, double durationSeconds, QString *error)
 {
     const auto fail = [&](const QString &message) { if (error) *error = message; return false; };
+    if (!compositionSources_.isEmpty()) {
+        auto normalized = command;
+        normalized.replace(QStringLiteral("\\_"), QStringLiteral("_"));
+        const auto tokens = QProcess::splitCommand(normalized);
+        const QRegularExpression geometry(QStringLiteral("\\b(scale\\w*|crop\\w*|pad\\w*|zscale|transpose\\w*|rotate|v360|perspective|zoompan)\\s*(?:=|,|;|$)"));
+        for (int i = 0; i < tokens.size(); ++i) {
+            const auto &option = tokens[i];
+            if (option == QStringLiteral("-s") || option.startsWith(QStringLiteral("-s:")) ||
+                ((option == QStringLiteral("-vf") || option == QStringLiteral("-filter") || option.startsWith(QStringLiteral("-filter:"))) &&
+                 i + 1 < tokens.size() && geometry.match(tokens[i + 1]).hasMatch()))
+                return fail(QStringLiteral("对比画布输出必须保持最大源视频分辨率，请移除 3FUI 参数中的尺寸、缩放、裁切或旋转设置。"));
+        }
+    }
     const QString sourceKey = pathKey(source);
     const QString outputKey = pathKey(output);
     QStringList inputKeys{sourceKey};
@@ -296,6 +324,9 @@ bool ExportWindow::addJob(const QString &command, const QString &output, const Q
         if (pathKey(input) == outputKey) return fail(QStringLiteral("输出不能覆盖任何对比源视频。"));
     if (!compositionSources_.isEmpty()) {
         auto &args = job->plan.ffmpegArguments;
+        const int destination = args.indexOf(QDir::toNativeSeparators(output));
+        args.insert(destination,QStringLiteral("-s:v"));
+        args.insert(destination+1,QStringLiteral("%1x%2").arg(compositionSize_.width()).arg(compositionSize_.height()));
         const int input = args.indexOf(QStringLiteral("-i"));
         if (input >= 0 && compositionAudioOffset_ != 0) {
             args.insert(input, QStringLiteral("-itsoffset"));
