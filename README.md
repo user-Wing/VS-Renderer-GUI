@@ -55,7 +55,7 @@ Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜�
 
 - [更新日志](changelog.md)：版本改动、性能测量与验证记录。
 - [依赖与构建指南](docs/dependencies.md)：Qt / CMake、VapourSynth、3FP 和完整运行时准备步骤。
-- [便携更新说明](docs/portable-updates.md)：配置保留、更新包与安装流程。旧 1.0.2 更新器首次升级到 1.0.3 需手动解压。
+- [便携更新说明](docs/portable-updates.md)：配置保留、更新包与安装流程。更新包兼容 1.0.2 更新器，安装时保留已有目录路径。
 - [项目地图](project.md)：实现路径与专项技术文档。
 
 源码采用 [MIT License](LICENSE)，随包第三方组件遵循各自许可证，见 [第三方声明](THIRD_PARTY_NOTICES.md)。

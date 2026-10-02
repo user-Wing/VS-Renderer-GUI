@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -29,6 +30,13 @@ private slots:
         QVERIFY(!PortableUpdater::safeArchiveListing("----------\nPath = VS-Renderer-GUI-anything-windows-x64/vs-player.exe\n"));
         for(const auto &path:QStringList{"/abs","C:/abs",root+"/../evil",root+"/x:stream",root+"/CON.txt",root+"/bad.",root+"/bad ",root+"//x"})QVERIFY2(!PortableUpdater::safeArchiveListing("----------\nPath = "+path+"\n"),qPrintable(path));
         QVERIFY(!PortableUpdater::safeArchiveListing("----------\nPath = "+root+"/x\nSymbolic Link = ../outside\n"));QVERIFY(!PortableUpdater::safeArchiveListing("----------\nPath = "+root+"/X\nPath = "+root+"/x\n"));}
+    void releasedPackageCompatibility(){
+        const auto archive=qEnvironmentVariable("VSR_TEST_UPDATE_ARCHIVE");if(archive.isEmpty())QSKIP("Set VSR_TEST_UPDATE_ARCHIVE to audit a release package");
+        QProcess listing;listing.start(tool("7z.exe"),{"l","-slt","-sccUTF-8",archive});QVERIFY(listing.waitForFinished(15000));QCOMPARE(listing.exitCode(),0);const auto text=QString::fromUtf8(listing.readAllStandardOutput());QVERIFY(PortableUpdater::safeArchiveListing(text));
+        const auto entries=text.mid(text.indexOf("----------")).split('\n');int paths=0;
+        for(const auto &entry:entries)if(entry.startsWith("Path = ")){auto path=entry.mid(7).trimmed();path.replace('\\','/');QVERIFY2(QRegularExpression("^VS-Renderer-GUI-[0-9.]+-windows-x64$").match(path.section('/',0,0)).hasMatch(),qPrintable(path));++paths;}
+        QVERIFY(paths>10);
+    }
     void downloadVerifyAndCancel(){QTemporaryDir dir;const auto root=dir.filePath("VS-Renderer-GUI-windows-x64");payload(root);
         QProcess zip;zip.setWorkingDirectory(dir.path());zip.start(tool("7z.exe"),{"a","-t7z",dir.filePath("test.7z"),QFileInfo(root).fileName(),"-mx=1"});QVERIFY(zip.waitForFinished(15000));QCOMPARE(zip.exitCode(),0);QFile file(dir.filePath("test.7z"));QVERIFY(file.open(QIODevice::ReadOnly));const auto bytes=file.readAll();
         QTcpServer server;QVERIFY(server.listen(QHostAddress::LocalHost));connect(&server,&QTcpServer::newConnection,this,[&]{while(auto *socket=server.nextPendingConnection()){connect(socket,&QTcpSocket::disconnected,socket,&QObject::deleteLater);connect(socket,&QTcpSocket::readyRead,socket,[socket,&bytes]{const auto request=socket->readAll();QByteArray response="HTTP/1.1 200 OK\r\nContent-Length: "+QByteArray::number(bytes.size())+"\r\nConnection: close\r\n\r\n";if(!request.startsWith("HEAD "))response+=bytes;socket->write(response);socket->disconnectFromHost();});}});

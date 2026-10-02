@@ -20,11 +20,11 @@
 
 ## 下载与更新
 
-完整 Windows x64 便携包：`1.0.3.7z`，校验文件：`1.0.3.7z.sha256`。标准 7z LZMA2 9级极限压缩，不使用 Zstandard；解压得到固定目录 `VS-Renderer-GUI-windows-x64`。
+完整 Windows x64 便携包：`1.0.3.7z`，校验文件：`1.0.3.7z.sha256`。标准 7z LZMA2 9级极限压缩，不使用 Zstandard；解压得到版本目录 `VS-Renderer-GUI-1.0.3-windows-x64`，兼容 1.0.2 更新器。
 
 包含两个程序、VS/Python/Qt/FFmpeg/滤镜运行时、LAV Filters 0.83.0、madVR、更新工具、内置 VPY 和许可证。排除缓存、个人配置、用户 VPY、截图、测试文件和日志。
 
-维护者手动上传附件和 [ModelScope 更新源](https://www.modelscope.cn/datasets/ARXChem/Software-List/files?Root=VS-GUI)。旧 1.0.2 更新器需要首次手动解压 1.0.3；新版后续更新支持固定目录，并保留配置及自定义预设。
+维护者手动上传附件和 [ModelScope 更新源](https://www.modelscope.cn/datasets/ARXChem/Software-List/files?Root=VS-GUI)。1.0.2 可通过更新器升级，安装时保持现有目录路径并保留配置及自定义预设。
 
 ## 验证与已知边界
 

@@ -4,7 +4,7 @@ Renderer 设置和 Player 的“设置 → 基本设置”都显示当前版本�
 
 下载使用随包 `runtime/tools/aria2-next.exe`（2.8.3），八路分段、证书验证、有限重试；哈希按小块异步验证，下载和解压也不阻塞界面。更新包需要目录接口提供有效大小与 SHA-256，下载地址使用文件 Revision 固定版本。关闭更新窗取消准备，取消或校验失败不会修改原程序目录。
 
-从 1.0.3 起，归档结构为单个固定 `VS-Renderer-GUI-windows-x64` 目录（新版更新器仍接受历史版本目录），包含两个正式 EXE、匹配的原生 DLL、完整 VS / Python / 解码器 / 着色器 / Qt 运行时、语言包、更新工具与 `release.json`。`release.json` 示例：
+为兼容已发布的 1.0.2 更新器，归档结构使用单个带版本号的 `VS-Renderer-GUI-<版本>-windows-x64` 目录；1.0.3 更新器同时接受固定根目录，包含两个正式 EXE、匹配的原生 DLL、完整 VS / Python / 解码器 / 着色器 / Qt 运行时、语言包、更新工具与 `release.json`。`release.json` 示例：
 
 ```json
 {"schema": 1, "version": "1.0.3", "platform": "windows-x64"}
@@ -20,4 +20,4 @@ Renderer 设置和 Player 的“设置 → 基本设置”都显示当前版本�
 
 1.0.3 发布安排：推送完整源码到 GitHub，创建无附件的 Release 草稿。`1.0.3.7z` 与 `1.0.3.7z.sha256` 由维护者手动上传到 GitHub Release 及 ModelScope 数据集 `ARXChem/Software-List` 的 `VS-GUI` 目录；本轮不自动上传二进制或更新源，不发布草稿。
 
-归档固定根目录为 `VS-Renderer-GUI-windows-x64`。旧 1.0.2 更新器只接受版本根目录，因此首次迁移需手动解压 1.0.3；之后新版更新器支持固定目录及历史版本目录。原有 1.0.2 远程包保持不变。
+1.0.3 修正归档根目录后，1.0.2 可正常验证与更新，无需首次手动迁移。安装器保持已有安装目录路径，不因压缩包的版本目录名重命名目标；本地开发目录仍为 `dist/VS-Renderer-GUI-windows-x64`。旧固定根目录包的大小及 SHA-256 正确，但会在 1.0.2 路径安全校验阶段被拒绝；维护者需替换更新源中的 `1.0.3.7z` 并同步校验文件。
