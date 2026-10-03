@@ -55,8 +55,12 @@ void PlayerWindow::setInterpolation(int stage,bool automatic) {
 }
 bool PlayerWindow::advanceInterpolation() {
     const int stage=interpolationStage();if(stage<0 || !interpolationAuto_)return false;
+    if(stage>=3){showInterpolationWarning(true);return false;}
     if(resumeAt_<0)resumeAt_=position();autoPlay_=playing_ || autoPlay_;
     setInterpolation(stage+1,true);message_->setText(tr("自动补帧：切换到 %1。").arg(interpolationNames().at(stage+1)));return true;
+}
+void PlayerWindow::showInterpolationWarning(bool visible) {
+    interpolationWarning_->setVisible(visible);if(visible){interpolationWarning_->adjustSize();interpolationWarning_->raise();}
 }
 void PlayerWindow::ensureProfiles() {
     const QDir shaders(QDir(QCoreApplication::applicationDirPath()).filePath("shaders"));QDir().mkpath(shaders.absolutePath());
@@ -82,7 +86,7 @@ void PlayerWindow::ensureProfiles() {
         if(stage<2){graph.setParameter(node,"threads",4);graph.setParameter(node,"inference_scale",stage==0?"1 - 原始":"2 - 半宽半高");}
         else if(stage==2){graph.setParameter(node,"block","8");graph.setParameter(node,"pel","2");graph.setParameter(node,"overlap",true);graph.setParameter(node,"chroma",true);}
         auto script=PresetStore::create(graph,SourceFilter::Ffms2,{},interpolationNames().at(stage));
-        script.replace("clip = src","clip = core.resize.Point(src, format=vs.YUV444P16, matrix_s='709' if src.format.color_family == vs.RGB else None)");
+        script.replace("clip = src","clip = core.resize.Point(src, format=vs.YUV444P16, **({'matrix': _vsr_matrix(src)} if src.format.color_family == vs.RGB else {}))");
         PresetStore::write(path,script);
     }
     for(const auto &mode:QStringList{"Anime","Realistic"}) {
@@ -172,7 +176,7 @@ void PlayerWindow::setDirectMode(bool enabled) {
     if(opened){clock_->openFile(mediaInput_);rateApplied_=false;resumeAt_=at;}
 }
 void PlayerWindow::updateProfile() {
-    if((interpolationStage()>=0 && !interpolationAuto_) || fixedAnimeStage()>=0 || madvrMode() || (profile().isEmpty() && !networkSource()) || qualityStage_>=5 || !ready_ || !playing_ || seekPending_ || profileResize_->isActive() || !qualitySettling_.isValid() || qualitySettling_.elapsed()<2000) {qualityTimer_.invalidate();return;}
+    if((interpolationStage()>=0 && !interpolationAuto_ && interpolationStage()!=3) || fixedAnimeStage()>=0 || madvrMode() || (profile().isEmpty() && !networkSource()) || qualityStage_>=5 || !ready_ || !playing_ || seekPending_ || profileResize_->isActive() || !qualitySettling_.isValid() || qualitySettling_.elapsed()<2000) {qualityTimer_.invalidate();return;}
     const auto output=outputSnapshot();const auto dropped=skippedFrames_+output.droppedVideoFrames+output.coalescedVideoFrames;
     if(!qualityTimer_.isValid()){qualityTimer_.start();qualityDropped_=dropped;qualitySubmitted_=direct_?output.presentedVideoFrames:submittedFrames_;return;}
     if(qualityTimer_.elapsed()<5000)return;
@@ -180,7 +184,10 @@ void PlayerWindow::updateProfile() {
     if(dropped<qualityDropped_ || (direct_?output.presentedVideoFrames:submittedFrames_)<qualitySubmitted_)return;
     const auto missed=dropped-qualityDropped_;
     const auto frames=(direct_?output.presentedVideoFrames:submittedFrames_)-qualitySubmitted_;
-    if(frames+missed<48 || double(missed)/(frames+missed)<=.05)return;
+    if(frames+missed<48)return;
+    const bool overloaded=double(missed)/(frames+missed)>.05;
+    if(interpolationStage()==3){showInterpolationWarning(overloaded);return;}
+    if(!overloaded)return;
     if(advanceInterpolation())return;
     if(direct_)qualityStage_=4;
     resumeAt_=position();autoPlay_=true;++qualityStage_;refreshScript();

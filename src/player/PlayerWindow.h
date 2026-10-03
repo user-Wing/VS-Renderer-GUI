@@ -18,6 +18,7 @@ class QVBoxLayout;
 class QSplitter;
 class QTreeWidget;
 class QTreeWidgetItem;
+class TestPlayer;
 namespace vsr {
 class ThreeFpPlayer;
 class LavPlayback;
@@ -27,6 +28,7 @@ class PlayerSubtitles;
 class PlayerNetworkInput;
 class PlayerLanguage;
 class PlayerImage;
+class PlayerImageTools;
 class PlayerWindow final : public QMainWindow {
     Q_OBJECT
 public:
@@ -57,6 +59,7 @@ protected:
     void dragMoveEvent(QDragMoveEvent *) override;
     void dragLeaveEvent(QDragLeaveEvent *) override;
 private:
+    friend class ::TestPlayer;
     void buildTransport(QVBoxLayout *layout);
     void buildPlaylist(QWidget *parent);
     void updateChrome();
@@ -81,11 +84,14 @@ private:
     QStringList qualityNames() const;
     QStringList interpolationNames() const;
     bool advanceInterpolation();
+    void showInterpolationWarning(bool visible);
     QSize profileTarget() const;
     void updateProfile();
     void setPlaylistPinned(bool pinned);
     void dockPlaylist();
     void showSettings();
+    void showColorSettings();
+    void applyColorSettings();
     void showSpeedPopup();
     void updateInfo();
     void nextFile(int direction);
@@ -112,6 +118,7 @@ private:
     std::unique_ptr<PlayerLanguage> language_;
     std::unique_ptr<PlayerImage> imageLoader_;
     bool imageMode_ = false;
+    PlayerImageTools *imageTools_ = nullptr;
     PlayerResources resources_;
     ResourceUsage usage_;
     ThreeFpApi api_;
@@ -124,6 +131,7 @@ private:
     QLabel *info_ = nullptr;
     QLabel *message_ = nullptr;
     QLabel *dragHint_ = nullptr;
+    QLabel *interpolationWarning_ = nullptr;
     QLabel *videoBadge_ = nullptr;
     QLabel *audioBadge_ = nullptr;
     QPushButton *decoderBadge_ = nullptr;
@@ -178,6 +186,10 @@ private:
     bool playing_ = false;
     bool autoPlay_ = false;
     bool seekPending_ = false;
+    QTimer *timelinePreview_ = nullptr;
+    qint64 timelineTarget_ = -1;
+    quint64 timelinePresented_ = 0;
+    bool timelineDragging_ = false, timelineResume_ = false, timelineWaiting_ = false;
     bool useLav_ = false;
     bool lavVideo_ = false;
     bool lavAudio_ = false;

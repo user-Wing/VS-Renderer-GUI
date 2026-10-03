@@ -40,6 +40,9 @@ public:
     static const QList<FilterDefinition> &all();
     static const FilterDefinition *find(const QString &id);
     static QStringList categories();
+    static QStringList shaderCategories();
+    static QString shaderCategory(const QString &path);
+    static QString shaderHardwareLabel(const QString &path);
 };
 
 }

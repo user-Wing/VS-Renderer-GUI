@@ -1,0 +1,16 @@
+AWJimage 1.1.0 - unmodified standalone image-conversion backend
+Copyright: AWJimage contributors (see NOTICE.txt and source).
+License: GNU Affero General Public License, version 3; see LICENSE.
+VS Player invokes AWJ.exe through command-line arguments; no AWJ source is linked into VS Player.
+
+Upstream: https://github.com/Dominic485649/AWJimage
+Release: https://github.com/Dominic485649/AWJimage/releases/tag/1.1.0
+Source revision: 26b07c852fe2a51ad7a0bdb796ab7b89b16f8f3d
+Corresponding source is provided alongside these binaries as AWJimage-1.1.0-source.tar.gz.
+The upstream CMakePresets.json, vcpkg.json, vcpkg-overlays, scripts, licenses,
+README and THIRD_PARTY_NOTICES document building and obtaining pinned codec dependencies.
+AVX2 is required by this upstream Windows build. Image viewing does not require this backend.
+
+Native conversion: libavif/AOM, libwebp, libjxl, JPEGli, libpng.
+GPU acceleration applies to visual-quality metrics, not codec encoding/decoding.
+AWJ_Win.7z SHA256: a1bf56e6ac03726cde6aea9d5750076d35f7a80dbeace0260361ad9f6a794524

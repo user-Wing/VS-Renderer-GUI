@@ -1,0 +1,57 @@
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -571,6 +571,24 @@
+     const float4 d=LoadClamped(sourceTexture,origin+int2(1,1),dimensions);
+     return clamp(filtered,min(min(a,b),min(c,d)),max(max(a,b),max(c,d)));
+ }
++float4 SampleLanczos4(Texture2D<float4> sourceTexture,float2 uv,uint2 dimensions,float2 outputSize) {
++    float2 position=uv*float2(dimensions)-0.5;
++    int2 origin=int2(floor(position));
++    float2 fraction=position-float2(origin);
++    float2 scale=min(float2(1.0,1.0),outputSize/float2(dimensions));
++    int2 support=min(int2(ceil(4.0/max(scale,0.0625))),int2(64,64));
++    float4 total=0.0;float sum=0.0;
++    [loop] for(int y=-support.y+1;y<=support.y;++y) {
++        float dy=(float(y)-fraction.y)*scale.y;
++        float wy=abs(dy)>=4.0?0.0:Sinc(dy)*Sinc(dy/4.0);
++        [loop] for(int x=-support.x+1;x<=support.x;++x) {
++            float dx=(float(x)-fraction.x)*scale.x;
++            float w=wy*(abs(dx)>=4.0?0.0:Sinc(dx)*Sinc(dx/4.0));
++            total+=LoadClamped(sourceTexture,origin+int2(x,y),dimensions)*w;sum+=w;
++        }
++    }
++    return total/max(sum,0.000001);
++}
+ int WrapPanoramaX(int coordinate,uint width) {
+     int wrapped=coordinate%int(width);
+     return wrapped<0?wrapped+int(width):wrapped;
+@@ -694,6 +712,7 @@
+     if(algorithm==4)return SampleJinc2(sourceTexture,uv,dimensions);
+     if(algorithm==5)return SampleSeparable(sourceTexture,uv,dimensions,5);
+     if(algorithm==6)return SampleSuperXbr(sourceTexture,uv,dimensions);
++    if(algorithm==8)return SampleLanczos4(sourceTexture,uv,dimensions,float2(OutputWidth,OutputHeight)*max(ViewZoom,1.0));
+     return SampleLanczos3(sourceTexture,uv,dimensions,float2(OutputWidth,OutputHeight));
+ }
+ float3 ReadSource(float2 uv) {
+@@ -2097,9 +2116,9 @@
+ FFFResult PlayerVideoRenderer::SetScalingAlgorithms(
+     const FFF3FPScalingAlgorithm upscale,
+     const FFF3FPScalingAlgorithm downscale) noexcept {
+-    if ((static_cast<std::uint32_t>(upscale) & 255u) > 7u ||
++    if ((static_cast<std::uint32_t>(upscale) & 255u) > 8u ||
+         ((static_cast<std::uint32_t>(upscale) >> 8) & 255u) > 11u ||
+-        static_cast<std::uint32_t>(downscale) > 7u)
++        static_cast<std::uint32_t>(downscale) > 8u)
+         return FFFResult::InvalidArgument;
+     upscaleAlgorithm_.store(static_cast<std::uint32_t>(upscale), std::memory_order_release);
+     downscaleAlgorithm_.store(static_cast<std::uint32_t>(downscale), std::memory_order_release);
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -33,6 +33,7 @@
+     Bicubic = 2,
+     Lanczos3 = 3,
+     Jinc2 = 4,
++    Lanczos4 = 8,
+ };
+ 
+ enum class FFF3FPColorTransfer : std::uint32_t {

@@ -130,7 +130,8 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     scaler_=new QComboBox(this); scaler_->setMaximumWidth(185);
     scaler_->addItems({QStringLiteral("放大：Nearest"),QStringLiteral("放大：Bilinear"),QStringLiteral("放大：Bicubic"),QStringLiteral("放大：Lanczos 3"),QStringLiteral("放大：Jinc 2"),QStringLiteral("放大：Spline36"),QStringLiteral("放大：Super-XBR（单阶段）")});
     controls->addWidget(scaler_);
-    connect(scaler_,&QComboBox::currentIndexChanged,this,[this](int index){for(auto &p:players_)if(p)p->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(index),ThreeFpScalingAlgorithm::Lanczos3);});
+    scaler_->addItem(QStringLiteral("放大：Lanczos 4"));
+    connect(scaler_,&QComboBox::currentIndexChanged,this,[this](int index){for(auto &p:players_)if(p)p->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(index==7?8:index),ThreeFpScalingAlgorithm::Lanczos3);});
     layout->addWidget(controls_);
     controls_->hide(); mode_->hide();
     status_=new QLabel(QStringLiteral("导入最多 9 个视频；每个视频独立保存对齐偏移。"),this); status_->setWordWrap(true); layout->addWidget(status_);
@@ -169,7 +170,7 @@ void AnalysisPage::configurePlayer(int i)
     players_[i]->setChromaAlgorithm(chromaAlgorithm_);
     players_[i]->setMuted(audio_->currentData().toInt()!=i);
     players_[i]->setVrrPresent(vrr_->isChecked()); players_[i]->setVrrPacing(pacing_->isChecked());
-    players_[i]->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(scaler_->currentIndex()),ThreeFpScalingAlgorithm::Lanczos3);
+    players_[i]->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(scaler_->currentIndex()==7?8:scaler_->currentIndex()),ThreeFpScalingAlgorithm::Lanczos3);
     connect(players_[i].get(),&ThreeFpPlayer::errorOccurred,this,[this](const QString &error){status_->setText(error);});
     connect(panes_[i],&PreviewPane::redrawRequested,players_[i].get(),&ThreeFpPlayer::redraw);
     connect(panes_[i],&PreviewPane::viewChanged,this,[this,pane=panes_[i]](float z,float x,float y){

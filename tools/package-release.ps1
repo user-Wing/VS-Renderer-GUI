@@ -10,7 +10,7 @@
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 if (-not $BuildDirectory) { $BuildDirectory = Join-Path $projectRoot "build\mingw-release" }
-if (-not $NativeRuntimeDirectory) { $NativeRuntimeDirectory = Join-Path $projectRoot "build\mingw-debug" }
+if (-not $NativeRuntimeDirectory) { $NativeRuntimeDirectory = $BuildDirectory }
 $BuildDirectory = [System.IO.Path]::GetFullPath($BuildDirectory)
 $NativeRuntimeDirectory = [System.IO.Path]::GetFullPath($NativeRuntimeDirectory)
 $distRoot = Join-Path $projectRoot "dist"
@@ -54,13 +54,23 @@ if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force 
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
 Copy-Item -LiteralPath $exe -Destination $staging
+if (Test-Path -LiteralPath (Join-Path $BuildDirectory 'color/vsr-color.dll')) {
+    Copy-Item -LiteralPath (Join-Path $BuildDirectory 'color') -Destination $staging -Recurse
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/color-management-1.0.4.md') -Destination (Join-Path $staging 'COLOR-MANAGEMENT.md')
+}
 New-Item -ItemType Directory -Force -Path (Join-Path $staging "runtime") | Out-Null
 Copy-Item -LiteralPath $pythonRuntime -Destination (Join-Path $staging "runtime\python") -Recurse
 $packagedFfmpeg = Join-Path $staging "runtime\ffmpeg"
 New-Item -ItemType Directory -Force -Path $packagedFfmpeg | Out-Null
-Copy-Item -LiteralPath $FfmpegExecutable -Destination (Join-Path $packagedFfmpeg "ffmpeg.exe") -Force
+Copy-Item -LiteralPath $FfmpegExecutable -Destination (Join-Path $staging "ffmpeg.exe") -Force
 Get-ChildItem -LiteralPath (Split-Path -Parent $FfmpegExecutable) -Filter "*.dll" -File |
-    Copy-Item -Destination $packagedFfmpeg -Force
+    Copy-Item -Destination $staging -Force
+foreach ($name in @('ffprobe.exe', 'ffplay.exe')) {
+    $extra = Join-Path (Split-Path -Parent $FfmpegExecutable) $name
+    if (Test-Path -LiteralPath $extra) { Copy-Item -LiteralPath $extra -Destination $staging -Force }
+}
+$ffmpegMetadata = Join-Path (Split-Path -Parent $FfmpegExecutable) 'runtime/ffmpeg'
+if (Test-Path -LiteralPath $ffmpegMetadata) { Get-ChildItem -LiteralPath $ffmpegMetadata | Copy-Item -Destination $packagedFfmpeg -Recurse -Force }
 Get-ChildItem -LiteralPath $NativeRuntimeDirectory -Filter "*.dll" -File |
     Copy-Item -Destination $staging -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md"),

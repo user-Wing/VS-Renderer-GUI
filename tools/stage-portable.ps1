@@ -23,11 +23,17 @@ if ($initialStage) {
 foreach ($exe in @("VSRenderer.exe", "vs-player.exe", "FFF.Native.dll")) {
     Copy-Item -LiteralPath (Join-Path $buildRoot $exe) -Destination $output -Force
 }
+if (Test-Path -LiteralPath (Join-Path $buildRoot 'color/vsr-color.dll')) {
+    Copy-Item -LiteralPath (Join-Path $buildRoot 'color') -Destination $output -Recurse -Force
+}
 Copy-Item -LiteralPath (Join-Path $buildRoot "runtime/python") -Destination (Join-Path $output "runtime") -Recurse -Force
+& (Join-Path $PSScriptRoot 'stage-ffmpeg.ps1') -OutputDirectory $output
+if (-not (Test-Path -LiteralPath (Join-Path $buildRoot 'runtime/awj/AWJ.exe'))) { throw 'Missing AWJimage backend; build VSPlayer before staging.' }
+Copy-Item -LiteralPath (Join-Path $buildRoot 'runtime/awj') -Destination (Join-Path $output 'runtime') -Recurse -Force
 New-Item -ItemType Directory -Path (Join-Path $output "shaders"), (Join-Path $output "vpy") -Force | Out-Null
 Get-ChildItem -LiteralPath $ShaderDirectory -Filter "*Anime4K*.glsl" -File | Copy-Item -Destination (Join-Path $output "shaders") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets/anime4k-a-fast.glsl"), (Join-Path $projectRoot "assets/anime4k-no-cnn.glsl") -Destination (Join-Path $output "shaders") -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot "assets/mpv-shaders") -Destination (Join-Path $output "shaders") -Recurse -Force
+& (Join-Path $PSScriptRoot 'stage-shaders.ps1') -OutputDirectory (Join-Path $output 'shaders') -SevenZip (Join-Path $output 'runtime/tools/7z.exe')
 & (Join-Path $PSScriptRoot 'stage-update-tools.ps1') -OutputDirectory (Join-Path $output 'runtime/tools')
 @{version=$version;schema=1;platform='windows-x64'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release.json') -Encoding UTF8
 New-Item -ItemType Directory -Path (Join-Path $output "languages") -Force | Out-Null
@@ -41,14 +47,23 @@ $lavNames = @(Get-ChildItem -LiteralPath $LavDirectory -File | Select-Object -Ex
 Get-ChildItem -LiteralPath (Join-Path $output "LAVFilters64") -Filter '*-lav-*.dll' -File |
     Where-Object { $_.Name -notin $lavNames } | ForEach-Object { Remove-Item -LiteralPath $_.FullName }
 Get-ChildItem -LiteralPath $MadvrDirectory | Copy-Item -Destination (Join-Path $output "madVR09217") -Recurse -Force
+& (Join-Path $PSScriptRoot 'trim-portable.ps1') -OutputDirectory $output
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md"), (Join-Path $projectRoot "project.md"), (Join-Path $projectRoot "changelog.md"), (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $output -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/dependencies.md") -Destination (Join-Path $output "DEPENDENCIES.md") -Force
 New-Item -ItemType Directory -Path (Join-Path $output "docs") -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/player-performance-1.0.2.md"), (Join-Path $projectRoot "docs/anime4k-fast-source.md"), (Join-Path $projectRoot "docs/portable-updates.md"), (Join-Path $projectRoot "docs/player-images-menu-1.0.3.md"), (Join-Path $projectRoot "docs/player-images-audio-1.0.3.md"), (Join-Path $projectRoot "docs/player-six-stage-1.0.3.md"), (Join-Path $projectRoot "docs/player-resolution-threshold-1.0.3.md") -Destination (Join-Path $output "docs") -Force
 Write-Host "Local $version program directory: $output"
 
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/image-editor-plan.md'), (Join-Path $projectRoot 'docs/image-editor-round2-1.0.4.md') -Destination (Join-Path $output 'docs') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/image-editor-interaction-1.0.4.md') -Destination (Join-Path $output 'docs') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/image-editor-workflows-1.0.4.md') -Destination (Join-Path $output 'docs') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'third_party/image-zlib/LICENSE') -Destination (Join-Path $output 'docs/image-zlib-LICENSE.txt') -Force
+
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets/image-runtime-LICENSE.txt") -Destination (Join-Path $output "IMAGE-LICENSE.txt") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/player-apply-avif-1.0.3.md") -Destination (Join-Path $output "docs") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/player-manual-presets-1.0.3.md") -Destination (Join-Path $output "docs") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/release-1.0.3.md"), (Join-Path $projectRoot "docs/avif-large-yuv444-analysis.md"), (Join-Path $projectRoot "docs/renderer-panels-1.0.3.md"), (Join-Path $projectRoot "docs/renderer-ui-export-1.0.3.md"), (Join-Path $projectRoot "docs/icons-integration.md") -Destination (Join-Path $output "docs") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/mpv-shaders-interpolation-1.0.3.md") -Destination (Join-Path $output "docs") -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/player-image-tools-1.0.4.md'), (Join-Path $projectRoot 'docs/awjimage-NOTICE.txt') -Destination (Join-Path $output 'docs') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/tracks-size-1.0.4.md'), (Join-Path $projectRoot 'docs/ffmpeg-enhanced-1.0.4.md'), (Join-Path $projectRoot 'docs/ffmpeg-enhanced-runtime.json') -Destination (Join-Path $output 'docs') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/color-management-1.0.4.md') -Destination (Join-Path $output 'docs') -Force

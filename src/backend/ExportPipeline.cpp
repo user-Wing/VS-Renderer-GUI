@@ -19,6 +19,9 @@ QString resolveExecutable(const QString &requested, const QString &applicationDi
     const QFileInfo requestedInfo(requested);
     if (requestedInfo.isAbsolute() && requestedInfo.isFile())
         return requestedInfo.absoluteFilePath();
+    const QString shared = QDir(applicationDirectory).filePath(requestedInfo.fileName());
+    if (QFileInfo::exists(shared))
+        return shared;
     const QString bundled = QDir(applicationDirectory).filePath(bundledRelative);
     if (QFileInfo::exists(bundled))
         return bundled;

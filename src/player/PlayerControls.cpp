@@ -16,6 +16,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSlider>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <cmath>
 
@@ -45,8 +46,29 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     volume_ = new QSlider(Qt::Horizontal, this); volume_->setObjectName("playerVolume"); volume_->setRange(0, 100); volume_->setValue(100); volume_->setFixedWidth(105); volume_->setToolTip(tr("音量")); first->addWidget(volume_);
     const auto volume = [this] { clock_->setVolume(volume_->value() / 100.0f); clock_->setMuted(lavAudio_ || mute_->isChecked()); if (lav_) lav_->volume(volume_->value() / 100.0f,!lavAudio_ || mute_->isChecked());settings_->setValue("player/volume",volume_->value());settings_->setValue("player/muted",mute_->isChecked()); };
     connect(volume_, &QSlider::valueChanged, this, volume); connect(mute_, &QPushButton::toggled, this, volume);
-    connect(slider, &QSlider::valueChanged, this, [this, slider](int value) { if (!slider->isSliderDown()) seekTime(clock_->snapshot().duration100ns * value / 100000); });
-    connect(slider, &QSlider::sliderReleased, this, [this, slider] { seekTime(clock_->snapshot().duration100ns * slider->value() / 100000); });
+    timelinePreview_=new QTimer(this);timelinePreview_->setInterval(33);
+    connect(timelinePreview_,&QTimer::timeout,this,[this]{
+        if(!timelineDragging_ || !direct_ || timelineTarget_<0){timelinePreview_->stop();return;}
+        const auto snap=clock_->snapshot();
+        if(timelineWaiting_ && (snap.timelineGeneration==generation_ || snap.presentedVideoFrames<=timelinePresented_))return;
+        const auto target=timelineTarget_;timelineTarget_=-1;timelinePresented_=snap.presentedVideoFrames;
+        seekTime(target);timelineWaiting_=seekPending_;
+    });
+    connect(slider,&QSlider::sliderPressed,this,[this]{
+        timelineDragging_=direct_ && clock_->snapshot().selectedVideoStream>=0;
+        timelineResume_=timelineDragging_ && playing_;timelineWaiting_=false;
+        if(timelineResume_)togglePlayback();
+    });
+    connect(slider, &QSlider::valueChanged, this, [this, slider](int value) {
+        const auto target=clock_->snapshot().duration100ns * value / 100000;
+        if(slider->isSliderDown() && timelineDragging_){timelineTarget_=target;if(!timelinePreview_->isActive())timelinePreview_->start();}
+        else if(!slider->isSliderDown())seekTime(target);
+    });
+    connect(slider, &QSlider::sliderReleased, this, [this, slider] {
+        timelinePreview_->stop();timelineDragging_=false;timelineTarget_=-1;timelineWaiting_=false;
+        seekTime(clock_->snapshot().duration100ns * slider->sliderPosition() / 100000);
+        if(timelineResume_ && !playing_)togglePlayback();timelineResume_=false;
+    });
     auto *row = new QHBoxLayout; row->setContentsMargins(8, 0, 8, 0); row->setSpacing(4); layout->addLayout(row);
     const auto button = [this, row](const QString &text, const QString &tooltip, auto action) {
         auto *b = new QPushButton(text, this); b->setToolTip(tooltip); b->setFixedWidth(34); row->addWidget(b); connect(b, &QPushButton::clicked, this, action); return b;

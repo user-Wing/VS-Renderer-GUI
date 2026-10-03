@@ -44,6 +44,8 @@ public:
     void setView(float zoom, float panX, float panY);
     void redraw();
     ThreeFpSnapshot snapshot() const;
+    bool setColorSettings(const VsrColorSettings &settings);
+    VsrColorStatus colorStatus() const;
     bool samplePixel(int x, int y, ThreeFpPixelProbe &sample) const;
     bool submitFrame(const VapourSynthFrame &frame);
     bool setOutputFormat(const QString &format);
@@ -67,6 +69,8 @@ private:
     float volume_ = 1.0f;
     unsigned decodeMode_ = 2;
     bool automaticHdr_ = false;
+    VsrColorSettings colorSettings_ = VsrColorDefaultSettings();
+    bool customColorSettings_ = false;
     bool antiRinging_ = false;
     QString outputFormat_;
     quint64 subtitleSequence_ = 0;

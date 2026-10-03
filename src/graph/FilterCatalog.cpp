@@ -1,9 +1,15 @@
 #include "graph/FilterCatalog.h"
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QFile>
 
 #include <QSet>
 #include <QCoreApplication>
 #include <QDirIterator>
 #include <QDir>
+#include <QFileInfo>
+#include <QRegularExpression>
 
 namespace vsr {
 namespace {
@@ -52,9 +58,12 @@ const QList<FilterDefinition> &catalog() {
       choice("kernel", "算法", "Spline36", {"Point", "Bicubic", "Lanczos", "Spline36"}),
       integer("taps", "Lanczos taps", 3, 2, 16)}},
     {"anime4k", "mpv GLSL 着色器", "GPU 超分与着色器", "placebo",
-     "由 vs-placebo 在 VapourSynth 中直接执行 mpv/libplacebo GLSL；GPU 实时性取决于 shader、倍率、分辨率与显卡。输入会转成 16-bit YUV，输出为 YUV444P16。",
-     {choice("mode", "着色器", "anime4k-v4-a.glsl", {"anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-no-cnn.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL 位置", ""),
-      choice("scale", "输出倍率", "2×", {"0.5×", "1×", "2×", "3×", "4×"})}},
+     "按功能选择 mpv/libplacebo GLSL，输出为 YUV444P16。NIS 标明 NVIDIA 来源但并非 N 卡独占；DP4A 版本需要整数点积支持。补帧请使用 RIFE / MVTools 节点。",
+     {choice("category", "功能分类", "全部", FilterCatalog::shaderCategories()), choice("mode", "着色器", "anime4k-v4-a.glsl", {"anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-no-cnn.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL 位置", ""),
+      choice("output_mode", "输出方式", "倍率", {"倍率", "指定分辨率"}),
+      choice("scale", "输出倍率", "2×", {"0.5×", "1×", "2×", "3×", "4×"}),
+      integer("width", "输出宽度", 1920, 2, 65536), integer("height", "输出高度", 1080, 2, 65536),
+      boolean("keep_aspect", "保持宽高比", true), choice("dimension_axis", "", "width", {"width", "height"})}},
     {"remove_grain", "RemoveGrain", "降噪", "rgvs", "VCB 教程中的基础空间降噪。",
      {integer("mode", "模式", 20, 0, 28)}},
     {"bilateral", "Bilateral", "降噪", "vszip", "VSZip 双边滤波，注意纹理损失。",
@@ -174,6 +183,7 @@ const QList<FilterDefinition> &catalog() {
     const QDir shaders(QDir(QCoreApplication::applicationDirPath()).filePath("shaders"));
     QDirIterator files(shaders.path(),{"*.glsl","*.hook"},QDir::Files,QDirIterator::Subdirectories);QStringList choices;
     while(files.hasNext())choices.append(shaders.relativeFilePath(files.next()));
+    if(QFileInfo::exists(shaders.filePath("mpv-shaders.7z"))){QFile manifest(shaders.filePath("mpv-shaders/manifest.json"));if(manifest.open(QIODevice::ReadOnly))for(const auto &entry:QJsonDocument::fromJson(manifest.readAll()).object().value("files").toArray()){const auto item=entry.toObject();const auto name="mpv-shaders/"+item.value("path").toString();if(item.value("shader").toBool() && !choices.contains(name))choices.append(name);}}
     choices.sort(Qt::CaseInsensitive);
     for(auto &definition:catalog)if(definition.id=="anime4k")for(auto &parameter:definition.parameters)if(parameter.id=="mode") {
         parameter.choices.removeAll("自定义 GLSL");
@@ -212,6 +222,38 @@ QStringList FilterCatalog::categories()
         }
     }
     return result;
+}
+
+QStringList FilterCatalog::shaderCategories()
+{
+    return {"全部", "超分", "缩小", "基础锐化", "线条增强与抗锯齿", "降噪与修复", "去色带", "色度重建", "色彩与 LUT", "几何与画面效果", "其他", "自定义 GLSL"};
+}
+
+QString FilterCatalog::shaderCategory(const QString &path)
+{
+    if(path=="自定义 GLSL")return path;
+    const auto name=QFileInfo(path).fileName().toLower();const auto lower=path.toLower();
+    const auto matches=[&](const QString &pattern){return QRegularExpression(pattern).match(name).hasMatch();};
+    if(lower.contains("/chroma/") || matches("chroma|cfl|krig|bilateral"))return "色度重建";
+    if(matches("downscale|downsampling|acme-0.5|dpid"))return "缩小";
+    if(matches("deband|f3kdb|gradfun"))return "去色带";
+    if(lower.contains("/lut/") || lower.contains("/color/") || lower.contains("/eq/") || matches("vibrance|vibrancy|scurve|contrast|blift|bdim|gamma|tone|saturation|color|colour"))return "色彩与 LUT";
+    if(lower.contains("/aa/") || lower.contains("/warpsharp/") || matches("warpsharp|warpline|fxaa|smaa|cmaa|dlaa|faaa|axaa|thin|darken"))return "线条增强与抗锯齿";
+    if(lower.contains("/canvas/") || lower.contains("/mirror/") || lower.contains("/plane/") || matches("lensfix|hyperview|stretch|nls-next|rotate|zoom|mirror|un360|seascape|grain|noise|pixellate|plane_|canvas"))return "几何与画面效果";
+    if(matches("jpeg444|jpeg420"))return "降噪与修复";
+    if(matches("upscale|artcnn|cunny"))return "超分";
+    if(lower.contains("/deint/") || lower.contains("/dehaasn/") || matches("denoise|nlmeans|restore|deblur|deint|dehaasn|gaussianblur|guided.*smth|clamp|highlight|fixer|pixelclipper"))return "降噪与修复";
+    if(matches("upscale|superres|fsrcnn|artcnn|cunny|acnet|ravu|nnedi|anime4k|ani4k|espcn|esrgan|raisr|nvscaler|fsr|sgsr|gsr|superxbr|hqx|mmpx|omniscale|tsubaup|w2x|_x[234]|magickernel|magic_kernel"))return "超分";
+    if(lower.contains("/usm/") || matches("sharpen|unsharp|cas|guided.*enh"))return "基础锐化";
+    return "其他";
+}
+
+QString FilterCatalog::shaderHardwareLabel(const QString &path)
+{
+    const auto name=QFileInfo(path).fileName().toLower();
+    if(name.startsWith("nvscaler") || name.startsWith("nvsharpen"))return "NVIDIA NIS · 非 N 卡独占";
+    if(path.contains("/dp4a/",Qt::CaseInsensitive) || name.endsWith("-q.glsl") || name.endsWith("_q.glsl"))return "需要 DP4A";
+    return {};
 }
 
 }

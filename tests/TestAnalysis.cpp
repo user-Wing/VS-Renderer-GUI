@@ -244,7 +244,7 @@ private slots:
     void directComparison()
     {
         QTemporaryDir dir;
-        QString ffmpeg = QCoreApplication::applicationDirPath() + "/runtime/ffmpeg/ffmpeg.exe";
+        QString ffmpeg = QCoreApplication::applicationDirPath() + "/ffmpeg.exe";
         if (!QFileInfo::exists(ffmpeg)) ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg.exe"));
         if (ffmpeg.isEmpty()) ffmpeg = QStringLiteral("C:/PortableSoft/FFmpegFreeUI ReadyToRun x64/ffmpeg.exe");
         for (int i = 0; i < 2; ++i) {

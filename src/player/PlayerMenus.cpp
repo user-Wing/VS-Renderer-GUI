@@ -1,5 +1,6 @@
 #include "player/PlayerWindow.h"
 #include "player/PlayerMenu.h"
+#include "player/PlayerTracks.h"
 #include "player/PlayerSubtitles.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/LavPlayback.h"
@@ -68,7 +69,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     auto *processing=PlayerMenu::add(menu,tr("图像处理"));auto *interpolation=PlayerMenu::add(processing,tr("补帧"));
     auto *interpolationGroup=new QActionGroup(interpolation);
     const auto interpolationChoice=[&](const QString &name,int stage,bool automatic){auto *action=interpolation->addAction(name,this,[this,stage,automatic]{setInterpolation(stage,automatic);});action->setCheckable(true);action->setChecked(automatic?interpolationAuto_:(stage<0?interpolationStage()<0:!interpolationAuto_ && interpolationStage()==stage));interpolationGroup->addAction(action);};
-    interpolationChoice(tr("自动补帧切换"),0,true);interpolation->addSeparator();
+    interpolationChoice(tr("自动补帧切换"),std::clamp(settings_->value("player/interpolationStart",0).toInt(),0,3),true);interpolation->addSeparator();
     for(int stage=0;stage<4;++stage)interpolationChoice(interpolationNames().at(stage),stage,false);
     interpolation->addSeparator();interpolationChoice(tr("关闭"),-1,false);
     bool hasVideo=false;for(const auto &entry:media_.value("streams").toArray())if(entry.toObject().value("type").toString()=="video")hasVideo=true;
@@ -76,7 +77,8 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     auto *audio=PlayerMenu::add(menu,tr("音频设置"));audio->setEnabled(!imageMode_ && !source_.isEmpty());
     auto *audioTracks=PlayerMenu::add(audio,tr("声音轨道"));auto *audioGroup=new QActionGroup(audioTracks);
     const auto selected=clock_->snapshot().selectedAudioStream;
-    for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()!="audio")continue;const int index=stream.value("index").toInt();const auto tags=stream.value("tags").toObject();auto *action=audioTracks->addAction(QString("%1 · %2 · %3 %4 · %5 ch").arg(index).arg(stream.value("codec").toString(),tags.value("language").toString(),tags.value("title").toString()).arg(stream.value("channels").toInt()),this,[this,index]{selectAudio(index);});action->setCheckable(true);action->setChecked(externalAudio_.isEmpty() && selected==index);audioGroup->addAction(action);}
+    int audioOrdinal=0;
+    for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()!="audio")continue;const int index=stream.value("index").toInt();auto *action=audioTracks->addAction(playerTrackLabel(stream,audioOrdinal++),this,[this,index]{selectAudio(index);});action->setToolTip(QString("%1 · %2 ch · stream 0:%3").arg(stream.value("codec").toString()).arg(stream.value("channels").toInt()).arg(index));action->setCheckable(true);action->setChecked(externalAudio_.isEmpty() && selected==index);audioGroup->addAction(action);}
     if(!externalAudio_.isEmpty()){auto *mounted=audioTracks->addAction(tr("挂载：%1").arg(QFileInfo(externalAudio_).fileName()));mounted->setCheckable(true);mounted->setChecked(true);audioGroup->addAction(mounted);audioTracks->addAction(tr("卸载外部音频"),this,[this]{if(clock_->clearExternalAudio())externalAudio_.clear();});}
     audioTracks->addSeparator();audioTracks->addAction(tr("挂载音频文件…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("挂载音频"),{},"Audio (*.mka *.aac *.ac3 *.dts *.eac3 *.flac *.m4a *.mp3 *.ogg *.opus *.wav *.wma)");if(!path.isEmpty())attachAudio(path);});
     auto *sync=PlayerMenu::add(audio,tr("声音同步"));sync->addAction(tr("复位"),this,[this]{audioDelay_=0;applyAudioEffects();});sync->addAction(tr("滞后 0.1s"),this,[this]{audioDelay_+=1000000;applyAudioEffects();});sync->addAction(tr("提前 0.1s"),this,[this]{audioDelay_-=1000000;applyAudioEffects();});auto *offset=sync->addAction(tr("当前偏移：%1 s").arg(audioDelay_/10000000.0,0,'f',1));offset->setEnabled(false);
@@ -86,7 +88,8 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     const auto tracks=[&](const QString &title,int slot) {auto *list=PlayerMenu::add(subtitles,title);auto *group=new QActionGroup(list);group->setExclusive(true);auto *off=list->addAction(tr("无"),this,[this,slot]{selectSubtitle(slot,-1);});off->setCheckable(true);off->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==-1);group->addAction(off);
         const auto external=slot==0?externalSubtitle_:externalSecondarySubtitle_;
         if(!external.isEmpty()) {auto *mounted=list->addAction(tr("挂载：%1").arg(QFileInfo(external).fileName()),this,[this,slot]{selectSubtitle(slot,-2);});mounted->setCheckable(true);mounted->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==-2);group->addAction(mounted);}
-        for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()!="subtitle")continue;const int index=stream.value("index").toInt();const auto tags=stream.value("tags").toObject();const auto label=QString("%1 · %2 · %3 %4").arg(index).arg(stream.value("codec").toString(),tags.value("language").toString(),tags.value("title").toString());auto *action=list->addAction(label,this,[this,slot,index]{selectSubtitle(slot,index);});action->setCheckable(true);action->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==index);group->addAction(action);}
+        int ordinal=0;
+        for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()!="subtitle")continue;const int index=stream.value("index").toInt();auto *action=list->addAction(playerTrackLabel(stream,ordinal++),this,[this,slot,index]{selectSubtitle(slot,index);});action->setToolTip(QString("%1 · stream 0:%2").arg(stream.value("codec").toString()).arg(index));action->setCheckable(true);action->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==index);group->addAction(action);}
     };
     tracks(tr("选择字幕 · 底部"),0);tracks(tr("选择次字幕 · 顶部"),1);
     auto *visible=subtitles->addAction(tr("显示字幕"));visible->setCheckable(true);visible->setChecked(subtitleVisible_);connect(visible,&QAction::toggled,this,[this](bool on){subtitleVisible_=on;settings_->setValue("subtitle/visible",on);});
@@ -96,7 +99,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     subtitles->addAction(tr("字幕样式设置…（SRT）"),this,&PlayerWindow::showSubtitleStyle);
     subtitles->setEnabled(!imageMode_);
     auto *capture=PlayerMenu::add(menu,tr("图像截取"));capture->addAction(imageMode_?tr("截取图片原始像素 PNG"):tr("截取当前源画面 · VS 处理后 PNG"),this,[this]{captureImage(true);})->setEnabled(!madvrMode() || imageMode_);capture->addAction(tr("截取实画面 · 含字幕及显示效果 PNG"),this,[this]{captureImage(false);});
-    auto *scaling=PlayerMenu::add(menu,tr("缩放算法"));const QStringList algorithms{"Nearest","Bilinear","Cubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11 Native"};
+    auto *scaling=PlayerMenu::add(menu,tr("缩放算法"));const QStringList algorithms{"Nearest","Bilinear","Cubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11 Native","Lanczos4（4 taps）"};
     for(int side=0;side<2;++side){auto *list=PlayerMenu::add(scaling,side?tr("缩小"):tr("放大"));auto *group=new QActionGroup(list);const QString key=side?"render/downscale":"render/upscale";for(int n=0;n<algorithms.size();++n){auto *action=list->addAction(algorithms[n]);action->setCheckable(true);action->setChecked((interpolationStage()>=0?4:fixedAnimeStage()>=4?(fixedAnimeStage()==4?4:7):settings_->value(key,4).toInt())==n);group->addAction(action);connect(action,&QAction::triggered,this,[this,key,n]{settings_->setValue(key,n);if(fixedAnimeStage()<0)qualityStage_=n==7?5:direct_?4:qualityStage_;suspendQualityCheck();if(n==7 && fixedAnimeStage()<0 && !profile().isEmpty() && !source_.isEmpty())refreshScript();else applyScaling();(direct_?clock_:output_)->redraw();});}list->setEnabled(!madvrMode() && fixedAnimeStage()<4 && interpolationStage()<0);}
     auto *ring=scaling->addAction(tr("Anti-ringing · relaxed（仅 Jinc）"));ring->setCheckable(true);ring->setChecked(settings_->value("render/antiring",true).toBool());ring->setEnabled(!madvrMode() && fixedAnimeStage()!=5);connect(ring,&QAction::toggled,this,[this](bool enabled){settings_->setValue("render/antiring",enabled);(direct_?clock_:output_)->setAntiRinging(enabled);(direct_?clock_:output_)->redraw();});
     scaling->setEnabled(!imageMode_);
@@ -134,7 +137,7 @@ void PlayerWindow::captureImage(bool source) {
     QStringList arguments{"-v","error","-f","rawvideo","-pixel_format",format,"-video_size",QString("%1x%2").arg(frame.width).arg(frame.height)};
     if(value>=10 && value<40) {const QHash<unsigned,QString> matrices{{1,"bt709"},{5,"bt470bg"},{6,"smpte170m"},{9,"bt2020nc"},{10,"bt2020c"}};if(matrices.contains(frame.colorMatrix))arguments<<"-colorspace"<<matrices.value(frame.colorMatrix);if(frame.colorRange)arguments<<"-color_range"<<(frame.colorRange==2?"pc":"tv");}
     arguments<<"-i"<<"pipe:0"<<"-frames:v"<<"1"<<"-pix_fmt"<<"rgb48be"<<"-y"<<file;
-    process->start(QDir(QCoreApplication::applicationDirPath()).filePath("runtime/ffmpeg/ffmpeg.exe"),arguments);
+    process->start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),arguments);
     for(int plane=0;plane<4;++plane)if(!frame.planes[plane].isEmpty()){const int width=plane>0&&value<40?(frame.width+(1<<subW)-1)>>subW:frame.width;const int height=plane>0&&value<40?(frame.height+(1<<subH)-1)>>subH:frame.height;for(int y=0;y<height;++y)process->write(frame.planes[plane].constData()+y*frame.strides[plane],width*bytes);}process->closeWriteChannel();
 }
 }

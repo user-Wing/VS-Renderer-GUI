@@ -49,6 +49,7 @@ bool ThreeFpPlayer::createSession()
     if (muted_)
         check(api_.setVolume(handle_, 1.0f, 1u), QStringLiteral("静音"));
     if (!outputFormat_.isEmpty()) api_.setExternalOutputFormat(handle_, outputFormat_.toUtf8().constData());
+    if (customColorSettings_) api_.setColorSettings(handle_, &colorSettings_);
     if (vrrPresent_)
         api_.setPresentConfig(handle_, true);
     if (vrrPacing_)
@@ -189,6 +190,19 @@ void ThreeFpPlayer::setView(float zoom, float panX, float panY)
 }
 
 void ThreeFpPlayer::redraw() { if (handle_) api_.redraw(handle_); }
+bool ThreeFpPlayer::setColorSettings(const VsrColorSettings &settings) {
+    colorSettings_ = settings; customColorSettings_ = true;
+    return handle_ && api_.setColorSettings(handle_, &settings) == ThreeFpResult::Success;
+}
+VsrColorStatus ThreeFpPlayer::colorStatus() const {
+    VsrColorStatus value{}; value.size = sizeof(value); value.version = 1;
+    if (!handle_ || api_.colorStatus(handle_, &value) != ThreeFpResult::Success) {
+        value.requestedEngine = colorSettings_.engine;
+        qstrncpy(value.engine, "3FP native", sizeof(value.engine));
+        if (colorSettings_.engine) qstrncpy(value.fallback, "This 3FP build has no advanced color API.", sizeof(value.fallback));
+    }
+    return value;
+}
 bool ThreeFpPlayer::setOutputFormat(const QString &format) { outputFormat_=format; return handle_ && check(api_.setExternalOutputFormat(handle_,format.toUtf8().constData()),QStringLiteral("输出像素格式")); }
 void ThreeFpPlayer::setAntiRinging(bool enabled) { antiRinging_=enabled; setScalingAlgorithms(upscale_,downscale_); }
 QImage ThreeFpPlayer::capture() const { const auto size=surface_->size()*surface_->devicePixelRatioF(); return handle_ ? api_.capture(handle_,size.width(),size.height()) : QImage(); }

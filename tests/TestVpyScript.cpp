@@ -3,12 +3,40 @@
 #include "graph/FilterCatalog.h"
 
 #include <QTest>
+#include <QFile>
 
 using namespace vsr;
 
 class TestVpyScript final : public QObject {
     Q_OBJECT
 private slots:
+    void shaderCategoriesAndHardware() {
+        QCOMPARE(FilterCatalog::shaderCategory("NVScaler.glsl"),QString("超分"));
+        QCOMPARE(FilterCatalog::shaderCategory("NVSharpen.glsl"),QString("基础锐化"));
+        QCOMPARE(FilterCatalog::shaderCategory("ArtCNN_C4F16_DS.glsl"),QString("超分"));
+        QCOMPARE(FilterCatalog::shaderCategory("mpv/ds/CuNNy-4x16-DS.glsl"),QString("超分"));
+        QCOMPARE(FilterCatalog::shaderCategory("SSimDownscaler.glsl"),QString("缩小"));
+        QCOMPARE(FilterCatalog::shaderCategory("CfL_Prediction.glsl"),QString("色度重建"));
+        QCOMPARE(FilterCatalog::shaderCategory("mpv-shaders/test/AA/SMAA.glsl"),QString("线条增强与抗锯齿"));
+        QVERIFY(FilterCatalog::shaderHardwareLabel("NVScaler.glsl").contains("非 N 卡独占"));
+        QCOMPARE(FilterCatalog::shaderHardwareLabel("mpv/dp4a/CuNNy-Q.glsl"),QString("需要 DP4A"));
+        QVERIFY(FilterCatalog::shaderHardwareLabel("FSR.glsl").isEmpty());
+    }
+    void shaderOutputResolution() {
+        FilterGraph graph;const int node=graph.add("anime4k");graph.setParameter(node,"output_mode","指定分辨率");graph.setParameter(node,"width",2560);graph.setParameter(node,"height",1440);
+        auto script=VpyScriptBuilder::build("input.mkv",SourceFilter::Ffms2,graph).script;
+        QVERIFY(script.contains("width=2560, height=max(2, int(2560 * clip.height / clip.width + 0.5))"));
+        QVERIFY(script.contains(".lstrip('\\ufeff')"));
+        graph.setParameter(node,"dimension_axis","height");script=VpyScriptBuilder::build("input.mkv",SourceFilter::Ffms2,graph).script;
+        QVERIFY(script.contains("width=max(2, int(1440 * clip.width / clip.height + 0.5)), height=1440"));
+        graph.setParameter(node,"keep_aspect",false);script=VpyScriptBuilder::build("input.mkv",SourceFilter::Ffms2,graph).script;
+        QVERIFY(script.contains("width=2560, height=1440"));
+        graph.setParameter(node,"width",102);graph.setParameter(node,"height",60);
+        for(const auto &mode:QStringList{"width","height","unlocked"}){
+            graph.setParameter(node,"dimension_axis",mode);graph.setParameter(node,"keep_aspect",mode!="unlocked");
+            QFile file(QCoreApplication::applicationDirPath()+"/shader-output-"+mode+"-1.0.4.vpy");QVERIFY(file.open(QIODevice::WriteOnly));file.write(VpyScriptBuilder::build("input.mkv",SourceFilter::Ffms2,graph).script.toUtf8());
+        }
+    }
     void bundledMpvShaderAndDownscale() {
         const auto *definition=FilterCatalog::find("anime4k");QVERIFY(definition);
         QStringList choices;for(const auto &p:definition->parameters)if(p.id=="mode")choices=p.choices;

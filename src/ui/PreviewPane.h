@@ -3,6 +3,7 @@
 #include <QPointF>
 #include <QWidget>
 #include <QImage>
+#include <QTransform>
 
 class QLabel;
 class QStackedLayout;
@@ -22,6 +23,9 @@ public:
     void setVideoSize(const QSize &size);
     void setImage(const QImage &image);
     QImage image() const;
+    void setImageTransform(const QTransform &transform);
+    QTransform imageTransform() const;
+    QSize imageDisplaySize() const;
     void adoptView(float zoom, float panX, float panY);
     void setActive(bool active);
     void setSurfaceActive(bool active);

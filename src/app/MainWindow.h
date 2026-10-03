@@ -58,6 +58,7 @@ private:
     void populateCatalog();
     void refreshPipeline(int selectRow = -1);
     void selectPipelineRow(int row);
+    void updateParameterInputSize();
     void openSource();
     bool loadSource(const QString &path);
     void showScript();

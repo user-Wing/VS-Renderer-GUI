@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.0.3 LANGUAGES CXX)
+project(VSRenderer VERSION 1.0.4 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,6 +10,28 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network)
+include(tools/color-runtime.cmake)
+add_library(vsr_image_zlib STATIC
+    third_party/image-zlib/adler32.c third_party/image-zlib/crc32.c
+    third_party/image-zlib/inflate.c third_party/image-zlib/inffast.c
+    third_party/image-zlib/inftrees.c third_party/image-zlib/zutil.c
+    third_party/image-zlib/deflate.c third_party/image-zlib/trees.c)
+target_include_directories(vsr_image_zlib PUBLIC third_party/image-zlib)
+qt_add_library(vsr_image_core STATIC src/image/ImageDocument.cpp src/image/ImageDocument.h
+    src/image/ImagePsd.cpp src/image/ImagePsd.h)
+target_include_directories(vsr_image_core PUBLIC src)
+target_link_libraries(vsr_image_core PUBLIC Qt6::Core Qt6::Gui Qt6::Widgets PRIVATE vsr_image_zlib)
+qt_add_library(vsr_image_editor STATIC
+    src/image/ImageEditorTools.cpp src/image/ImageEditorTools.h
+    src/image/ImageEditorCanvas.cpp src/image/ImageEditorCanvas.h
+    src/image/ImageAdjustments.cpp src/image/ImageAdjustments.h
+    src/image/ImageHdr.cpp src/image/ImageHdr.h
+    src/image/ImageHdrSurface.cpp src/image/ImageHdrSurface.h
+    src/image/ImageEditorWindow.cpp src/image/ImageEditorWindow.h)
+target_link_libraries(vsr_image_editor PUBLIC vsr_image_core)
+if(WIN32)
+    target_link_libraries(vsr_image_editor PRIVATE d3d11 dxgi d3dcompiler)
+endif()
 if(MINGW)
     # These icon-only resources need no C++ include paths or definitions.
     set(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> -O coff <SOURCE> <OBJECT>")
@@ -90,10 +112,12 @@ qt_add_executable(VSPlayer WIN32
     assets/icons/icons.qrc
     src/update/PortableUpdater.cpp src/update/PortableUpdater.h
     assets/startup.qrc
-    src/player/PlayerImage.cpp src/player/PlayerImage.h src/player/PlayerMenu.cpp src/player/PlayerMenu.h
+    src/player/PlayerMenu.cpp src/player/PlayerMenu.h
+    src/player/PlayerImageTools.cpp src/player/PlayerImageTools.h
+    src/player/PlayerImageResample.cpp assets/image-tools.qrc
     src/player/main.cpp src/player/PlayerWindow.cpp src/player/PlayerControls.cpp src/player/PlayerInfo.cpp
     src/player/PlayerWindow.h
-    src/player/PlayerSettings.cpp src/player/PlayerMenus.cpp src/player/PlayerPlaylist.cpp src/player/PlayerAudio.cpp src/player/PlayerMediaMatching.cpp
+    src/player/PlayerSettings.cpp src/player/PlayerColor.cpp src/player/PlayerMenus.cpp src/player/PlayerPlaylist.cpp src/player/PlayerAudio.cpp src/player/PlayerMediaMatching.cpp
     src/player/PlayerNetworkInput.cpp src/player/PlayerNetworkInput.h
     src/player/PlayerProfiles.cpp src/player/PlayerCache.cpp src/player/PlayerLanguage.cpp src/player/PlayerAssociations.cpp
     src/player/PlayerResources.cpp src/player/PlayerResources.h
@@ -104,28 +128,65 @@ qt_add_executable(VSPlayer WIN32
     src/ui/PreviewPane.cpp
 )
 set_target_properties(VSPlayer PROPERTIES OUTPUT_NAME "vs-player")
+if(TARGET vsr_color)
+    add_dependencies(VSRenderer vsr_color)
+    add_dependencies(VSPlayer vsr_color)
+endif()
 if(WIN32)
     configure_file(assets/icons/player.rc "${CMAKE_CURRENT_BINARY_DIR}/player-icons.rc" @ONLY)
     set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/player-icons.rc" PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/player.ico;${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/video.ico;${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/image.ico")
     target_sources(VSPlayer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/player-icons.rc")
 endif()
 include(tools/image-runtime.cmake)
-target_link_libraries(VSPlayer PRIVATE avif)
+qt_add_library(vsr_image_decoder STATIC src/player/PlayerImage.cpp src/player/PlayerImage.h)
+target_include_directories(vsr_image_decoder PUBLIC src)
+target_link_libraries(vsr_image_decoder PUBLIC Qt6::Core Qt6::Gui PRIVATE avif vsr_turbojpeg vsr_image_core)
+target_link_libraries(vsr_image_editor PRIVATE vsr_image_decoder)
+include(tools/awj-runtime.cmake)
+target_link_libraries(VSPlayer PRIVATE avif vsr_image_editor)
 
 target_include_directories(VSPlayer PRIVATE src third_party/vapoursynth/include)
 target_link_libraries(VSPlayer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
 target_compile_definitions(VSPlayer PRIVATE VSR_VERSION="${PROJECT_VERSION}")
 
-foreach(program VSRenderer VSPlayer)
-    add_custom_command(TARGET ${program} POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_directory
-            "${CMAKE_SOURCE_DIR}/assets/mpv-shaders" "$<TARGET_FILE_DIR:${program}>/shaders/mpv-shaders"
-        VERBATIM)
-endforeach()
+if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/shaders/mpv-shaders.7z")
+    foreach(program VSRenderer VSPlayer)
+        add_custom_command(TARGET ${program} POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                "${CMAKE_SOURCE_DIR}/assets/mpv-shaders" "$<TARGET_FILE_DIR:${program}>/shaders/mpv-shaders"
+            VERBATIM)
+    endforeach()
+endif()
 
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test Network)
+    qt_add_executable(vsr_image_tests tests/TestImageDocument.cpp)
+    target_link_libraries(vsr_image_tests PRIVATE vsr_image_core Qt6::Test)
+    add_test(NAME image-document-core COMMAND vsr_image_tests)
+    qt_add_executable(vsr_image_layer_tests tests/TestImageLayerOperations.cpp)
+    target_link_libraries(vsr_image_layer_tests PRIVATE vsr_image_core Qt6::Test)
+    add_test(NAME image-layer-operations COMMAND vsr_image_layer_tests)
+    qt_add_executable(vsr_image_psd_tests tests/TestImagePsd.cpp)
+    target_link_libraries(vsr_image_psd_tests PRIVATE vsr_image_core Qt6::Test)
+    add_test(NAME image-psd-layers COMMAND vsr_image_psd_tests)
+    qt_add_executable(vsr_image_adjustments_tests tests/TestImageAdjustments.cpp)
+    target_link_libraries(vsr_image_adjustments_tests PRIVATE vsr_image_editor Qt6::Test)
+    add_test(NAME image-adjustments-hdr COMMAND vsr_image_adjustments_tests)
+    qt_add_executable(vsr_image_editor_advanced_tests tests/TestImageEditorAdvanced.cpp)
+    target_link_libraries(vsr_image_editor_advanced_tests PRIVATE vsr_image_editor Qt6::Test)
+    add_test(NAME image-editor-advanced-tools COMMAND vsr_image_editor_advanced_tests)
+    qt_add_executable(vsr_image_editor_layout_tests tests/TestImageEditorLayout.cpp)
+    target_link_libraries(vsr_image_editor_layout_tests PRIVATE vsr_image_editor Qt6::Test)
+    add_test(NAME image-editor-layout COMMAND vsr_image_editor_layout_tests)
+    qt_add_executable(vsr_image_editor_interaction_tests tests/TestImageEditorInteraction.cpp)
+    target_link_libraries(vsr_image_editor_interaction_tests PRIVATE vsr_image_editor Qt6::Test)
+    add_test(NAME image-editor-interaction COMMAND vsr_image_editor_interaction_tests)
+    qt_add_executable(vsr_image_editor_tests tests/TestImageEditor.cpp
+        src/player/PlayerImageTools.cpp src/player/PlayerImageTools.h src/player/PlayerImageResample.cpp
+        src/ui/PreviewPane.cpp src/ui/PreviewPane.h assets/image-tools.qrc)
+    target_link_libraries(vsr_image_editor_tests PRIVATE vsr_image_editor Qt6::Test shell32)
+    add_test(NAME image-editor-tools COMMAND vsr_image_editor_tests)
     qt_add_executable(vsr_graph_tests
         assets/startup.qrc
         tests/TestVpyScript.cpp
@@ -139,6 +200,20 @@ if(BUILD_TESTING)
     target_include_directories(vsr_graph_tests PRIVATE src)
     target_link_libraries(vsr_graph_tests PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME graph-and-vpy COMMAND vsr_graph_tests)
+
+    qt_add_executable(vsr_parameter_tests assets/startup.qrc tests/TestParameterEditor.cpp src/ui/ParameterEditor.cpp src/ui/ParameterEditor.h src/graph/FilterCatalog.cpp src/graph/FilterGraph.cpp src/app/Style.cpp)
+    target_include_directories(vsr_parameter_tests PRIVATE src)
+    target_link_libraries(vsr_parameter_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+    add_test(NAME shader-parameters COMMAND vsr_parameter_tests)
+
+    qt_add_executable(vsr_color_tests tests/TestColor.cpp assets/startup.qrc src/backend/ThreeFpApi.cpp
+        src/backend/ThreeFpPlayer.cpp src/backend/VapourSynthFrameServer.cpp)
+    target_include_directories(vsr_color_tests PRIVATE src third_party/vapoursynth/include)
+    target_link_libraries(vsr_color_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+    if(TARGET vsr_color)
+        add_dependencies(vsr_color_tests vsr_color)
+    endif()
+    add_test(NAME d3d11-color-management COMMAND vsr_color_tests -o color-test-results.txt,txt)
 
     qt_add_executable(vsr_frame_bridge_tests
         assets/startup.qrc
@@ -197,9 +272,10 @@ if(BUILD_TESTING)
     get_target_property(player_test_sources VSPlayer SOURCES)
     list(FILTER player_test_sources EXCLUDE REGEX "src/player/main.cpp|VSPlayer_autogen")
     qt_add_executable(vsr_player_tests tests/TestPlayer.cpp ${player_test_sources})
+    add_dependencies(vsr_player_tests VSPlayer)
     target_include_directories(vsr_player_tests PRIVATE src third_party/vapoursynth/include)
     target_link_libraries(vsr_player_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
-    target_link_libraries(vsr_player_tests PRIVATE avif vsr_turbojpeg)
+    target_link_libraries(vsr_player_tests PRIVATE avif vsr_turbojpeg vsr_image_editor)
     target_compile_definitions(vsr_player_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME vs-player-playback COMMAND vsr_player_tests -o player-test-results.txt,txt)
     add_test(NAME player-language-packs COMMAND "${CMAKE_BINARY_DIR}/runtime/python/python.exe" "${CMAKE_SOURCE_DIR}/tools/check-player-languages.py")

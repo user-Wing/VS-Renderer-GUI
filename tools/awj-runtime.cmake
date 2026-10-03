@@ -1,0 +1,30 @@
+# Keep AWJimage unmodified as a separate CLI, with its own license and source archive.
+set(awj_archive "${CMAKE_SOURCE_DIR}/.deps/awj/AWJ_Win.7z")
+set(awj_directory "${CMAKE_SOURCE_DIR}/.deps/awj/1.1.0")
+file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/.deps/awj")
+if(NOT EXISTS "${awj_archive}")
+    file(DOWNLOAD "https://github.com/Dominic485649/AWJimage/releases/download/1.1.0/AWJ_Win.7z"
+        "${awj_archive}" EXPECTED_HASH SHA256=a1bf56e6ac03726cde6aea9d5750076d35f7a80dbeace0260361ad9f6a794524 TLS_VERIFY ON)
+endif()
+file(SHA256 "${awj_archive}" awj_hash)
+if(NOT awj_hash STREQUAL "a1bf56e6ac03726cde6aea9d5750076d35f7a80dbeace0260361ad9f6a794524")
+    message(FATAL_ERROR "AWJimage archive hash mismatch")
+endif()
+file(ARCHIVE_EXTRACT INPUT "${awj_archive}" DESTINATION "${awj_directory}")
+set(awj_source "${awj_directory}/AWJimage-1.1.0-source.tar.gz")
+if(NOT EXISTS "${awj_source}")
+    file(DOWNLOAD "https://codeload.github.com/Dominic485649/AWJimage/tar.gz/26b07c852fe2a51ad7a0bdb796ab7b89b16f8f3d" "${awj_source}" EXPECTED_HASH SHA256=1049dbeb46cd63779e54f0b22124a627716ea9e3b22797f2f7f9bfcd5ed79526 TLS_VERIFY ON STATUS awj_source_status)
+    list(GET awj_source_status 0 awj_source_code)
+    if(NOT awj_source_code EQUAL 0)
+        file(REMOVE "${awj_source}")
+        message(FATAL_ERROR "Could not download AWJimage corresponding source: ${awj_source_status}")
+    endif()
+endif()
+file(SHA256 "${awj_source}" awj_source_hash)
+if(NOT awj_source_hash STREQUAL "1049dbeb46cd63779e54f0b22124a627716ea9e3b22797f2f7f9bfcd5ed79526")
+    message(FATAL_ERROR "AWJimage source archive hash mismatch")
+endif()
+add_custom_command(TARGET VSPlayer POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory "${awj_directory}" "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj"
+    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/docs/awjimage-NOTICE.txt" "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj/VSPlayer-NOTICE.txt"
+    VERBATIM)

@@ -51,6 +51,8 @@ ThreeFpApi::ThreeFpApi()
     setExternalOutputFormat_ = reinterpret_cast<OpenFn>(library_.resolve("FFF3FP_SetExternalOutputFormat"));
     setSubtitleLayer_ = reinterpret_cast<LayerFn>(library_.resolve("FFF3FP_SetTimedTextLayer"));
     readRegion_ = reinterpret_cast<RegionFn>(library_.resolve("FFF3FP_ReadVideoPixelRegion"));
+    setColorSettings_ = reinterpret_cast<ColorSetFn>(library_.resolve("FFF3FP_SetColorSettings"));
+    colorStatus_ = reinterpret_cast<ColorStatusFn>(library_.resolve("FFF3FP_GetColorStatus"));
     if (!ok)
         library_.unload();
 }
@@ -84,6 +86,8 @@ ThreeFpResult ThreeFpApi::setPacingConfig(void *h, bool e) const { return availa
 ThreeFpResult ThreeFpApi::setViewTransform(void *h, float z, float x, float y) const { return available() ? setViewTransform_(h, z, x, y) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setScalingAlgorithms(void *h, ThreeFpScalingAlgorithm u, ThreeFpScalingAlgorithm d) const { return available() ? setScalingAlgorithms_(h, u, d) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::snapshot(void *h, ThreeFpSnapshot *s) const { return available() ? snapshot_(h, s) : ThreeFpResult::NativeFailure; }
+ThreeFpResult ThreeFpApi::setColorSettings(void *h, const VsrColorSettings *s) const { return setColorSettings_ ? setColorSettings_(h,s) : ThreeFpResult::NotSupported; }
+ThreeFpResult ThreeFpApi::colorStatus(void *h, VsrColorStatus *s) const { return colorStatus_ ? colorStatus_(h,s) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::readPixel(void *h, ThreeFpPixelProbe *p) const { return available() ? readPixel_(h, p) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::submitExternalVideoFrame(void *h, const ThreeFpExternalVideoFrame *f) const { return available() ? submitExternalVideoFrame_(h, f) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setExternalOutputFormat(void *h, const char *f) const { return setExternalOutputFormat_ ? setExternalOutputFormat_(h,f) : ThreeFpResult::NotSupported; }

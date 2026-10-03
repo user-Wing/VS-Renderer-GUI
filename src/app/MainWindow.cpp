@@ -686,6 +686,7 @@ QWidget *MainWindow::buildTransport()
     scaler->addItem(QStringLiteral("放大：Jinc 2"), static_cast<int>(ThreeFpScalingAlgorithm::Jinc2));
     scaler->addItem(QStringLiteral("放大：Spline36"), static_cast<int>(ThreeFpScalingAlgorithm::Spline36));
     scaler->addItem(QStringLiteral("放大：Super-XBR（单阶段）"), static_cast<int>(ThreeFpScalingAlgorithm::SuperXbrSinglePass));
+    scaler->addItem(QStringLiteral("放大：Lanczos 4"), static_cast<int>(ThreeFpScalingAlgorithm::Lanczos4));
     scaler->setToolTip(QStringLiteral("仅超过源像素密度后使用所选算法；缩小固定使用 Lanczos 3。"));
     auto *frameControls = new QWidget(transport);
     frameControls->setObjectName(QStringLiteral("rendererFrameControls"));
@@ -813,6 +814,28 @@ void MainWindow::selectPipelineRow(int row)
 {
     const auto *node = graph_.at(row);
     parameterEditor_->setNode(node ? FilterCatalog::find(node->definitionId) : nullptr, node);
+    updateParameterInputSize();
+}
+
+void MainWindow::updateParameterInputSize()
+{
+    if(!sourcePlayer_ || !parameterEditor_)return;
+    const auto source=sourcePlayer_->snapshot();QSize size(source.videoWidth,source.videoHeight);
+    if(size.isEmpty())return;
+    for(int i=0;i<pipelineList_->currentRow();++i){
+        if(size.isEmpty())return;
+        const auto *node=graph_.at(i);if(!node || !node->enabled)continue;const auto &p=node->parameters;
+        if(node->definitionId=="crop")size-=QSize(p.value("left").toInt()+p.value("right").toInt(),p.value("top").toInt()+p.value("bottom").toInt());
+        else if(node->definitionId=="transpose")size.transpose();
+        else if(node->definitionId=="resize" || node->definitionId=="descale")size=QSize(p.value("width").toInt(),p.value("height").toInt());
+        else if(node->definitionId=="anime4k"){
+            if(p.value("output_mode").toString()!="指定分辨率"){const auto scale=p.value("scale").toString().section(QChar(0x00d7),0,0).toDouble();size=QSize(qMax(2,int(size.width()*scale)),qMax(2,int(size.height()*scale)));}
+            else if(!p.value("keep_aspect",true).toBool())size=QSize(p.value("width",1920).toInt(),p.value("height",1080).toInt());
+            else if(p.value("dimension_axis","width")=="height")size=QSize(qMax(2,qRound(double(p.value("height",1080).toInt())*size.width()/size.height())),p.value("height",1080).toInt());
+            else size=QSize(p.value("width",1920).toInt(),qMax(2,qRound(double(p.value("width",1920).toInt())*size.height()/size.width())));
+        }
+    }
+    parameterEditor_->setInputSize(size);
 }
 
 void MainWindow::openSource()
@@ -1105,6 +1128,7 @@ void MainWindow::updatePlaybackState()
         return;
     const auto snap = sourcePlayer_->snapshot();
     if (sourcePrimePending_ && snap.state != ThreeFpState::Opening) {
+        updateParameterInputSize();
         if (snap.decodedVideoFrames > 0) {
             sourcePrimePending_ = false;
         } else if (!sourcePrimeStarted_ &&

@@ -8,6 +8,10 @@
 
 ## 源码构建依赖
 
+可选高级色彩 SDK 由 `tools/prepare-color.ps1` 根据 `third_party/color/packages.json` 下载 / 校验固定二进制包。已经准备好的 `.deps/color` 优先复用；无需克隆 libplacebo。构建自动产生 `color/` 独立 DLL 目录，便携部署携带许可证和哈希；不替换 FFmpeg / VS / Qt DLL。3FP 重建使用新增 `3fp-color-management.patch` 和 `src/color/` 头文件。用法及边界见 [色彩依赖说明](color-management-1.0.4.md)。
+
+1.0.4图片转换使用AWJimage 1.1.0独立Windows CLI（AVX2）。`tools/awj-runtime.cmake`自动下载并校验原始发布包和对应源码，构建后保存到 `runtime/awj`，便携部署同时携带许可证与NOTICE。图片查看与基础操作不依赖AWJ。来源、采样与算法边界见 `player-image-tools-1.0.4.md`。
+
 本轮便携LAV运行时采用 `LAVFilters-0.83-x64.zip`，解压到 `.deps/lav/0.83` 后由 `tools/stage-portable.ps1` 默认携带；也可以通过 `-LavDirectory` 指定准备好的解码器目录。三个AX为0.83.0，完整依赖和GPL `COPYING` 一起分发，不运行注册批处理。源包SHA-256：`0126982f47157bb86a6dbb43c4f332f7f98beba9ad552c19b65f9db2e7d4f186`。
 
 补帧新增 `vapoursynth-mvtools==29`，由 `build-vapoursynth.ps1` 固定安装，staging 携带 `plugins/mvtools.dll` 与 GPL-2.0 许可。不要使用 VSRepo 的旧 v24/API 3 版本；R80 已不能加载。现有开发环境可先运行 `.deps\vs-python\Scripts\python.exe -m pip install vapoursynth-mvtools==29`，再重跑 staging 或链接 GUI。
@@ -16,7 +20,11 @@
 - Qt 6.8+；官方构建使用 Qt 6.10.2 MinGW 64-bit 与配套 MinGW。
 - Python 3.12+。
 - 带所需编码器的 FFmpeg CLI；发布脚本通过 `-FfmpegExecutable` 指定，并把其 DLL 隔离复制到 `runtime\ffmpeg`。
+
+1.0.4本地使用维护者提供的 `ffmpeg-autokey444-full.7z` 增强版。解压到 `.deps/ffmpeg-enhanced` 后运行 `tools/stage-ffmpeg.ps1`，同步CLI与3FP的FFmpeg共享库；保留原来的FFF.Native、LAV和VS插件。便携部署自动采用构建目录 `runtime/ffmpeg`，旧发布脚本也优先从这里读取。构建为x86-64-v3，具体编译配置、来源哈希和验证见 [增强版FFmpeg记录](ffmpeg-enhanced-1.0.4.md)。
 - Visual Studio 2022 的“使用 C++ 的桌面开发”工作负载，用于构建 VapourSynth 和 3FP。
+
+1.0.4后续体积优化改用根目录ffmpeg.exe与共享DLL，runtime/ffmpeg仅保存来源记录；发布脚本优先读取根目录CLI。stage-shaders.ps1压缩GLSL库，trim-portable.ps1裁剪实际未使用的副本；以 [最新布局](tracks-size-1.0.4.md) 为准。更新库源码后需重新部署资源库，首次无归档的源码构建仍复制普通Shader用于开发。
 
 先设置 Qt 与编译器环境；路径按本机 Qt 安装位置调整：
 

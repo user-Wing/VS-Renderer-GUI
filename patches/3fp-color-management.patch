@@ -1,0 +1,284 @@
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -3,6 +3,7 @@
+ #include "3FR/Api/FFF.Native.Api.h"
+ 
+ #include <cstdint>
++#include "3FP/Render/ColorBridge.h"
+ 
+ enum class FFF3FPDecodeMode : std::uint32_t {
+     Unspecified = 0,
+@@ -553,6 +554,8 @@
+ FFF3FP_API FFFResult FFF3FP_SetVolume(FFF3FPHandle player, float volume, std::uint32_t muted) noexcept;
+ FFF3FP_API FFFResult FFF3FP_SetTimedTextLayer(FFF3FPHandle player,
+     const FFF3FPTimedTextLayer* layer) noexcept;
++FFF3FP_API FFFResult FFF3FP_SetColorSettings(FFF3FPHandle player, const VsrColorSettings* settings) noexcept;
++FFF3FP_API FFFResult FFF3FP_GetColorStatus(FFF3FPHandle player, VsrColorStatus* status) noexcept;
+ FFF3FP_API FFFResult FFF3FP_GetSnapshot(FFF3FPHandle player, FFF3FPSnapshot* snapshot) noexcept;
+ FFF3FP_API FFFResult FFF3FP_SubmitExternalVideoFrame(FFF3FPHandle player,
+     const FFF3FPExternalVideoFrame* frame) noexcept;
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -122,6 +122,12 @@
+     return player && layer ? static_cast<PlayerSession*>(player)->SetTimedTextLayer(*layer)
+         : FFFResult::InvalidArgument;
+ }
++FFFResult FFF3FP_SetColorSettings(FFF3FPHandle player, const VsrColorSettings* settings) noexcept {
++    return player && settings ? static_cast<PlayerSession*>(player)->SetColorSettings(*settings) : FFFResult::InvalidArgument;
++}
++FFFResult FFF3FP_GetColorStatus(FFF3FPHandle player, VsrColorStatus* status) noexcept {
++    return player && status ? static_cast<PlayerSession*>(player)->GetColorStatus(*status) : FFFResult::InvalidArgument;
++}
+ FFFResult FFF3FP_GetSnapshot(const FFF3FPHandle player, FFF3FPSnapshot* snapshot) noexcept { return player && snapshot ? static_cast<PlayerSession*>(player)->GetSnapshot(*snapshot) : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_SubmitExternalVideoFrame(const FFF3FPHandle player,
+     const FFF3FPExternalVideoFrame* frame) noexcept {
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -993,6 +993,28 @@
+     // next loop iteration; safe in any state, no chain work required.
+     Enqueue([this, enablePacing] { videoRenderer_.SetPacingConfig(enablePacing); });
+     return FFFResult::Success;
++}
++FFFResult PlayerSession::SetColorSettings(const VsrColorSettings& settings) noexcept {
++    if (settings.size != sizeof(settings) || settings.version != 1 || settings.engine > 1 ||
++        settings.output > 2 || settings.tone > 5 || settings.gamut > 4 || settings.quality > 1 ||
++        settings.icc > 2 || settings.peakDetect > 1 || settings.dither > 1 || settings.inverseTone > 1 ||
++        !std::isfinite(settings.sdrPeak) || settings.sdrPeak <= 0 || settings.sdrPeak > 10000 ||
++        !std::isfinite(settings.displayPeak) || settings.displayPeak < 0 || settings.displayPeak > 10000 ||
++        !std::isfinite(settings.paperWhite) || settings.paperWhite <= 0 || settings.paperWhite > 10000 ||
++        !std::isfinite(settings.contrastRecovery) || settings.contrastRecovery < 0 || settings.contrastRecovery > 1 ||
++        !std::memchr(settings.iccPath, 0, sizeof(settings.iccPath)) ||
++        !std::memchr(settings.lutPath, 0, sizeof(settings.lutPath))) return FFFResult::InvalidArgument;
++    Enqueue([this, settings] {
++        videoRenderer_.SetColorSettings(settings);
++        videoRenderer_.Redraw();
++        snapshot_.requestedColorMode = settings.output == 1 ? FFF3FPColorMode::MapToSdr : FFF3FPColorMode::MapToHdr;
++        snapshot_.actualColorMode = videoRenderer_.ActualColorMode();
++        PublishSnapshot();
++    });
++    return FFFResult::Success;
++}
++FFFResult PlayerSession::GetColorStatus(VsrColorStatus& status) const noexcept {
++    return videoRenderer_.GetColorStatus(status);
+ }
+ FFFResult PlayerSession::SetColorMode(const FFF3FPColorMode mode, const float sdr, const float hdr,
+     const float paper, const bool forceHdrOutput) noexcept {
+@@ -1804,7 +1826,7 @@
+         sws_scale(scale, frame.data, frame.linesize, 0, frame.height, converted->data, converted->linesize);
+         sws_freeContext(scale); submitted = converted;
+     }
+-    const auto result = videoRenderer_.Render(submitted);
++    const auto result = videoRenderer_.Render(submitted, false, false, true);
+     av_frame_free(&converted);
+     if (result != FFFResult::Success) {
+         if (result == FFFResult::DeviceFailure) videoRenderer_.RequestRecoveryIfDeviceLost();
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -48,6 +48,8 @@
+         std::int64_t offset100ns) noexcept;
+     FFFResult ClearExternalAudio() noexcept;
+     FFFResult SetExternalAudioOffset(std::int64_t offset100ns) noexcept;
++    FFFResult SetColorSettings(const VsrColorSettings& settings) noexcept;
++    FFFResult GetColorStatus(VsrColorStatus& status) const noexcept;
+     FFFResult SetColorMode(FFF3FPColorMode mode, float sdrPeakNits,
+         float hdrPeakNits, float paperWhiteNits, bool forceHdrOutput) noexcept;
+     FFFResult SetPresentConfig(bool enableTearing) noexcept;
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -715,6 +715,21 @@
+     if(algorithm==8)return SampleLanczos4(sourceTexture,uv,dimensions,float2(OutputWidth,OutputHeight)*max(ViewZoom,1.0));
+     return SampleLanczos3(sourceTexture,uv,dimensions,float2(OutputWidth,OutputHeight));
+ }
++// BT.2020 constant-luminance uses piecewise chroma, not the NCL matrix.
++float ClCamera(float x) { return x < 0.08145 ? x/4.5 : pow(max((x+0.0993)/1.0993,0.0),1.0/0.45); }
++float3 DecodeYuv(float y,float2 chroma) {
++    if((Source2020 & 2)!=0) {
++        float r=y+chroma.y*(chroma.y<=0?1.7184:0.9936);
++        float b=y+chroma.x*(chroma.x<=0?1.9404:1.5816);
++        float g=(ClCamera(y)-0.2627*ClCamera(r)-0.0593*ClCamera(b))/0.6780;
++        g=g<0.0181?4.5*g:1.0993*pow(max(g,0.0),0.45)-0.0993;
++        return float3(r,g,b);
++    }
++    float kg=1.0-Kr-Kb;
++    return float3(y+(2.0-2.0*Kr)*chroma.y,
++        y-Kb*(2.0-2.0*Kb)/kg*chroma.x-Kr*(2.0-2.0*Kr)/kg*chroma.y,
++        y+(2.0-2.0*Kb)*chroma.x);
++}
+ float3 ReadSource(float2 uv) {
+     if(InputLayout==0)return SampleVideo(Source,uv).rgb;
+     float2 chromaUv=uv+ChromaOffset;
+@@ -724,10 +739,7 @@
+         :SampleChroma(ChromaU,chromaUv).rg*SampleScale;
+     y=(y-YOffset)*YScale;
+     chroma=(chroma-COffset)*CScale;
+-    float kg=1.0-Kr-Kb;
+-    return float3(y+(2.0-2.0*Kr)*chroma.y,
+-        y-Kb*(2.0-2.0*Kb)/kg*chroma.x-Kr*(2.0-2.0*Kr)/kg*chroma.y,
+-        y+(2.0-2.0*Kb)*chroma.x);
++    return DecodeYuv(y,chroma);
+ }
+ float3 ReadSourceLinear(float2 uv) {
+     if(InputLayout==0)return Source.Sample(LinearSampler,uv).rgb;
+@@ -739,10 +751,7 @@
+         :SampleChroma(ChromaU,chromaUv).rg*SampleScale;
+     y=(y-YOffset)*YScale;
+     chroma=(chroma-COffset)*CScale;
+-    float kg=1.0-Kr-Kb;
+-    return float3(y+(2.0-2.0*Kr)*chroma.y,
+-        y-Kb*(2.0-2.0*Kb)/kg*chroma.x-Kr*(2.0-2.0*Kr)/kg*chroma.y,
+-        y+(2.0-2.0*Kb)*chroma.x);
++    return DecodeYuv(y,chroma);
+ }
+ float2 CoverFillUv(float2 uv) {
+     float sourceAspect=SourceWidth/max(SourceHeight,1.0);
+@@ -766,10 +775,7 @@
+         :SamplePanorama(ChromaU,chromaUv).rg*SampleScale;
+     y=(y-YOffset)*YScale;
+     chroma=(chroma-COffset)*CScale;
+-    float kg=1.0-Kr-Kb;
+-    return float3(y+(2.0-2.0*Kr)*chroma.y,
+-        y-Kb*(2.0-2.0*Kb)/kg*chroma.x-Kr*(2.0-2.0*Kr)/kg*chroma.y,
+-        y+(2.0-2.0*Kb)*chroma.x);
++    return DecodeYuv(y,chroma);
+ }
+ float2 EquirectangularUv(float2 uv) {
+     const float radiansPerDegree=0.0174532925199433;
+@@ -2143,6 +2149,22 @@
+     return FFFResult::Success;
+ }
+ 
++FFFResult PlayerVideoRenderer::SetColorSettings(const VsrColorSettings& settings) noexcept {
++    // Swap-chain changes use their original lock; do not nest the device mutex.
++    const auto result = SetColorMode(settings.output == 1 ? FFF3FPColorMode::MapToSdr : FFF3FPColorMode::MapToHdr,
++        settings.sdrPeak, settings.displayPeak, settings.paperWhite, settings.output == 2);
++    if (result != FFFResult::Success) return result;
++    std::lock_guard lock(deviceMutex_);
++    colorEngine_.configure(settings);
++    return FFFResult::Success; // Optional-engine errors are reported by color status; native keeps playing.
++}
++FFFResult PlayerVideoRenderer::GetColorStatus(VsrColorStatus& status) const noexcept {
++    if (status.size != sizeof(status) || status.version != 1) return FFFResult::InvalidArgument;
++    std::lock_guard lock(deviceMutex_);
++    status = colorEngine_.status();
++    status.outputHdr = swapHdr_; status.outputBits = swapOutputBits_;
++    return FFFResult::Success;
++}
+ FFFResult PlayerVideoRenderer::SetColorMode(const FFF3FPColorMode mode, const float sdrPeakNits,
+     const float hdrPeakNits, const float paperWhiteNits, const bool forceHdrOutput) noexcept {
+     std::lock_guard deviceLock(deviceMutex_);
+@@ -2189,6 +2211,7 @@
+ 
+ void PlayerVideoRenderer::ConfigureHdrStream(const AVCodecParameters* parameters) noexcept {
+     hdrProcessor_.ConfigureStream(parameters);
++    std::lock_guard lock(deviceMutex_); colorEngine_.stream(parameters);
+ }
+ 
+ FFFResult PlayerVideoRenderer::SetPresentConfig(const bool enableTearing) noexcept {
+@@ -4213,7 +4236,7 @@
+ }
+ 
+ FFFResult PlayerVideoRenderer::Render(const AVFrame* frame, const bool limitToNativeSize,
+-    const bool coverArt) noexcept {
++    const bool coverArt, const bool externalVs) noexcept {
+     if (frame == nullptr || frame->width <= 0 || frame->height <= 0) return FFFResult::InvalidArgument;
+     struct PlaybackWorkGuard final {
+         std::atomic<std::uint32_t>& pending;
+@@ -4304,6 +4327,10 @@
+         context_->UpdateSubresource(sourceTextures_[0], 0, nullptr, convertedRgb_.data(),
+             width * bytesPerPixel, 0);
+     }
++    auto softwareFormat = static_cast<AVPixelFormat>(frame->format);
++    if (d3d11Frame && frame->hw_frames_ctx) softwareFormat =
++        reinterpret_cast<const AVHWFramesContext*>(frame->hw_frames_ctx->data)->sw_format;
++    colorEngine_.frame(frame, softwareFormat, !directYuv, externalVs ? 2u : 1u);
+     ShaderSettings settings{};
+     settings.colorMode = static_cast<std::uint32_t>(actualMode_);
+     settings.reserved = 0;
+@@ -4312,7 +4339,7 @@
+         (hdrState.format == FFF3FPHdrFormat::DolbyVision &&
+          (hdrState.compatibility & hlgCompatibility) != 0) ? 2u :
+         (hdrState.format != FFF3FPHdrFormat::Sdr ? 1u : 0u);
+-    settings.source2020 = source2020 ? 1u : 0u;
++    settings.source2020 = (source2020 ? 1u : 0u) | (frame->colorspace == AVCOL_SPC_BT2020_CL ? 2u : 0u);
+     settings.sdrPeak = sdrPeakNits_;
+     settings.hdrPeak = settings.transfer == 0 ? 100.0f : hdrState.sourcePeakNits;
+     sourcePeakNits_ = settings.hdrPeak;
+@@ -4825,6 +4852,34 @@
+         cachedVideoSettings_.viewPanX = 0.0f;
+         cachedVideoSettings_.viewPanY = 0.0f;
+         cachedVideoSettings_.viewZoom = 1.0f;
++    }
++    if (colorEngine_.settings.engine && (projection360 || sourceCoverArt_))
++        colorEngine_.bypass("Special projection / audio cover uses the original 3FP compositor.");
++    if (colorEngine_.settings.engine && !projection360 && !sourceCoverArt_) {
++        ComPtr<ID3D11Resource> resource; target->GetResource(&resource);
++        ComPtr<ID3D11Texture2D> texture;
++        if (SUCCEEDED(resource.As(&texture))) {
++            VsrColorDraw draw{};
++            for (unsigned i = 0; i < 3; ++i) draw.textures[i] = sourceTextures_[i];
++            draw.targetTexture = texture.Get(); draw.layout = sourceInputLayout_;
++            draw.upscale = upscaleAlgorithm_.load(); draw.downscale = downscaleAlgorithm_.load();
++            draw.hdr = swapHdr_; draw.outputBits = swapOutputBits_;
++            const auto hdr = hdrProcessor_.State();
++            draw.targetPeak = hdr.targetPeakNits; draw.targetBlack = hdr.display.minimumNits;
++            draw.monitor = MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST);
++            const float z = cachedVideoSettings_.viewZoom;
++            draw.crop[0] = (1.0f - 1.0f / z) * 0.5f + cachedVideoSettings_.viewPanX;
++            draw.crop[1] = (1.0f - 1.0f / z) * 0.5f + cachedVideoSettings_.viewPanY;
++            draw.crop[2] = draw.crop[0] + 1.0f / z; draw.crop[3] = draw.crop[1] + 1.0f / z;
++            draw.destination[0] = drawX; draw.destination[1] = drawY;
++            draw.destination[2] = drawX + drawWidth; draw.destination[3] = drawY + drawHeight;
++            if (colorEngine_.draw(device_, draw)) {
++                lastDestX_ = destination.x; lastDestY_ = destination.y;
++                lastDestWidth_ = destination.width; lastDestHeight_ = destination.height;
++                actualVideoScalingMode_.store(FFF3FPVideoScalingMode::Shader);
++                return FFFResult::Success;
++            }
++        }
+     }
+     const bool nativeScaling = std::min(drawWidth / sourceWidth_, drawHeight / sourceHeight_) >= 1.0f
+         ? (upscaleAlgorithm_.load() & 255u) == 7u : downscaleAlgorithm_.load() == 7u;
+@@ -5265,6 +5320,7 @@
+ }
+ 
+ void PlayerVideoRenderer::ReleaseDeviceObjects() noexcept {
++    colorEngine_.resetDevice();
+     ReleaseVideoProcessor();
+     ReleaseVideoProcessorInputSurface();
+     ReleaseCoverBackdropResources();
+--- a/FFF.Native/3FP/Render/VideoRenderer.h
++++ b/FFF.Native/3FP/Render/VideoRenderer.h
+@@ -2,6 +2,7 @@
+ 
+ #include "3FP/Api/FFF.Player.Api.h"
+ #include "3FP/Hdr/HdrProcessor.h"
++#include "3FP/Render/NativeColorEngine.h"
+ 
+ #include <cstdint>
+ #include <atomic>
+@@ -119,6 +120,8 @@
+     FFFResult SetScalingAlgorithms(FFF3FPScalingAlgorithm upscale,
+         FFF3FPScalingAlgorithm downscale) noexcept;
+     FFFResult Set360View(bool enabled, float yaw, float pitch, float fovY) noexcept;
++    FFFResult SetColorSettings(const VsrColorSettings& settings) noexcept;
++    FFFResult GetColorStatus(VsrColorStatus& status) const noexcept;
+     FFFResult SetColorMode(FFF3FPColorMode mode, float sdrPeakNits,
+         float hdrPeakNits, float paperWhiteNits, bool forceHdrOutput = false) noexcept;
+     // VRR pacing preference (3FCompare extension). Returns NotSupported when
+@@ -133,7 +136,7 @@
+     FFFResult ForceSdrOutputForSdrSource() noexcept;
+     void ConfigureHdrStream(const AVCodecParameters* parameters) noexcept;
+     FFFResult Render(const AVFrame* frame, bool limitToNativeSize = false,
+-        bool coverArt = false) noexcept;
++        bool coverArt = false, bool externalVs = false) noexcept;
+     FFFResult Redraw() noexcept;
+     // 3FCompare extension: render target diagnostics (swap/client/destination sizes).
+     struct RenderTargetInfo {
+@@ -424,6 +427,7 @@
+     float sourcePeakNits_;
+     HdrProcessor hdrProcessor_;
+     std::vector<std::uint8_t> convertedRgb_;
++    NativeColorEngine colorEngine_;
+     mutable std::mutex deviceMutex_;
+     mutable std::mutex presentMutex_;
+     mutable std::mutex timedTextMutex_;

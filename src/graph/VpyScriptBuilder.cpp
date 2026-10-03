@@ -91,14 +91,40 @@ QString emitNode(const FilterNode &node, bool gpu = true)
     }
     if (node.definitionId == "anime4k") {
         const double scale = std::clamp(p.value("scale").toString().section(QChar(0x00d7), 0, 0).toDouble(), .5, 4.0);
-        return QString("if clip.format.color_family != vs.YUV: clip = core.resize.Bicubic(clip, format=vs.YUV444P16, matrix_s='709')\n"
+        QString dimensions=QString("width=max(2, int(clip.width * %1)), height=max(2, int(clip.height * %1))").arg(scale);
+        if(p.value("output_mode").toString()=="指定分辨率"){
+            const int width=std::clamp(p.value("width",1920).toInt(),2,65536),height=std::clamp(p.value("height",1080).toInt(),2,65536);
+            dimensions=QString("width=%1, height=%2").arg(width).arg(height);
+            if(p.value("keep_aspect",true).toBool())dimensions=p.value("dimension_axis","width").toString()=="height"
+                ?QString("width=max(2, int(%1 * clip.width / clip.height + 0.5)), height=%1").arg(height)
+                :QString("width=%1, height=max(2, int(%1 * clip.height / clip.width + 0.5))").arg(width);
+        }
+        return QString("if clip.format.color_family != vs.YUV: clip = core.resize.Bicubic(clip, format=vs.YUV444P16, **({'matrix': _vsr_matrix(clip)} if clip.format.color_family == vs.RGB else {}))\n"
                        "if clip.format.bits_per_sample != 16 or clip.format.sample_type != vs.INTEGER: clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16, sample_type=vs.INTEGER))\n"
-                       "with open(%1, encoding='utf-8') as _shader_file: _shader_text = _shader_file.read().lstrip('\\ufeff')\n"
-                       "clip = core.placebo.Shader(clip, shader_s=_shader_text, width=max(2, int(clip.width * %2)), height=max(2, int(clip.height * %2)))")
+                       "_shader_path = %1\n"
+                       "if os.path.isfile(_shader_path):\n"
+                       "    with open(_shader_path, encoding='utf-8') as _shader_file: _shader_text = _shader_file.read().lstrip('\\ufeff')\n"
+                       "else:\n"
+                       "    import subprocess as _shader_process, sys as _shader_sys\n"
+                       "    _shader_root = os.path.dirname(_shader_path)\n"
+                       "    while not os.path.isfile(os.path.join(_shader_root, 'mpv-shaders.7z')):\n"
+                       "        _shader_parent = os.path.dirname(_shader_root)\n"
+                       "        if _shader_parent == _shader_root: raise FileNotFoundError(_shader_path)\n"
+                       "        _shader_root = _shader_parent\n"
+                       "    _shader_archive = os.path.join(_shader_root, 'mpv-shaders.7z')\n"
+                       "    _shader_member = os.path.relpath(_shader_path, _shader_root).replace('\\\\', '/')\n"
+                       "    _shader_key = (_shader_archive, _shader_member, os.stat(_shader_archive).st_mtime_ns)\n"
+                       "    _shader_cached = getattr(_shader_sys, '_vsr_last_shader', (None, None))\n"
+                       "    if _shader_cached[0] != _shader_key:\n"
+                       "        _shader_tool = os.path.join(_shader_root, '..', 'runtime', 'tools', '7z.exe')\n"
+                       "        _shader_text = _shader_process.check_output([_shader_tool, 'x', '-so', '-bd', '-bsp0', '-spd', _shader_archive, _shader_member], creationflags=0x08000000).decode('utf-8').lstrip('\\ufeff')\n"
+                       "        _shader_sys._vsr_last_shader = (_shader_key, _shader_text)\n"
+                       "    else: _shader_text = _shader_cached[1]\n"
+                       "clip = core.placebo.Shader(clip, shader_s=_shader_text, %2)")
             .arg((p.value("mode").toString() == QStringLiteral("自定义 GLSL") || !p.value("shader").toString().isEmpty()
                  ? VpyScriptBuilder::pythonString(p.value("shader").toString())
                  : QString("os.path.join(globals().get('_vsr_directory', %1), 'shaders', %2)")
-                     .arg(VpyScriptBuilder::pythonString(QCoreApplication::applicationDirPath()), VpyScriptBuilder::pythonString(p.value("mode").toString())))).arg(scale);
+                     .arg(VpyScriptBuilder::pythonString(QCoreApplication::applicationDirPath()), VpyScriptBuilder::pythonString(p.value("mode").toString())))).arg(dimensions);
     }
     if (node.definitionId == "remove_grain")
         return QString("clip = core.rgvs.RemoveGrain(clip, mode=%1)").arg(number(p, "mode"));
@@ -192,9 +218,10 @@ QString emitNode(const FilterNode &node, bool gpu = true)
     if (node.definitionId == "cnr4")
         return QString("clip = core.zsmooth.Cnr4(clip, radius=%1, str=[0,%2,%2])").arg(number(p,"radius"),number(p,"strength"));
     if (node.definitionId == "ccd")
-        return QString("clip = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s='709')\n"
+        return QString("_ccd_matrix = _vsr_matrix(clip)\n"
+                       "clip = core.resize.Bicubic(clip, format=vs.RGBS, **({'matrix_in': _ccd_matrix} if clip.format.color_family == vs.YUV else {}))\n"
                        "clip = core.zsmooth.CCD(clip, threshold=%1, temporal_radius=%2, scale=max(1.0, clip.height / 240.0))\n"
-                       "clip = core.resize.Bicubic(clip, format=vs.YUV444P16, matrix_s='709')").arg(realNumber(p,"threshold"),number(p,"radius"));
+                       "clip = core.resize.Bicubic(clip, format=vs.YUV444P16, matrix=_ccd_matrix)").arg(realNumber(p,"threshold"),number(p,"radius"));
     if (node.definitionId == "dct_filter")
         return QString("clip = core.zsmooth.DCTFilter(clip, factors=[1,1,1,1,1,%1,%1,%1])").arg(realNumber(p,"high"));
     if (node.definitionId == "temporal_soften")
@@ -267,6 +294,18 @@ ScriptBuildResult VpyScriptBuilder::build(const QString &sourcePath, SourceFilte
         "        out.props['_SceneChangePrev'] = int(f[2].props['PrevDiff'] > 0.1)\n"
         "        return out\n"
         "    return core.std.ModifyFrame(c, clips=[c, next_stats, prev_stats], selector=mark)\n");
+    if (std::any_of(graph.nodes().cbegin(), graph.nodes().cend(), [](const FilterNode &node) {
+        return node.enabled && (node.definitionId == "anime4k" || node.definitionId == "ccd" ||
+                               node.definitionId == "rife" || node.definitionId == "mvtools");
+    })) body << QStringLiteral(R"PY(
+def _vsr_matrix(c):
+    props = c.get_frame(0).props
+    matrix = props.get('_Matrix', 2)
+    if matrix in (1, 4, 5, 6, 7, 9, 10, 14):
+        return matrix
+    primaries = props.get('_Primaries', 2)
+    return 9 if primaries == 9 else 5 if primaries == 5 else 6 if primaries in (6, 7) else 1
+)PY");
     body << QStringLiteral("clip = src");
 
     const bool hasInterpolation = std::any_of(graph.nodes().cbegin(), graph.nodes().cend(), [](const FilterNode &node) {
@@ -278,7 +317,8 @@ def _vsr_mvtools(c, block, pel, overlap, chroma, searchparam, blend, scale=1):
     if c.format is None or c.fps_num <= 0:
         raise ValueError('MVTools requires constant format and frame rate')
     if c.format.color_family not in (vs.YUV, vs.GRAY) or c.format.sample_type != vs.INTEGER:
-        c = core.resize.Bicubic(c, format=vs.YUV444P16, matrix_s='709')
+        c = core.resize.Bicubic(c, format=vs.YUV444P16,
+                                **({'matrix': _vsr_matrix(c)} if c.format.color_family == vs.RGB else {}))
     if c.num_frames == 1:
         return core.std.Interleave([c, c])
     work = c
@@ -312,14 +352,14 @@ def _vsr_rife(c, model, factor, gpu, threads, scene, scale):
     w = max(32, ((c.width + scale - 1) // scale + 1) // 2 * 2) if scale > 1 else c.width
     h = max(32, ((c.height + scale - 1) // scale + 1) // 2 * 2) if scale > 1 else c.height
     rgb = core.resize.Bicubic(c, width=w, height=h, format=vs.RGBS,
-                              **({'matrix_in_s': '709'} if c.format.color_family == vs.YUV else {}))
+                              **({'matrix_in': _vsr_matrix(c)} if c.format.color_family == vs.YUV else {}))
     generated = core.rife.RIFE(rgb, model_path=model, factor_num=factor,
                                gpu_id=gpu, gpu_thread=threads, sc=scene)
     branches = [c]
     for offset in range(1, factor):
         middle = core.std.SelectEvery(generated, cycle=factor, offsets=offset)
         middle = core.resize.Bicubic(middle, width=c.width, height=c.height, format=c.format.id,
-                                     **({'matrix_s': '709'} if c.format.color_family == vs.YUV else {}))
+                                     **({'matrix': _vsr_matrix(c)} if c.format.color_family == vs.YUV else {}))
         # The final source frame has no successor: hold it without a RGB round trip.
         branches.append(middle[:-1] + c[-1] if c.num_frames > 1 else c)
     return core.std.Interleave(branches)

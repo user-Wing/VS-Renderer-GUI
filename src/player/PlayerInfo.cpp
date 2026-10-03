@@ -21,7 +21,7 @@ void PlayerWindow::updateInfo() {
     if(imageMode_){
         if(!infoVisible_)return;
         usage_=resources_.sample();const auto image=pane_->image();const QFileInfo file(source_);
-        const auto fitted=QSizeF(image.size()).scaled(QSizeF(pane_->surface()->size()),Qt::KeepAspectRatio)*pane_->zoom();
+        const auto fitted=QSizeF(pane_->imageDisplaySize()).scaled(QSizeF(pane_->surface()->size()),Qt::KeepAspectRatio)*pane_->zoom();
         const auto color=image.colorSpace().isValid()?image.colorSpace().description():tr("未提供");
         QStringList lines;
         lines<<tr("文件名：%1").arg(file.fileName())<<tr("路径：%1").arg(file.absoluteFilePath())
@@ -106,6 +106,30 @@ void PlayerWindow::updateInfo() {
     if(interpolationStage()>=0)lines << tr("补帧：%1 · %2 · Jinc 直通 YUV444P16").arg(interpolationNames().at(interpolationStage()),interpolationAuto_?tr("自动降档"):tr("手动固定"));
     else if(fixedAnimeStage()>=0)lines << tr("手动固定级别：%1 · 不自动切换").arg(qualityNames().at(qualityStage_));
     else if(!profile().isEmpty() || networkSource())lines << tr("自适应级别：%1 · 超过 5% 丢帧逐级降载").arg(qualityNames().at(direct_?qMax(4,qualityStage_):qualityStage_));
+    if(!madvrMode()) {
+        const auto color=(direct_?clock_:output_)->colorStatus();
+        lines << tr("色彩引擎：%1 · %2").arg(QString::fromUtf8(color.engine),color.activeEngine?"libplacebo D3D11":tr("3FP 原生"));
+        if(color.activeEngine) {
+            const auto tagged=[](unsigned value,const QStringList& names){return QString("%1 (%2)").arg(names.value(value,"Unknown")).arg(value);};
+            lines << tr("色彩输入：Matrix %1 · Primaries %2 · Transfer %3 · Range %4 · Chroma %5 · %6 bit")
+                .arg(tagged(color.sourceMatrix,{"RGB","BT.709","Unspecified","Reserved","FCC","BT.470BG","SMPTE170M","SMPTE240M","YCgCo","BT.2020 NCL","BT.2020 CL","SMPTE2085","Chroma NCL","Chroma CL","ICtCp"}))
+                .arg(tagged(color.sourcePrimaries,{"Reserved","BT.709","Unspecified","Reserved","BT.470M","BT.470BG","SMPTE170M","SMPTE240M","Film","BT.2020","SMPTE428","P3-DCI","P3-D65"}))
+                .arg(tagged(color.sourceTransfer,{"Reserved","BT.709","Unspecified","Reserved","Gamma2.2","Gamma2.8","SMPTE170M","SMPTE240M","Linear","Log","Log-sqrt","IEC61966-2-4","BT.1361","sRGB","BT.2020 10","BT.2020 12","PQ","SMPTE428","HLG"}))
+                .arg(tagged(color.sourceRange,{"Unspecified","Limited","Full"})).arg(tagged(color.sourceChroma,{"Unspecified","Left","Center","Top-left","Top","Bottom-left","Bottom"})).arg(color.sourceBits);
+            lines << tr("元数据来源：%1 · 显式字段掩码 %2（其余按兼容规则推断）")
+                .arg(color.sourceKind==2?"VS props":"Decoded AVFrame").arg(color.explicitFields);
+            lines << tr("色彩目标：%1 nit · 黑位 %2 nit · ICC %3 · LUT %4 · 提交 %5 ms")
+                .arg(color.targetPeak,0,'f',0).arg(color.targetBlack,0,'f',4).arg(color.iccState).arg(color.lutActive).arg(color.renderSubmitMs,0,'f',2);
+            lines << tr("HDR 静态信息：Mastering %1 / %2 nit · MaxCLL %3 · MaxFALL %4")
+                .arg(color.masteringPeak,0,'f',1).arg(color.masteringBlack,0,'f',4).arg(color.maxCll,0,'f',1).arg(color.maxFall,0,'f',1);
+            if(color.profile[0])lines << tr("显示 ICC：%1").arg(QString::fromUtf8(color.profile));
+            lines << QString("HDR10+ %1 · Dolby Vision %2 / reshape %3 · Vivid %4").arg(color.hdr10plus).arg(color.doviDetected).arg(color.doviActive).arg(color.vividDetected);
+            const QStringList tones{"Auto","Spline","ST2094-40","BT.2390","Clip","Linear"},gamuts{"Auto","Perceptual","Softclip","Relative","Clip"};
+            lines << QString("Tone %1 · Gamut %2 · Dither %3 · Stream fields %4")
+                .arg(tones.value(color.tone),gamuts.value(color.gamut)).arg(color.dither).arg(color.streamFields);
+        }
+        if(color.fallback[0]) lines << tr("色彩回退 / 限制：%1").arg(QString::fromUtf8(color.fallback));
+    }
     const QString text = lines.join('\n');
     info_->setMaximumWidth(qMax(300, pane_->surface()->width()-24)); info_->setText(text); info_->adjustSize(); info_->move(12, 12); info_->raise();
 }

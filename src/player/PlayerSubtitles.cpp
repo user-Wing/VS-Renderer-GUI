@@ -6,7 +6,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QPainter>
-#include <QProcess>
 #include <QTemporaryDir>
 #include <QRegularExpression>
 #include <array>
@@ -60,10 +59,7 @@ void PlayerSubtitles::load(int slot,const QString &path,int stream,const QString
     QMetaObject::invokeMethod(worker_,[this,slot,path,stream,codec,style]{
         impl_->clear(slot); if(path.isEmpty()) return; auto &t=impl_->tracks[slot]; QString actual=path; int index=stream; QTemporaryDir temp;
         t.srt=codec=="subrip" || QFileInfo(path).suffix().compare("srt",Qt::CaseInsensitive)==0;
-        if(t.srt) {
-            if(stream>=0) { actual=temp.filePath("subtitle.srt"); QProcess extract; extract.start(QDir(QCoreApplication::applicationDirPath()).filePath("runtime/ffmpeg/ffmpeg.exe"),{"-v","error","-i",path,"-map","0:"+QString::number(stream),"-c:s","srt","-y",actual});
-                if(!extract.waitForFinished(120000) || extract.exitCode()!=0) { emit errorOccurred(tr("无法提取 SRT 字幕：%1").arg(QString::fromUtf8(extract.readAllStandardError()))); return; }
-            }
+        if(t.srt && stream<0) {
             QFile input(actual); if(!input.open(QIODevice::ReadOnly)) {emit errorOccurred(tr("无法读取字幕：%1").arg(actual));return;}
             const auto ass=srtToAss(QString::fromUtf8(input.readAll()),style,slot); input.close(); actual=temp.filePath("subtitle.ass"); QFile output(actual); if(!output.open(QIODevice::WriteOnly)) return; output.write(ass.toUtf8());output.close();index=-1;
         }
@@ -85,7 +81,7 @@ void PlayerSubtitles::render(qint64 time,const QSize &canvas,const QSize &video,
         QImage image(canvas,QImage::Format_ARGB32_Premultiplied);image.fill(Qt::transparent);QPainter painter(&image);
         const QSize fitted=video.isEmpty()?canvas:video.scaled(canvas,Qt::KeepAspectRatio);const QPoint origin((canvas.width()-fitted.width())/2,(canvas.height()-fitted.height())/2);
         if(visible) for(int slot=0;slot<2;++slot) { auto &t=impl_->tracks[slot]; if(!t.handle) continue;
-            if(!t.bitmap) { t.frame={}; if(!impl_->renderAss || impl_->renderAss(t.handle,time,fitted.width(),fitted.height(),&t.frame)!=0) continue; if(!(t.frame.flags&16) || t.image.isNull())t.image=impl_->pixels(t); }
+            if(!t.bitmap) { t.frame={}; if(!impl_->renderAss || impl_->renderAss(t.handle,time,fitted.width(),fitted.height(),&t.frame)!=0) continue; if(t.frame.flags&8)impl_->renderedTime=-1; if(!(t.frame.flags&16) || t.image.isNull())t.image=impl_->pixels(t); }
             else {
                 if(t.last>=0 && (time<t.last || time>t.last+50000000)) { impl_->seekBitmap(t.handle,qMax<qint64>(0,time-300000000)); t.frame={}; t.image={};t.nextImage={};t.hasNext=t.eof=false; }
                 for(int n=0;n<128;++n) {

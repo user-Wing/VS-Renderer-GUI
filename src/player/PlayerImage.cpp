@@ -1,4 +1,5 @@
 #include "player/PlayerImage.h"
+#include "image/ImagePsd.h"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -28,7 +29,7 @@ PlayerImage::~PlayerImage() { cancel(); thread_.quit(); thread_.wait(); }
 bool PlayerImage::supports(const QString &path) {
     const auto suffix=QFileInfo(path).suffix().toLower().toLatin1();
     return QImageReader::supportedImageFormats().contains(suffix) ||
-        QList<QByteArray>{"jpg","jpeg","jpe","jfif","png","webp","bmp","gif","tif","tiff","avif","heic","heif","jxl","jp2","j2k","j2c","jpf","jpm","jls","exr","tga","pcx","psd","dds","qoi","hdr","wbmp","pbm","pgm","ppm","pnm"}.contains(suffix);
+        QList<QByteArray>{"jpg","jpeg","jpe","jfif","png","webp","bmp","gif","tif","tiff","avif","heic","heif","jxl","jp2","j2k","j2c","jpf","jpm","jls","exr","tga","pcx","psd","psb","dds","qoi","hdr","wbmp","pbm","pgm","ppm","pnm"}.contains(suffix);
 }
 void PlayerImage::cancel() { ++generation_; }
 void PlayerImage::open(const QString &path) {
@@ -70,6 +71,9 @@ void PlayerImage::open(const QString &path) {
                 }
             }
         }
+        if(suffix=="psd" || suffix=="psb"){
+            auto document=ImagePsd::load(path,&error);if(document && generation==generation_){image=document->composite(QRect(QPoint(),document->size()));error=document->storageError();if(!image.isNull()){image.setText("sourceBitDepth",document->precision()==ImagePrecision::Float32?"32":document->precision()==ImagePrecision::UInt16?"16":"8");image.setText("sourcePixelFormat",QString("PSD RGB · %1 layers").arg(document->layers().size()));decoderName="Native layered PSD/PSB";}}
+        }
         if(suffix=="avif") {
             QFile file(path);
             if(!file.open(QIODevice::ReadOnly))error=file.errorString();
@@ -105,6 +109,18 @@ void PlayerImage::open(const QString &path) {
                             stage="RGB conversion";result=avifImageYUVToRGB(source,&rgb);
                             if(result==AVIF_RESULT_OK) {
                                 if(source->icc.size)image.setColorSpace(QColorSpace::fromIccProfile(QByteArray(reinterpret_cast<const char *>(source->icc.data),source->icc.size)));
+                                if(!image.colorSpace().isValid()){
+                                    auto primaries=QColorSpace::Primaries::Custom;auto transfer=QColorSpace::TransferFunction::Custom;
+                                    if(source->colorPrimaries==AVIF_COLOR_PRIMARIES_BT709)primaries=QColorSpace::Primaries::SRgb;
+                                    else if(source->colorPrimaries==AVIF_COLOR_PRIMARIES_BT2020)primaries=QColorSpace::Primaries::Bt2020;
+                                    else if(source->colorPrimaries==AVIF_COLOR_PRIMARIES_SMPTE432)primaries=QColorSpace::Primaries::DciP3D65;
+                                    if(source->transferCharacteristics==AVIF_TRANSFER_CHARACTERISTICS_SRGB)transfer=QColorSpace::TransferFunction::SRgb;
+                                    else if(source->transferCharacteristics==AVIF_TRANSFER_CHARACTERISTICS_LINEAR)transfer=QColorSpace::TransferFunction::Linear;
+                                    else if(source->transferCharacteristics==AVIF_TRANSFER_CHARACTERISTICS_PQ)transfer=QColorSpace::TransferFunction::St2084;
+                                    else if(source->transferCharacteristics==AVIF_TRANSFER_CHARACTERISTICS_HLG)transfer=QColorSpace::TransferFunction::Hlg;
+                                    else if(source->transferCharacteristics==AVIF_TRANSFER_CHARACTERISTICS_BT2020_10BIT || source->transferCharacteristics==AVIF_TRANSFER_CHARACTERISTICS_BT2020_12BIT)transfer=QColorSpace::TransferFunction::Bt2020;
+                                    if(primaries!=QColorSpace::Primaries::Custom && transfer!=QColorSpace::TransferFunction::Custom)image.setColorSpace(QColorSpace(primaries,transfer));
+                                }
                                 if(source->transformFlags & AVIF_TRANSFORM_IROT)image=image.transformed(QTransform().rotate(-90*source->irot.angle));
                                 if(source->transformFlags & AVIF_TRANSFORM_IMIR)image=image.mirrored(source->imir.axis!=0,source->imir.axis==0);
                             }
@@ -120,7 +136,7 @@ void PlayerImage::open(const QString &path) {
             // FFmpeg provides additional still-image codecs absent from Qt's plugins.
             if(image.isNull() && suffix!="avif" && temporary.isValid()) {
                 decoded=temporary.filePath("image.png");QProcess process;
-                process.start(QDir(runtime).filePath("runtime/ffmpeg/ffmpeg.exe"),
+                process.start(QDir(runtime).filePath("ffmpeg.exe"),
                     {"-v","error","-i",path,"-frames:v","1","-y",decoded});
                 if(process.waitForStarted()) {
                     while(!process.waitForFinished(100))if(generation!=generation_){process.kill();process.waitForFinished();return;}

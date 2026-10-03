@@ -19,6 +19,7 @@ namespace {
 class NativeVideoSurface final : public QWidget {
 public:
     QImage image;
+    QTransform imageTransform;
     float zoom = 1, panX = 0, panY = 0;
     explicit NativeVideoSurface(QWidget *parent) : QWidget(parent)
     {
@@ -31,17 +32,21 @@ protected:
     void paintEvent(QPaintEvent *) override {
         if(image.isNull())return;
         QPainter painter(this);painter.fillRect(rect(),QColor("#101010"));
-        const QSizeF fitted=QSizeF(image.size().scaled(size(),Qt::KeepAspectRatio))*zoom;
+        const QRectF bounds=imageTransform.mapRect(QRectF(QPointF(),image.size()));
+        const QSizeF fitted=bounds.size().scaled(size(),Qt::KeepAspectRatio)*zoom;
         const QPointF origin((width()-fitted.width())/2+panX*std::max(0.0,fitted.width()-width())/2,
                              (height()-fitted.height())/2+panY*std::max(0.0,fitted.height()-height())/2);
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
         // Clip before mapping into painter coordinates: huge zooms exceed raster's coordinate range.
         const QRectF destination=QRectF(origin,fitted).intersected(QRectF(rect()));
         if(destination.isEmpty())return;
-        const QRectF source((destination.x()-origin.x())*image.width()/fitted.width(),
-                            (destination.y()-origin.y())*image.height()/fitted.height(),
-                            destination.width()*image.width()/fitted.width(),destination.height()*image.height()/fitted.height());
-        painter.drawImage(destination,image,source);
+        QTransform screen;
+        screen.translate(origin.x(),origin.y());screen.scale(fitted.width()/bounds.width(),fitted.height()/bounds.height());screen.translate(-bounds.x(),-bounds.y());
+        const auto mapping=imageTransform*screen;
+        const QRectF source=mapping.inverted().mapRect(destination).intersected(QRectF(QPointF(),image.size()));
+        // Draw only the visible source, with its local origin to avoid raster coordinate limits.
+        painter.setWorldTransform(QTransform::fromTranslate(source.x(),source.y())*mapping);
+        painter.drawImage(QRectF(QPointF(),source.size()),image,source);
     }
 };
 
@@ -118,12 +123,19 @@ void PreviewPane::setChromeVisible(bool visible) { titleBar_->setVisible(visible
 void PreviewPane::setVideoSize(const QSize &size) { videoSize_ = size; }
 void PreviewPane::setImage(const QImage &image) {
     auto *surface=static_cast<NativeVideoSurface *>(surface_);surface->image=image;
+    surface->imageTransform.reset();
     surface->setAttribute(Qt::WA_PaintOnScreen,image.isNull());
     surface->setAttribute(Qt::WA_NoSystemBackground,image.isNull());
     if(!image.isNull()){setVideoSize(image.size());setSurfaceActive(true);}
     adoptView(zoom_,panX_,panY_);surface->update();
 }
 QImage PreviewPane::image() const { return static_cast<NativeVideoSurface *>(surface_)->image; }
+QTransform PreviewPane::imageTransform() const { return static_cast<NativeVideoSurface *>(surface_)->imageTransform; }
+QSize PreviewPane::imageDisplaySize() const { return imageTransform().mapRect(QRectF(QPointF(),image().size())).size().toSize(); }
+void PreviewPane::setImageTransform(const QTransform &transform) {
+    static_cast<NativeVideoSurface *>(surface_)->imageTransform=transform;
+    setVideoSize(imageDisplaySize());adoptView(1,0,0);emit viewChanged(1,0,0);surface_->update();
+}
 
 void PreviewPane::adoptView(float zoom, float panX, float panY)
 {
@@ -241,6 +253,16 @@ void PreviewPane::wheelEvent(QWheelEvent *event)
 
 void PreviewPane::applyWheel(QWheelEvent *event, const QPointF &surfacePosition)
 {
+    if(!image().isNull() && !event->modifiers().testFlag(Qt::ControlModifier)){
+        const auto fitted=imageDisplaySize().scaled(surface_->size(),Qt::KeepAspectRatio)*zoom_;
+        const auto pixels=event->pixelDelta();const auto angles=event->angleDelta();
+        double dx=pixels.isNull()?angles.x()/120.0*60:pixels.x();double dy=pixels.isNull()?angles.y()/120.0*60:pixels.y();
+        if(event->modifiers().testFlag(Qt::ShiftModifier)){dx+=dy;dy=0;}
+        const double spanX=std::max(0.0,double(fitted.width()-surface_->width())),spanY=std::max(0.0,double(fitted.height()-surface_->height()));
+        if(spanX>0)panX_=std::clamp(float(panX_+dx*2/spanX),-1.f,1.f);
+        if(spanY>0)panY_=std::clamp(float(panY_+dy*2/spanY),-1.f,1.f);
+        adoptView(zoom_,panX_,panY_);emit viewChanged(zoom_,panX_,panY_);return;
+    }
     if (event->angleDelta().y() == 0)
         return;
     const float factor = event->angleDelta().y() > 0 ? 1.25f : 0.8f;

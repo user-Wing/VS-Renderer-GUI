@@ -405,9 +405,9 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames)
 
         const auto range = frameProperty(impl_->vsApi, properties, "_ColorRange", 2);
         frame.colorRange = range == 0 ? 2u : (range == 1 ? 1u : 0u);
-        frame.colorPrimaries = frameProperty(impl_->vsApi, properties, "_Primaries");
-        frame.colorTransfer = frameProperty(impl_->vsApi, properties, "_Transfer");
-        frame.colorMatrix = frameProperty(impl_->vsApi, properties, "_Matrix");
+        frame.colorPrimaries = frameProperty(impl_->vsApi, properties, "_Primaries", 2);
+        frame.colorTransfer = frameProperty(impl_->vsApi, properties, "_Transfer", 2);
+        frame.colorMatrix = frameProperty(impl_->vsApi, properties, "_Matrix", 2);
         int chromaError = peSuccess;
         const auto chroma = impl_->vsApi->mapGetInt(properties, "_ChromaLocation", 0, &chromaError);
         frame.chromaLocation = chromaError == peSuccess && chroma >= 0 ? static_cast<std::uint32_t>(chroma + 1) : 0u;

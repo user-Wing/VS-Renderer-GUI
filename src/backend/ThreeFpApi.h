@@ -1,4 +1,5 @@
 #pragma once
+#include "color/ColorBridge.h"
 
 #include <QLibrary>
 #include <QString>
@@ -39,7 +40,8 @@ enum class ThreeFpScalingAlgorithm : std::uint32_t {
     Jinc2 = 4,
     Spline36 = 5,
     SuperXbrSinglePass = 6,
-    D3D11Native = 7
+    D3D11Native = 7,
+    Lanczos4 = 8
 };
 
 struct ThreeFpConfiguration {
@@ -204,6 +206,8 @@ public:
     ThreeFpResult setScalingAlgorithms(void *handle, ThreeFpScalingAlgorithm upscale,
                                        ThreeFpScalingAlgorithm downscale) const;
     ThreeFpResult snapshot(void *handle, ThreeFpSnapshot *snapshot) const;
+    ThreeFpResult setColorSettings(void *handle, const VsrColorSettings *settings) const;
+    ThreeFpResult colorStatus(void *handle, VsrColorStatus *status) const;
     ThreeFpResult readPixel(void *handle, ThreeFpPixelProbe *probe) const;
     ThreeFpResult submitExternalVideoFrame(void *handle, const ThreeFpExternalVideoFrame *frame) const;
     ThreeFpResult setExternalOutputFormat(void *handle, const char *format) const;
@@ -266,6 +270,10 @@ private:
     ViewFn setViewTransform_ = nullptr;
     ScalingFn setScalingAlgorithms_ = nullptr;
     SnapshotFn snapshot_ = nullptr;
+    using ColorSetFn = ThreeFpResult (*)(void *, const VsrColorSettings *);
+    using ColorStatusFn = ThreeFpResult (*)(void *, VsrColorStatus *);
+    ColorSetFn setColorSettings_ = nullptr;
+    ColorStatusFn colorStatus_ = nullptr;
     PixelFn readPixel_ = nullptr;
     ExternalFrameFn submitExternalVideoFrame_ = nullptr;
     HandleFn redraw_ = nullptr;

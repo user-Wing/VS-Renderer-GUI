@@ -1,0 +1,130 @@
+diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
+index 6a9062e..6f3cd1b 100644
+--- a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
++++ b/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
+@@ -305,6 +305,7 @@ public:
+             output.size < sizeof(FFF3FPBitmapSubtitleFrame) || output.version != ApiVersion)
+             return FFFResult::InvalidArgument;
+         try {
++            PumpContainer(position / TicksPerMillisecond);
+             const auto geometryChanged = width != canvasWidth_ || height != canvasHeight_;
+             auto contentChanged = geometryChanged || !hasRenderedFrame_;
+             if (geometryChanged) {
+@@ -315,7 +316,7 @@ public:
+                 canvasHeight_ = height;
+             }
+ 
+-            if (geometryChanged || position != lastPosition_ || !hasRenderedFrame_) {
++            if (geometryChanged || position != lastPosition_ || !hasRenderedFrame_ || container_ != nullptr) {
+                 int changed = 0;
+                 const auto timestamp = position / TicksPerMillisecond;
+                 ASS_Image* images = ass_render_frame(renderer_, track_, timestamp, &changed);
+@@ -327,6 +328,8 @@ public:
+                 hasRenderedFrame_ = true;
+             }
+             FillOutput(output, position);
++            if (container_ != nullptr && !subtitleEof_ && subtitleReadUntil_ <= position / TicksPerMillisecond + 1000)
++                output.flags = static_cast<FFF3FPBitmapSubtitleFlags>(static_cast<std::uint32_t>(output.flags) | 8u);
+             if (!contentChanged) {
+                 output.flags = static_cast<FFF3FPBitmapSubtitleFlags>(
+                     static_cast<std::uint32_t>(output.flags) |
+@@ -440,8 +443,47 @@ private:
+ 
+             packet = av_packet_alloc();
+             if (packet == nullptr) throw std::runtime_error("Could not allocate a subtitle packet.");
+-            std::int64_t eventOrder = 0;
+-            while ((result = av_read_frame(format, packet)) >= 0) {
++            container_ = format; containerInput_ = std::move(sharedInput);
++            subtitleDecoder_ = decoder; subtitlePacket_ = packet;
++            subtitleStream_ = requestedStream; timelineOrigin_ = timelineOriginMilliseconds;
++            ass_set_check_readorder(track, 0);
++            return track;
++        } catch (...) {
++            cleanup();
++            if (track != nullptr) ass_free_track(track);
++            throw;
++        }
++    }
++
++    void PumpContainer(const std::int64_t position) {
++        if (container_ == nullptr) return;
++        auto* format = container_; auto* decoder = subtitleDecoder_;
++        auto* packet = subtitlePacket_; auto* track = track_;
++        const auto requestedStream = subtitleStream_;
++        auto* stream = format->streams[requestedStream];
++        const auto timelineOriginMilliseconds = timelineOrigin_;
++        if ((lastSubtitlePosition_ < 0 && position > 5000) || (lastSubtitlePosition_ >= 0 && (position < lastSubtitlePosition_ || position > lastSubtitlePosition_ + 5000))) {
++            // Seek with preroll for cues that began before the requested frame.
++            const auto target = std::max<std::int64_t>(0, position - 30000) + timelineOrigin_;
++            const auto result = av_seek_frame(format, -1, target * 1000, AVSEEK_FLAG_BACKWARD);
++            if (result < 0) throw std::runtime_error("Could not seek embedded subtitles: " + FfmpegError(result));
++            avcodec_flush_buffers(decoder); ass_flush_events(track);
++            subtitleReadUntil_ = -1; subtitleEof_ = false;
++        }
++        lastSubtitlePosition_ = position;
++        int result = 0;
++        std::int64_t bytes = 0;
++        for (int count = 0; count < 64 && bytes < 4 * 1024 * 1024 && !subtitleEof_ && subtitleReadUntil_ <= position + 1000; ++count) {
++                result = av_read_frame(format, packet);
++                if (result < 0) {
++                    if (result != AVERROR_EOF) throw std::runtime_error("Could not read embedded subtitles: " + FfmpegError(result));
++                    subtitleEof_ = true; break;
++                }
++                bytes += packet->size;
++                if (packet->pts != AV_NOPTS_VALUE) {
++                    const auto time = av_rescale_q(packet->pts, format->streams[packet->stream_index]->time_base, AVRational{1, 1000}) - timelineOrigin_;
++                    subtitleReadUntil_ = std::max(subtitleReadUntil_, time);
++                }
+                 if (packet->stream_index != requestedStream) {
+                     av_packet_unref(packet);
+                     continue;
+@@ -489,23 +531,13 @@ private:
+                             if (*current == '\n') text += "\\N";
+                             else text += *current;
+                         }
+-                        auto chunk = std::to_string(eventOrder++) + ",0,Default,,0,0,0,," + text;
++                        auto chunk = std::to_string(eventOrder_++) + ",0,Default,,0,0,0,," + text;
+                         ass_process_chunk(track, chunk.data(), static_cast<int>(chunk.size()),
+                             startMilliseconds, durationMilliseconds);
+                     }
+                 }
+                 avsubtitle_free(&subtitle);
+             }
+-            if (result != AVERROR_EOF)
+-                throw std::runtime_error("Could not finish reading embedded subtitles: " + FfmpegError(result));
+-
+-            cleanup();
+-            return track;
+-        } catch (...) {
+-            cleanup();
+-            if (track != nullptr) ass_free_track(track);
+-            throw;
+-        }
+     }
+ 
+     static void AssMessageCallback(const int level, const char* format, va_list arguments,
+@@ -677,6 +709,10 @@ private:
+     }
+ 
+     void Close() noexcept {
++        if (subtitlePacket_ != nullptr) av_packet_free(&subtitlePacket_);
++        if (subtitleDecoder_ != nullptr) avcodec_free_context(&subtitleDecoder_);
++        if (container_ != nullptr) avformat_close_input(&container_);
++        containerInput_.reset();
+         if (renderer_ != nullptr) ass_renderer_done(renderer_);
+         if (track_ != nullptr) ass_free_track(track_);
+         if (library_ != nullptr) ass_library_done(library_);
+@@ -689,6 +725,13 @@ private:
+     ASS_Library* library_{};
+     ASS_Renderer* renderer_{};
+     ASS_Track* track_{};
++    AVFormatContext* container_{};
++    std::unique_ptr<SharedFileInput> containerInput_;
++    AVCodecContext* subtitleDecoder_{};
++    AVPacket* subtitlePacket_{};
++    std::int32_t subtitleStream_{-1};
++    std::int64_t timelineOrigin_{}, eventOrder_{}, subtitleReadUntil_{-1}, lastSubtitlePosition_{-1};
++    bool subtitleEof_{};
+     std::string lastError_;
+     std::string lastLibassMessage_;
+     std::vector<std::string> fontDirectories_;

@@ -1,0 +1,544 @@
+{
+  "files": [
+    {
+      "path": "ASL.dll",
+      "sha256": "ba5e878e2171907889db5308df8280b6b06af2232f89f720936c3f78ec7ad1d1"
+    },
+    {
+      "path": "avcodec-63.dll",
+      "sha256": "320c093425a70856f4b37e17964323e28e3eda2096eb44016a64d0adf0c912eb"
+    },
+    {
+      "path": "avdevice-63.dll",
+      "sha256": "c9edf12d78a529db1e03b7c0d8874abb696177455ca28209a9b8586e1481ebe0"
+    },
+    {
+      "path": "avfilter-12.dll",
+      "sha256": "f9c7e92014da15f02d8979b26cbc7d54194340809d781e09a6475661e70a81e3"
+    },
+    {
+      "path": "avformat-63.dll",
+      "sha256": "04fb89ca33619a1a540db21275e6db2d567d5d5a87ea45311f0f3f56b3f4ca12"
+    },
+    {
+      "path": "avutil-61.dll",
+      "sha256": "95032744d04592a550dc1120f0181d4e952283ab7a54ce6783cbef3c9c236bd1"
+    },
+    {
+      "path": "CoreAudioToolbox.dll",
+      "sha256": "81fb32b38aa02f421909c3d94fc3b81b9ab8f87a62ab73758f8b3a667bb46134"
+    },
+    {
+      "path": "CoreFoundation.dll",
+      "sha256": "7dc93030bbcfd67ab69e907111651bd080435cfa93b5f87b2449c7111957567b"
+    },
+    {
+      "path": "ffmpeg.exe",
+      "sha256": "7dea36a4316f6304f8e425553af915b58a3699eb2c6566ae5e83f83f62c65819"
+    },
+    {
+      "path": "ffplay.exe",
+      "sha256": "ba810dba514ead961b3c525da22ddb458f74d7a6b4268abe4fbe3e674b271e47"
+    },
+    {
+      "path": "ffprobe.exe",
+      "sha256": "cb3fe988c0faa461396ace2b0d42f14a46f904a45a37c65c8e5fa9284bf76e23"
+    },
+    {
+      "path": "icudt62.dll",
+      "sha256": "45688da18174797bbf5df81f3c360af7fd65df5bc8339b0adf19d53a9ce0f001"
+    },
+    {
+      "path": "libbrotlicommon.dll",
+      "sha256": "a950615636b94ce1aae598d19880eb8df2406a5cb48bae5cabe4c94c28ec40c1"
+    },
+    {
+      "path": "libbrotlidec.dll",
+      "sha256": "f0e052374c4ca4c9b0528f62ad214e3879209af3121d55c380698a0e07c92fa4"
+    },
+    {
+      "path": "libbz2-1.dll",
+      "sha256": "4557cff8919558a717968513281a0e88ae504d0c898d6ced8e5ca0c00f66d8fb"
+    },
+    {
+      "path": "libc++.dll",
+      "sha256": "9779d03d9bdb4bed763a5b18d0aa5b9002ce5dad6d0adc2d496e783a3f336e3f"
+    },
+    {
+      "path": "libcairo-2.dll",
+      "sha256": "f93dce7e0dcbbef563fc216c16e514de391ccaa9efb6c43d18e4af9efbb937bb"
+    },
+    {
+      "path": "libdatrie-1.dll",
+      "sha256": "b46d3dd9a85579cab9ec048955c41d160325f6b6be011f2c6f021a5fc9179a79"
+    },
+    {
+      "path": "libdispatch.dll",
+      "sha256": "b8ebfdc5b41cb6277fc753dbc76ef8e68d93546a2a8e7dee981a026e217c0daa"
+    },
+    {
+      "path": "libexpat-1.dll",
+      "sha256": "2eb4f820f0d5eb4117005eaacb56f437d739f1b565d628312980aa7e0e7d0c13"
+    },
+    {
+      "path": "libffi-8.dll",
+      "sha256": "a647f20fe0a895e0ff4e8a8211da00a092fdd55371f6f8c1a0701ba526e75fa6"
+    },
+    {
+      "path": "libfontconfig-1.dll",
+      "sha256": "fb8179916028b1afe77232bcd672927a6ffd0d8fc36a46be30b1aae2d3b14f52"
+    },
+    {
+      "path": "libfreetype-6.dll",
+      "sha256": "2e9aacb546077c99fd0f05f092d7a75a7f79dc4b95fa1fb6677d9e60e1dba855"
+    },
+    {
+      "path": "libfribidi-0.dll",
+      "sha256": "e8bd127f0b99a050e9e4c45af6062c0e9f5ac18e28e5e497f590bf435b25a29d"
+    },
+    {
+      "path": "libgio-2.0-0.dll",
+      "sha256": "5dce329bc7ce8104194c22e36bdf12d85ea929ca7971b548f1ccc9a4897bf387"
+    },
+    {
+      "path": "libglib-2.0-0.dll",
+      "sha256": "a3c639218f6d60d67a7dfa7be62d913640a7b11ae4eb7fe287e1189f90061875"
+    },
+    {
+      "path": "libgmodule-2.0-0.dll",
+      "sha256": "0f75caffd45c8acc12d4077f4dfa964a9c2ff0f93e96ab886355a01f60efb4fb"
+    },
+    {
+      "path": "libgobject-2.0-0.dll",
+      "sha256": "46e9d091b375a2a1be887b570d051f4b7519473f9d8efe722b8d0a2323b5ad88"
+    },
+    {
+      "path": "libgraphite2.dll",
+      "sha256": "6a0597e05dce3cc2e1af712bcf05fedc292df2c344c2a73adfcbc9087d19a2ab"
+    },
+    {
+      "path": "libharfbuzz-0.dll",
+      "sha256": "23d75f6e7144099e372d1f18bbd827444c695aa8bcdbd3531723ea3ff0394bfc"
+    },
+    {
+      "path": "libiconv-2.dll",
+      "sha256": "2f7c032b46e49959da998a2d0b81c35188ba5129e933e20123f2dc680892093d"
+    },
+    {
+      "path": "libicuin.dll",
+      "sha256": "9efd6a19fea9d06621bcbb8c023ec5aa25eebbd2927b40498c71ad0670f5cc93"
+    },
+    {
+      "path": "libicuuc.dll",
+      "sha256": "33461f73c650c244e00cf270d6bafed623333b44c932ff2fa3adda7bd5bb3aac"
+    },
+    {
+      "path": "libintl-8.dll",
+      "sha256": "7ed43ff32c96fbda930e7ee30d76e4c57703535d26be3e94f6af07ee2c22c603"
+    },
+    {
+      "path": "libm++.dll",
+      "sha256": "7344daed05388589e9bd691ed1d30c568c374da4b8b6a12e1502185948c03cd4"
+    },
+    {
+      "path": "libomp.dll",
+      "sha256": "6bb7a666d9163c3b372ac98bcc7272353f225a4f323557f47d51a8311936b8b0"
+    },
+    {
+      "path": "libpango-1.0-0.dll",
+      "sha256": "03a92dda09d21762dbae2368b0cfa4a005df70bc6ab7138655b518f4cb345ceb"
+    },
+    {
+      "path": "libpangocairo-1.0-0.dll",
+      "sha256": "d534448e835862aea74133fedf45ff52bdadb300ccdede560816de761d0cfee8"
+    },
+    {
+      "path": "libpangoft2-1.0-0.dll",
+      "sha256": "8bdc1f2c8071d1ded5aa20d46a34480ebe9e186d6821243180aa9ac568c8b303"
+    },
+    {
+      "path": "libpangowin32-1.0-0.dll",
+      "sha256": "a4d2731f936637e21e4a24c0774dfbe1de30b5385ba038d3fa87dc7525ffb7cb"
+    },
+    {
+      "path": "libpcre2-8-0.dll",
+      "sha256": "cbbc706dc359eda7267092999bc91bb4fa32addb6e1bd2c409332b1743b5c817"
+    },
+    {
+      "path": "libpixman-1-0.dll",
+      "sha256": "46993575bbcd6fd8ef97143987eca2116a0fe6915314d739fbe1e0d5f87d961b"
+    },
+    {
+      "path": "libpng16-16.dll",
+      "sha256": "2cdf421247f15359059e61d8357aadf3d728b65890e851dc2d2f52e8d34202bb"
+    },
+    {
+      "path": "libshaderc_shared.dll",
+      "sha256": "55cc339ff1d97547476237334e815dba264a4a67848d54ff4baca1bc30f99257"
+    },
+    {
+      "path": "libSPIRV-Tools-shared.dll",
+      "sha256": "6cd62c744ec9630634341682dcbd3d169da7e38dae31d23e0994c5e75d647f76"
+    },
+    {
+      "path": "libthai-0.dll",
+      "sha256": "7ed4243585adb1cc3a3a24c8aba134c3444f6c33b08c91bd0aa91dd35ac57aa7"
+    },
+    {
+      "path": "libunwind.dll",
+      "sha256": "cb9dbb9757c975e3bdbf2a9b25d782ac4224cc42e49968dfc614a16c5e347664"
+    },
+    {
+      "path": "libwinpthread-1.dll",
+      "sha256": "c8167eb13ba082929586a09278c71b1f69add7a68280d26143772798b1795196"
+    },
+    {
+      "path": "msvcp140.dll",
+      "sha256": "0f885b509a685d2bbfa652fed26b5fb31d88fbdab0a978c641d1c7b8aa460aa9"
+    },
+    {
+      "path": "objc.dll",
+      "sha256": "2025cf8d69a9aa5322f36ea30f5facbec752b5c922976d506c70c4e844b7190b"
+    },
+    {
+      "path": "README.md",
+      "sha256": "3592c83629d67c8ffbe98f8224404ff57624ea6da2cb04b1e65f22f8b41f8cae"
+    },
+    {
+      "path": "swresample-7.dll",
+      "sha256": "bc6335fc98e52d9b007d7afc84a229a5e214bf6d0d72978f0aec0ca9ebb7e18a"
+    },
+    {
+      "path": "swscale-10.dll",
+      "sha256": "8be34d6b24d3dfce0dd17f275cb4dc3d93e0c439147baaaa5920b0a4606653bf"
+    },
+    {
+      "path": "zlib1.dll",
+      "sha256": "768f2f27015e7244a20952fa423b7aa1adc32ca3e04167886bd1cb5ed9a7b3f8"
+    },
+    {
+      "path": "build-info/additional-codec-sources.json",
+      "sha256": "29e943d2f3edcf48d32de386f2b157f048551a4b335c3adeab66c71dbdf37634"
+    },
+    {
+      "path": "build-info/build-config.mak",
+      "sha256": "0a954b147b33ed170d2b75695164cfdc3fd7dc65a976bccf9249f7bbbadb7c55"
+    },
+    {
+      "path": "build-info/build-extra-deps.sh",
+      "sha256": "1ff2e98e9a75af376acda1d99ccd809c07902c843e0ca935917d54b51433125a"
+    },
+    {
+      "path": "build-info/build-full-expanded.sh",
+      "sha256": "917e8c3abe2934091eebf9eed8a6ad9e06bb3d04e7d4e2bd9e0ea23e7343ed35"
+    },
+    {
+      "path": "build-info/build-manifest.json",
+      "sha256": "86f6a37427f759109143294f554fbf8fafced43a4b172324fa2e4d7a63724c40"
+    },
+    {
+      "path": "build-info/check-expanded-pe-imports.py",
+      "sha256": "00daff6076541f51b4372332a7c78c7217f1027224936cd349bdd5c638aceed0"
+    },
+    {
+      "path": "build-info/check-expanded-svt.ps1",
+      "sha256": "833e6b22da2295ae07f9c81fdbc4d2f16c80f154f2e4f2af2e672386805c0839"
+    },
+    {
+      "path": "build-info/check-expanded.ps1",
+      "sha256": "e183ad77e9e3a393b05fbe1498bfc6190d7fbfedc00125ba4012880d7e1471de"
+    },
+    {
+      "path": "build-info/configure.log",
+      "sha256": "38f27dcefcce8cc34186c455a18cdaa36c5fc25aa8a529e17bdf45fdc902eb48"
+    },
+    {
+      "path": "build-info/decoders.txt",
+      "sha256": "d9f890acf63b19edc3a69c56fb3d17791121e07d080bbaa68140c42107f009b8"
+    },
+    {
+      "path": "build-info/dominic-local.sh",
+      "sha256": "1e9eedcd5af6e38a23049dc8a66d41c149ed74d2c8ac657d71de989c2ef8ac32"
+    },
+    {
+      "path": "build-info/encoders.txt",
+      "sha256": "bde1700b2675f7481389ccbc8915fef72c62e29b4fa9c0d94257dcc33ecaac03"
+    },
+    {
+      "path": "build-info/expanded-adapter-fix.log",
+      "sha256": "befd2ee97c647da592e97865e9eb3edc54e9b3513c492c7e2dc9fbb879a310ae"
+    },
+    {
+      "path": "build-info/ffmpeg-version.txt",
+      "sha256": "a8581714aafe9139a2e5b461305ff32bf6c4c4dd6219ef0d77afadaa436be4c1"
+    },
+    {
+      "path": "build-info/ffplay-version.txt",
+      "sha256": "4331249b7c482f7d83fa33cdd495e773899030cb39a8f197d2fba61d7e4a3f4f"
+    },
+    {
+      "path": "build-info/ffprobe-version.txt",
+      "sha256": "0927cb826f762404575163edadaa8af4afd29553ca55425809d3e2db876ae77e"
+    },
+    {
+      "path": "build-info/finish-full-expanded.sh",
+      "sha256": "1e863829f5c6fd8e4a9deebb46288e50007ead9968a957746adbea0db4bddc4b"
+    },
+    {
+      "path": "build-info/fix-avs3-reorder.py",
+      "sha256": "2a365ca27072e36238ff589ded76072d69cb4642c37c618e748920c335eb3edd"
+    },
+    {
+      "path": "build-info/fix-avs3-timestamps.py",
+      "sha256": "152a0a9f3d2d41d717ec1461e363ac32766df59bc5bcda1c6c3e9ef5f7caf6e6"
+    },
+    {
+      "path": "build-info/fix-uavs3e-alignment.py",
+      "sha256": "674d1180ec3357f97efa34868eb6dc2e83ca2925f2489eb94840990629e3fd5f"
+    },
+    {
+      "path": "build-info/full-expanded-build.log",
+      "sha256": "c21c3469a2e0162497c040875bd40832e1dadd23047399159906b792cd8cff45"
+    },
+    {
+      "path": "build-info/import-symbol-check.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": "build-info/isolate-svg-runtime.py",
+      "sha256": "1da625326cb432d3fb77a624b4b02233f4bbe6bf5f51c737bf49a34cd9c487a0"
+    },
+    {
+      "path": "build-info/librav1e-Cargo.lock",
+      "sha256": "4dc33950691aaf914acc9fd06b533170b73f93b3de5c0bb9abe48a7ed9276401"
+    },
+    {
+      "path": "build-info/librsvg-Cargo.lock",
+      "sha256": "e79e2a2735a0b5b151bb4133becd3008223fabedd34a8b787a872edab9854941"
+    },
+    {
+      "path": "build-info/libuavs3e.c",
+      "sha256": "9ea7dd88bbc4a6e7e14df05d5501b4aff725ca9d66b3fb22d41302afcf95e3a1"
+    },
+    {
+      "path": "build-info/package-full-expanded.sh",
+      "sha256": "2b9eafb0153aef4d5bc2a2bf79cc8a1ffe97aa2503e6988a0c2eb5815a4823fb"
+    },
+    {
+      "path": "build-info/patch-extra-codecs.py",
+      "sha256": "c04ed717b40e7bc87f4909043def9b6a03e9ed7ddb4d509f72e63f3d1937dd5b"
+    },
+    {
+      "path": "build-info/SHA256SUMS.txt",
+      "sha256": "62dbdff0287d8ebba6d819e40d278d51c53e2d70c6edacf73dbc5479ee43d274"
+    },
+    {
+      "path": "build-info/sources.json",
+      "sha256": "f4e10ddbbf0348cd99156f74e19aa42887b7a767cfd4223e998edcde0beed9b5"
+    },
+    {
+      "path": "build-info/svg-support-packages.json",
+      "sha256": "ef0dc9cb109310c39a6530f6a28fabe2cb274bf55c81bc54274c4c209bf63007"
+    },
+    {
+      "path": "build-info/svt-fixed-coding_loop.c",
+      "sha256": "4fe94ac8fae7a261c13d2bd0659156323ba5829712815e770b862319c6db39f6"
+    },
+    {
+      "path": "build-info/svt-fixed-product_coding_loop.c",
+      "sha256": "3c1e0f004120a20aeda73e0ffeaec643a3c57a4673dd48ec2cac7c72360627b1"
+    },
+    {
+      "path": "build-info/svt-library.sha256",
+      "sha256": "a6d123190f9ebe9da3079dd95076f1aae31e0fa9a7be702270c1d51848cdc021"
+    },
+    {
+      "path": "build-info/uavs3e-fixed-inter_pred_avx2.c",
+      "sha256": "45cdb7391336f277f53d63e04d163f35ae7c2ffe06c46b83e6fdbba2fe15f108"
+    },
+    {
+      "path": "build-info/zenrav1e-Cargo.lock",
+      "sha256": "75eb34892e80c32358cf184e7e251aa6926df9dd418a9d3957f8167f86a89d72"
+    },
+    {
+      "path": "build-info/smoke/expanded-fixed-decoded.sha256",
+      "sha256": "8d87ecfeffe3615358bd85aa1202a8de4f2da0c879f0a9179724c3a2e5c5f448"
+    },
+    {
+      "path": "build-info/smoke/fixed-reference-decoded.sha256",
+      "sha256": "8d87ecfeffe3615358bd85aa1202a8de4f2da0c879f0a9179724c3a2e5c5f448"
+    },
+    {
+      "path": "build-info/smoke/kvazaar-decode.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/kvazaar-encode.log",
+      "sha256": "1db8de4d3f08849c88a59ff62856a5706158e04cc7946a298b29dc4839a0ecdd"
+    },
+    {
+      "path": "build-info/smoke/kvazaar.hevc",
+      "sha256": "b2ca9c5153477127d4039d509c797632729cad3d54b7397e5ab2c8b5ee0b76a2"
+    },
+    {
+      "path": "build-info/smoke/oapv-decode.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/oapv-encode.log",
+      "sha256": "1c198eec9576c88a82f0be485a38935b71c4a2c79ff8c0ab02b45ad62ae95198"
+    },
+    {
+      "path": "build-info/smoke/oapv.mov",
+      "sha256": "0400ba0c1213de56d74104cdd9593a6894bbfc888944d16c0741d1358b3975c5"
+    },
+    {
+      "path": "build-info/smoke/openh264-decode.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/openh264-encode.log",
+      "sha256": "a2e5e318edf94c6ebdd898a874f54d40f1ae828918ac8546e2bbd833f4034505"
+    },
+    {
+      "path": "build-info/smoke/openh264.h264",
+      "sha256": "48f316d80b838663ef7e16852141185c33d092abfa5067938825dc3797e5adee"
+    },
+    {
+      "path": "build-info/smoke/rav1e-decode.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/rav1e-encode.log",
+      "sha256": "b4a3bed0b4dd3902d921064e0eab3ac0e002633f5a0a989464b9377e2a425f08"
+    },
+    {
+      "path": "build-info/smoke/rav1e.ivf",
+      "sha256": "00cd73752ec80d2f959e17c647bd84b94f206b4b04f37c782830e32f4cb723e6"
+    },
+    {
+      "path": "build-info/smoke/results.json",
+      "sha256": "d0f3f25598d5fcdc1438706f5ce8f9e4364ffc6d1f50c86e4be8dfd148393b87"
+    },
+    {
+      "path": "build-info/smoke/svg-decode.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/svg.png",
+      "sha256": "a034d04521065fbcfd8f1f33e737082fdde7613dd58f77c12c1de870521c2830"
+    },
+    {
+      "path": "build-info/smoke/svg.svg",
+      "sha256": "48e4154de833d8b0340e9c302506da76d1d473133b6e97a471a0b0c3c824f10f"
+    },
+    {
+      "path": "build-info/smoke/svt-fixed-comparison-psnr.log",
+      "sha256": "ee91bd5f18654174494c9ea0e6b5a9bc2c3cb7ec3b1f6ae77a1228c49b1a8c05"
+    },
+    {
+      "path": "build-info/smoke/svt-fixed-comparison-psnr.txt",
+      "sha256": "2aa087900415ccff8db0554887632f8861df2b12adf5a5e26a52bcd67b94e7f7"
+    },
+    {
+      "path": "build-info/smoke/svt-fixed-t77.log",
+      "sha256": "c5d396e06e00ce4fd4599cd46d0c9ecb97aa92c2bef824f3078cc3623cca3c8d"
+    },
+    {
+      "path": "build-info/smoke/svt-fixed-t77.mkv",
+      "sha256": "f45978ed1b445df047cf0ccddd9f150755cbe98fd323e0fa934f7179f4b3630b"
+    },
+    {
+      "path": "build-info/smoke/svt420-decode.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/svt420-encode.log",
+      "sha256": "c8870888622e9cfce7f65c17a5e9aef48d9ed02f1851b85d5fbe25ec0088a8e8"
+    },
+    {
+      "path": "build-info/smoke/svt420.ivf",
+      "sha256": "1efe5815e12b56323a8d36938336a116f766b8848273b843cbb44437e22a11d3"
+    },
+    {
+      "path": "build-info/smoke/svt444-decode.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/svt444-encode.log",
+      "sha256": "4fda21c6c9fbd0dfe2da797f7cf980d18c8cc56784ddee11cdcb23b89bad0518"
+    },
+    {
+      "path": "build-info/smoke/svt444.ivf",
+      "sha256": "b9669bd0abaab756f83f57c75a56f865346458472ae7286a481be150ccbbc74a"
+    },
+    {
+      "path": "build-info/smoke/uavs-test.avs3",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/uavs3e-decode.log",
+      "sha256": "bc63c9c1469d739111dbb19a9cbe3fac51c5ad48fb4f7789774a2be061d2ee3c"
+    },
+    {
+      "path": "build-info/smoke/uavs3e-encode.log",
+      "sha256": "f6c1036b32f4c9ae258faba013bbc8039aee9c47207781e335407b573e40f1e4"
+    },
+    {
+      "path": "build-info/smoke/uavs3e.avs3",
+      "sha256": "f061fae278df16e7d50ffa820d525443aaadb4786d206823fc02a0e2e50bd771"
+    },
+    {
+      "path": "build-info/smoke/uavs3e8-decode.json",
+      "sha256": "666f3895c2b1408c08b1f3264095a558a1f34d726d4ba5e7ebcaeea5232109ee"
+    },
+    {
+      "path": "build-info/smoke/uavs3e8-encode.log",
+      "sha256": "fa042010dcb9bf6c10ea4e1b7526b41bb3a35ceaed780e80a1329640fe97597e"
+    },
+    {
+      "path": "build-info/smoke/uavs3e8.avs3",
+      "sha256": "d18239b594b97a59d07a38ed62ceb24a5ad854fa53294c3c50eca3dd0165f8cc"
+    },
+    {
+      "path": "build-info/smoke/vvenc-decode.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/vvenc-encode.log",
+      "sha256": "de3e83fd6eb0d9b22c6cc135ceb1027b6d665752d31f6ce6737cc7ffb108def5"
+    },
+    {
+      "path": "build-info/smoke/vvenc.vvc",
+      "sha256": "eee82d20dfcb81eabeea0bf45d861559ae0f834f8f7344543b3d96df11c51f04"
+    },
+    {
+      "path": "build-info/smoke/x265-decode.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/x265-encode.log",
+      "sha256": "a0e7e0279cbf05a2054f901d6ba0ba271f554133e89c45fce65cc24d5cdd7c81"
+    },
+    {
+      "path": "build-info/smoke/x265.hevc",
+      "sha256": "0493826cc72eb32ed5fc3fb3096a6173d649d0100876c37e10cadf49d5801380"
+    },
+    {
+      "path": "build-info/smoke/zenrav1e-decode.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build-info/smoke/zenrav1e-encode.log",
+      "sha256": "59a6407ef8a17309819bcab86586cbd2395f2023d63eb3ecf8a14377107d5139"
+    },
+    {
+      "path": "build-info/smoke/zenrav1e.ivf",
+      "sha256": "00cd73752ec80d2f959e17c647bd84b94f206b4b04f37c782830e32f4cb723e6"
+    }
+  ],
+  "buildDate": "2026-10-03",
+  "archiveSha256": "b56bcecdb5de1e768f14b2e18564dd052446b73e36af8903b043561c86684811",
+  "archive": "ffmpeg-autokey444-full.7z",
+  "version": "8.0.git"
+}

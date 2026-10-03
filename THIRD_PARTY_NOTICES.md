@@ -12,8 +12,15 @@
 | L-SMASH Works、FFMS2 | VapourSynth 源滤镜 | 通过 VSRepo 获取；许可证及源码链接见各 VSRepo 包元数据 |
 | fmtconv、RemoveGrain、AddGrain、VSZip、nlm-ispc、CAS、Zsmooth、Deblock、ZNEDI3、EEDI3、SangNom、Bwdif、VIVTC | VapourSynth 处理插件 | 通过 PyPI/VSRepo 获取；许可证及源码链接见各项目包元数据 |
 | vs-placebo 2.0.4 / libplacebo | VapourSynth 中执行 Anime4K 等 mpv GLSL | [vs-placebo](https://github.com/Lypheo/vs-placebo)、[libplacebo](https://github.com/haasn/libplacebo)；LGPL-2.1+ |
+| AWJimage 1.1.0 | 独立原生图片压缩转换CLI | [AWJimage](https://github.com/Dominic485649/AWJimage/releases/tag/1.1.0)；AGPL-3.0，随包保留许可证、完整上游NOTICE和固定修订对应源码；不链接进本项目 |
 
 发布包内同时保留 Qt、Python、VapourSynth 等组件随附的许可证文件。重新分发前请核对你所替换的 FFmpeg 和 VapourSynth 插件构建配置。
+
+## 可选 D3D11 色彩运行时
+
+`color/` 使用 MSYS2 UCRT64 二进制包的 libplacebo 7.360.1-2（LGPL-2.1+）、LittleCMS 2.19.1（MIT）及其 shaderc / glslang / SPIRV-Cross / SPIRV-Tools / libdovi / MinGW runtime 等依赖。完整包 URL、版本和 SHA-256 在 `third_party/color/packages.json`，实际部署 DLL 闭包与原始 / 修改后哈希在 `color/runtime.json`；许可证保留于 `color/licenses/`。
+
+源码可从 [libplacebo](https://github.com/haasn/libplacebo/tree/v7.360.1)、[LittleCMS](https://github.com/mm2/Little-CMS)、[MSYS2 包工程](https://github.com/msys2/MINGW-packages) 获取，其他包来源见各固定包的 MSYS2 元数据。为避免与 Qt / VS 的 GCC runtime 冲突，仅修改 PE 导入名和部署文件名为 `v3_` 前缀，不修改可执行代码。第三方 DLL 动态链接并保持可替换，不改变其独立许可证；重新分发者应保留修改说明与对应源码获取路径。
 
 
 ## Super-XBR 单阶段色度 / 放大核
@@ -44,7 +51,13 @@ Hyllian, Copyright (c) 2015. MIT License. Adapted from the pass-0 diagonal kerne
 - aria2-next 2.8.3：独立下载进程，GPL-2.0-or-later；[上游版本与对应源码](https://github.com/AnInsomniacy/aria2-next/tree/v2.8.3)，完整许可随包 `runtime/tools/aria2-COPYING.txt`。Windows x86_64 官方资产 SHA-256：`08afaf2a44811d38e7ce538da719ab06d6925bcaad1231ee7b92c497f58e5aac`。
 - 7-Zip Zstandard 25.01 ZS v1.5.7 R4：本机 `C:/PortableSoft/7-Zip-Zstandard` 的 7z.exe / 7z.dll，用于 Zstandard Ultra 归档与更新解压；[对应源码](https://github.com/mcmilk/7-Zip-zstd/tree/v25.01-v1.5.7-R4)，完整许可随包 `runtime/tools/License.txt`，包含 LGPL / BSD 与 unRAR 限制。
 
-## 静态图片解码
+## 1.0.4 本地增强版 FFmpeg
+
+维护者提供的 `ffmpeg-autokey444-full.7z`（2026-10-03，SHA-256 `b56bcecdb5de1e768f14b2e18564dd052446b73e36af8903b043561c86684811`）包含FFmpeg及新增编解码依赖。实际构建启用 `--enable-gpl --enable-version3 --enable-nonfree`，不能将这一构建标作纯LGPL或自由可再分发版本。保留上游README、源码提交清单、构建脚本、补丁和配置于 `runtime/ffmpeg/build-info`；这些记录不等于完整对应源码。此轮仅更新本地运行时，未制作或发布该二进制包。
+
+## 静态图片解码组件
+
+- 图层 PSD/PSB 模块使用 zlib 1.3.2，Jean-loup Gailly / Mark Adler，zlib 许可；未修改的最小压缩/解压源文件位于 `third_party/image-zlib`，来源为 libjpeg-turbo 3.2.0 的 spng 内含副本。静态链接，无新增运行时 DLL；完整许可随 `docs/image-zlib-LICENSE.txt` 分发。PSD 解析、工具与编辑核心为本项目 MIT 自有实现，未复制 GIMP GPL 或闭源 Photopea 代码。
 
 - libavif 1.4.2：BSD-2-Clause，https://github.com/AOMediaCodec/libavif 。通过官方源码与 dav1d 静态链接；构建时仅扩大显式图像像素上限，保留网格、格式、尺寸算术与码流检查。依赖版本和 SHA-256 固定于 `tools/image-runtime.cmake`。
 - dav1d 1.5.3：BSD-2-Clause，https://code.videolan.org/videolan/dav1d 。Windows MinGW 静态库来自 MSYS2；不增加用户需安装的解码器。
