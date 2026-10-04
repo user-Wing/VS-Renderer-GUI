@@ -2,7 +2,9 @@
 
 本文件用于接手开发、定位模块和确认当前边界。用户操作见 [README.md](README.md)，版本变更见 [changelog.md](changelog.md)，逐轮测试与交付记录见 [专项文档](docs/) 和 [历史原文归档](docs/history/development-records-through-2026-10-03.md)。
 
-核对日期：2026-10-03。源码 `CMakeLists.txt` 与本地便携 `release.json` 均为 **1.0.4 开发版**；这不表示已发布 1.0.4。
+核对日期：2026-10-04。源码 `CMakeLists.txt` 与本地便携 `release.json` 均为 **1.0.5 本地版**；这不表示已在线发布 1.0.5。
+
+当前修复以返回的 1.0.5 源码为基线；2026-10-04 已重新编译并覆盖 `dist/VS-Renderer-GUI-windows-x64` 的 Renderer、Player、3FP 和版本清单，保留配置及预设。Jinc 8K 原生稳定段、大图启动与编辑操作的结果及未验收项集中于 [本机验收记录](docs/local-1.0.5-performance.md)。此次没有更新其它 PortableSoft 安装目录或发布线上版本。
 
 3FP 色彩管理新增可选 libplacebo D3D11 显示分支，默认保留原生路径。配置入口在 `PlayerColor`，独立 C ABI 在 `src/color/`，3FP 变更以 `patches/3fp-color-management.patch` 重建；高级显示处理位于解码 / VS 输出之后。依赖、专项验证和尚未实现的 HDR 扩展见 [色彩管理记录](docs/color-management-1.0.4.md)。
 
@@ -101,7 +103,7 @@ Renderer 默认窗口为1800×900逻辑像素，参数栏独立占用可用高�
 | --- | --- | --- |
 | Qt | 6.8+，本机6.10.2；Core/Gui/Widgets/Network | 配置阶段需完整开发包，运行阶段需匹配 Qt DLL/plugins |
 | VapourSynth / Python | 官方源码当前 `5b2d556`（R80RC2），VS API4；便携 Python/VS | `tools/build-vapoursynth.ps1` 默认 Python3.15，staging 至 `runtime/python`；缺失时不能 VS 预览，原生/图片路径独立 |
-| 3FP / FFF.Native | API14及项目扩展，动态 C ABI | `tools/build-3fp.ps1` 应用多份补丁；只应用最初外部帧补丁不足以得到当前功能 |
+| 3FP / FFF.Native | 本地扩展 ABI16，动态 C ABI；选择兼容官方更新，保留本地 DV | `tools/build-3fp.ps1` 应用性能及 `3fp-jinc-upstream-1.0.5.patch` 等补丁；不是官方完整功能镜像 |
 | FFmpeg | 自编译增强版，2026-10-03，匹配 shared major ABI | 根目录供3FP；`runtime/ffmpeg` 为CLI，源插件/LAV自带解码库不自动更新；见 [运行时说明](docs/ffmpeg-enhanced-1.0.4.md) |
 | VS 插件 / RIFE 模型 | API4插件，vs-placebo2.0.4、MVTools29、NCNN param/bin | 安装与stage脚本固定来源；R80不加载旧API3，缺 namespace 时报告具体错误；PKL不能代替NCNN模型 |
 | GLSL 库 | 随包mpv着色器及上游许可/哈希 | `assets/mpv-shaders` 与便携 `shaders`；目录/搜索/分类入口见 [GLSL说明](docs/mpv-shaders-1.0.4.md) |
@@ -134,6 +136,10 @@ Renderer 默认窗口为1800×900逻辑像素，参数栏独立占用可用高�
 
 ## 9. 构建、验证、部署与文档维护
 
+780M 原生直通性能后续在 NuxBox 本地开发；素材、mpv 对照、工具链和验收见 [远端性能交接](docs/nuxbox-performance-handoff.md)。`tools/package-dev-handoff.ps1` 制作独立干净源码/SDK快照，不删除当前工作区、不携带个人配置和整套运行时。远端 v143 可通过 `build-3fp.ps1 -PlatformToolset v143` 显式选择；未据用户丢帧报告宣称性能已修复。
+
+此设备本轮改为先升级 V145；Qt 6.10.2 MinGW、MinGW 13.1、CMake、Ninja 已安装，VSPlayer 与 Player 专项已构建并验证。`C:\BuildTools\2026` 的 MSVC 14.51 / v145 已完成原生 Release 构建；新增帧呈现等待补丁和异步阶段计时，独立 HWND 与 GUI 的重复测量及实测边界见 [2026-10-04 设备记录](docs/nuxbox-performance-session-2026-10-04.md)。
+
 开发流程：明确行为与边界 → 改对应模块 → 构建目标和相关测试 → 验证所需原生呈现/真实输出 → 按任务范围部署。当前CTest包括图脚本、shader参数、VS帧桥、缩放平移、导出、比较、Player、语言包、更新；图片相关为核心、PSD、颜色/HDR、基础工具、高级工具和工作区布局六组。只按变更运行相关专项，测试组通过与子用例通过分开记录。
 
 `tools/stage-portable.ps1` 更新本地便携目录；`tools/package-portable.ps1` 从已验证目录构造干净LZMA2归档；`-BuiltinDirectory` 可指定由当前构建生成的干净内置预设，不改动本机用户VPY。旧 `package-release.ps1` 仍存在，不应套用其中历史版本参数。归档使用版本根目录以兼容1.0.2更新器，本地目录保持固定名。包含必需运行时与许可，排除个人INI、用户VPY、缓存、日志和测试程序。
@@ -151,7 +157,7 @@ Renderer 默认窗口为1800×900逻辑像素，参数栏独立占用可用高�
 
 1.0.4本地开发已包含：Renderer模块滤镜/VPY、源与输出同步预览、九路分析与受限画布导出；Player视频/音频/图片、字幕、原生/VS/madVR路径、自动/固定Anime与补帧；图片旋转/镜像/裁剪/调整尺寸/AWJ转换；GLSL分类与宽高联动、直通拖动预览、Lanczos4和增强FFmpeg。
 
-1.0.4正在准备干净便携归档、源码推送与无附件 Release 草稿；正式发布和附件上传由维护者完成。发布说明见 [1.0.4 草稿](docs/release-1.0.4.md)，具体交付与测试查 [更新日志](changelog.md)。
+当前 1.0.5 交付范围为源码推送和本地完整便携压缩包，不创建 Release 或 Draft，不上传发行附件。原 1.0.4 发布资料保留，具体交付与测试查 [更新日志](changelog.md)。
 
 图片“详细编辑”入口已开放，使用Photoshop系列布局和B–D工具/颜色菜单；RGB PSD/PSB图层、组和蒙版可编辑、另存，提供浮点TIFF及HDR能力检测/SDR回退。真实520MiB、9层PSD专项和最终交付见 [本轮记录](docs/image-editor-round2-1.0.4.md)。后续方向仍包括按需求扩充VCB教程向catalog、完善插件部署与诊断、评估帧搬运性能及NGU独立后端；这些是方向，不是已实现能力。
 

@@ -51,6 +51,7 @@ signals:
     void sliceCreated(const QRect &region);
     void previewReady();
     void previewError(const QString &error);
+    void selectionContextMenuRequested(QPoint globalPosition);
 protected:
     void paintEvent(QPaintEvent *) override;
     void resizeEvent(QResizeEvent *) override;

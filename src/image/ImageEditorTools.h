@@ -51,6 +51,8 @@ public:
     bool strokePath(const QPainterPath &path);
     bool createText(QPointF baseline);
     bool invertSelection();
+    QImage selectedPixels(QPoint *origin = nullptr) const;
+    bool layerFromSelection(bool cut);
     bool featherSelection(int radius);
     bool selectPath(const QPainterPath &path, ImageSelectionMode mode);
     bool beginStroke(QPointF point, bool erase);

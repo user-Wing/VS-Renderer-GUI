@@ -83,6 +83,7 @@ public:
     void writeSelection(QPoint origin, const QImage &coverage, const QString &label = {});
     void clearSelection();
     bool hasSelection() const;
+    QRect selectionBounds() const;
     quint64 selectionId() const; // Stable content identity restored by undo/redo; zero means no selection.
     QImage composite(const QRect &documentRegion) const; // Native precision, no display tone mapping.
     QImage compositePreview(const QRect &documentRegion, QSize outputSize, ImageSamplingQuality quality = ImageSamplingQuality::Nearest) const; // Bounded native-precision preview.

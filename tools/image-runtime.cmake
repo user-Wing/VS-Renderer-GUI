@@ -9,6 +9,12 @@ function(vsr_image_dependency name url digest)
         file(WRITE "${directory}/.ready" "${digest}")
     endif()
 endfunction()
+vsr_image_dependency(libdeflate "https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.25.tar.gz"
+    "d11473c1ad4c57d874695e8026865e38b47116bbcb872bfc622ec8f37a86017d")
+set(LIBDEFLATE_BUILD_SHARED_LIB OFF CACHE BOOL "" FORCE)
+set(LIBDEFLATE_BUILD_GZIP OFF CACHE BOOL "" FORCE)
+set(LIBDEFLATE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory("${CMAKE_SOURCE_DIR}/.deps/image/libdeflate/libdeflate-1.25" "${CMAKE_BINARY_DIR}/image-libdeflate" EXCLUDE_FROM_ALL)
 vsr_image_dependency(libavif "https://github.com/AOMediaCodec/libavif/archive/refs/tags/v1.4.2.tar.gz"
     "2b645287340ba5a631d268b551dc2d72bd73ac33335962dd36dcdb6d8366921d")
 vsr_image_dependency(dav1d "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-dav1d-1.5.3-1-any.pkg.tar.zst"

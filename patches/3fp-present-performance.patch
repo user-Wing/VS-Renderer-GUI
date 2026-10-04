@@ -1,0 +1,426 @@
+diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
+index c4c3b04..e54deb0 100644
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -2568,6 +2568,9 @@ bool PlayerSession::PumpVideoPresentation() noexcept {
+     const auto primesVisibleVideo = ShouldDelayAudioUntilVideoFrame() &&
+         audioUnblockVideoGeneration_ == 0 && videoRenderer_.HasOutputWindow();
+     if (primesVisibleVideo || position <= now + 20'000) {
++        // Keep the queued AVFrame until the previous retained surface is shown.
++        // Replacing that surface early silently coalesces otherwise on-time frames.
++        if (videoRenderer_.WaitForPendingVideoFrame()) return false;
+         videoFrameQueue_.pop_front();
+         PresentVideoFrame(frame, format_);
+         av_frame_unref(frame);
+@@ -3495,6 +3498,7 @@ void PlayerSession::RebuildMediaInfo() noexcept {
+ 
+ void PlayerSession::SetState(const FFF3FPState state, const char* operation) noexcept {
+     const auto previous = state_.exchange(state);
++    videoRenderer_.SetVideoPlaybackActive(state == FFF3FPState::Playing && videoStream_ >= 0 && !staticImage_);
+     snapshot_.state = state;
+     PublishSnapshot();
+     if (previous == state) return;
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/VideoRenderer.cpp
+index 190fb65..8d4cd6c 100644
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -1,4 +1,4 @@
+-﻿#include "pch.h"
++#include "pch.h"
+ #include "3FP/Render/VideoRenderer.h"
+ 
+ extern "C" {
+@@ -34,6 +34,70 @@ extern "C" {
+ 
+ using Microsoft::WRL::ComPtr;
+ 
++void FFF3FP_KernelLogImpl(const char* utf8Line) noexcept;
++
++// Opt-in diagnostics. Timestamp results are polled without flushing or waiting.
++struct PlaybackProfiler {
++    struct Sample {
++        ComPtr<ID3D11Query> disjoint, start, end;
++        bool pending = false;
++        std::uint64_t generation = 0;
++        LARGE_INTEGER cpuStart{}, cpuEnd{};
++    } samples[2][8];
++    unsigned counters[2]{};
++    LARGE_INTEGER frequency{};
++    PlaybackProfiler() { QueryPerformanceFrequency(&frequency); }
++    Sample* Begin(ID3D11Device* device, ID3D11DeviceContext* context,
++        unsigned stage, std::uint64_t generation) {
++        for (auto& sample : samples[stage]) {
++            if (!sample.pending) continue;
++            D3D11_QUERY_DATA_TIMESTAMP_DISJOINT timing{};
++            UINT64 start = 0, end = 0;
++            if (context->GetData(sample.disjoint.Get(), &timing, sizeof(timing), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK ||
++                context->GetData(sample.start.Get(), &start, sizeof(start), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK ||
++                context->GetData(sample.end.Get(), &end, sizeof(end), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK) continue;
++            sample.pending = false;
++            if (timing.Disjoint || !timing.Frequency) continue;
++            char line[256]{};
++            std::snprintf(line, sizeof(line), "GPU_PROFILE,%s,%llu,%.6f,%.6f,%lld,%lld",
++                stage == 0 ? "upload" : "compose", sample.generation,
++                (sample.cpuEnd.QuadPart - sample.cpuStart.QuadPart) * 1000.0 / frequency.QuadPart,
++                (end - start) * 1000.0 / timing.Frequency, sample.cpuStart.QuadPart, sample.cpuEnd.QuadPart);
++            FFF3FP_KernelLogImpl(line);
++        }
++        if (++counters[stage] % 16) return nullptr;
++        for (auto& sample : samples[stage]) {
++            if (sample.pending) continue;
++            if (!sample.disjoint) {
++                D3D11_QUERY_DESC desc{D3D11_QUERY_TIMESTAMP_DISJOINT, 0};
++                if (FAILED(device->CreateQuery(&desc, &sample.disjoint))) return nullptr;
++                desc.Query = D3D11_QUERY_TIMESTAMP;
++                if (FAILED(device->CreateQuery(&desc, &sample.start)) ||
++                    FAILED(device->CreateQuery(&desc, &sample.end))) return nullptr;
++            }
++            sample.generation = generation;
++            QueryPerformanceCounter(&sample.cpuStart);
++            context->Begin(sample.disjoint.Get()); context->End(sample.start.Get());
++            return &sample;
++        }
++        return nullptr;
++    }
++    struct Scope {
++        ID3D11DeviceContext* context;
++        Sample* sample;
++        Scope(PlaybackProfiler* profiler, ID3D11Device* device, ID3D11DeviceContext* ctx,
++            unsigned stage, std::uint64_t generation) : context(ctx),
++            sample(profiler ? profiler->Begin(device, ctx, stage, generation) : nullptr) {}
++        ~Scope() { Finish(); }
++        void Finish() {
++            if (!sample) return;
++            context->End(sample->end.Get()); context->End(sample->disjoint.Get());
++            QueryPerformanceCounter(&sample->cpuEnd); sample->pending = true;
++            sample = nullptr;
++        }
++    };
++};
++
+ namespace {
+ // Bytecode is device-independent; compile each built-in shader once per process.
+ HRESULT CompileSharedShader(LPCVOID source, SIZE_T length, LPCSTR sourceName,
+@@ -2274,6 +2338,9 @@ FFFResult PlayerVideoRenderer::EnsureDevice() noexcept {
+     if (FAILED(result)) { SetError("Could not create the D3D11 playback device."); return FFFResult::DeviceFailure; }
+     ComPtr<ID3D11Multithread> multithread;
+     if (SUCCEEDED(context_->QueryInterface(IID_PPV_ARGS(&multithread)))) multithread->SetMultithreadProtected(TRUE);
++    wchar_t profile[2]{};
++    if (GetEnvironmentVariableW(L"VSR_3FP_PROFILE", profile, ARRAYSIZE(profile)) == 1 && profile[0] == L'1')
++        playbackProfiler_ = std::make_unique<PlaybackProfiler>();
+     return FFFResult::Success;
+ }
+ 
+@@ -2497,7 +2564,7 @@ FFFResult PlayerVideoRenderer::CreateSwapChain(const std::uint32_t width,
+         (outputBits >= 10 ? DXGI_FORMAT_R10G10B10A2_UNORM :
+             DXGI_FORMAT_B8G8R8A8_UNORM);
+     description.SampleDesc.Count = 1; description.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+-    description.BufferCount = 2; description.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
++    description.BufferCount = 3; description.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+     description.AlphaMode = DXGI_ALPHA_MODE_IGNORE; description.Scaling = DXGI_SCALING_NONE;
+     // VRR capability (3FCompare extension): when the OS supports tearing, carry
+     // the creation flag unconditionally so the pacing mode can toggle at runtime
+@@ -2553,9 +2620,11 @@ FFFResult PlayerVideoRenderer::CreateSwapChain(const std::uint32_t width,
+         // call opts the window into an explicit Advanced Color presentation
+         // contract instead of the ordinary SDR desktop path.
+     }
+-    // Keep at most one complete composite queued. Decode and managed overlay
+-    // production retain only their latest state while Present is waiting.
+-    swapChain_->SetMaximumFrameLatency(1);
++    // Allow rendering to overlap a vsync wait without an unbounded queue.
++    ComPtr<IDXGIDevice1> latencyDevice;
++    if (SUCCEEDED(dxgiDevice.As(&latencyDevice))) {
++        latencyDevice->SetMaximumFrameLatency(2);
++    }
+     {
+         std::lock_guard lock(timedTextMutex_);
+         presentationFrameRate_ = DetectDisplayRefreshRate(window_);
+@@ -2817,7 +2886,7 @@ FFFResult PlayerVideoRenderer::EnsureVideoProcessor(ID3D11Texture2D* inputTextur
+     D3D11_TEXTURE2D_DESC outputDescription{};
+     inputTexture->GetDesc(&inputDescription);
+     outputTexture->GetDesc(&outputDescription);
+-    if (inputDescription.ArraySize != 1 || outputDescription.ArraySize != 1)
++    if (outputDescription.ArraySize != 1)
+         return FFFResult::NotSupported;
+     const auto sameConfiguration = videoProcessorInputFormat_ == inputDescription.Format &&
+         videoProcessorOutputFormat_ == outputDescription.Format &&
+@@ -2949,6 +3018,7 @@ FFFResult PlayerVideoRenderer::DrawWithShader(ID3D11RenderTargetView* target,
+     const bool useCachedViewTransform) noexcept {
+     if (target == nullptr || context_ == nullptr || width <= 0.0f || height <= 0.0f)
+         return FFFResult::InvalidArgument;
++    EnsureRetainedVideoSurface();
+     cachedVideoSettings_.colorMode = static_cast<std::uint32_t>(actualMode_);
+     cachedVideoSettings_.reserved = effect;
+     cachedVideoSettings_.outputWidth = width;
+@@ -3219,9 +3289,19 @@ FFFResult PlayerVideoRenderer::RenderVideoProcessorInput() noexcept {
+         static_cast<float>(sourceWidth_), static_cast<float>(sourceHeight_));
+ }
+ 
++void PlayerVideoRenderer::EnsureRetainedVideoSurface() noexcept {
++    if (retainedHardwareFrame_ == nullptr || retainedSurfaceCopied_) return;
++    const D3D11_BOX box{0, 0, 0, sourceWidth_, sourceHeight_, 1};
++    context_->CopySubresourceRegion(sourceTextures_[0], 0, 0, 0, 0,
++        reinterpret_cast<ID3D11Texture2D*>(retainedHardwareFrame_->data[0]),
++        static_cast<UINT>(reinterpret_cast<std::uintptr_t>(retainedHardwareFrame_->data[1])), &box);
++    retainedSurfaceCopied_ = true;
++}
++
+ FFFResult PlayerVideoRenderer::DrawWithVideoProcessor(ID3D11Texture2D* inputTexture,
+     ID3D11Texture2D* outputTexture, const RECT& destination,
+-    const std::uint32_t inputColorSpace, const std::uint32_t outputColorSpace) noexcept {
++    const std::uint32_t inputColorSpace, const std::uint32_t outputColorSpace,
++    const std::uint32_t arraySlice) noexcept {
+     const auto ensure = EnsureVideoProcessor(inputTexture, outputTexture,
+         inputColorSpace, outputColorSpace);
+     if (ensure != FFFResult::Success) return ensure;
+@@ -3229,7 +3309,7 @@ FFFResult PlayerVideoRenderer::DrawWithVideoProcessor(ID3D11Texture2D* inputText
+     D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputDescription{};
+     inputDescription.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D;
+     inputDescription.Texture2D.MipSlice = 0;
+-    inputDescription.Texture2D.ArraySlice = 0;
++    inputDescription.Texture2D.ArraySlice = arraySlice;
+     ComPtr<ID3D11VideoProcessorInputView> inputView;
+     if (FAILED(videoDevice_->CreateVideoProcessorInputView(inputTexture,
+         videoProcessorEnumerator_, &inputDescription, &inputView))) {
+@@ -3352,7 +3432,10 @@ FFFResult PlayerVideoRenderer::SetTimedTextLayer(TimedTextRenderLayer layer,
+                     timedTextThread_ = std::thread(&PlayerVideoRenderer::TimedTextThread, this);
+                 }
+             }
+-            ++presentationGeneration_;
++            // During video playback, composite subtitle changes with the next
++            // video frame rather than spending another vsync slot on a repeat.
++            if (slot != TimedTextLayerSlot::Subtitle || !videoPlaybackActive_.load())
++                ++presentationGeneration_;
+         }
+         // Submission is intentionally publish-and-wake only. The UI timer must
+         // never wait for 4K conversion, the D3D immediate-context lock or DXGI.
+@@ -4306,27 +4389,32 @@ FFFResult PlayerVideoRenderer::Render(const AVFrame* frame, const bool limitToNa
+     const auto pipelineResult = EnsurePipeline(width, height, input.layout, input.bitDepth,
+         input.chromaWidthShift, input.chromaHeightShift, d3d11Frame);
+     if (pipelineResult != FFFResult::Success) return pipelineResult;
++    PlaybackProfiler::Scope upload(playbackProfiler_.get(), device_, context_, 0, videoGeneration_.load() + 1);
+     if (d3d11Frame) {
+         auto* texture = reinterpret_cast<ID3D11Texture2D*>(frame->data[0]);
+-        const auto slice = static_cast<UINT>(reinterpret_cast<std::uintptr_t>(frame->data[1]));
+         if (texture == nullptr || input.layout != 2) {
+             SetError("The shared D3D11 decoder produced an unsupported surface.");
+             return FFFResult::NotSupported;
+         }
+-        // Decoder array slices are transient and are reused as soon as the AVFrame
+-        // is released. Retain only one shader-readable GPU surface and copy the
+-        // selected slice; this remains GPU-to-GPU and removes the full CPU transfer.
+-        context_->CopySubresourceRegion(sourceTextures_[0], 0, 0, 0, 0, texture, slice, nullptr);
++        // Retain the decoder slice for the asynchronous presenter. Native VP
++        // reads it directly; shader paths copy only when actually needed.
++        auto* retained = av_frame_clone(frame);
++        if (retained == nullptr) return FFFResult::NativeFailure;
++        av_frame_free(&retainedHardwareFrame_);
++        retainedHardwareFrame_ = retained; retainedSurfaceCopied_ = false;
+     } else if (directYuv) {
++        av_frame_free(&retainedHardwareFrame_);
+         context_->UpdateSubresource(sourceTextures_[0], 0, nullptr, frame->data[0], frame->linesize[0], 0);
+         context_->UpdateSubresource(sourceTextures_[1], 0, nullptr, frame->data[1], frame->linesize[1], 0);
+         if (input.layout == 1)
+             context_->UpdateSubresource(sourceTextures_[2], 0, nullptr, frame->data[2], frame->linesize[2], 0);
+     } else {
++        av_frame_free(&retainedHardwareFrame_);
+         const auto bytesPerPixel = input.bitDepth <= 8 ? 4u : 8u;
+         context_->UpdateSubresource(sourceTextures_[0], 0, nullptr, convertedRgb_.data(),
+             width * bytesPerPixel, 0);
+     }
++    upload.Finish();
+     auto softwareFormat = static_cast<AVPixelFormat>(frame->format);
+     if (d3d11Frame && frame->hw_frames_ctx) softwareFormat =
+         reinterpret_cast<const AVHWFramesContext*>(frame->hw_frames_ctx->data)->sw_format;
+@@ -4397,6 +4485,13 @@ FFFResult PlayerVideoRenderer::Render(const AVFrame* frame, const bool limitToNa
+     sourceCoverArt_ = coverArt;
+     hasCachedVideo_ = true;
+     videoGeneration_.fetch_add(1);
++    if (playbackProfiler_) {
++        LARGE_INTEGER now{}; QueryPerformanceCounter(&now);
++        char line[160]{};
++        std::snprintf(line, sizeof(line), "SUBMIT_PROFILE,%llu,%lld,%lld",
++            videoGeneration_.load(), frame->pts, now.QuadPart);
++        FFF3FP_KernelLogImpl(line);
++    }
+     if (coverArt) RequestCoverBackdropRender();
+     {
+         std::lock_guard lock(timedTextMutex_);
+@@ -4853,6 +4948,7 @@ FFFResult PlayerVideoRenderer::DrawCachedVideo(ID3D11RenderTargetView* target) n
+         cachedVideoSettings_.viewPanY = 0.0f;
+         cachedVideoSettings_.viewZoom = 1.0f;
+     }
++    if (colorEngine_.settings.engine) EnsureRetainedVideoSurface();
+     if (colorEngine_.settings.engine && (projection360 || sourceCoverArt_))
+         colorEngine_.bypass("Special projection / audio cover uses the original 3FP compositor.");
+     if (colorEngine_.settings.engine && !projection360 && !sourceCoverArt_) {
+@@ -4890,9 +4986,23 @@ FFFResult PlayerVideoRenderer::DrawCachedVideo(ID3D11RenderTargetView* target) n
+         if (SUCCEEDED(resource.As(&texture))) {
+             const RECT rectangle{static_cast<LONG>(drawX), static_cast<LONG>(drawY),
+                 static_cast<LONG>(drawX + drawWidth), static_cast<LONG>(drawY + drawHeight)};
+-            if (DrawWithVideoProcessor(sourceTextures_[0], texture.Get(), rectangle,
+-                VideoProcessorInputColorSpace(sourceColorSpace_, sourceFullRange_, sourceWidth_),
+-                DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709) == FFFResult::Success) {
++            auto result = FFFResult::NotSupported;
++            const auto inputColor = VideoProcessorInputColorSpace(sourceColorSpace_, sourceFullRange_, sourceWidth_);
++            if (retainedHardwareFrame_ && !directDecoderVideoProcessorFailed_) {
++                result = DrawWithVideoProcessor(reinterpret_cast<ID3D11Texture2D*>(retainedHardwareFrame_->data[0]),
++                    texture.Get(), rectangle, inputColor, DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
++                    static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(retainedHardwareFrame_->data[1])));
++                if (result != FFFResult::Success) {
++                    directDecoderVideoProcessorFailed_ = true;
++                    videoProcessorConfigurationFailed_ = false;
++                }
++            }
++            if (result != FFFResult::Success) {
++                EnsureRetainedVideoSurface();
++                result = DrawWithVideoProcessor(sourceTextures_[0], texture.Get(), rectangle,
++                    inputColor, DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
++            }
++            if (result == FFFResult::Success) {
+                 lastDestX_ = destination.x; lastDestY_ = destination.y;
+                 lastDestWidth_ = destination.width; lastDestHeight_ = destination.height;
+                 actualVideoScalingMode_.store(FFF3FPVideoScalingMode::D3D11VideoProcessor);
+@@ -4900,6 +5010,7 @@ FFFResult PlayerVideoRenderer::DrawCachedVideo(ID3D11RenderTargetView* target) n
+             }
+         }
+     }
++    EnsureRetainedVideoSurface();
+     ID3D11ShaderResourceView* presentationViews[3]{};
+     if (projection360) {
+         // The panorama projection is view-dependent. Scaling the equirectangular
+@@ -5124,6 +5235,7 @@ FFFResult PlayerVideoRenderer::PresentCurrentFrame(IDXGISwapChain4* chain,
+     }
+     ++swapChainPresents_;
+     const auto previous = presentedVideoGeneration_.exchange(renderedVideoGeneration);
++    videoPresentedCondition_.notify_one();
+     if (previous != 0 && renderedVideoGeneration > previous + 1)
+         coalescedVideoFrames_.fetch_add(renderedVideoGeneration - previous - 1);
+     std::lock_guard lock(timedTextMutex_);
+@@ -5210,6 +5322,7 @@ FFFResult PlayerVideoRenderer::PresentTimedText() noexcept {
+     const auto targetResult = AcquireBackBufferTarget(
+         backBuffer.GetAddressOf(), backBufferTarget.GetAddressOf());
+     if (targetResult != FFFResult::Success) return targetResult;
++    PlaybackProfiler::Scope compose(playbackProfiler_.get(), device_, context_, 1, videoGeneration_.load());
+     if (hasCachedVideo_) {
+         const auto drawResult = DrawCachedVideo(backBufferTarget.Get());
+         if (drawResult != FFFResult::Success) return drawResult;
+@@ -5230,10 +5343,20 @@ FFFResult PlayerVideoRenderer::PresentTimedText() noexcept {
+     CompositeTimedText(backBufferTarget.Get(), TimedTextLayerSlot::Lyrics);
+     CompositeTimedText(backBufferTarget.Get(), TimedTextLayerSlot::PlayerInformation);
+     context_->OMSetRenderTargets(0, nullptr, nullptr);
++    compose.Finish();
+     const auto generation = videoGeneration_.load();
++    const bool profilePresent = playbackProfiler_ != nullptr;
+     ComPtr<IDXGISwapChain4> retainedChain = swapChain_;
+     deviceLock.unlock();
++    const auto presentStart = std::chrono::steady_clock::now();
+     const auto result = PresentCurrentFrame(retainedChain.Get(), generation);
++    if (profilePresent) {
++        LARGE_INTEGER now{}; QueryPerformanceCounter(&now);
++        char line[160]{};
++        std::snprintf(line, sizeof(line), "PRESENT_PROFILE,%llu,%.6f,%lld", generation,
++            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - presentStart).count(), now.QuadPart);
++        FFF3FP_KernelLogImpl(line);
++    }
+     if (result != FFFResult::Success) return result;
+     // 3FCompare patch (P1 fix, review item 3): restore the upstream semantics —
+     // the pending-360-redraw flag is cleared after every *successful* present,
+@@ -5320,6 +5443,8 @@ bool PlayerVideoRenderer::RequestRecoveryIfDeviceLostLocked() noexcept {
+ }
+ 
+ void PlayerVideoRenderer::ReleaseDeviceObjects() noexcept {
++    av_frame_free(&retainedHardwareFrame_); directDecoderVideoProcessorFailed_ = false;
++    playbackProfiler_.reset();
+     colorEngine_.resetDevice();
+     ReleaseVideoProcessor();
+     ReleaseVideoProcessorInputSurface();
+@@ -5385,6 +5510,7 @@ void PlayerVideoRenderer::ResetMedia() noexcept {
+     StopCoverBackdropThread();
+     StopTimedTextThread();
+     std::lock_guard deviceLock(deviceMutex_);
++    av_frame_free(&retainedHardwareFrame_); directDecoderVideoProcessorFailed_ = false;
+     ClearSurface();
+     if (scaler_ != nullptr) { sws_freeContext(scaler_); scaler_ = nullptr; }
+     ReleaseVideoProcessor();
+@@ -5458,6 +5584,20 @@ FFF3FPColorMode PlayerVideoRenderer::ActualColorMode() const noexcept { return a
+ float PlayerVideoRenderer::SourcePeakNits() const noexcept { return sourcePeakNits_; }
+ HdrFrameState PlayerVideoRenderer::HdrState() const noexcept { return hdrProcessor_.State(); }
+ std::uint64_t PlayerVideoRenderer::PresentedVideoFrames() const noexcept { return presentedVideoFrames_.load(); }
++void PlayerVideoRenderer::SetVideoPlaybackActive(const bool active) noexcept {
++    if (videoPlaybackActive_.exchange(active) && !active) Redraw();
++}
++bool PlayerVideoRenderer::WaitForPendingVideoFrame() noexcept {
++    if (!HasOutputWindow() || DeviceRecoveryRequested() ||
++        videoGeneration_.load() <= presentedVideoGeneration_.load()) return false;
++    std::unique_lock lock(timedTextMutex_);
++    videoPresentedCondition_.wait_for(lock, std::chrono::milliseconds(2), [this] {
++        return timedTextThreadStop_ || DeviceRecoveryRequested() ||
++            videoGeneration_.load() <= presentedVideoGeneration_.load();
++    });
++    return true;
++}
++
+ std::uint64_t PlayerVideoRenderer::CoalescedVideoFrames() const noexcept { return coalescedVideoFrames_.load(); }
+ std::uint64_t PlayerVideoRenderer::SwapChainPresents() const noexcept { return swapChainPresents_.load(); }
+ std::uint64_t PlayerVideoRenderer::SubmittedVideoGeneration() const noexcept { return videoGeneration_.load(); }
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/VideoRenderer.h
+index a16e4bd..939051d 100644
+--- a/FFF.Native/3FP/Render/VideoRenderer.h
++++ b/FFF.Native/3FP/Render/VideoRenderer.h
+@@ -29,6 +29,7 @@ struct ID3D11SamplerState;
+ struct ID3D11Buffer;
+ struct ID3D11Texture2D;
+ struct ID3D11RenderTargetView;
++struct PlaybackProfiler;
+ struct ID3D11ShaderResourceView;
+ struct ID3D11VideoDevice;
+ struct ID3D11VideoContext;
+@@ -176,6 +177,8 @@ public:
+     std::uint64_t SwapChainPresents() const noexcept;
+     std::uint64_t SubmittedVideoGeneration() const noexcept;
+     std::uint64_t PresentedVideoGeneration() const noexcept;
++    bool WaitForPendingVideoFrame() noexcept;
++    void SetVideoPlaybackActive(bool active) noexcept;
+     bool HasOutputWindow() const noexcept;
+     std::uint64_t PresentWait100ns() const noexcept;
+     std::uint64_t DeviceLockWait100ns() const noexcept;
+@@ -186,6 +189,7 @@ public:
+     std::string LastError() const;
+ 
+ private:
++    std::unique_ptr<PlaybackProfiler> playbackProfiler_;
+     enum class CoverBackdropRenderResult {
+         Complete,
+         Deferred,
+@@ -262,7 +266,9 @@ private:
+     void ReleaseScaleResources() noexcept;
+     FFFResult DrawWithVideoProcessor(ID3D11Texture2D* inputTexture,
+         ID3D11Texture2D* outputTexture, const RECT& destination,
+-        std::uint32_t inputColorSpace, std::uint32_t outputColorSpace) noexcept;
++        std::uint32_t inputColorSpace, std::uint32_t outputColorSpace,
++        std::uint32_t arraySlice = 0) noexcept;
++    void EnsureRetainedVideoSurface() noexcept;
+     bool CanUseDirectVideoProcessor() const noexcept;
+     void ReleaseVideoProcessor() noexcept;
+     void ReleaseVideoProcessorInputSurface() noexcept;
+@@ -433,6 +439,7 @@ private:
+     mutable std::mutex timedTextMutex_;
+     mutable std::mutex coverBackdropThreadMutex_;
+     std::condition_variable timedTextCondition_;
++    std::condition_variable videoPresentedCondition_;
+     std::condition_variable coverBackdropCondition_;
+     std::thread timedTextThread_;
+     std::thread coverBackdropThread_;
+@@ -463,7 +470,11 @@ private:
+     std::uint64_t timedTextCompositePixelInvocations_[4];
+     CachedVideoSettings cachedVideoSettings_;
+     bool hasCachedVideo_;
++    AVFrame* retainedHardwareFrame_ = nullptr;
++    bool retainedSurfaceCopied_ = false;
++    bool directDecoderVideoProcessorFailed_ = false;
+     std::atomic<std::uint64_t> videoGeneration_;
++    std::atomic<bool> videoPlaybackActive_{false};
+     std::atomic<std::uint64_t> presentedVideoGeneration_;
+     std::atomic<std::uint64_t> presentedVideoFrames_;
+     std::atomic<std::uint64_t> coalescedVideoFrames_;

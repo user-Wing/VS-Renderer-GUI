@@ -204,6 +204,7 @@ bool PlayerWindow::openFile(const QString &input) {
     for(auto *control:QList<QWidget *>{timeline_,play_,time_,frame_,rate_,speedButton_})control->setEnabled(!image);
     lav_.reset(); clock_->pause(); playing_ = false; autoPlay_ = settings_->value("basic/autoplay",true).toBool(); ready_ = pending_ = seekPending_ = rateApplied_ = false;
     if(interpolationAuto_){const QStringList stages{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};preset_=QDir(PresetStore::directory()).filePath("builtin/"+stages[std::clamp(settings_->value("player/interpolationStart",0).toInt(),0,3)]);}
+    profileFallback_=false;profileStartup_.invalidate();
     manualFrame_ = -1;clip_={};positionRestored_=false;qualityStage_=initialQualityStage();resumeAt_=settingsPosition_=-1;profileSize_={};resetStatistics(); displayedFrame_={};
     const auto actual=remote?path:QFileInfo(path).absoluteFilePath();
     const auto mounted=actual==source_?externalSubtitle_:QString();
@@ -272,6 +273,12 @@ void PlayerWindow::refreshScript() {
     result.script.prepend(QString("import vapoursynth as _vsr_vs\ndef _vsr_player_ffms(*args, **options):\n    options['cache'] = %1\n    options['cachefile'] = %2\n    options.setdefault('threads', %5)\n    try:\n        return _vsr_vs.core.ffms2.Source(*args, **options)\n    except _vsr_vs.Error as error:\n        if 'Source: No video track found' not in str(error): raise\n        if 'track' in options: options['stream_index'] = options.pop('track')\n        return _vsr_player_lsmas(*args, **options)\ndef _vsr_player_lsmas(*args, **options):\n    options.pop('cachedir', None)\n    options['cache'] = %3\n    options['cachefile'] = %4\n    options.setdefault('threads', %5)\n    return _vsr_vs.core.lsmas.LWLibavSource(*args, **options)\n")
         .arg(ffindex.isEmpty()?"False":"True",literal(ffindex),lwi.isEmpty()?"0":"1",literal(lwi),settings_->value("playback/multithread",true).toBool()?"0":"1"));
     if(!mode.isEmpty() && interpolationStage()<0)result.script.prepend(QString("_vsr_target_width = %1\n_vsr_target_height = %2\n_vsr_quality_stage = %3\n_vsr_resize_before_enhance = %4\n").arg(profileSize_.width()).arg(profileSize_.height()).arg(qualityStage_).arg(settings_->value("performance/resizeBeforeEnhance",false).toBool()?"True":"False"));
+    if(mode=="Anime" && QFileInfo(source_).size()>1000000000 &&
+        (ffindex.isEmpty() || !QFileInfo::exists(ffindex)) && (lwi.isEmpty() || !QFileInfo::exists(lwi))){
+        profileFallback_=true;qualityStage_=4;refreshScript();
+        message_->setText(tr("首次 VS 索引需要扫描大文件：已切换 Jinc 直通，避免机械盘全片读取。"));return;
+    }
+    requested_=lastFrame_=-1;profileStartup_.restart();
     server_->loadScript(result.script, preset_.isEmpty() ? QDir(QCoreApplication::applicationDirPath()).filePath("vpy/player.vpy") : preset_);
     message_->setText(preset_.isEmpty() ? tr("正在加载 VS 原画播放…") : tr("正在加载 VPY：%1").arg(QFileInfo(preset_).fileName()));
     if(QUrl(source_).scheme()=="http" || QUrl(source_).scheme()=="https")message_->setText(tr("正在读取网络视频并建立帧索引；首次索引需要扫描视频…"));
@@ -285,7 +292,7 @@ void PlayerWindow::savePosition() {
 void PlayerWindow::loadPreset(const QString &path) {
     if(madvrMode()) { const auto text=tr("工作在 madVR 模式下，VS 预设不生效。");setError(text);QToolTip::showText(pane_->mapToGlobal(QPoint(20,20)),text,pane_,QRect(),4000);return; }
     interpolationAuto_=false;settings_->setValue("player/interpolationAuto",false);
-    preset_ = path; qualityStage_=initialQualityStage();settings_->setValue("player/preset",path); if (!source_.isEmpty() && !imageMode_) refreshScript();
+    profileFallback_=false;profileStartup_.invalidate();preset_ = path; qualityStage_=initialQualityStage();settings_->setValue("player/preset",path); if (!source_.isEmpty() && !imageMode_) refreshScript();
 }
 void PlayerWindow::togglePlayback() {
     if (imageMode_ || !ready_ || source_.isEmpty()) return;
@@ -340,6 +347,9 @@ void PlayerWindow::nextFile(int direction) { const int next = fileIndex_ + direc
 void PlayerWindow::setError(const QString &message) { message_->setText(message); message_->setToolTip(message); }
 void PlayerWindow::updateState() {
     if(imageMode_){if(infoVisible_ && ++infoTick_>=50){infoTick_=0;updateInfo();}return;}
+    if(!direct_ && profile()=="Anime" && lastFrame_<0 && profileStartup_.isValid() && profileStartup_.elapsed()>=8000){
+        profileStartup_.invalidate();profileFallback_=true;qualityStage_=4;refreshScript();message_->setText(tr("VS 首帧等待超过 8 秒：已切换 Jinc 直通。"));
+    }
     const auto snap = clock_->snapshot();
     if(!pendingExternalAudio_.isEmpty() && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Playing || snap.state==ThreeFpState::Paused)){const auto path=pendingExternalAudio_;pendingExternalAudio_.clear();attachAudio(path);}
     if(direct_ && resumeAt_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)) {clock_->seek(resumeAt_);resumeAt_=-1;}

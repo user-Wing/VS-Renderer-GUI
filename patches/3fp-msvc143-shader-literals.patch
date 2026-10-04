@@ -1,0 +1,8 @@
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -521,1 +521,1 @@
+-float4 SampleJinc2(Texture2D<float4> sourceTexture,float2 uv,uint2 dimensions) {
++)" R"(float4 SampleJinc2(Texture2D<float4> sourceTexture,float2 uv,uint2 dimensions) {
+@@ -678,1 +678,1 @@
+-float4 SampleBilateral(Texture2D<float4> tex,float2 uv,uint2 dim,bool guided) {
++)" R"(float4 SampleBilateral(Texture2D<float4> tex,float2 uv,uint2 dim,bool guided) {

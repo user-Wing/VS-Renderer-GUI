@@ -1,0 +1,422 @@
+diff --git a/FFF.Native/3FP/Api/FFF.Player.Api.h b/FFF.Native/3FP/Api/FFF.Player.Api.h
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -115,6 +115,8 @@ struct FFF3FPConfiguration {
+     void* eventCallbackContext;
+     FFF3FPVideoScalingQuality videoScalingQuality;
+     std::uint32_t forceHdrOutput;
++    std::int32_t preferredAdapterIndex = -1;
++    std::uint32_t sdrScRgbMode = 0;
+ };
+ 
+ struct FFF3FPSnapshot {
+diff --git a/FFF.Native/3FP/Api/PlayerApi.cpp b/FFF.Native/3FP/Api/PlayerApi.cpp
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -7,7 +7,7 @@
+ #include <atomic>
+ 
+ namespace {
+-constexpr std::uint32_t PlayerApiVersion = 14;
++constexpr std::uint32_t PlayerApiVersion = 16;
+ 
+ // 3FCompare extension (F-LOG): process-wide native log sink.
+ std::atomic<FFF3FPLogCallback> g_logSink{nullptr};
+@@ -51,6 +51,8 @@ FFFResult FFF3FP_Create(const FFF3FPConfiguration* configuration, FFF3FPHandle*
+         configuration->decodeMode > FFF3FPDecodeMode::D3D11 || configuration->colorMode > FFF3FPColorMode::MapToHdr ||
+         configuration->videoScalingQuality > FFF3FPVideoScalingQuality::HighQuality ||
+         configuration->forceHdrOutput > 1 ||
++        configuration->preferredAdapterIndex < -1 || configuration->preferredAdapterIndex > 15 ||
++        configuration->sdrScRgbMode > 1 ||
+         !std::isfinite(configuration->sdrPeakNits) || configuration->sdrPeakNits <= 0 ||
+         !std::isfinite(configuration->hdrPeakNits) || configuration->hdrPeakNits < 0 ||
+         configuration->hdrPeakNits > 10000 || !std::isfinite(configuration->sdrPaperWhiteNits) ||
+diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -445,6 +445,8 @@ PlayerSession::PlayerSession(const FFF3FPConfiguration& configuration)
+     if (configuration.audioEndpointIdUtf8 != nullptr) audioEndpointId_ = FromUtf8(configuration.audioEndpointIdUtf8);
+     videoRenderer_.SetWindow(static_cast<HWND>(configuration.outputWindow));
+     videoRenderer_.SetScalingQuality(configuration.videoScalingQuality);
++    videoRenderer_.SetPreferredAdapterIndex(configuration.preferredAdapterIndex);
++    videoRenderer_.SetSdrScRgbMode(configuration.sdrScRgbMode);
+     videoRenderer_.SetColorMode(configuration.colorMode, configuration.sdrPeakNits,
+         configuration.hdrPeakNits, configuration.sdrPaperWhiteNits,
+         configuration.forceHdrOutput != 0);
+diff --git a/FFF.Native/3FP/Hdr/HdrProcessor.h b/FFF.Native/3FP/Hdr/HdrProcessor.h
+--- a/FFF.Native/3FP/Hdr/HdrProcessor.h
++++ b/FFF.Native/3FP/Hdr/HdrProcessor.h
+@@ -15,6 +15,7 @@ struct HdrDisplayCapabilities {
+     float minimumNits = 0.0f;
+     float maximumNits = 0.0f;
+     float maximumFullFrameNits = 0.0f;
++    float sdrWhiteLevelNits = 0.0f;
+ };
+ 
+ struct HdrStaticMetadata {
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/VideoRenderer.cpp
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -21,6 +21,7 @@ extern "C" {
+ #include <windows.graphics.display.h>
+ #include <windows.graphics.display.interop.h>
+ #include <algorithm>
++#include <array>
+ #include <bit>
+ #include <chrono>
+ #include <climits>
+@@ -106,7 +107,8 @@ HRESULT CompileSharedShader(LPCVOID source, SIZE_T length, LPCSTR sourceName,
+     static std::mutex mutex;
+     static std::map<std::string, ComPtr<ID3DBlob>> cache;
+     std::lock_guard lock(mutex);
+-    const std::string key = std::string(static_cast<const char*>(source), length) + target + entry;
++    std::string key = std::string(static_cast<const char*>(source), length) + target + entry;
++    if(defines)for(auto macro=defines;macro->Name;++macro)key+=std::string(macro->Name)+"="+(macro->Definition?macro->Definition:"")+";";
+     const auto found = cache.find(key);
+     if (found != cache.end()) return found->second.CopyTo(code);
+     std::filesystem::path cachePath;
+@@ -124,7 +126,7 @@ HRESULT CompileSharedShader(LPCVOID source, SIZE_T length, LPCSTR sourceName,
+         }
+     }
+     // Level 1 avoids lengthy loop optimization at startup without changing kernels.
+-    flags = (flags & ~D3DCOMPILE_OPTIMIZATION_LEVEL3) | D3DCOMPILE_OPTIMIZATION_LEVEL1;
++    if(defines==nullptr)flags = (flags & ~D3DCOMPILE_OPTIMIZATION_LEVEL3) | D3DCOMPILE_OPTIMIZATION_LEVEL1;
+     const auto result = D3DCompile(source, length, sourceName, defines, include, entry,
+         target, flags, effectFlags, code, errors);
+     if (SUCCEEDED(result)) {
+@@ -186,6 +188,8 @@ bool ReadWindowsDisplayLuminance(const HMONITOR monitor,
+             capabilities.minimumNits = minimum;
+         if (std::isfinite(fullFrame) && fullFrame > 0.0f)
+             capabilities.maximumFullFrameNits = fullFrame;
++        float sdrWhite=0.0f;
++        if(SUCCEEDED(color->get_SdrWhiteLevelInNits(&sdrWhite)) && std::isfinite(sdrWhite) && sdrWhite>0.0f)capabilities.sdrWhiteLevelNits=sdrWhite;
+         read = true;
+     } while (false);
+     if (shouldUninitialize) RoUninitialize();
+@@ -439,6 +443,15 @@ cbuffer Settings : register(b0) {
+     float ViewAspect; float ViewZoom; uint UpscaleAlgorithm; uint DownscaleAlgorithm;
+ };
+ Texture2D<float4> Source : register(t0);
++#ifdef VSR_LAYOUT
++#define InputLayout VSR_LAYOUT
++#define ColorMode VSR_COLOR
++#define Transfer VSR_TRANSFER
++#define Source2020 VSR_PRIMARIES
++#define Projection360 0
++#define Reserved 0
++#endif
++Texture1D<float> JincWeights : register(t3);
+ Texture2D<float4> ChromaU : register(t1);
+ Texture2D<float4> ChromaV : register(t2);
+ SamplerState LinearSampler : register(s0);
+@@ -464,6 +477,7 @@ float BtOne(float v) { v=max(v,0.0); return saturate(v<0.018 ? 4.5*v : 1.099*pow
+ float3 ToBt709(float3 v) { return float3(BtOne(v.r),BtOne(v.g),BtOne(v.b)); }
+ float3 To2020(float3 v) { return mul(float3x3(0.627404,0.329283,0.043313, 0.069097,0.919540,0.011362, 0.016392,0.088013,0.895595),v); }
+ float3 To709(float3 v) { return mul(float3x3(1.660491,-0.587641,-0.072850, -0.124550,1.132900,-0.008349, -0.018151,-0.100579,1.118730),v); }
++float3 SourceTo709(float3 v) { return (Source2020 & 4)!=0?mul(float3x3(1.224745,-0.224904,0.0,-0.042058,1.042081,0.0,-0.019642,-0.078655,1.098537),v):To709(v); }
+ float Bt2390HdrToSdrPq(float value,float sourcePeak,float targetPeak) {
+     float sourceMaximum=max(sourcePeak,1.0);
+     float targetMaximum=clamp(targetPeak,1.0,sourceMaximum);
+@@ -580,14 +594,18 @@ float Jinc(float value) {
+ }
+ float Jinc2Weight(float value) {
+     value=abs(value);
++#ifdef VSR_JINC_REFERENCE
+     return value>=2.0?0.0:Jinc(value)*Jinc(value/2.0);
++#else
++    return value>=2.0?0.0:JincWeights.SampleLevel(LinearSampler,(value*2048.0+0.5)/4097.0,0);
++#endif
+ }
+ float4 SampleJinc2(Texture2D<float4> sourceTexture,float2 uv,uint2 dimensions) {
+     float2 position=uv*float2(dimensions)-0.5;
+     int2 origin=int2(floor(position));
+     float4 total=0.0; float weightTotal=0.0;
+-    [loop] for(int y=-1;y<=2;++y) {
+-        [loop] for(int x=-1;x<=2;++x) {
++    [unroll] for(int y=-1;y<=2;++y) {
++        [unroll] for(int x=-1;x<=2;++x) {
+             float2 delta=float2(origin+int2(x,y))-position;
+             float weight=Jinc2Weight(length(delta));
+             total+=LoadClamped(sourceTexture,origin+int2(x,y),dimensions)*weight;
+@@ -751,7 +769,11 @@ float4 SampleBilateral(Texture2D<float4> tex,float2 uv,uint2 dim,bool guided) {
+ }
+ float4 SampleChroma(Texture2D<float4> tex,float2 uv) {
+     uint w,h;tex.GetDimensions(w,h);uint2 dim=uint2(w,h);
++#ifdef VSR_CHROMA
++    uint chroma=VSR_CHROMA;
++#else
+     uint chroma=(UpscaleAlgorithm>>8)&255;
++#endif
+     uint algorithm=chroma==0?1:chroma-1;
+     if(algorithm==0)return tex.SampleLevel(PointSampler,uv,0);
+     if(algorithm==1)return tex.SampleLevel(LinearSampler,uv,0);
+@@ -769,6 +791,9 @@ float4 SampleVideo(Texture2D<float4> sourceTexture,float2 uv) {
+     float effectiveScale=min(OutputWidth/max(float(width),1.0),
+         OutputHeight/max(float(height),1.0))*max(ViewZoom,1.0);
+     if(abs(effectiveScale-1.0)<0.00001)return sourceTexture.SampleLevel(PointSampler,uv,0);
++#ifdef VSR_JINC
++    return SampleJinc2(sourceTexture,uv,dimensions);
++#else
+     uint algorithm=effectiveScale>=1.0?(UpscaleAlgorithm & 255):DownscaleAlgorithm;
+     if(algorithm==0)return sourceTexture.SampleLevel(PointSampler,uv,0);
+     if(algorithm==1)return sourceTexture.SampleLevel(LinearSampler,uv,0);
+@@ -778,6 +803,7 @@ float4 SampleVideo(Texture2D<float4> sourceTexture,float2 uv) {
+     if(algorithm==6)return SampleSuperXbr(sourceTexture,uv,dimensions);
+     if(algorithm==8)return SampleLanczos4(sourceTexture,uv,dimensions,float2(OutputWidth,OutputHeight)*max(ViewZoom,1.0));
+     return SampleLanczos3(sourceTexture,uv,dimensions,float2(OutputWidth,OutputHeight));
++#endif
+ }
+ // BT.2020 constant-luminance uses piecewise chroma, not the NCL matrix.
+ float ClCamera(float x) { return x < 0.08145 ? x/4.5 : pow(max((x+0.0993)/1.0993,0.0),1.0/0.45); }
+@@ -876,17 +902,18 @@ float4 main(float4 position:SV_Position,float2 uv:TEXCOORD0):SV_Target {
+         (Projection360!=0?ReadSourcePanorama(EquirectangularUv(uv)):ReadSource(pannedUv));
+     if(ColorMode==1)return float4(rgb,1);
+     if(ColorMode==0&&Transfer==0){
+-        if(Source2020!=0)rgb=ToBt709(To709(ToLinear709(rgb)));
++        if(Source2020!=0)rgb=ToBt709(SourceTo709(ToLinear709(rgb)));
+         return float4(rgb,1);
+     }
+     float3 nits=Transfer==1?PqToNits(rgb):(Transfer==2?HlgToNits(rgb):ToLinear709(rgb)*PaperWhite);
+     if(ColorMode==2){
+         // scRGB swap-chain contract: linear Rec.709 primaries, 1.0 = 80 nits.
+         // Tone mapping is delegated to the display via the HDR metadata.
+-        float3 rec709Nits=Source2020==0?nits:To709(nits);
++        float3 rec709Nits=Source2020==0?nits:SourceTo709(nits);
+         return float4(rec709Nits/80.0,1);
+     }
+     if(Source2020==0)nits=To2020(nits);
++    else if((Source2020 & 4)!=0)nits=To2020(SourceTo709(nits));
+     // BT.2390 operates on IPT intensity before Rec.2020-to-Rec.709 gamut
+     // conversion. Chroma follows the reduced IPT gamut hull.
+     float3 sdr=ToBt709(To709(ToneHdrToSdr(nits,HdrPeak,SdrPeak))/SdrPeak);
+@@ -2161,7 +2188,7 @@ FFFResult PlayerVideoRenderer::SetWindow(const HWND window) noexcept {
+     if (requestedMode_ == FFF3FPColorMode::MapToHdr) {
+         fallbackReason_.clear();
+         const auto sourceHdr = hdrProcessor_.IsHdrSource();
+-        actualMode_ = sourceHdr && OutputSupportsHdr() ?
++        actualMode_ = WantsScRgbPresentationPath(sourceBitDepth_) && OutputSupportsHdr() ?
+             FFF3FPColorMode::MapToHdr : FFF3FPColorMode::MapToSdr;
+         if (actualMode_ != requestedMode_) {
+             fallbackReason_ = sourceHdr ?
+@@ -2248,7 +2275,7 @@ FFFResult PlayerVideoRenderer::SetColorMode(const FFF3FPColorMode mode, const fl
+     hdrSwapChainRejected_ = false;
+     if (requestedMode_ == FFF3FPColorMode::MapToHdr) {
+         const auto sourceHdr = hdrProcessor_.IsHdrSource();
+-        if (!sourceHdr || !OutputSupportsHdr()) {
++        if (!WantsScRgbPresentationPath(sourceBitDepth_) || !OutputSupportsHdr()) {
+             actualMode_ = FFF3FPColorMode::MapToSdr;
+             fallbackReason_ = sourceHdr ?
+                 "The target display or Windows Advanced Color mode does not support true HDR output." :
+@@ -2260,7 +2287,7 @@ FFFResult PlayerVideoRenderer::SetColorMode(const FFF3FPColorMode mode, const fl
+     hdrProcessor_.SetTargetPeakOverride(hdrPeakNits_);
+     if (hasCachedVideo_) {
+         cachedVideoSettings_.sdrPeak = sdrPeakNits_;
+-        cachedVideoSettings_.paperWhite = paperWhiteNits_;
++        cachedVideoSettings_.paperWhite = EffectivePaperWhiteNits();
+         cachedVideoSettings_.targetPeak = hdrProcessor_.State().targetPeakNits;
+     }
+     const bool hdr = actualMode_ == FFF3FPColorMode::MapToHdr;
+@@ -2306,13 +2333,31 @@ FFFResult PlayerVideoRenderer::ForceSdrOutputForSdrSource() noexcept {
+     return FFFResult::Success;
+ }
+ 
++FFFResult PlayerVideoRenderer::SetPreferredAdapterIndex(const std::int32_t index) noexcept {
++    if(index < -1 || index > 15)return FFFResult::InvalidArgument;
++    std::lock_guard deviceLock(deviceMutex_);preferredAdapterIndex_.store(index,std::memory_order_release);return FFFResult::Success;
++}
++FFFResult PlayerVideoRenderer::SetSdrScRgbMode(const std::uint32_t mode) noexcept {
++    if(mode>1)return FFFResult::InvalidArgument;
++    std::lock_guard deviceLock(deviceMutex_);sdrScRgbMode_=mode;return FFFResult::Success;
++}
++bool PlayerVideoRenderer::WantsScRgbPresentationPath(const std::uint32_t bitDepth) const noexcept {
++    return hdrProcessor_.IsHdrSource() || sourceWideGamut_.load(std::memory_order_acquire) || (sdrScRgbMode_!=0 && bitDepth>8);
++}
++float PlayerVideoRenderer::EffectivePaperWhiteNits() const noexcept {
++    if(actualMode_==FFF3FPColorMode::MapToHdr && !hdrProcessor_.IsHdrSource()){
++        const auto white=hdrProcessor_.State().display.sdrWhiteLevelNits;return white>0?white:80.0f;
++    }return paperWhiteNits_;
++}
+ FFFResult PlayerVideoRenderer::EnsureDevice() noexcept {
+     if (device_ != nullptr) return FFFResult::Success;
+     const D3D_FEATURE_LEVEL levels[] = {
+         D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0 };
+     D3D_FEATURE_LEVEL selected{};
+     ComPtr<IDXGIAdapter1> selectedAdapter;
+-    if (window_ != nullptr && IsWindow(window_)) {
++    const auto preferred=preferredAdapterIndex_.load(std::memory_order_acquire);
++    if(preferred>=0){ComPtr<IDXGIFactory6> factory;if(SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))factory->EnumAdapters1(static_cast<UINT>(preferred),&selectedAdapter);}
++    if (!selectedAdapter && window_ != nullptr && IsWindow(window_)) {
+         const auto monitor = MonitorFromWindow(window_, MONITOR_DEFAULTTONEAREST);
+         ComPtr<IDXGIFactory6> factory;
+         if (SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
+@@ -2420,6 +2465,7 @@ bool PlayerVideoRenderer::OutputSupportsHdr() noexcept {
+                 capabilities.minimumNits = previousCapabilities.minimumNits;
+                 capabilities.maximumNits = previousCapabilities.maximumNits;
+                 capabilities.maximumFullFrameNits = previousCapabilities.maximumFullFrameNits;
++                capabilities.sdrWhiteLevelNits = previousCapabilities.sdrWhiteLevelNits;
+             }
+             hdrProcessor_.SetDisplayCapabilities(capabilities);
+             // Several TVs correctly expose the active 10-bit/PQ desktop but
+@@ -2482,7 +2528,7 @@ FFFResult PlayerVideoRenderer::EnsureSwapChain(std::uint32_t width, std::uint32_
+     if (window_ == nullptr) return FFFResult::Success;
+     if (requestedMode_ == FFF3FPColorMode::MapToHdr) {
+         const auto sourceHdr = hdrProcessor_.IsHdrSource();
+-        const auto nextMode = sourceHdr && OutputSupportsHdr() ?
++        const auto nextMode = WantsScRgbPresentationPath(sourceBitDepth) && OutputSupportsHdr() ?
+             FFF3FPColorMode::MapToHdr : FFF3FPColorMode::MapToSdr;
+         const auto reason = sourceHdr ?
+             "The target display or Windows Advanced Color mode does not support true HDR output." :
+@@ -2778,6 +2824,35 @@ FFFResult PlayerVideoRenderer::EnsurePipeline(const std::uint32_t sourceWidth,
+             SetError("Could not create the presentation shader resources."); return FFFResult::DeviceFailure;
+         }
+     }
++    if (jincWeights_ == nullptr) {
++        // The radial reconstruction kernel is invariant across frames and planes.
++        // Keep Bessel evaluation off the per-output-pixel sampling path.
++        std::array<float,4097> weights{};
++        const auto jinc = [](double radius) noexcept {
++            const double z = radius * 3.14159265358979323846;
++            double term = 1.0, sum = 1.0;
++            for (int k = 1; k <= 24; ++k) {
++                term *= -z*z/(4.0*k*(k+1)); sum += term;
++            }
++            return sum;
++        };
++        for (std::size_t i = 0; i < weights.size(); ++i) {
++            const double radius = double(i)/2048.0;
++            weights[i] = float(jinc(radius)*jinc(radius/2.0));
++        }
++        D3D11_TEXTURE1D_DESC description{};
++        description.Width = static_cast<UINT>(weights.size());
++        description.MipLevels = description.ArraySize = 1;
++        description.Format = DXGI_FORMAT_R32_FLOAT;
++        description.Usage = D3D11_USAGE_IMMUTABLE;
++        description.BindFlags = D3D11_BIND_SHADER_RESOURCE;
++        D3D11_SUBRESOURCE_DATA data{};data.pSysMem = weights.data();
++        ComPtr<ID3D11Texture1D> texture;
++        if (FAILED(device_->CreateTexture1D(&description,&data,&texture)) ||
++            FAILED(device_->CreateShaderResourceView(texture.Get(),nullptr,&jincWeights_))) {
++            SetError("Could not create the Jinc reconstruction weights.");return FFFResult::DeviceFailure;
++        }
++    }
+     if (sourceTextures_[0] != nullptr && sourceExternal_ == externalSource &&
+         sourceWidth_ == sourceWidth && sourceHeight_ == sourceHeight &&
+         sourceInputLayout_ == inputLayout && sourceBitDepth_ == bitDepth &&
+@@ -2865,6 +2940,7 @@ FFFResult PlayerVideoRenderer::EnsurePipeline(const std::uint32_t sourceWidth,
+ 
+ bool PlayerVideoRenderer::CanUseDirectVideoProcessor() const noexcept {
+     if (hdrProcessor_.RequiresMetadataAwareShader()) return false;
++    if ((cachedVideoSettings_.source2020 & 4u) != 0) return false;
+     if (!sourceExternal_ || sourceInputLayout_ != 2 || sourceTextures_[0] == nullptr ||
+         sourceBitDepth_ > 10 || sourceInterlaced_ ||
+         sourceChromaLocation_ != AVCHROMA_LOC_LEFT ||
+@@ -3049,15 +3125,33 @@ FFFResult PlayerVideoRenderer::DrawWithShader(ID3D11RenderTargetView* target,
+     context_->IASetInputLayout(nullptr);
+     context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+     context_->VSSetShader(vertexShader_, nullptr, 0);
+-    context_->PSSetShader(pixelShader_, nullptr, 0);
++    auto *shader=pixelShader_;
++    if(effect==0 && !projection360 && (cachedVideoSettings_.upscaleAlgorithm&255u)==4u && cachedVideoSettings_.downscaleAlgorithm==4u){
++        const auto chroma=(cachedVideoSettings_.upscaleAlgorithm>>8)&255u;
++        const auto key=chroma | (cachedVideoSettings_.inputLayout<<8) | (cachedVideoSettings_.colorMode<<10) | (cachedVideoSettings_.transfer<<12) | (cachedVideoSettings_.source2020<<14);auto found=jincShaders_.find(key);
++        if(found==jincShaders_.end()){
++            const auto chromaValue=std::to_string(chroma);
++            const auto layoutValue=std::to_string(cachedVideoSettings_.inputLayout),colorValue=std::to_string(cachedVideoSettings_.colorMode),transferValue=std::to_string(cachedVideoSettings_.transfer),primariesValue=std::to_string(cachedVideoSettings_.source2020);
++            char referenceValue[2]{};const bool reference=GetEnvironmentVariableA("VSR_3FP_REFERENCE_JINC",referenceValue,sizeof(referenceValue))>0;
++            const D3D_SHADER_MACRO macros[]={{"VSR_JINC","1"},{"VSR_CHROMA",chromaValue.c_str()},{"VSR_JINC_REFERENCE",reference?"1":nullptr},{"VSR_LAYOUT",layoutValue.c_str()},{"VSR_COLOR",colorValue.c_str()},{"VSR_TRANSFER",transferValue.c_str()},{"VSR_PRIMARIES",primariesValue.c_str()},{nullptr,nullptr}};
++            // Do not define the reference macro at all on the production path.
++            auto defines=std::vector<D3D_SHADER_MACRO>(std::begin(macros),std::end(macros));if(!reference)defines.erase(defines.begin()+2);
++            ComPtr<ID3DBlob> code,errors;ID3D11PixelShader *specialized=nullptr;
++            if(SUCCEEDED(CompileSharedShader(PixelShaderSource,std::strlen(PixelShaderSource),nullptr,defines.data(),nullptr,"main","ps_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&code,&errors)) && SUCCEEDED(device_->CreatePixelShader(code->GetBufferPointer(),code->GetBufferSize(),nullptr,&specialized))){jincShaders_[key]=specialized;shader=specialized;}
++            else{jincShaders_[key]=nullptr;if(errors){extern void FFF3FP_KernelLogImpl(const char*) noexcept;FFF3FP_KernelLogImpl(static_cast<const char *>(errors->GetBufferPointer()));}}
++        }else if(found->second)shader=found->second;
++    }
++    context_->PSSetShader(shader, nullptr, 0);
+     context_->PSSetConstantBuffers(0, 1, &constants_);
+     ID3D11SamplerState* samplers[] = {sampler_, pointSampler_, panoramaSampler_};
+     context_->PSSetSamplers(0, ARRAYSIZE(samplers), samplers);
+     auto* views = sourceViews != nullptr ? sourceViews : sourceViews_;
+     context_->PSSetShaderResources(0, ARRAYSIZE(sourceViews_), views);
++    context_->PSSetShaderResources(3, 1, &jincWeights_);
+     context_->Draw(3, 0);
+     ID3D11ShaderResourceView* nullViews[] = {nullptr, nullptr, nullptr};
+     context_->PSSetShaderResources(0, ARRAYSIZE(nullViews), nullViews);
++    context_->PSSetShaderResources(3, 1, nullViews);
+     context_->OMSetRenderTargets(0, nullptr, nullptr);
+     return FFFResult::Success;
+ }
+@@ -4333,6 +4427,8 @@ FFFResult PlayerVideoRenderer::Render(const AVFrame* frame, const bool limitToNa
+     const auto hdrState = hdrProcessor_.ProcessFrame(
+         frame, hdrPeakNits_, paperWhiteNits_);
+     const auto source2020 = hdrState.format != FFF3FPHdrFormat::Sdr || IsRec2020(frame);
++    const auto sourceP3=frame->color_primaries==AVCOL_PRI_SMPTE431 || frame->color_primaries==AVCOL_PRI_SMPTE432;
++    sourceWideGamut_.store(source2020 || sourceP3,std::memory_order_release);
+     auto input = DescribeInput(static_cast<AVPixelFormat>(frame->format));
+     const auto d3d11Frame = frame->format == AV_PIX_FMT_D3D11;
+     if (d3d11Frame && frame->hw_frames_ctx != nullptr) {
+@@ -4427,11 +4523,11 @@ FFFResult PlayerVideoRenderer::Render(const AVFrame* frame, const bool limitToNa
+         (hdrState.format == FFF3FPHdrFormat::DolbyVision &&
+          (hdrState.compatibility & hlgCompatibility) != 0) ? 2u :
+         (hdrState.format != FFF3FPHdrFormat::Sdr ? 1u : 0u);
+-    settings.source2020 = (source2020 ? 1u : 0u) | (frame->colorspace == AVCOL_SPC_BT2020_CL ? 2u : 0u);
++    settings.source2020 = (sourceP3 ? 4u : source2020 ? 1u : 0u) | (frame->colorspace == AVCOL_SPC_BT2020_CL ? 2u : 0u);
+     settings.sdrPeak = sdrPeakNits_;
+     settings.hdrPeak = settings.transfer == 0 ? 100.0f : hdrState.sourcePeakNits;
+     sourcePeakNits_ = settings.hdrPeak;
+-    settings.paperWhite = paperWhiteNits_;
++    settings.paperWhite = EffectivePaperWhiteNits();
+     settings.targetPeak = hdrState.targetPeakNits;
+     settings.sourceWidth = static_cast<float>(width); settings.sourceHeight = static_cast<float>(height);
+     settings.outputWidth = static_cast<float>(swapWidth_); settings.outputHeight = static_cast<float>(swapHeight_);
+@@ -5275,7 +5371,7 @@ FFFResult PlayerVideoRenderer::PresentTimedText() noexcept {
+             cachedVideoSettings_.colorMode = static_cast<std::uint32_t>(actualMode_);
+             cachedVideoSettings_.sdrPeak = sdrPeakNits_;
+             cachedVideoSettings_.hdrPeak = sdrPeakNits_;
+-            cachedVideoSettings_.paperWhite = paperWhiteNits_;
++            cachedVideoSettings_.paperWhite = EffectivePaperWhiteNits();
+             cachedVideoSettings_.targetPeak = hdrProcessor_.State().targetPeakNits;
+         }
+     }
+@@ -5468,6 +5564,8 @@ void PlayerVideoRenderer::ReleaseDeviceObjects() noexcept {
+     if (constants_ != nullptr) { constants_->Release(); constants_ = nullptr; }
+     if (scaleConstants_ != nullptr) { scaleConstants_->Release(); scaleConstants_ = nullptr; }
+     if (pointSampler_ != nullptr) { pointSampler_->Release(); pointSampler_ = nullptr; }
++    if (jincWeights_ != nullptr) { jincWeights_->Release(); jincWeights_ = nullptr; }
++    for(auto &[key,shader]:jincShaders_)if(shader)shader->Release();jincShaders_.clear();
+     if (panoramaSampler_ != nullptr) { panoramaSampler_->Release(); panoramaSampler_ = nullptr; }
+     if (sampler_ != nullptr) { sampler_->Release(); sampler_ = nullptr; }
+     if (pixelShader_ != nullptr) { pixelShader_->Release(); pixelShader_ = nullptr; }
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/VideoRenderer.h
+--- a/FFF.Native/3FP/Render/VideoRenderer.h
++++ b/FFF.Native/3FP/Render/VideoRenderer.h
+@@ -11,6 +11,7 @@
+ #include <deque>
+ #include <functional>
+ #include <memory>
++#include <map>
+ #include <mutex>
+ #include <string>
+ #include <thread>
+@@ -116,6 +117,8 @@ public:
+     ~PlayerVideoRenderer();
+ 
+     FFFResult SetWindow(HWND window) noexcept;
++    FFFResult SetPreferredAdapterIndex(std::int32_t index) noexcept;
++    FFFResult SetSdrScRgbMode(std::uint32_t mode) noexcept;
+     FFFResult SetScalingQuality(FFF3FPVideoScalingQuality quality) noexcept;
+     FFFResult SetViewTransform(float zoom, float panX, float panY) noexcept;
+     FFFResult SetScalingAlgorithms(FFF3FPScalingAlgorithm upscale,
+@@ -331,6 +334,13 @@ private:
+     ID3D11Buffer* scaleConstants_;
+     ID3D11Texture2D* sourceTextures_[3];
+     ID3D11ShaderResourceView* sourceViews_[3];
++    ID3D11ShaderResourceView* jincWeights_ = nullptr;
++    std::map<std::uint32_t,ID3D11PixelShader*> jincShaders_;
++    std::atomic<std::int32_t> preferredAdapterIndex_{-1};
++    std::uint32_t sdrScRgbMode_ = 0;
++    std::atomic<bool> sourceWideGamut_{false};
++    bool WantsScRgbPresentationPath(std::uint32_t bitDepth) const noexcept;
++    float EffectivePaperWhiteNits() const noexcept;
+     PlaneScaleChain planeScaleChains_[3];
+     std::uint64_t scaledVideoGeneration_;
+     std::uint32_t scaledOutputWidth_;

@@ -4,12 +4,30 @@
 
 以下记录日期是已留存的开发 / 交付日期，不据此补写正式发布日期。同一版本号曾有多轮本地修改，归档前后的功能可能不同，具体包以发布说明和内部资源清单为准。完整旧日志、原始测试数字、哈希及交付路径保存在 [开发记录原文归档](docs/history/development-records-through-2026-10-03.md)。
 
+## 1.0.5 — 本地构建（2026-10-04）
+
+- 本轮交付范围为源码推送与本地完整便携压缩包；不创建 Release 或 Draft，不上传发行附件。打包排除个人数据目录和 AWJ 更新安全状态文件，保留运行时、许可及内置预设。
+
+- 重新从独立 Release 构建目录编译 Renderer / Player，3FP 完整 Rebuild；已覆盖 `dist/VS-Renderer-GUI-windows-x64` 的 `VSRenderer.exe`、`vs-player.exe`、`FFF.Native.dll`，修正 `release.json` 为 1.0.5，并同步本文及说明文档。配置、VPY、缓存和色彩后端保留；旧文件备份在 `build/dist-backup-1.0.5-20261004`。本次只更新本地 dist，未发布线上版本，也未更新 PortableSoft 安装目录。
+
+- 以返回的 1.0.5 源码继续修复：Jinc 权重查表及输入/色彩专用着色器，RTX 4070 Laptop 的 1080p48/2160p48→真实 8K 原生播放各约 60 秒稳定段无新增丢帧；不代表 780M、GUI 或 HDR 全量验收。
+- 选择兼容官方适配器、SDR scRGB、SDR white 和 P3 路径，保留本地杜比核心；原生补丁及测试范围见 [本机记录](docs/local-1.0.5-performance.md)。
+- 大图背景惰性载入，RGBA8 PNG 快速解码及原位 AVX2/SSE2 预测器；TEST.png 本机两次进入编辑器为 9.825 / 9.767 秒，10 秒预算通过；冷缓存、机械盘和非 AVX2 边界见专项记录。
+- 选区右键支持复制/剪切图层、取消/反向选择；Ctrl+C/V 保留当前图层选区；工具变体使用不同图标。
+- 大文件缺索引时 Anime 预检进入 Jinc，VS 首帧超时提供 Jinc 降级；新增 Jinc/D3D11 两个直通入口。机械盘限速及进程内索引中断边界见专项记录。
+
+- 合入 NucBox 780M 的 D3D11 帧队列保护、硬解纹理直接呈现、字幕去重及有界三缓冲修复；本地 4K60 验收详见 [设备实测记录](docs/nuxbox-performance-session-2026-10-04.md)。
+- Renderer / Player 同步升级为 1.0.5；本轮实际交付目录以本节的 dist 更新记录为准，保留个人配置与预设。
+- 本地构建可显式复用现有完整 VapourSynth / Python 运行时。未执行线上发布。
+
 ## 1.0.4 — 发布准备
 
 
 记录截至2026-10-03；源码与本地便携manifest为1.0.4。本轮准备干净便携包、推送源码并创建无附件 Release 草稿；正式发布与 GitHub / ModelScope 附件由维护者操作。发布内容见 [1.0.4 草稿](docs/release-1.0.4.md)。
 
 ### 新增
+
+- 增加 NucBox 780M 的独立 3FP / mpv HWND 测量工具、GPU 引擎采样与开发环境脚本。Qt 开发组件、Player 构建及 `C:\BuildTools\2026` 的 v145 原生构建已验证；修复待呈现帧覆盖、重复字幕呈现和硬解纹理拷贝，并调整有界呈现缓冲；本地 4K60 的 D3D11 原生 / GUI 共 24 轮稳定窗口无丢帧，启动与 Jinc 边界见 [设备实测记录](docs/nuxbox-performance-session-2026-10-04.md)。
 
 - 3FP 解码配置新增可选 libplacebo D3D11 色彩管理：HDR→SDR / FP16 scRGB、自动 / 手动 tone 与 gamut、系统 / 自定义 ICC、SDR `.cube`、动态峰值检测和末端抖动。默认仍是原生 709 / 2020，配置持久化到完整 INI；应用不重开媒体或 VS 链。解码页按钮按 3FP、LAV Video、LAV Audio 排列。
 - Tab 新增实际色彩引擎、颜色字段来源、HDR 元数据、ICC / LUT、输出目标和回退原因。有效 HDR10+ knee / anchors 参与 ST2094-40；DV 支持不依赖 EL 的 decoded metadata，Vivid 仅报告底层回退，详见 [色彩管理边界与测试](docs/color-management-1.0.4.md)。
@@ -37,7 +55,7 @@
 
 ### 修复
 
-- 原画播放改为 3FP 原生直通，Jinc / D3D11 不再等待 VS 初始化；内嵌 ASS / SRT 字幕改为按位置限量读取，去除整视频扫描和 SRT 全量提取。108 GB 机械硬盘实测与远端部署暂缓，见 [直通加载说明](docs/player-direct-open-1.0.4.md)。
+- 原画播放改为 3FP 原生直通，Jinc / D3D11 不再等待 VS 初始化；内嵌 ASS / SRT 字幕改为按位置限量读取，去除整视频扫描和 SRT 全量提取。远端已完成部署；大素材稳定播放性能仍待优化，见 [直通加载说明](docs/player-direct-open-1.0.4.md)。
 
 - 修正 BT.2020 CL 被当成 NCL 处理、RGB 纹理红蓝顺序和 ICC SDR 参考亮度；内置 VPY 必要转换根据源颜色属性选择矩阵，709 默认保持一致。高级路径复用 D3D11 纹理和暂停缓存，不新增逐帧 CPU 回传；缺少依赖或色彩配置错误继续原生显示。
 
@@ -47,6 +65,8 @@
 - 修复PSD详细编辑只得到扁平图而无法选择内部像素层的问题；层组树支持选择与修改子层，组移动同步后代，原文件另存保护。
 
 ### 变更
+
+- 新增 NuxBox 780M 原生播放性能开发交接和干净源码/SDK打包脚本，3FP 构建可显式选择 v143 / v145 工具集。远端已部署基线，但 1080p48 放大和 2160p48 丢帧仍待实测优化，不写作已解决；见 [交接说明](docs/nuxbox-performance-handoff.md)。
 
 - 图片顶栏缩至38逻辑像素，尺寸和转换窗口加宽；旋转/镜像使用显示变换，避免反复复制超大源图。
 - GLSL显示短名称并通过悬停提供完整路径，避免长路径撑宽控件；NIS来源与DP4A硬件要求分别标注。

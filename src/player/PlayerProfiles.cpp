@@ -176,7 +176,7 @@ void PlayerWindow::setDirectMode(bool enabled) {
     if(opened){clock_->openFile(mediaInput_);rateApplied_=false;resumeAt_=at;}
 }
 void PlayerWindow::updateProfile() {
-    if((interpolationStage()>=0 && !interpolationAuto_ && interpolationStage()!=3) || fixedAnimeStage()>=0 || madvrMode() || (profile().isEmpty() && !networkSource()) || qualityStage_>=5 || !ready_ || !playing_ || seekPending_ || profileResize_->isActive() || !qualitySettling_.isValid() || qualitySettling_.elapsed()<2000) {qualityTimer_.invalidate();return;}
+    if((interpolationStage()>=0 && !interpolationAuto_ && interpolationStage()!=3) || (fixedAnimeStage()>=0 && !profileFallback_) || madvrMode() || (profile().isEmpty() && !networkSource()) || qualityStage_>=5 || !ready_ || !playing_ || seekPending_ || profileResize_->isActive() || !qualitySettling_.isValid() || qualitySettling_.elapsed()<2000) {qualityTimer_.invalidate();return;}
     const auto output=outputSnapshot();const auto dropped=skippedFrames_+output.droppedVideoFrames+output.coalescedVideoFrames;
     if(!qualityTimer_.isValid()){qualityTimer_.start();qualityDropped_=dropped;qualitySubmitted_=direct_?output.presentedVideoFrames:submittedFrames_;return;}
     if(qualityTimer_.elapsed()<5000)return;
@@ -197,6 +197,6 @@ void PlayerWindow::suspendQualityCheck() {qualityTimer_.invalidate();qualitySett
 void PlayerWindow::applyScaling() {
     auto *visible=direct_?clock_.get():output_.get();const bool native=qualityStage_>=5;
     visible->setAntiRinging(!native && settings_->value("render/antiring",true).toBool());
-    visible->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(native?7:interpolationStage()>=0 || fixedAnimeStage()==4?4:settings_->value("render/upscale",4).toInt()),static_cast<ThreeFpScalingAlgorithm>(native?7:interpolationStage()>=0 || fixedAnimeStage()==4?4:settings_->value("render/downscale",4).toInt()));
+    visible->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(native?7:qualityStage_==4?4:settings_->value("render/upscale",4).toInt()),static_cast<ThreeFpScalingAlgorithm>(native?7:qualityStage_==4?4:settings_->value("render/downscale",4).toInt()));
 }
 }

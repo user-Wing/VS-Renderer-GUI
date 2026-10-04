@@ -58,6 +58,8 @@ struct ThreeFpConfiguration {
     void *eventCallbackContext;
     std::uint32_t videoScalingQuality;
     std::uint32_t forceHdrOutput;
+    std::int32_t preferredAdapterIndex = -1;
+    std::uint32_t sdrScRgbMode = 0;
 };
 
 struct ThreeFpSnapshot {

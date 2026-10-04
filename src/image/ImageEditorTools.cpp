@@ -47,6 +47,31 @@ ImageEditorTools::ImageEditorTools(ImageDocument *document,QObject *parent) : QO
     cachedPrecision_=document_->precision();connect(document_,&ImageDocument::changed,this,[this]{if(cachedPrecision_!=document_->precision()){if(!cloneSource_.isNull())cloneSource_=cloneSource_.convertToFormat(document_->pixelFormat());if(!historySource_.isNull())historySource_=historySource_.convertToFormat(document_->pixelFormat());cachedPrecision_=document_->precision();}});
     if(historySourceFits(document_,layer_))captureHistorySource();
 }
+QImage ImageEditorTools::selectedPixels(QPoint *origin) const{
+    const auto layer=layerInfo(document_,layer_);if(layer.id.isNull() || layer.group)return {};
+    const auto bounds=document_->selectionBounds().intersected(document_->layerBounds(layer_));
+    if(bounds.isEmpty() || qint64(bounds.width())*bounds.height()>16*1024*1024)return {};
+    auto pixels=document_->readRegion(layer_,bounds.translated(-layer.offset));if(pixels.isNull())return {};
+    if(document_->hasSelection()){
+        const auto mask=document_->selectionRegion(bounds);if(mask.isNull())return {};
+        for(int y=0;y<pixels.height();++y){const auto *row=reinterpret_cast<const quint16 *>(mask.constScanLine(y));
+            for(int x=0;x<pixels.width();++x){auto pixel=readPixel(pixels,x,y,document_->precision());pixel[3]*=row[x]/65535.f;writePixel(pixels,x,y,pixel,document_->precision());}
+        }
+    }
+    if(origin)*origin=bounds.topLeft();return pixels;
+}
+bool ImageEditorTools::layerFromSelection(bool cut){
+    if(!document_->hasSelection())return false;
+    const auto layer=layerInfo(document_,layer_);if(cut && layerLocked(document_,layer)){emit errorOccurred(tr("请先解锁图层再剪切。"));return false;}
+    QPoint origin;const auto selected=selectedPixels(&origin);if(selected.isNull()){emit errorOccurred(tr("选区为空或超过 16M 像素，请缩小选区。"));return false;}
+    const QRect bounds(origin,selected.size());document_->beginEdit(cut?tr("通过剪切的图层"):tr("通过复制的图层"));
+    if(cut){auto source=document_->readRegion(layer_,bounds.translated(-layer.offset));const auto mask=document_->selectionRegion(bounds);
+        if(source.isNull() || mask.isNull()){document_->cancelEdit();return false;}
+        for(int y=0;y<source.height();++y){const auto *row=reinterpret_cast<const quint16 *>(mask.constScanLine(y));for(int x=0;x<source.width();++x){auto pixel=readPixel(source,x,y,document_->precision());pixel[3]*=1-row[x]/65535.f;writePixel(source,x,y,pixel,document_->precision());}}
+        document_->writeRegion(layer_,origin-layer.offset,source);
+    }
+    const auto id=document_->addLayer(tr("选区图层"),selected,origin);document_->clearSelection();document_->commitEdit();setLayer(id);return true;
+}
 void ImageEditorTools::setLayer(const QUuid &id) {
     if(layer_==id || (!id.isNull() && layerInfo(document_,id).id.isNull()) || (id.isNull() && !document_->layers().isEmpty()))return;
     endStroke();endMove();endSelectionStroke();layer_=id;sourceSet_=false;cloneSource_={};historySource_={};if(!layerInfo(document_,id).group && historySourceFits(document_,id))captureHistorySource();emit layerChanged(id);

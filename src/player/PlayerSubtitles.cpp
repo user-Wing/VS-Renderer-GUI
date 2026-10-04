@@ -39,12 +39,12 @@ struct PlayerSubtitles::Impl {
     using OpenBitmap=int(*)(const char*,int,void**); using ReadBitmap=int(*)(void*,SubtitleBitmap*); using SeekBitmap=int(*)(void*,int64_t);
     OpenAss openAss=nullptr;RenderAss renderAss=nullptr;Copy copyAss=nullptr,copyBitmap=nullptr;Destroy destroyAss=nullptr,destroyBitmap=nullptr;OpenBitmap openBitmap=nullptr;ReadBitmap readBitmap=nullptr;SeekBitmap seekBitmap=nullptr;
     struct Track { void *handle=nullptr; bool bitmap=false,srt=false,hasNext=false,eof=false; SubtitleBitmap frame,next; QImage image,nextImage; qint64 last=-1; }; std::array<Track,2> tracks; QSize emptyCanvas;
-    qint64 renderedTime=-1; QSize renderedCanvas,renderedVideo; bool renderedVisible=false;
+    qint64 renderedTime=-1; QSize renderedCanvas,renderedVideo; bool renderedVisible=false; QImage renderedImage;
     Impl() { library.setLoadHints(QLibrary::PreventUnloadHint); library.load();
         openAss=reinterpret_cast<OpenAss>(library.resolve("FFF3FP_OpenAssSubtitle"));renderAss=reinterpret_cast<RenderAss>(library.resolve("FFF3FP_RenderAssSubtitle"));copyAss=reinterpret_cast<Copy>(library.resolve("FFF3FP_CopyAssSubtitlePixels"));destroyAss=reinterpret_cast<Destroy>(library.resolve("FFF3FP_DestroyAssSubtitle"));
         openBitmap=reinterpret_cast<OpenBitmap>(library.resolve("FFF3FP_OpenBitmapSubtitle"));readBitmap=reinterpret_cast<ReadBitmap>(library.resolve("FFF3FP_ReadBitmapSubtitle"));copyBitmap=reinterpret_cast<Copy>(library.resolve("FFF3FP_CopyBitmapSubtitlePixels"));seekBitmap=reinterpret_cast<SeekBitmap>(library.resolve("FFF3FP_SeekBitmapSubtitle"));destroyBitmap=reinterpret_cast<Destroy>(library.resolve("FFF3FP_DestroyBitmapSubtitle"));
     }
-    void clear(int slot) { renderedTime=-1; emptyCanvas={}; auto &t=tracks[slot]; if(t.handle) { if(t.bitmap && destroyBitmap) destroyBitmap(t.handle); else if(destroyAss) destroyAss(t.handle); } t={}; }
+    void clear(int slot) { renderedTime=-1; emptyCanvas={}; renderedImage={}; auto &t=tracks[slot]; if(t.handle) { if(t.bitmap && destroyBitmap) destroyBitmap(t.handle); else if(destroyAss) destroyAss(t.handle); } t={}; }
     ~Impl(){clear(0);clear(1);}
     QImage pixels(Track &t) {
         const auto &f=t.frame; if(f.pixelBytes==0 || f.width<=0 || f.height<=0 || f.stride<f.width*4 || f.pixelBytes>200000000) return {};
@@ -104,7 +104,9 @@ void PlayerSubtitles::render(qint64 time,const QSize &canvas,const QSize &video,
             int y=qRound(t.frame.y*sy); if(slot==1 && !t.srt) y=qMax(0,fitted.height()-y-qRound(t.image.height()*sy));
             painter.drawImage(QRect(origin.x()+qRound(t.frame.x*sx),origin.y()+y,qRound(t.image.width()*sx),qRound(t.image.height()*sy)),t.image);
         }
-        painter.end(); pending_.store(false);emit imageReady(image);
+        painter.end();
+        if(image==impl_->renderedImage){pending_.store(false);return;}
+        impl_->renderedImage=image;pending_.store(false);emit imageReady(image);
     },Qt::QueuedConnection);
 }
 }

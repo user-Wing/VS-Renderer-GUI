@@ -5,11 +5,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $projectRoot "build\mingw-debug\runtime\python" }
+if ($env:VSR_BUNDLED_VS_RUNTIME) {
+    $source = (Resolve-Path -LiteralPath $env:VSR_BUNDLED_VS_RUNTIME).Path
+    $target = [IO.Path]::GetFullPath($OutputDirectory)
+    $buildRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'build')).TrimEnd('\') + '\'
+    if (-not $target.StartsWith($buildRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Runtime staging target must stay inside project build directory.' }
+    foreach ($name in @('python.exe', 'Lib/site-packages/vapoursynth/vsscript.dll')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $source $name))) { throw "Missing bundled runtime: $name" }
+    }
+    & robocopy.exe $source $target /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XD __pycache__ /XF '*.pyc' | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw 'Bundled runtime staging failed.' }
+    Write-Host "Bundled VapourSynth runtime reused: $target"
+    exit 0
+}
 if (-not $Venv) { $Venv = Join-Path $projectRoot ".deps\vs-python" }
 $Venv = (Resolve-Path $Venv).Path
-if (-not $OutputDirectory) {
-    $OutputDirectory = Join-Path $projectRoot "build\mingw-debug\runtime\python"
-}
 $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 
 $python = Join-Path $Venv "Scripts\python.exe"

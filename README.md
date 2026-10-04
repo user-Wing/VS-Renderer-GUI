@@ -8,7 +8,11 @@ Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜�
 2. 解压整个目录，运行 `VSRenderer.exe` 或 `vs-player.exe`。无需另外安装 Qt、Python、VapourSynth。
 3. 系统要求：Windows 10 22H2 或更新的 64 位 Windows，支持 Direct3D 11 的显卡与驱动；RIFE 补帧需要 Vulkan 驱动。
 
-当前准备版本为 **1.0.4**，发布内容与运行要求见 [发布草稿](docs/release-1.0.4.md)。草稿暂不带附件，维护者上传后才提供本版下载。
+当前本地构建版本为 **1.0.5**，包含 D3D11 播放性能修复；实测条件和边界见 [设备记录](docs/nuxbox-performance-session-2026-10-04.md)。1.0.5 尚未在线发布，原 1.0.4 发布资料保留。
+
+本轮仅上传源码并制作本地完整便携压缩包，不创建 Release 或 Draft；发行附件由维护者另行安排。
+
+2026-10-04 已重新编译并更新本地 `dist/VS-Renderer-GUI-windows-x64`，包含 Jinc 专用渲染、大图惰性进入编辑器、选区图层操作及实时启动降级；测试结果与边界见 [本机验收](docs/local-1.0.5-performance.md)。TEST.png 本机重复打开两次在 10 秒内进入编辑器，但未做全机缓存清除或机械盘验收；本地更新不等同于线上发布。
 
 ## 核心功能
 
@@ -77,6 +81,7 @@ HDR显示自动检测Windows能力并回退SDR，视图菜单可调整HDR→SDR�
 
 - [更新日志](changelog.md)：版本改动、性能测量与验证记录。
 - [依赖与构建指南](docs/dependencies.md)：Qt / CMake、VapourSynth、3FP 和完整运行时准备步骤。
+- [NuxBox 性能开发交接](docs/nuxbox-performance-handoff.md)：780M 上四份本地素材、mpv 对照条件、原生构建和验收；干净开发包由 `tools/package-dev-handoff.ps1` 生成。
 - [便携更新说明](docs/portable-updates.md)：配置保留、更新包与安装流程。更新包兼容 1.0.2 更新器，安装时保留已有目录路径。
 - [项目地图](project.md)：实现路径与专项技术文档。
 - [工作区清理记录](docs/workspace-cleanup.md)：开发副本与缓存占用；主目录 `Clean-Workspace.bat` 可手动清理，`--preview`仅预览。

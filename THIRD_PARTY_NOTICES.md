@@ -57,6 +57,8 @@ Hyllian, Copyright (c) 2015. MIT License. Adapted from the pass-0 diagonal kerne
 
 ## 静态图片解码组件
 
+- libdeflate 1.25：MIT，https://github.com/ebiggers/libdeflate 。RGBA8 PNG 快速路径静态链接，版本及 SHA-256 固定于 `tools/image-runtime.cmake`；许可全文随 `IMAGE-LICENSE.txt` 分发。不增加用户需安装的 DLL。
+
 - 图层 PSD/PSB 模块使用 zlib 1.3.2，Jean-loup Gailly / Mark Adler，zlib 许可；未修改的最小压缩/解压源文件位于 `third_party/image-zlib`，来源为 libjpeg-turbo 3.2.0 的 spng 内含副本。静态链接，无新增运行时 DLL；完整许可随 `docs/image-zlib-LICENSE.txt` 分发。PSD 解析、工具与编辑核心为本项目 MIT 自有实现，未复制 GIMP GPL 或闭源 Photopea 代码。
 
 - libavif 1.4.2：BSD-2-Clause，https://github.com/AOMediaCodec/libavif 。通过官方源码与 dav1d 静态链接；构建时仅扩大显式图像像素上限，保留网格、格式、尺寸算术与码流检查。依赖版本和 SHA-256 固定于 `tools/image-runtime.cmake`。

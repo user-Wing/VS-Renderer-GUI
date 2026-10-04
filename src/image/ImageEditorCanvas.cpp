@@ -186,6 +186,7 @@ void ImageEditorCanvas::paintGuides(QPainter &painter){
 void ImageEditorCanvas::resizeEvent(QResizeEvent *event) {QWidget::resizeEvent(event);hdrSurface_->setGeometry(rect());if(fit_)fitToWindow();else refreshPreview();}
 void ImageEditorCanvas::mousePressEvent(QMouseEvent *event) {
     setFocus();lastScreen_=event->position();current_=documentPoint(event->position());emit cursorPositionChanged(current_,true);
+    if(event->button()==Qt::RightButton && tools_->document()->hasSelection()){emit selectionContextMenuRequested(event->globalPosition().toPoint());return;}
     if(event->button()==Qt::RightButton && tool_==ImageEditorTool::Path && !vectorPath_.isEmpty()){QMenu menu(this);menu.addAction(tr("描边路径"),this,&ImageEditorCanvas::strokeVectorPath);menu.addAction(tr("填充路径"),this,&ImageEditorCanvas::fillVectorPath);menu.addAction(tr("路径转选区"),this,&ImageEditorCanvas::selectVectorPath);menu.exec(event->globalPosition().toPoint());return;}
     if(event->button()==Qt::MiddleButton || (event->button()==Qt::LeftButton && tool_==ImageEditorTool::Hand)){panning_=true;fit_=false;setCursor(Qt::ClosedHandCursor);return;}
     if(event->button()!=Qt::LeftButton)return;

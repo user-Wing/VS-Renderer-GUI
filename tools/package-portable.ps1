@@ -18,7 +18,7 @@ if (Test-Path -LiteralPath $payload) { throw 'Release staging directory already 
 if (Test-Path -LiteralPath $archive) { throw 'Archive already exists; do not silently update an existing archive.' }
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 # Construct a clean distribution, retaining the live installation's settings and user files.
-& robocopy.exe $program $payload /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XD cache shader-cache screenshots vpy __pycache__ .git .deps temp logs /XF '*.ini' '*.lwi' '*.ffindex' '*.pyc' '*.pdb' '*test*.exe' Qt6Test.dll '*.log' '*.before-*' '*.tmp' '*.autosave' settings.bin | Out-Null
+& robocopy.exe $program $payload /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XD cache data shader-cache screenshots vpy __pycache__ .git .deps temp logs /XF '*.ini' '*.lwi' '*.ffindex' '*.pyc' '*.pdb' '*test*.exe' Qt6Test.dll '*.log' '*.before-*' '*.tmp' '*.autosave' '.awj-update-security-state*' settings.bin | Out-Null
 if ($LASTEXITCODE -ge 8) { throw 'Clean payload copy failed' }
 $builtin = Join-Path $payload 'vpy/builtin'
 New-Item -ItemType Directory -Path $builtin -Force | Out-Null

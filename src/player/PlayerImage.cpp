@@ -1,4 +1,5 @@
 #include "player/PlayerImage.h"
+#include "player/PlayerPng.h"
 #include "image/ImagePsd.h"
 #include <QCoreApplication>
 #include <QDir>
@@ -43,6 +44,10 @@ void PlayerImage::open(const QString &path) {
         const auto suffix=QFileInfo(path).suffix().toLower();
         QImage image;
         QString decoderName;
+        if(suffix=="png"){
+            image=decodeRgbaPng(path,generation_,generation);
+            if(!image.isNull())decoderName="libdeflate / SIMD PNG / mapped input";
+        }
         if(QList<QString>{"jpg","jpeg","jpe","jfif"}.contains(suffix)) {
             // Map compressed input and write SIMD output directly into Qt's pixels.
             // Qt's JPEG plugin otherwise converts/copies an RGB scanline to RGB32.

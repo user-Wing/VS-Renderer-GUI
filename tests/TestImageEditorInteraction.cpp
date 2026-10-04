@@ -1,5 +1,9 @@
 #include "image/ImageEditorWindow.h"
 #include "image/ImageEditorCanvas.h"
+#include "player/PlayerImage.h"
+#include "player/PlayerPng.h"
+#include <QImageReader>
+#include <QElapsedTimer>
 #include "image/ImagePsd.h"
 #include <QAction>
 #include <QApplication>
@@ -41,6 +45,48 @@ void hover(ImageEditorCanvas &canvas,QPointF position){
 class TestImageEditorInteraction final : public QObject {
     Q_OBJECT
 private slots:
+    void largeLayerLazyPreviewAndEdit(){
+        QImage image(48000,384,QImage::Format_ARGB32);image.fill(Qt::red);
+        for(int y=0;y<image.height();++y){auto *row=reinterpret_cast<QRgb *>(image.scanLine(y));std::fill(row+24000,row+image.width(),qRgb(0,0,255));}
+        ImageDocument document(image.size(),ImagePrecision::UInt16);const auto layer=document.addLayer("Large",image);QCOMPARE(document.residentBytes(),0);
+        auto preview=document.compositePreview(QRect(QPoint(),image.size()),{480,16},ImageSamplingQuality::Bilinear);QVERIFY(!preview.isNull());
+        QCOMPARE(preview.pixelColor(120,8).rgb(),QColor(Qt::red).rgb());QCOMPARE(preview.pixelColor(360,8).rgb(),QColor(Qt::blue).rgb());
+        QVERIFY(preview.pixelColor(120,8).rgba64().alpha()>=65533);
+        const QRect area(40000,100,32,32);QCOMPARE(document.readRegion(layer,area).pixelColor(16,16).rgba64(),QColor(Qt::blue).rgba64());
+        document.writeRegion(layer,area.topLeft(),pixels(area.size(),Qt::green));
+        QCOMPARE(document.compositePreview(area,area.size(),ImageSamplingQuality::Bilinear).pixelColor(16,16).rgba64(),QColor(Qt::green).rgba64());
+        document.history()->undo();QCOMPARE(document.readRegion(layer,area).pixelColor(16,16).rgba64(),QColor(Qt::blue).rgba64());
+    }
+    void rgbaPngMatchesQt(){
+        QTemporaryDir directory;std::atomic<quint64> generation{1};
+        for(int pattern=0;pattern<5;++pattern){
+            QImage source(257,129,QImage::Format_RGBA8888);
+            for(int y=0;y<source.height();++y)for(int x=0;x<source.width();++x){auto *p=source.scanLine(y)+x*4;for(int c=0;c<4;++c)p[c]=uchar(pattern==0?0:pattern==1?255:pattern==2?x+c:pattern==3?y+c:(x*37+y*71+c*13)&255);}
+            const auto path=directory.filePath(QString::number(pattern)+".png");QVERIFY(source.save(path));
+            const auto decoded=decodeRgbaPng(path,generation,1);QVERIFY(!decoded.isNull());
+            QCOMPARE(decoded,QImageReader(path).read().convertToFormat(QImage::Format_RGBA8888));
+        }
+        generation=2;QVERIFY(decodeRgbaPng(directory.filePath("0.png"),generation,1).isNull());
+    }
+    void largeImageEditorStartup(){
+        const auto path=qEnvironmentVariable("VSR_TEST_IMAGE");if(path.isEmpty())QSKIP("Set VSR_TEST_IMAGE for the real large-image benchmark");
+        PlayerImage decoder;QSignalSpy loaded(&decoder,&PlayerImage::loaded),failed(&decoder,&PlayerImage::failed);QElapsedTimer timer;timer.start();decoder.open(path);
+        QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !failed.isEmpty(),180000);QVERIFY2(failed.isEmpty(),failed.isEmpty()?"":qPrintable(failed.first().first().toString()));
+        const auto decodeMs=timer.elapsed();const auto image=qvariant_cast<QImage>(loaded.first().first());QVERIFY(!image.isNull());
+        qInfo()<<image.text("pngStages");
+        ImageEditorWindow editor(image,path);editor.setAttribute(Qt::WA_DeleteOnClose,false);editor.show();QTRY_VERIFY_WITH_TIMEOUT(!editor.canvas()->previewBusy(),30000);
+        qInfo("Image %dx%d decode=%lldms editor-ready=%lldms resident-tiles=%lld",image.width(),image.height(),decodeMs,timer.elapsed(),editor.document()->residentBytes());
+        const auto limit=qEnvironmentVariableIntValue("VSR_TEST_IMAGE_LIMIT_MS");if(limit>0)QVERIFY2(timer.elapsed()<=limit,"Large image startup exceeded the requested time budget");
+    }
+    void selectionCopyCutAndIcons(){
+        auto *doc=new ImageDocument({80,60},ImagePrecision::UInt16);const auto id=doc->addLayer("Source",pixels({80,60},Qt::red));doc->history()->clear();
+        ImageEditorWindow editor(doc,"selection.psd");editor.setAttribute(Qt::WA_DeleteOnClose,false);
+        QImage mask({7,5},QImage::Format_Grayscale16);mask.fill(65535);reinterpret_cast<quint16 *>(mask.scanLine(0))[0]=0;doc->writeSelection({20,10},mask);
+        QCOMPARE(doc->selectionBounds(),QRect(20,10,7,5));QPoint origin;const auto selected=editor.tools()->selectedPixels(&origin);QCOMPARE(origin,QPoint(20,10));QCOMPARE(selected.size(),QSize(7,5));QCOMPARE(selected.format(),QImage::Format_RGBA64);QCOMPARE(selected.pixelColor(0,0).alpha(),0);
+        editor.findChild<QAction *>("imageEditorCopy")->trigger();editor.findChild<QAction *>("imageEditorPaste")->trigger();const auto pasted=editor.tools()->layer();QCOMPARE(info(*doc,pasted).offset,origin);QCOMPARE(doc->readRegion(pasted,{0,0,7,5}),selected);QVERIFY(!doc->hasSelection());
+        editor.tools()->setLayer(id);doc->writeSelection({20,10},mask);doc->history()->clear();QVERIFY(editor.tools()->layerFromSelection(true));QCOMPARE(doc->history()->count(),1);QCOMPARE(doc->readRegion(id,{21,11,1,1}).pixelColor(0,0).alpha(),0);doc->history()->undo();QCOMPARE(doc->readRegion(id,{21,11,1,1}).pixelColor(0,0),QColor(Qt::red));QVERIFY(doc->hasSelection());
+        auto *rectangle=editor.findChild<QAction *>("imageEditorTool_"+QString::number(int(ImageEditorTool::Rectangle)));auto *ellipse=editor.findChild<QAction *>("imageEditorTool_"+QString::number(int(ImageEditorTool::Ellipse)));QVERIFY(rectangle&&ellipse);QVERIFY(rectangle->icon().pixmap(24,24).toImage()!=ellipse->icon().pixmap(24,24).toImage());
+    }
     void boundsMoveScaleAndCancel(){
         ImageDocument doc({300,220},ImagePrecision::UInt16);const auto id=doc.addLayer("Object",pixels({40,20},Qt::red),{30,40});doc.history()->clear();
         ImageEditorTools tools(&doc);ImageEditorCanvas canvas(&tools);canvas.resize(700,540);canvas.show();canvas.actualSize();canvas.setTool(ImageEditorTool::Move);QTest::qWait(20);

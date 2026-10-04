@@ -166,6 +166,8 @@ private:
     QSize profileSize_;
     QElapsedTimer qualityTimer_;
     QElapsedTimer qualitySettling_;
+    QElapsedTimer profileStartup_;
+    bool profileFallback_ = false;
     QElapsedTimer positionTimer_;
     bool positionRestored_ = false;
     quint64 qualityDropped_ = 0, qualitySubmitted_ = 0;

@@ -1,4 +1,5 @@
 #include "image/ImageDocument.h"
+#include <QPainter>
 #include <QFile>
 #include <QHash>
 #include <QMap>
@@ -296,7 +297,15 @@ void ImageDocument::cancelEdit(){if(!d->editing)return;d->state=d->before;d->bef
 QUuid ImageDocument::addLayer(const QString &name,const QImage &image,QPoint offset){
     const bool own=!d->editing;if(own)beginEdit(tr("添加图层"));
     Impl::Layer layer;layer.info.id=QUuid::createUuid();layer.info.name=name;layer.info.offset=offset;layer.info.extent=image.size();layer.bounds=QRect(QPoint(),image.size());
-    if(!image.isNull())d->write(layer.pixels,{},image,d->format(),false);
+    if(image.sizeInBytes()>64*1024*1024){
+        const auto format=d->format();
+        layer.reader=[image,format](const QRect &rect){return image.copy(rect).convertToFormat(format);};
+        layer.qualityPreview=[image,format](const QRect &rect,QSize size,ImageSamplingQuality quality){
+            QImage out(size,format);out.fill(Qt::transparent);out.setColorSpace(image.colorSpace());
+            QPainter painter(&out);painter.setRenderHint(QPainter::SmoothPixmapTransform,quality==ImageSamplingQuality::Bilinear);
+            painter.drawImage(QRect(QPoint(),size),image,rect);return out;
+        };
+    }else if(!image.isNull())d->write(layer.pixels,{},image,d->format(),false);
     const auto id=layer.info.id;d->state.layers<<std::move(layer);d->modified=true;++d->revision;if(own)commitEdit();return id;
 }
 void ImageDocument::removeLayer(const QUuid &id){
@@ -484,6 +493,18 @@ void ImageDocument::writeSelection(QPoint origin,const QImage &coverage,const QS
 }
 void ImageDocument::clearSelection(){const bool own=!d->editing;if(own)beginEdit(tr("取消选区"));if(d->state.selected){d->state.selection.clear();d->state.selected=false;d->state.selectionId=0;d->modified=true;++d->revision;}if(own)commitEdit();}
 bool ImageDocument::hasSelection() const{return d->state.selected;}
+QRect ImageDocument::selectionBounds() const{
+    if(!hasSelection())return QRect(QPoint(),size());
+    QRect bounds;const QRect canvas(QPoint(),size());
+    for(auto it=d->state.selection.cbegin();it!=d->state.selection.cend();++it){
+        const auto tile=tileRect(int(quint32(it.key()>>32)),int(quint32(it.key())));const auto part=tile.intersected(canvas);const auto mask=d->load(it.value());
+        if(mask.isNull())continue;
+        for(int y=part.top();y<=part.bottom();++y){const auto *row=reinterpret_cast<const quint16 *>(mask.constScanLine(y-tile.y()));int first=-1,last=-1;
+            for(int x=part.left();x<=part.right();++x)if(row[x-tile.x()]){if(first<0)first=x;last=x;}
+            if(first>=0)bounds=bounds.united(QRect(first,y,last-first+1,1));
+        }
+    }return bounds;
+}
 quint64 ImageDocument::selectionId() const{return d->state.selectionId;}
 QImage ImageDocument::composite(const QRect &rect) const{return compositePreview(rect,rect.size());}
 QImage ImageDocument::compositePreview(const QRect &rect,QSize outputSize,ImageSamplingQuality quality) const{

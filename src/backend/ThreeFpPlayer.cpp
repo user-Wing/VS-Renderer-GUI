@@ -41,6 +41,7 @@ bool ThreeFpPlayer::createSession()
     configuration.hdrPeakNits = 0.0f;
     configuration.sdrPaperWhiteNits = 203.0f;
     configuration.videoScalingQuality = 1;
+    if(qEnvironmentVariableIsSet("VSR_3FP_ADAPTER"))configuration.preferredAdapterIndex=qEnvironmentVariableIntValue("VSR_3FP_ADAPTER");
 
     if (!check(api_.create(&configuration, &handle_), QStringLiteral("创建 3FP 会话")))
         return false;
