@@ -17,5 +17,6 @@ foreach ($name in @('7z.exe','7z.dll','License.txt')) {
     Copy-Item -LiteralPath (Join-Path $SevenZipDirectory $name) -Destination (Join-Path $OutputDirectory $name) -Force
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'apply-update.ps1') -Destination $OutputDirectory -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'apply-components.ps1') -Destination $OutputDirectory -Force
 Invoke-WebRequest 'https://raw.githubusercontent.com/AnInsomniacy/aria2-next/v2.8.3/COPYING' -OutFile (Join-Path $OutputDirectory 'aria2-COPYING.txt')
 Write-Host "Verified aria2-next 2.8.3 and staged full-update tools: $OutputDirectory"

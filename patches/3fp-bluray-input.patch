@@ -1,0 +1,32 @@
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -1960,11 +1960,12 @@
+     std::unique_ptr<SharedFileInput>& io, std::string& error) noexcept {
+     AVDictionary* options = nullptr;
+     const bool remote = path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0;
+-    av_dict_set(&options, "protocol_whitelist", remote ? "http,https,tcp,tls,crypto,data" : "file,crypto,data", 0);
++    const bool bluray = path.rfind("bluray:", 0) == 0;
++    av_dict_set(&options, "protocol_whitelist", remote ? "http,https,tcp,tls,crypto,data" : bluray ? "bluray,file,crypto,data" : "file,crypto,data", 0);
+     av_dict_set(&options, "rw_timeout", "10000000", 0);
+     av_dict_set(&options, "ignore_loop", "0", 0);
+-    io = remote ? nullptr : SharedFileInput::Open(path.c_str(), error);
+-    if (!remote && io == nullptr) {
++    io = (remote || bluray) ? nullptr : SharedFileInput::Open(path.c_str(), error);
++    if (!remote && !bluray && io == nullptr) {
+         av_dict_free(&options);
+         return FFFResult::NativeFailure;
+     }
+@@ -3597,6 +3598,13 @@
+ 
+ bool PlayerSession::NormalizeLocalPath(const char* path, std::string& normalized, std::string& error) noexcept {
+     try {
++        if (path && std::string_view(path).rfind("bluray:", 0) == 0) {
++            const std::string suffix = "\\BDMV\\PLAYLIST\\00000.mpls";
++            std::string playlist;
++            if (!NormalizeLocalPath((std::string(path + 7) + suffix).c_str(), playlist, error)) return false;
++            normalized = "bluray:" + playlist.substr(0, playlist.size() - suffix.size());
++            return true;
++        }
+         if(path && (std::string_view(path).rfind("http://",0)==0 || std::string_view(path).rfind("https://",0)==0)) {
+             normalized=path;
+             if(normalized.find_first_of("\r\n")!=std::string::npos) {error="The media URL is invalid.";return false;}

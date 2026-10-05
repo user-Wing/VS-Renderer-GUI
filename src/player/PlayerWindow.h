@@ -29,6 +29,7 @@ class PlayerNetworkInput;
 class PlayerLanguage;
 class PlayerImage;
 class PlayerImageTools;
+class PlayerInfoPanel;
 class PlayerWindow final : public QMainWindow {
     Q_OBJECT
 public:
@@ -37,7 +38,7 @@ public:
     bool openFile(const QString &path);
     bool openFolder(const QString &path);
     void loadPreset(const QString &path);
-    void setInterpolation(int stage, bool automatic = false);
+    void setInterpolation(int stage, bool automatic = false, int renderer = 0);
     int interpolationStage() const;
     void togglePlayback();
     void seekTime(qint64 time);
@@ -67,6 +68,11 @@ private:
     void populateFolder(QTreeWidgetItem *parent, const QString &path);
     void chooseFiles();
     void chooseFolder();
+    void chooseBluRay();
+    bool openBluRay(const QString &path);
+    QHash<QString, QString> blurayLabels_;
+    QJsonObject blurayMetadata_;
+    void applyBlurayMetadata();
     void chooseLink();
     void updateState();
     void requestFrame(int frame);
@@ -83,6 +89,7 @@ private:
     int initialQualityStage() const;
     QStringList qualityNames() const;
     QStringList interpolationNames() const;
+    int interpolationRenderer() const;
     bool advanceInterpolation();
     void showInterpolationWarning(bool visible);
     QSize profileTarget() const;
@@ -112,6 +119,10 @@ private:
     bool madvrMode() const;
     int prefetchCount() const;
     void resetStatistics();
+    bool commitFrameEdit();
+    bool frameEditPending_ = false;
+    int frameJumpTarget_ = -1;
+    quint64 frameJumpPresents_ = 0;
     std::unique_ptr<QSettings> settings_;
     std::unique_ptr<PlayerSubtitles> subtitles_;
     std::unique_ptr<PlayerNetworkInput> network_;
@@ -196,6 +207,9 @@ private:
     bool lavVideo_ = false;
     bool lavAudio_ = false;
     bool infoVisible_ = false;
+    QElapsedTimer infoFpsTimer_;
+    quint64 infoLastFrames_ = 0;
+    double infoCurrentFps_ = 0;
     bool rateApplied_ = false;
     bool lavKeyPending_ = false;
     int manualFrame_ = -1;

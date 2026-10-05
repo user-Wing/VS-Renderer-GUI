@@ -9,11 +9,17 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <QThread>
+#include <future>
+#include <thread>
+#include <vector>
+#include <windows.h>
 
 namespace vsr {
 #if defined(__GNUC__) && defined(__x86_64__)
-__attribute__((target("avx2"))) static void paethRow(uchar *out,const uchar *input,const uchar *above,size_t stride){
+__attribute__((target("avx2"))) static void paethRow(uchar *out,const uchar *input,const uchar *above,size_t stride,bool continuation=false){
     const auto zero=_mm_setzero_si128();auto left=zero,upperLeft=zero;
+    if(continuation){quint32 value=0;std::memcpy(&value,out-4,4);left=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(value)),zero);if(above){std::memcpy(&value,above-4,4);upperLeft=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(value)),zero);}}
     for(size_t x=0;x<stride;x+=4){
         quint32 value=0,upValue=0;std::memcpy(&value,input+x,4);if(above)std::memcpy(&upValue,above+x,4);
         const auto current=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(value)),zero),up=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(upValue)),zero);
@@ -69,27 +75,29 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
     const auto inflateMs=timer.elapsed();
     auto *rawPixels=raw.get();
     int filters[5]{};for(int y=0;y<height;++y){const auto filter=rawPixels[size_t(y)*(stride+1)];if(filter>4)return {};++filters[filter];}
-    // Reconstruct into the same allocation, compacting one filter byte per
-    // row. The destination always precedes the unread input; this avoids a
-    // second full-size image allocation and its page faults.
-    QImage image(rawPixels,width,height,qsizetype(stride),QImage::Format_RGBA8888,[](void *memory){std::free(memory);},rawPixels);if(image.isNull())return {};
-    raw.release();
+    // Keep the in-place path under memory pressure. Large images with enough
+    // headroom use a separate output so dependent rows can run concurrently.
+    MEMORYSTATUSEX memory{};memory.dwLength=sizeof(memory);GlobalMemoryStatusEx(&memory);
+    int workers=rawSize>=128*1024*1024 && height>=512 && memory.ullAvailPhys>=rawSize*2?std::clamp(QThread::idealThreadCount()/2,1,16):1;
+    auto *outputPixels=workers>1?static_cast<uchar *>(std::malloc(stride*size_t(height))):nullptr;
+    if(!outputPixels){workers=1;outputPixels=rawPixels;}
+    QImage image(outputPixels,width,height,qsizetype(stride),QImage::Format_RGBA8888,[](void *pixels){std::free(pixels);},outputPixels);if(image.isNull()){if(outputPixels!=rawPixels)std::free(outputPixels);return {};}
+    if(outputPixels==rawPixels)raw.release();
     image.setColorSpace(space);image.setDotsPerMeterX(dpmX);image.setDotsPerMeterY(dpmY);
     const auto zero=_mm_setzero_si128();
 #if defined(__GNUC__) && defined(__x86_64__)
     const bool avx2=__builtin_cpu_supports("avx2");
 #endif
-    for(int y=0;y<height;++y){
-        if(generation!=expected)return {};
-        const auto *input=rawPixels+size_t(y)*(stride+1);const auto filter=*input++;auto *out=image.scanLine(y);const auto *above=y?image.constScanLine(y-1):nullptr;
-        if(filter>4)return {};
-        if(filter==0){std::memmove(out,input,stride);continue;}
+    const auto unfilter=[&](int y,size_t begin,size_t end){
+        const auto filter=rawPixels[size_t(y)*(stride+1)];const auto *input=rawPixels+size_t(y)*(stride+1)+1+begin;auto *out=outputPixels+size_t(y)*stride+begin;const auto *above=y?outputPixels+size_t(y-1)*stride+begin:nullptr;const auto count=end-begin;
+        if(filter==0){std::memmove(out,input,count);return;}
 #if defined(__GNUC__) && defined(__x86_64__)
-        if(filter==4 && avx2){paethRow(out,input,above,stride);continue;}
+        if(filter==4 && avx2){paethRow(out,input,above,count,begin>0);return;}
 #endif
-        if(filter==2){for(size_t x=0;x<stride;x+=16){if(x+16<=stride){const auto a=_mm_loadu_si128(reinterpret_cast<const __m128i *>(input+x));const auto b=above?_mm_loadu_si128(reinterpret_cast<const __m128i *>(above+x)):zero;_mm_storeu_si128(reinterpret_cast<__m128i *>(out+x),_mm_add_epi8(a,b));}else for(;x<stride;++x)out[x]=uchar(input[x]+(above?above[x]:0));}continue;}
+        if(filter==2){for(size_t x=0;x<count;x+=16){if(x+16<=count){const auto a=_mm_loadu_si128(reinterpret_cast<const __m128i *>(input+x));const auto b=above?_mm_loadu_si128(reinterpret_cast<const __m128i *>(above+x)):zero;_mm_storeu_si128(reinterpret_cast<__m128i *>(out+x),_mm_add_epi8(a,b));}else for(;x<count;++x)out[x]=uchar(input[x]+(above?above[x]:0));}return;}
         auto left=zero,upperLeft=zero;
-        for(size_t x=0;x<stride;x+=4){
+        if(begin){quint32 value=0;std::memcpy(&value,out-4,4);left=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(value)),zero);if(above){std::memcpy(&value,above-4,4);upperLeft=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(value)),zero);}}
+        for(size_t x=0;x<count;x+=4){
             quint32 value=0,upValue=0;std::memcpy(&value,input+x,4);if(above)std::memcpy(&upValue,above+x,4);
             auto current=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(value)),zero);const auto up=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(upValue)),zero);auto predictor=left;
             if(filter==3)predictor=_mm_srli_epi16(_mm_add_epi16(left,up),1);
@@ -103,7 +111,20 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
             left=_mm_and_si128(_mm_add_epi16(current,predictor),_mm_set1_epi16(255));upperLeft=up;
             value=quint32(_mm_cvtsi128_si32(_mm_packus_epi16(left,zero)));std::memcpy(out+x,&value,4);
         }
+    };
+    if(workers==1){for(int y=0;y<height;++y){if(generation!=expected)return {};unfilter(y,0,stride);}}
+    else {
+        // Wavefront blocks preserve Paeth's left/previous-row dependencies.
+        // A separate output allocation prevents parallel rows overwriting raw input.
+        auto progress=std::make_unique<std::atomic<size_t>[]>(height);std::atomic<int> next{0};std::vector<std::future<void>> jobs;
+        for(int i=0;i<workers;++i)jobs.push_back(std::async(std::launch::async,[&]{
+            for(int y=next.fetch_add(1);y<height;y=next.fetch_add(1))for(size_t begin=0;begin<stride;begin+=4096){
+                const size_t end=std::min(stride,begin+4096);const auto filter=rawPixels[size_t(y)*(stride+1)];
+                while(y>0 && filter>=2 && progress[y-1].load(std::memory_order_acquire)<end && generation==expected)std::this_thread::yield();
+                if(generation!=expected)return;unfilter(y,begin,end);progress[y].store(end,std::memory_order_release);
+            }
+        }));for(auto &job:jobs)job.get();if(generation!=expected)return {};
     }
-    image.setText("sourceBitDepth","8");image.setText("sourcePixelFormat","PNG RGBA8");image.setText("pngStages",QString("parse=%1 inflate=%2 unfilter=%3 ms; filters=%4/%5/%6/%7/%8").arg(parseMs).arg(inflateMs-parseMs).arg(timer.elapsed()-inflateMs).arg(filters[0]).arg(filters[1]).arg(filters[2]).arg(filters[3]).arg(filters[4]));return image;
+    image.setText("sourceBitDepth","8");image.setText("sourcePixelFormat","PNG RGBA8");image.setText("pngStages",QString("parse=%1 inflate=%2 unfilter=%3 ms; filters=%4/%5/%6/%7/%8; predictorThreads=%9").arg(parseMs).arg(inflateMs-parseMs).arg(timer.elapsed()-inflateMs).arg(filters[0]).arg(filters[1]).arg(filters[2]).arg(filters[3]).arg(filters[4]).arg(workers));return image;
 }
 }

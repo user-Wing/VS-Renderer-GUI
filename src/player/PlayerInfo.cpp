@@ -1,4 +1,5 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerInfoPanel.h"
 #include "backend/ThreeFpPlayer.h"
 #include "ui/PreviewPane.h"
 #include <QCoreApplication>
@@ -34,11 +35,12 @@ void PlayerWindow::updateInfo() {
              <<tr("图片渲染器：Qt Raster · 可见区域裁切 · SDR")
              <<tr("VS 滤镜：未启用 · 预解码：未启用")
              <<tr("CPU：%1 · GPU：%2 · 内存：%3 MiB").arg(usage_.processCpu>=0?QString::number(usage_.processCpu,'f',1)+"%":tr("采样中"),usage_.gpu>=0?QString::number(usage_.gpu,'f',1)+"%":tr("未提供")).arg(usage_.memoryMiB);
-        info_->setMaximumWidth(qMax(300,pane_->surface()->width()-24));info_->setText(lines.join('\n'));info_->adjustSize();info_->move(12,12);info_->raise();return;
+        static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));info_->raise();return;
     }
     usage_=resources_.sample();
     const auto refreshed = QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();
     if (!refreshed.isEmpty()) media_ = refreshed;
+    applyBlurayMetadata();
     const auto selectedAudio=clock_->snapshot().selectedAudioStream;
     QJsonObject video, audio;
     for (const auto &entry : media_.value("streams").toArray()) {
@@ -48,10 +50,13 @@ void PlayerWindow::updateInfo() {
     }
     videoBadge_->setText(video.value("codec").toString("—")); audioBadge_->setText(audio.value("codec").toString("—"));
     const auto source = clock_->snapshot(); const auto rendered = outputSnapshot();
-    const auto decoder = lavVideo_ ? QStringLiteral("LAV") : source.decodeMode == 2 ? QStringLiteral("3FP-HW") : QStringLiteral("3FP-SW");
+    const auto decoder = source_.isEmpty() ? (settings_->value("decode/mode",2).toUInt()==2?QStringLiteral("3FP-HW"):QStringLiteral("3FP-SW")) : lavVideo_ ? QStringLiteral("LAV") : !direct_ ? QStringLiteral("VS / VPY") : source.decodeMode == 2 ? QStringLiteral("3FP-HW") : QStringLiteral("3FP-SW");
     decoderBadge_->setText(decoder); hdrBadge_->setText(source.isHdrSource ? "HDR" : "SDR");
     hdrBadge_->setToolTip(madvrMode()?tr("HDR / SDR 输出与色调映射由 madVR 控制"):source.isHdrSource ? (rendered.actualColorMode ? tr("HDR 输出") : tr("HDR 源，映射到 SDR 显示器")) : tr("SDR 源"));
     if (!infoVisible_) return;
+    const auto count=rendered.presentedVideoFrames>=rendered.coalescedVideoFrames?rendered.presentedVideoFrames-rendered.coalescedVideoFrames:0;
+    if(infoFpsTimer_.isValid() && infoFpsTimer_.elapsed()>=500){infoCurrentFps_=count>=infoLastFrames_?(count-infoLastFrames_)*1000./infoFpsTimer_.elapsed():0;infoLastFrames_=count;infoFpsTimer_.restart();}
+    else if(!infoFpsTimer_.isValid()){infoFpsTimer_.start();infoLastFrames_=count;}
     QString gpu = tr("未知"); IDXGIFactory1 *factory = nullptr;
     if (SUCCEEDED(CreateDXGIFactory1(IID_IDXGIFactory1, reinterpret_cast<void **>(&factory)))) {
         IDXGIAdapter1 *adapter = nullptr;
@@ -82,15 +87,15 @@ void PlayerWindow::updateInfo() {
           << tr("输入：%1 · %2×%3 · %4-%5 · 帧率：%6 · 位率：%7")
              .arg(video.value("codec").toString()).arg(video.value("width").toInt()).arg(video.value("height").toInt())
              .arg(video.value("pixelFormat").toString(),video.value("profile").toString()).arg(sourceFps,0,'f',3).arg(formatRate(videoRate))
-          << (madvrMode()?tr("输出：%1 · %2×%3 · 帧率：%4 · 显示格式由 madVR 协商%5%6"):tr("输出：%1 · %2×%3 · 帧率：%4 · 显示：%5 bit / %6"))
-             .arg(madvrMode()?tr("LAV / madVR 协商"):direct_?video.value("pixelFormat").toString():settings_->value("decode/output").toString().isEmpty()?clip_.formatName:settings_->value("decode/output").toString()).arg(clip_.width).arg(clip_.height).arg(fps,0,'f',3).arg(madvrMode()?QString():QString::number(rendered.videoOutputBitDepth)).arg(madvrMode()?QString():rendered.actualColorMode ? "HDR" : "SDR")
+          << (madvrMode()?tr("输出：%1 · %2×%3 · 目标帧率：%4 · 显示格式由 madVR 协商%5%6"):tr("输出：%1 · %2×%3 · 目标帧率：%4 · 显示：%5 bit / %6"))
+             .arg(madvrMode()?tr("LAV / madVR 协商"):direct_?video.value("pixelFormat").toString():settings_->value("decode/output").toString().isEmpty()?clip_.formatName:settings_->value("decode/output").toString()).arg(clip_.width).arg(clip_.height).arg(fps*speed_,0,'f',3).arg(madvrMode()?QString():QString::number(rendered.videoOutputBitDepth)).arg(madvrMode()?QString():rendered.actualColorMode ? "HDR" : "SDR")
           << (madvrMode()?tr("视频渲染器：madshi video renderer"):tr("视频渲染器：VS Real-Time Video Renderer"))
           << tr("  设备：%1").arg(gpu)
           << (madvrMode()?tr("  帧与丢帧统计：由 madVR 控制器提供"):tr("  已提交：%1 · 丢帧：%2（VS 跳过 %3 / 渲染丢弃 %4 / 合并 %5）")
               .arg(direct_?rendered.presentedVideoFrames:submittedFrames_).arg(skippedFrames_+rendered.droppedVideoFrames+rendered.coalescedVideoFrames).arg(skippedFrames_).arg(rendered.droppedVideoFrames).arg(rendered.coalescedVideoFrames))
           << ((madvrMode() || direct_)?tr("  VS 处理：未启用 · 原生直通"):tr("  VS 请求耗时：%1 ms · 同步偏移：%2 ms · 平均呈现等待：%3 ms · 预解码：%4 帧")
               .arg(frameMilliseconds_,0,'f',1).arg((frameTime-at)/10000,0,'f',1).arg(rendered.swapChainPresents?rendered.presentWait100ns/10000.0/rendered.swapChainPresents:0,0,'f',2).arg(prefetchCount()))
-          << tr("视频帧大小：显示 %1×%2 · VS %3×%4 · 源 %5×%6")
+          << tr("视频帧大小：源 %5×%6 → VS 输出 %3×%4 → 当前呈现 %1×%2")
              .arg(fitted.width()).arg(fitted.height()).arg(clip_.width).arg(clip_.height).arg(video.value("width").toInt()).arg(video.value("height").toInt())
           << ""
           << tr("音频解码器：%1").arg(lavAudio ? "LAV Audio Decoder" : "3FP / FFmpeg")
@@ -102,11 +107,13 @@ void PlayerWindow::updateInfo() {
           << tr("音频渲染器：%1").arg(lavAudio ? "DirectShow Audio Renderer" : "Built-in WASAPI Audio Renderer")
           << (lavAudio ? tr("  缓冲时间：未提供 · 同步偏移：未提供") : tr("  缓冲时间：%1 ms · 同步偏移：%2 ms · 时间戳抖动帧：%3")
               .arg(source.bufferedAudio100ns/10000.0,0,'f',1).arg((source.audioPosition100ns-at)/10000.0,0,'f',1).arg(source.audioTimestampJitterFrames))
-          << tr("倍速：%1× · %2").arg(speed_,0,'f',2).arg(preset_.isEmpty() ? tr("原画") : QFileInfo(preset_).fileName());
-    if(interpolationStage()>=0)lines << tr("补帧：%1 · %2 · Jinc 直通 YUV444P16").arg(interpolationNames().at(interpolationStage()),interpolationAuto_?tr("自动降档"):tr("手动固定"));
-    else if(fixedAnimeStage()>=0)lines << tr("手动固定级别：%1 · 不自动切换").arg(qualityNames().at(qualityStage_));
-    else if(!profile().isEmpty() || networkSource())lines << tr("自适应级别：%1 · 超过 5% 丢帧逐级降载").arg(qualityNames().at(direct_?qMax(4,qualityStage_):qualityStage_));
-    if(!madvrMode()) {
+          << "" << tr("倍速：%1× · %2").arg(speed_,0,'f',2).arg(preset_.isEmpty() ? tr("原画") : QFileInfo(preset_).fileName());
+    lines << tr("补帧：%1").arg(interpolationStage()>=0?interpolationNames().at(interpolationStage())+(interpolationAuto_?tr(" · 自动降档"):tr(" · 手动固定")):tr("未启用"));
+    const QStringList algorithms{"Nearest Neighbour","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11","Lanczos4"};
+    lines << tr("缩放滤镜：%1").arg(madvrMode()?QString("madVR"):interpolationStage()>=0?(interpolationRenderer()?tr("D3D11"):tr("Jinc 直通")):profile()=="Anime"||profile()=="Realistic"||preset_.isEmpty()?qualityNames().at(std::clamp(qualityStage_,0,5)):algorithms.value(settings_->value("render/upscale",4).toInt(),tr("自定义")));
+
+    if(madvrMode())lines << tr("色彩引擎：madVR");
+    else {
         const auto color=(direct_?clock_:output_)->colorStatus();
         lines << tr("色彩引擎：%1 · %2").arg(QString::fromUtf8(color.engine),color.activeEngine?"libplacebo D3D11":tr("3FP 原生"));
         if(color.activeEngine) {
@@ -130,7 +137,7 @@ void PlayerWindow::updateInfo() {
         }
         if(color.fallback[0]) lines << tr("色彩回退 / 限制：%1").arg(QString::fromUtf8(color.fallback));
     }
-    const QString text = lines.join('\n');
-    info_->setMaximumWidth(qMax(300, pane_->surface()->width()-24)); info_->setText(text); info_->adjustSize(); info_->move(12, 12); info_->raise();
+    for(auto &line:lines)if(line.contains(tr("已提交：")))line=tr("  当前帧率：%1 fps · ").arg(playing_?infoCurrentFps_:0,0,'f',2)+line.trimmed();
+    static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));info_->raise();
 }
 }

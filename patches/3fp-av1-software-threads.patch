@@ -1,0 +1,19 @@
+diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -2045,8 +2045,14 @@
+     context->pkt_timebase = stream->time_base;
+     if (result >= 0 && video && !hardwareRequested) {
+         const auto hardwareThreads = std::max(1u, std::thread::hardware_concurrency());
++        // Large AV1 frames need dav1d's tile/frame workers beyond the legacy
++        // eight-thread budget. Keep other codecs and smaller clips unchanged.
++        const auto decoderThreads = stream->codecpar->codec_id == AV_CODEC_ID_AV1 &&
++            codec->name != nullptr && std::strcmp(codec->name, "libdav1d") == 0 &&
++            static_cast<std::int64_t>(context->width) * context->height >= 3840LL * 2160
++            ? 16u : MaximumSoftwareDecoderThreads;
+         context->thread_count = static_cast<int>(std::min(
+-            hardwareThreads, MaximumSoftwareDecoderThreads));
++            hardwareThreads, decoderThreads));
+         context->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+     }
+     if (result >= 0 && hardwareRequested) {

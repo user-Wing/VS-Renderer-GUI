@@ -9,7 +9,18 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent)
+qt_add_library(vsr_bluray STATIC src/bluray/BlurayCatalog.cpp src/bluray/BlurayCatalog.h
+    src/bluray/BlurayWidget.cpp src/bluray/BlurayWidget.h)
+target_include_directories(vsr_bluray PUBLIC src)
+target_link_libraries(vsr_bluray PUBLIC Qt6::Widgets Qt6::Concurrent)
+qt_add_library(vsr_components STATIC src/update/ComponentDownloads.cpp src/update/ComponentDownloads.h src/update/PortableUpdater.cpp src/update/PortableUpdater.h)
+target_include_directories(vsr_components PUBLIC src)
+target_link_libraries(vsr_components PUBLIC Qt6::Widgets Qt6::Network Qt6::Concurrent)
+target_compile_definitions(vsr_components PRIVATE VSR_VERSION="${PROJECT_VERSION}")
+if(WIN32)
+    target_link_libraries(vsr_components PUBLIC version)
+endif()
 include(tools/color-runtime.cmake)
 add_library(vsr_image_zlib STATIC
     third_party/image-zlib/adler32.c third_party/image-zlib/crc32.c
@@ -39,7 +50,6 @@ endif()
 
 qt_add_executable(VSRenderer WIN32
     assets/icons/icons.qrc
-    src/update/PortableUpdater.cpp src/update/PortableUpdater.h
     assets/startup.qrc
     src/backend/StartupWarmup.cpp
     src/backend/StartupWarmup.h
@@ -86,7 +96,7 @@ qt_add_executable(VSRenderer WIN32
 )
 
 target_include_directories(VSRenderer PRIVATE src third_party/vapoursynth/include)
-target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network)
+target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network vsr_bluray)
 target_compile_definitions(VSRenderer PRIVATE VSR_VERSION="${PROJECT_VERSION}")
 
 if(WIN32)
@@ -110,7 +120,6 @@ endif()
 
 qt_add_executable(VSPlayer WIN32
     assets/icons/icons.qrc
-    src/update/PortableUpdater.cpp src/update/PortableUpdater.h
     assets/startup.qrc
     src/player/PlayerMenu.cpp src/player/PlayerMenu.h
     src/player/PlayerImageTools.cpp src/player/PlayerImageTools.h
@@ -128,6 +137,16 @@ qt_add_executable(VSPlayer WIN32
     src/ui/PreviewPane.cpp
 )
 set_target_properties(VSPlayer PROPERTIES OUTPUT_NAME "vs-player")
+foreach(program VSRenderer VSPlayer)
+    target_link_libraries(${program} PRIVATE vsr_components)
+    add_custom_command(TARGET ${program} POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:Qt6::Concurrent>" "$<TARGET_FILE_DIR:${program}>"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${program}>/tools"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_SOURCE_DIR}/tools/download-bd.py" "$<TARGET_FILE_DIR:${program}>/tools"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${program}>/runtime/tools"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_SOURCE_DIR}/tools/apply-components.ps1" "$<TARGET_FILE_DIR:${program}>/runtime/tools"
+        VERBATIM)
+endforeach()
 if(TARGET vsr_color)
     add_dependencies(VSRenderer vsr_color)
     add_dependencies(VSPlayer vsr_color)
@@ -143,7 +162,7 @@ target_include_directories(vsr_image_decoder PUBLIC src)
 target_link_libraries(vsr_image_decoder PUBLIC Qt6::Core Qt6::Gui PRIVATE avif vsr_turbojpeg vsr_image_core libdeflate_static)
 target_link_libraries(vsr_image_editor PRIVATE vsr_image_decoder)
 include(tools/awj-runtime.cmake)
-target_link_libraries(VSPlayer PRIVATE avif vsr_image_editor)
+target_link_libraries(VSPlayer PRIVATE avif vsr_image_editor vsr_bluray)
 
 target_include_directories(VSPlayer PRIVATE src third_party/vapoursynth/include)
 target_link_libraries(VSPlayer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
@@ -161,6 +180,10 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test Network)
+    qt_add_executable(vsr_bluray_tests tests/TestBluray.cpp)
+    set_target_properties(vsr_bluray_tests PROPERTIES OUTPUT_NAME "vsr-bluray-tests")
+    target_link_libraries(vsr_bluray_tests PRIVATE vsr_bluray Qt6::Test)
+    add_test(NAME bluray-metadata COMMAND vsr_bluray_tests)
     qt_add_executable(vsr_image_tests tests/TestImageDocument.cpp)
     target_link_libraries(vsr_image_tests PRIVATE vsr_image_core Qt6::Test)
     add_test(NAME image-document-core COMMAND vsr_image_tests)
@@ -265,7 +288,7 @@ if(BUILD_TESTING)
     list(FILTER analysis_test_sources EXCLUDE REGEX "src/main.cpp|VSRenderer_autogen")
     qt_add_executable(vsr_analysis_tests tests/TestAnalysis.cpp ${analysis_test_sources})
     target_include_directories(vsr_analysis_tests PRIVATE src third_party/vapoursynth/include)
-    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network)
+    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_bluray)
     target_compile_definitions(vsr_analysis_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME direct-video-comparison COMMAND vsr_analysis_tests -o analysis-test-results.txt,txt)
 
@@ -275,14 +298,16 @@ if(BUILD_TESTING)
     add_dependencies(vsr_player_tests VSPlayer)
     target_include_directories(vsr_player_tests PRIVATE src third_party/vapoursynth/include)
     target_link_libraries(vsr_player_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
-    target_link_libraries(vsr_player_tests PRIVATE avif vsr_turbojpeg vsr_image_editor)
+    target_link_libraries(vsr_player_tests PRIVATE avif vsr_turbojpeg vsr_image_editor vsr_bluray)
+    target_link_libraries(vsr_player_tests PRIVATE vsr_components)
     target_compile_definitions(vsr_player_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME vs-player-playback COMMAND vsr_player_tests -o player-test-results.txt,txt)
     add_test(NAME player-language-packs COMMAND "${CMAKE_BINARY_DIR}/runtime/python/python.exe" "${CMAKE_SOURCE_DIR}/tools/check-player-languages.py")
 
-    qt_add_executable(vsr_update_tests tests/TestUpdates.cpp src/update/PortableUpdater.cpp src/update/PortableUpdater.h)
+    qt_add_executable(vsr_update_tests tests/TestUpdates.cpp)
     target_include_directories(vsr_update_tests PRIVATE src)
     target_link_libraries(vsr_update_tests PRIVATE Qt6::Core Qt6::Widgets Qt6::Network Qt6::Test)
+    target_link_libraries(vsr_update_tests PRIVATE vsr_components)
     target_compile_definitions(vsr_update_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME portable-full-update COMMAND vsr_update_tests -o update-test-results.txt,txt)
 

@@ -17,10 +17,10 @@ using namespace vsr;
 class TestImageEditor final : public QObject {
     Q_OBJECT
 private slots:
-    void viewerWheelPansImagesAndRetainsVideoZoom() {
+    void viewerWheelZoomsImagesAndRetainsShiftPan() {
         PreviewPane pane("Preview","");pane.resize(700,500);pane.show();QImage image(1400,1000,QImage::Format_RGB32);image.fill(Qt::white);pane.setImage(image);pane.adoptView(3,0,0);
         auto *surface=pane.surface();const auto point=surface->rect().center();auto wheel=[&](Qt::KeyboardModifiers modifiers){QWheelEvent event(point,surface->mapToGlobal(point),{},QPoint(0,120),Qt::NoButton,modifiers,Qt::NoScrollPhase,false);QApplication::sendEvent(surface,&event);};
-        wheel(Qt::NoModifier);QCOMPARE(pane.zoom(),3.f);QVERIFY(pane.pan().y()>0);QCOMPARE(pane.pan().x(),0.);const auto y=pane.pan().y();wheel(Qt::ShiftModifier);QVERIFY(pane.pan().x()>0);QCOMPARE(pane.pan().y(),y);wheel(Qt::ControlModifier);QVERIFY(pane.zoom()>3);
+        wheel(Qt::NoModifier);QCOMPARE(pane.zoom(),3.75f);const auto y=pane.pan().y();wheel(Qt::ShiftModifier);QVERIFY(pane.pan().x()>0);QCOMPARE(pane.pan().y(),y);wheel(Qt::ControlModifier);QVERIFY(pane.zoom()>3.75f);
         pane.setImage({});pane.setVideoSize({1920,1080});pane.adoptView(1,0,0);wheel(Qt::NoModifier);QVERIFY(pane.zoom()>1);
     }
     void detailedEditorReusesOneWindow() {

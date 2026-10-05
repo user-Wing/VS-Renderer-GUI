@@ -3,7 +3,8 @@ param(
     [string]$PreviousDirectory = "dist/VS-Renderer-GUI-1.0.1-windows-x64",
     [string]$ShaderDirectory = "C:/PortableSoft/FFmpegFreeUI ReadyToRun x64/libplacebo",
     [string]$LavDirectory = (Join-Path $PSScriptRoot "../.deps/lav/0.83"),
-    [string]$MadvrDirectory = "C:/PortableSoft/PotPlayer/madVR09217"
+    [string]$MadvrDirectory = "C:/PortableSoft/PotPlayer/madVR09217",
+    [string]$MkvtoolnixDirectory = "C:/PortableSoft/Mkvtoolnix"
 )
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -23,6 +24,9 @@ if ($initialStage) {
 foreach ($exe in @("VSRenderer.exe", "vs-player.exe", "FFF.Native.dll")) {
     Copy-Item -LiteralPath (Join-Path $buildRoot $exe) -Destination $output -Force
 }
+Copy-Item -LiteralPath (Join-Path $buildRoot 'Qt6Concurrent.dll') -Destination $output -Force
+New-Item -ItemType Directory -Path (Join-Path $output 'tools') -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $projectRoot 'tools/download-bd.py') -Destination (Join-Path $output 'tools') -Force
 if (Test-Path -LiteralPath (Join-Path $buildRoot 'color/vsr-color.dll')) {
     Copy-Item -LiteralPath (Join-Path $buildRoot 'color') -Destination $output -Recurse -Force
 }
@@ -35,6 +39,8 @@ Get-ChildItem -LiteralPath $ShaderDirectory -Filter "*Anime4K*.glsl" -File | Cop
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets/anime4k-a-fast.glsl"), (Join-Path $projectRoot "assets/anime4k-no-cnn.glsl") -Destination (Join-Path $output "shaders") -Force
 & (Join-Path $PSScriptRoot 'stage-shaders.ps1') -OutputDirectory (Join-Path $output 'shaders') -SevenZip (Join-Path $output 'runtime/tools/7z.exe')
 & (Join-Path $PSScriptRoot 'stage-update-tools.ps1') -OutputDirectory (Join-Path $output 'runtime/tools')
+& (Join-Path $PSScriptRoot 'stage-mkvtoolnix.ps1') -SourceDirectory $MkvtoolnixDirectory -OutputDirectory (Join-Path $output 'runtime/mkvtoolnix')
+if (!(Test-Path -LiteralPath (Join-Path $output 'components.json'))) { Copy-Item -LiteralPath (Join-Path $projectRoot 'assets/full-components.json') -Destination (Join-Path $output 'components.json') }
 @{version=$version;schema=1;platform='windows-x64'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release.json') -Encoding UTF8
 New-Item -ItemType Directory -Path (Join-Path $output "languages") -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets/languages/zh_CN.json"), (Join-Path $projectRoot "assets/languages/en_US.json") -Destination (Join-Path $output "languages") -Force

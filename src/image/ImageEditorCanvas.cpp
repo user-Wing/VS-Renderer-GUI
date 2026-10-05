@@ -14,6 +14,8 @@
 #include <QSet>
 #include <algorithm>
 #include <cmath>
+#include <windows.h>
+#undef near
 
 namespace vsr {
 namespace {
@@ -25,6 +27,7 @@ QList<QPointF> handles(const QRectF &r){return {r.topLeft(),r.topRight(),r.botto
 bool samePreviewSettings(const ImageHdrPreviewSettings &a,const ImageHdrPreviewSettings &b){return a.exposure==b.exposure&&a.whitePoint==b.whitePoint&&a.toneMap==b.toneMap&&a.channel==b.channel;}
 }
 ImageEditorCanvas::ImageEditorCanvas(ImageEditorTools *tools,QWidget *parent) : QWidget(parent),tools_(tools) {
+    MEMORYSTATUSEX memory{};memory.dwLength=sizeof(memory);if(GlobalMemoryStatusEx(&memory))tools_->document()->setCacheBudget(std::clamp<qint64>(memory.ullAvailPhys/8,64ll*1024*1024,1024ll*1024*1024));
     hdrSurface_=new ImageHdrSurface(this);
     setObjectName("imageEditorCanvas");setMinimumSize(320,240);setFocusPolicy(Qt::StrongFocus);setMouseTracking(true);
     connect(tools_->document(),&ImageDocument::changed,this,[this]{
@@ -53,7 +56,7 @@ void ImageEditorCanvas::zoomBy(double factor,QPointF anchor){
     zoom_=std::clamp(zoom_*factor,std::max(1e-8,minimum),64.);origin_=anchor-at*zoom_;current_=documentPoint(anchor);emit cursorPositionChanged(current_,true);refreshPreview();emit viewChanged();
 }
 void ImageEditorCanvas::invalidateDocumentPreview(){++previewInvalidation_;refreshPreview();}
-void ImageEditorCanvas::cancelGesture() {tools_->endStroke(true);tools_->endMove(true);tools_->endSelectionStroke(true);if(freeTransform_){freeTransform_=false;tools_->document()->cancelEdit();}transformHandle_=-1;transformRect_={};dragging_=panning_=false;polygon_.clear();refreshPreview();update();}
+void ImageEditorCanvas::cancelGesture() {movePixels_={};moveBackdrop_={};tools_->endStroke(true);tools_->endMove(true);tools_->endSelectionStroke(true);if(freeTransform_){freeTransform_=false;tools_->document()->cancelEdit();}transformHandle_=-1;transformRect_={};dragging_=panning_=false;polygon_.clear();refreshPreview();update();}
 QRectF ImageEditorCanvas::selectedLayerBounds() const {
     const auto layers=tools_->document()->layers();QSet<QUuid> ids{tools_->layer()};bool added=true;
     while(added){added=false;for(const auto &l:layers)if(ids.contains(l.parentId)&&!ids.contains(l.id)){ids.insert(l.id);added=true;}}
@@ -117,10 +120,24 @@ void ImageEditorCanvas::finishSelection() {
         selectionOutlines_[tools_->document()->selectionId()]=selectionOutline_;}
     polygon_.clear();dragging_=false;update();
 }
+void ImageEditorCanvas::prepareMovePreview() {
+    moveDelta_={};moveRegion_=bufferedRegion(visibleDocumentRegion());if(moveRegion_.isEmpty())return;
+    const auto layers=tools_->document()->layers();QSet<QUuid> moving{tools_->layer()};bool added=true;
+    while(added){added=false;for(const auto &layer:layers)if(moving.contains(layer.parentId)&&!moving.contains(layer.id)){moving.insert(layer.id);added=true;}}
+    QSet<QUuid> parents;auto parent=tools_->layer();for(int i=0;!parent.isNull()&&i<=layers.size();++i){QUuid next;for(const auto &layer:layers)if(layer.id==parent){next=layer.parentId;break;}if(!next.isNull())parents.insert(next);parent=next;}
+    auto background=tools_->document()->snapshot(),foreground=tools_->document()->snapshot();
+    background->removeLayer(tools_->layer());
+    for(auto layer:layers)if(!moving.contains(layer.id)&&!parents.contains(layer.id)){layer.visible=false;foreground->updateLayer(layer);}
+    const auto output=previewOutput(moveRegion_);
+    moveBackdrop_=ImageHdr::preview(background->compositePreview(moveRegion_,output,ImageSamplingQuality::Bilinear),hdrSettings_);
+    movePixels_=ImageHdr::preview(foreground->compositePreview(moveRegion_,output,ImageSamplingQuality::Bilinear),hdrSettings_);
+    // The drag is a display proxy; pixels and native-precision history change once on release.
+    hdrSurface_->hide();update();
+}
 QRect ImageEditorCanvas::visibleDocumentRegion() const{return QRectF(documentPoint(QPointF()),documentPoint(QPointF(width(),height()))).toAlignedRect().intersected(QRect(QPoint(),tools_->document()->size()));}
 QRect ImageEditorCanvas::bufferedRegion(const QRect &visible) const {const int x=std::max(2,visible.width()/4),y=std::max(2,visible.height()/4);return visible.adjusted(-x,-y,x,y).intersected(QRect(QPoint(),tools_->document()->size()));}
 QSize ImageEditorCanvas::previewOutput(const QRect &region) const {
-    const double density=std::min(1.,zoom_*devicePixelRatioF());double w=std::max(1.,std::ceil(region.width()*density)),h=std::max(1.,std::ceil(region.height()*density));
+    const double density=std::min(1.,zoom_*devicePixelRatioF()*2);double w=std::max(1.,std::ceil(region.width()*density)),h=std::max(1.,std::ceil(region.height()*density));
     // At most 256 MiB of native RGBA32F staging, independently of document dimensions.
     const double reduction=std::min({1.,8192./w,8192./h,std::sqrt((16.*1024*1024)/(w*h))});
     return QSize(std::max(1,int(std::floor(w*reduction))),std::max(1,int(std::floor(h*reduction))));
@@ -132,6 +149,7 @@ bool ImageEditorCanvas::previewCovers(const QRect &visible) const {
 }
 void ImageEditorCanvas::updatePreviewTarget(){previewTarget_=QRectF(screenPoint(previewRegion_.topLeft()),QSizeF(previewRegion_.size())*zoom_);}
 void ImageEditorCanvas::refreshPreview() {
+    if(dragging_ && tool_==ImageEditorTool::Move && !movePixels_.isNull()){update();return;}
     updatePreviewTarget();update();const auto visible=visibleDocumentRegion();if(visible.isEmpty()){if(previewThread_)refreshAgain_=true;return;}if(previewCovers(visible))return;
     if(previewThread_){refreshAgain_=true;return;}if(refreshPending_)return;refreshPending_=true;
     QTimer::singleShot(0,this,[this]{
@@ -143,7 +161,7 @@ void ImageEditorCanvas::refreshPreview() {
         result->snapshot->moveToThread(previewThread_);auto *thread=previewThread_;
         connect(thread,&QThread::finished,this,[this,result,region,settings,layerId,showMask,revision,generation]{previewThread_=nullptr;
             const auto visible=visibleDocumentRegion();const bool produced=!result->display.isNull();
-            if(!previewCovers(visible)&&generation==previewInvalidation_&&revision==tools_->document()->revision()&&samePreviewSettings(settings,hdrSettings_)&&showMask==maskPreview_&&(!showMask||layerId==tools_->layer())){nativePreview_=std::move(result->native);preview_=std::move(result->display);previewRegion_=region;previewRevision_=revision;previewGeneration_=generation;previewSettings_=settings;previewLayer_=layerId;previewMask_=showMask;updatePreviewTarget();update();emit previewReady();if(!result->error.isEmpty())emit previewError(result->error);}
+            if(!previewCovers(visible)&&generation==previewInvalidation_&&revision==tools_->document()->revision()&&samePreviewSettings(settings,hdrSettings_)&&showMask==maskPreview_&&(!showMask||layerId==tools_->layer())){nativePreview_=std::move(result->native);preview_=std::move(result->display);previewRegion_=region;previewRevision_=revision;previewGeneration_=generation;previewSettings_=settings;previewLayer_=layerId;previewMask_=showMask;if(region==QRect(QPoint(),tools_->document()->size())){overview_=preview_;overviewNative_=nativePreview_;}if(!dragging_){movePixels_={};moveBackdrop_={};if(hdrSurface_->hdrActive())hdrSurface_->show();}updatePreviewTarget();update();emit previewReady();if(!result->error.isEmpty())emit previewError(result->error);}
             if(refreshAgain_ || revision!=tools_->document()->revision()||(!visible.isEmpty()&&!previewCovers(visible)&&produced)){refreshAgain_=false;refreshPreview();}
         });connect(thread,&QThread::finished,thread,&QObject::deleteLater);thread->start();
     });
@@ -152,11 +170,17 @@ void ImageEditorCanvas::paintEvent(QPaintEvent *) {
     QPainter painter(this);painter.fillRect(rect(),palette().color(QPalette::Window));const QRectF imageRect(screenPoint(QPointF()),QSizeF(tools_->document()->size())*zoom_);
     const QRect exposed=imageRect.toAlignedRect().intersected(rect());
     for(int y=exposed.top();y<=exposed.bottom();y+=16)for(int x=exposed.left();x<=exposed.right();x+=16)painter.fillRect(QRect(x,y,std::min(16,exposed.right()-x+1),std::min(16,exposed.bottom()-y+1)),((x-exposed.left())/16+(y-exposed.top())/16)%2?QColor("#505050"):QColor("#707070"));
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);if(!preview_.isNull())painter.drawImage(previewTarget_,preview_);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    if(!overview_.isNull())painter.drawImage(imageRect,overview_);
+    if(!movePixels_.isNull()){
+        const QRectF target(screenPoint(moveRegion_.topLeft()),QSizeF(moveRegion_.size())*zoom_);
+        painter.drawImage(target,moveBackdrop_);painter.save();painter.setClipRect(imageRect);painter.drawImage(target.translated(moveDelta_*zoom_),movePixels_);painter.restore();
+    }else if(!preview_.isNull())painter.drawImage(previewTarget_,preview_);
     paintGuides(painter);painter.end();
-    if(hdrSurface_->hdrActive() && !nativePreview_.isNull()){
+    if(hdrSurface_->hdrActive() && !nativePreview_.isNull() && movePixels_.isNull()){
         QImage overlay(size()*devicePixelRatioF(),QImage::Format_ARGB32_Premultiplied);overlay.setDevicePixelRatio(devicePixelRatioF());overlay.fill(Qt::transparent);QPainter guides(&overlay);paintGuides(guides);guides.end();
-        hdrSurface_->present(hdrSettings_.channel<0?nativePreview_:preview_,previewTarget_,overlay,hdrSettings_.exposure);
+        const bool overview=!overviewNative_.isNull() && !previewTarget_.contains(imageRect.intersected(QRectF(rect())));
+        hdrSurface_->present(hdrSettings_.channel<0?(overview?overviewNative_:nativePreview_):(overview?overview_:preview_),overview?imageRect:previewTarget_,overlay,hdrSettings_.exposure);
         if(!hdrSurface_->hdrActive())emit viewChanged();
     }
 }
@@ -178,7 +202,7 @@ void ImageEditorCanvas::paintGuides(QPainter &painter){
         if(!vectorPath_.isEmpty())painter.drawPath(vectorPath_);
     }
     if(!cropRect_.isEmpty()){painter.setPen(QPen(Qt::white,1/zoom_));painter.setBrush(QColor("#303030"));for(const QPointF &p:QList<QPointF>{cropRect_.topLeft(),cropRect_.topRight(),cropRect_.bottomLeft(),cropRect_.bottomRight(),QPointF(cropRect_.center().x(),cropRect_.top()),QPointF(cropRect_.center().x(),cropRect_.bottom()),QPointF(cropRect_.left(),cropRect_.center().y()),QPointF(cropRect_.right(),cropRect_.center().y())})painter.drawRect(QRectF(p-QPointF(3/zoom_,3/zoom_),QSizeF(6/zoom_,6/zoom_)));}
-    if(tool_==ImageEditorTool::Move||freeTransform_){const auto bounds=transformHandle_>=0?transformRect_:selectedLayerBounds();if(!bounds.isEmpty()){
+    if(tool_==ImageEditorTool::Move||freeTransform_){const auto bounds=transformHandle_>=0?transformRect_:selectedLayerBounds().translated(!movePixels_.isNull()?moveDelta_:QPointF());if(!bounds.isEmpty()){
         painter.setPen(QPen(QColor("#69b7ff"),1.5/zoom_));painter.setBrush(Qt::NoBrush);painter.drawRect(bounds);
         painter.setBrush(palette().color(QPalette::Window));for(const auto &point:handles(bounds))painter.drawRect(QRectF(point-QPointF(3.5/zoom_,3.5/zoom_),QSizeF(7/zoom_,7/zoom_)));
     }}
@@ -195,7 +219,7 @@ void ImageEditorCanvas::mousePressEvent(QMouseEvent *event) {
         if(handle<0)return;const auto layers=tools_->document()->layers();auto id=tools_->layer();for(int depth=0;!id.isNull()&&depth<=layers.size();++depth){QUuid parent;for(const auto &l:layers)if(l.id==id){if(l.locked){emit previewError(tr("当前图层或父组已锁定，请先解锁再移动或缩放。"));return;}parent=l.parentId;break;}id=parent;}
         anchor_=current_;transformAnchorRect_=selectedLayerBounds();
         if(handle>0||freeTransform_){transformHandle_=handle;transformRect_=transformAnchorRect_;dragging_=true;update();return;}
-        dragging_=tools_->beginMove(current_);return;
+        dragging_=tools_->beginMove(current_);if(dragging_)prepareMovePreview();return;
     }
     if(!QRectF(QPointF(),tools_->document()->size()).contains(current_))return;
     if(tool_==ImageEditorTool::Zoom){zoomBy(event->modifiers().testFlag(Qt::AltModifier)?.5:2,event->position());return;}
@@ -217,6 +241,7 @@ void ImageEditorCanvas::mouseMoveEvent(QMouseEvent *event) {
     current_=documentPoint(event->position());
     if(panning_){origin_+=event->position()-lastScreen_;lastScreen_=event->position();current_=documentPoint(event->position());emit cursorPositionChanged(current_,true);refreshPreview();emit viewChanged();return;}
     emit cursorPositionChanged(current_,true);
+    if(dragging_ && tool_==ImageEditorTool::Move && transformHandle_<0 && !movePixels_.isNull()){moveDelta_=current_-anchor_;update();return;}
     if(dragging_&&transformHandle_>=0){updateLayerTransform(current_,event->modifiers().testFlag(Qt::ShiftModifier));update();return;}
     if(!dragging_&&tool_==ImageEditorTool::Move){const int h=layerHandle(current_);setCursor(h==1||h==3?Qt::SizeFDiagCursor:h==2||h==4?Qt::SizeBDiagCursor:h==5||h==7?Qt::SizeHorCursor:h==6||h==8?Qt::SizeVerCursor:h==0?Qt::SizeAllCursor:Qt::ArrowCursor);}
     if(dragging_){if(brushTool(tool_))tools_->continueStroke(current_);else if(tool_==ImageEditorTool::Move)tools_->continueMove(current_);else if(tool_==ImageEditorTool::QuickSelection)quickSelect(current_);else if(tool_==ImageEditorTool::Lasso || tool_==ImageEditorTool::MagneticLasso){const auto point=tool_==ImageEditorTool::MagneticLasso?tools_->magneticPoint(current_):current_;if(polygon_.isEmpty() || QLineF(polygon_.last(),point).length()>=1/zoom_)polygon_<<point;}
@@ -230,7 +255,7 @@ void ImageEditorCanvas::mouseReleaseEvent(QMouseEvent *event) {
     if(panning_ && (event->button()==Qt::LeftButton || event->button()==Qt::MiddleButton)){panning_=false;setCursor(tool_==ImageEditorTool::Hand?Qt::OpenHandCursor:Qt::CrossCursor);return;}
     if(event->button()!=Qt::LeftButton || !dragging_)return;
     if(transformHandle_>=0){mouseMoveEvent(event);finishLayerTransform();return;}
-    mouseMoveEvent(event);if(brushTool(tool_))tools_->endStroke();else if(tool_==ImageEditorTool::Move)tools_->endMove();else if(tool_==ImageEditorTool::QuickSelection)tools_->endSelectionStroke();
+    mouseMoveEvent(event);if(brushTool(tool_))tools_->endStroke();else if(tool_==ImageEditorTool::Move){tools_->continueMove(current_);tools_->endMove();}else if(tool_==ImageEditorTool::QuickSelection)tools_->endSelectionStroke();
     else if(tool_==ImageEditorTool::Gradient)tools_->fillGradient(anchor_,current_);
     else if(tool_==ImageEditorTool::Ruler){rulerStart_=anchor_;rulerEnd_=current_;rulerVisible_=true;const QLineF line(anchor_,current_);emit rulerMeasured(line.length(),std::atan2(current_.y()-anchor_.y(),current_.x()-anchor_.x())*180/3.141592653589793);}
     else if(tool_==ImageEditorTool::ObjectSelection){const auto prior=selectionOutline_;if(tools_->selectObject(QRectF(anchor_,current_).normalized().toAlignedRect(),selectionMode_))rememberColorSelection(prior);}

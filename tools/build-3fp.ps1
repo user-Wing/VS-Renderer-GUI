@@ -20,7 +20,9 @@ function Test-AppliedPatch([string]$Path) {
 }
 $performancePatch = Join-Path $projectRoot 'patches/3fp-present-performance.patch'
 $jincPatch = Join-Path $projectRoot 'patches/3fp-jinc-upstream-1.0.5.patch'
-$jincApplied = (Test-Path $jincPatch) -and (Test-AppliedPatch $jincPatch)
+$softwareFramePatch = Join-Path $projectRoot 'patches/3fp-software-frame-upload.patch'
+$softwareFrameApplied = (Test-Path $softwareFramePatch) -and (Test-AppliedPatch $softwareFramePatch)
+$jincApplied = $softwareFrameApplied -or ((Test-Path $jincPatch) -and (Test-AppliedPatch $jincPatch))
 $performanceApplied = $jincApplied -or ((Test-Path $performancePatch) -and (Test-AppliedPatch $performancePatch))
 if (-not $performanceApplied) {
 
@@ -73,6 +75,33 @@ if ((Test-Path $jincPatch) -and -not $jincApplied) {
     if ($LASTEXITCODE -ne 0) { throw 'Jinc/upstream compatibility patch does not apply cleanly.' }
     & git -C $source apply $jincPatch
     if ($LASTEXITCODE -ne 0) { throw 'Jinc/upstream compatibility patch failed.' }
+}
+$clockPatch = Join-Path $projectRoot 'patches/3fp-vs-audio-clock.patch'
+if (-not (Test-AppliedPatch $clockPatch)) {
+    & git -C $source apply --check $clockPatch
+    if ($LASTEXITCODE -ne 0) { throw 'VS audio-clock patch does not apply cleanly.' }
+    & git -C $source apply $clockPatch
+    if ($LASTEXITCODE -ne 0) { throw 'VS audio-clock patch failed.' }
+}
+$blurayPatch = Join-Path $projectRoot 'patches/3fp-bluray-input.patch'
+if (-not (Test-AppliedPatch $blurayPatch)) {
+    & git -C $source apply --check $blurayPatch
+    if ($LASTEXITCODE -ne 0) { throw 'Blu-ray input patch does not apply cleanly.' }
+    & git -C $source apply $blurayPatch
+    if ($LASTEXITCODE -ne 0) { throw 'Blu-ray input patch failed.' }
+}
+$av1ThreadsPatch = Join-Path $projectRoot 'patches/3fp-av1-software-threads.patch'
+if (-not (Test-AppliedPatch $av1ThreadsPatch)) {
+    & git -C $source apply --check $av1ThreadsPatch
+    if ($LASTEXITCODE -ne 0) { throw 'AV1 software threads patch does not apply cleanly.' }
+    & git -C $source apply $av1ThreadsPatch
+    if ($LASTEXITCODE -ne 0) { throw 'AV1 software threads patch failed.' }
+}
+if (-not $softwareFrameApplied) {
+    & git -C $source apply --check $softwareFramePatch
+    if ($LASTEXITCODE -ne 0) { throw 'Software frame upload patch does not apply cleanly.' }
+    & git -C $source apply $softwareFramePatch
+    if ($LASTEXITCODE -ne 0) { throw 'Software frame upload patch failed.' }
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/color/ColorBridge.h'), (Join-Path $projectRoot 'src/color/NativeColorEngine.h') -Destination (Join-Path $source 'FFF.Native/3FP/Render') -Force
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"

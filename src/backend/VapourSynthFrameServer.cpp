@@ -125,6 +125,7 @@ struct VapourSynthFrameServer::Impl {
     QString error;
     int threadLimit = qMax(4, QThread::idealThreadCount());
     int cacheMiB = 1024;
+    int lastRequested = -1;
     struct RequestedFrame { const VSFrame *frame = nullptr; QString error; };
     std::map<int, std::future<RequestedFrame>> ahead;
 
@@ -138,9 +139,9 @@ struct VapourSynthFrameServer::Impl {
         }, promise);
     }
 
-    void trimAhead(int current) {
+    void trimAhead(int current, bool seek) {
         for (auto it = ahead.begin(); it != ahead.end();) {
-            if ((it->first < current || it->first > current + 16) && it->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            if ((it->first < current || it->first > current + 16) && (seek || it->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready)) {
                 const auto result = it->second.get(); if (result.frame) vsApi->freeFrame(result.frame);
                 it = ahead.erase(it);
             } else ++it;
@@ -197,6 +198,7 @@ struct VapourSynthFrameServer::Impl {
     {
         for (auto &[index, future] : ahead) { const auto result = future.get(); if (result.frame) vsApi->freeFrame(result.frame); }
         ahead.clear();
+        lastRequested=-1;
         if (node && vsApi)
             vsApi->freeNode(node);
         node = nullptr;
@@ -323,7 +325,7 @@ void VapourSynthFrameServer::loadScript(const QString &source, const QString &sc
     }, Qt::QueuedConnection);
 }
 
-void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames)
+void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames, bool warmStart)
 {
     if (!available_ || frameIndex < 0)
         return;
@@ -332,19 +334,19 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames)
         return;
 
     const auto scriptGeneration=scriptGeneration_.load();
-    QMetaObject::invokeMethod(worker_, [this, frameIndex, prefetchFrames,scriptGeneration] {
-        const auto finish = [this, frameIndex] {
+    QMetaObject::invokeMethod(worker_, [this, frameIndex, prefetchFrames,warmStart,scriptGeneration] {
+        const auto finish = [this, frameIndex, prefetchFrames,warmStart] {
             frameRequestScheduled_.store(false);
             const int latest = desiredFrame_.load();
             if (latest >= 0 && latest != frameIndex)
-                requestFrame(latest);
+                requestFrame(latest, prefetchFrames,warmStart);
         };
         if (scriptGeneration!=scriptGeneration_.load() || !impl_->node || desiredFrame_.load() != frameIndex) {
             finish();
             return;
         }
         const int bounded = impl_->info.numFrames > 0 ? qMin(frameIndex, impl_->info.numFrames - 1) : frameIndex;
-        impl_->trimAhead(bounded);
+        impl_->trimAhead(bounded, warmStart && impl_->lastRequested>=0);
         const int availableAhead = impl_->info.numFrames > 0
             ? qMax(0, impl_->info.numFrames - bounded - 1) : 0;
         const int warmCount = qBound(0, prefetchFrames, qMin(16, availableAhead));
@@ -354,6 +356,11 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames)
             if (impl_->ahead.size() < 20) impl_->schedule(warmFrame);
         }
         const auto result = impl_->ahead.at(bounded).get();
+        // Fill the configured lookahead before starting a cold/seek clock.
+        // An original/interleaved frame alone does not warm the inference pipeline.
+        if(warmCount>0 && (warmStart || impl_->lastRequested<0))
+            for(int offset=1;offset<=warmCount;++offset)if(impl_->ahead.contains(bounded+offset))impl_->ahead.at(bounded+offset).wait();
+        impl_->lastRequested=bounded;
         impl_->ahead.erase(bounded);
         const VSFrame *source = result.frame;
         if (!source) {

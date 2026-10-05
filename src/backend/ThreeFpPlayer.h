@@ -22,6 +22,7 @@ public:
     bool openFile(const QString &path);
     bool play();
     bool pause();
+    bool setClockOnly(bool enabled);
     void stop();
     bool seek(std::int64_t position100ns);
     bool seekFrame(std::int64_t frame);
@@ -66,6 +67,7 @@ private:
     QString lastError_;
     int chromaAlgorithm_ = 1;
     bool muted_ = false;
+    bool clockOnly_ = false;
     float volume_ = 1.0f;
     unsigned decodeMode_ = 2;
     bool automaticHdr_ = false;

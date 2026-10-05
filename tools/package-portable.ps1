@@ -18,12 +18,17 @@ if (Test-Path -LiteralPath $payload) { throw 'Release staging directory already 
 if (Test-Path -LiteralPath $archive) { throw 'Archive already exists; do not silently update an existing archive.' }
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 # Construct a clean distribution, retaining the live installation's settings and user files.
-& robocopy.exe $program $payload /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XD cache data shader-cache screenshots vpy __pycache__ .git .deps temp logs /XF '*.ini' '*.lwi' '*.ffindex' '*.pyc' '*.pdb' '*test*.exe' Qt6Test.dll '*.log' '*.before-*' '*.tmp' '*.autosave' '.awj-update-security-state*' settings.bin | Out-Null
+& robocopy.exe $program $payload /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XD cache (Join-Path $program 'data') shader-cache screenshots vpy __pycache__ .git .deps temp logs /XF '*.ini' '*.lwi' '*.ffindex' '*.pyc' '*.pdb' '*test*.exe' Qt6Test.dll '*.log' '*.before-*' '*.tmp' '*.autosave' '.awj-update-security-state*' settings.bin | Out-Null
 if ($LASTEXITCODE -ge 8) { throw 'Clean payload copy failed' }
 $builtin = Join-Path $payload 'vpy/builtin'
 New-Item -ItemType Directory -Path $builtin -Force | Out-Null
 foreach ($name in @('Anime.vpy','Realistic.vpy','Anime-0-CNN-Enhanced.vpy','Anime-1-CNN.vpy','Anime-2-No-CNN-Enhanced.vpy','Anime-3-No-CNN.vpy','Anime-4-Jinc.vpy','Anime-5-D3D11.vpy','Interpolation-0-RIFE.vpy','Interpolation-1-RIFE-Half.vpy','Interpolation-2-MVTools-HQ.vpy','Interpolation-3-MVTools.vpy')) {
     Copy-Item -LiteralPath (Join-Path $builtinSource $name) -Destination $builtin -Force
+    if ($name.StartsWith('Interpolation-')) {
+        $variant = $name.Replace('.vpy', '-D3D11.vpy')
+        $variantSource = Join-Path $builtinSource $variant
+        Copy-Item -LiteralPath $(if (Test-Path -LiteralPath $variantSource) { $variantSource } else { Join-Path $builtinSource $name }) -Destination (Join-Path $builtin $variant) -Force
+    }
 }
 # These scripts register/reset the third-party renderer globally; portable COM loading does not use them.
 $madvr = Join-Path $payload 'madVR09217'

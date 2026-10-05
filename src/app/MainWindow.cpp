@@ -4,6 +4,8 @@
 #include "backend/StartupWarmup.h"
 #include "ui/ExportWindow.h"
 #include "ui/AnalysisPage.h"
+#include "bluray/BlurayWidget.h"
+#include <QProcess>
 #include "graph/PresetStore.h"
 #include <QStackedWidget>
 #include <QToolButton>
@@ -169,6 +171,25 @@ MainWindow::MainWindow(QWidget *parent)
     pages_->addWidget(root);
     pages_->addWidget(new QWidget(pages_)); // Reserve the lazily initialized analysis page.
     pages_->addWidget(buildSettingsPage());
+    auto *bluray = new BlurayWidget(pages_);
+    pages_->addWidget(bluray);
+    auto *bdButton = new NavigationButton(navigation_);
+    bdButton->setText(QStringLiteral("BD 一键 Remux"));
+    bdButton->setToolTip(bdButton->text());
+    bdButton->setIcon(style()->standardIcon(QStyle::SP_DriveCDIcon));
+    bdButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    bdButton->setCheckable(true);
+    bdButton->setMinimumHeight(36);
+    navigationButtons_.append(bdButton);
+    navigationLayout->insertWidget(2, bdButton);
+    connect(bdButton, &QToolButton::clicked, this, [this] { selectPage(3); });
+    connect(bluray, &BlurayWidget::playRequested, this, [this](const QVector<BlurayTitle> &titles, int index) {
+        QString error;
+        const auto playlist = BlurayCatalog::prepare(titles.at(index), &error);
+        if (playlist.isEmpty()) { setStatus(error, true); return; }
+        if (!QProcess::startDetached(QDir(QCoreApplication::applicationDirPath()).filePath("vs-player.exe"), {playlist}))
+            setStatus(QStringLiteral("无法启动 VS Player"), true);
+    });
     shellLayout->addWidget(navigation_);
     shellLayout->addWidget(pages_, 1);
     setCentralWidget(shell);
@@ -364,7 +385,7 @@ void MainWindow::selectPage(int index)
     for (int i = 0; i < navigationButtons_.size(); ++i) navigationButtons_[i]->setChecked(i == index);
     for (auto *action : vsActions_) action->setVisible(index == 0);
     frameStatus_->setVisible(index == 0);
-    setStatus(index == 0 ? QStringLiteral("VS 实时渲染") : index == 1 ? QStringLiteral("图像分析比对 · 双路直接解码") : QStringLiteral("设置"));
+    setStatus(index == 0 ? QStringLiteral("VS 实时渲染") : index == 1 ? QStringLiteral("图像分析比对 · 双路直接解码") : index == 3 ? QStringLiteral("BD 一键 Remux") : QStringLiteral("设置"));
 }
 
 void MainWindow::showSettings()

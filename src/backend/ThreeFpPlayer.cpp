@@ -45,6 +45,7 @@ bool ThreeFpPlayer::createSession()
 
     if (!check(api_.create(&configuration, &handle_), QStringLiteral("创建 3FP 会话")))
         return false;
+    if(clockOnly_)api_.setClockOnly(handle_,true);
     if (!check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale_) | ((chromaAlgorithm_ + 1) << 8) | (antiRinging_ ? 65536u : 0u)), downscale_), QStringLiteral("设置缩放算法")))
         return false;
     if (muted_)
@@ -67,6 +68,7 @@ ThreeFpPlayer::~ThreeFpPlayer()
         api_.destroy(handle_);
     }
 }
+bool ThreeFpPlayer::setClockOnly(bool enabled) { clockOnly_=enabled;return handle_ && api_.setClockOnly(handle_,enabled)==ThreeFpResult::Success; }
 
 bool ThreeFpPlayer::ready() const { return handle_ != nullptr; }
 QString ThreeFpPlayer::lastError() const { return lastError_; }

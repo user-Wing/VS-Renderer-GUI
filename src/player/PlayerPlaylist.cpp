@@ -1,6 +1,12 @@
 #include "player/PlayerWindow.h"
 #include "ui/PreviewPane.h"
 #include "player/PlayerImage.h"
+#include "bluray/BlurayCatalog.h"
+#include <QFutureWatcher>
+#include <QtConcurrentRun>
+#include <QProcess>
+#include <QDialog>
+#include <QJsonArray>
 #include <QApplication>
 #include <QCursor>
 #include <QDir>
@@ -29,6 +35,28 @@ void PlayerWindow::chooseFiles() {
 void PlayerWindow::chooseFolder() {
     const auto path=QFileDialog::getExistingDirectory(this,tr("打开文件夹"));if(!path.isEmpty())openFolder(path);
 }
+void PlayerWindow::chooseBluRay() {const auto path=QFileDialog::getExistingDirectory(this,tr("打开 BD 文件夹用于播放"));if(!path.isEmpty())openBluRay(path);}
+void PlayerWindow::applyBlurayMetadata() {
+    if(blurayMetadata_.isEmpty())return;
+    media_.insert("chapters",blurayMetadata_.value("chapters"));
+    QJsonArray streams;const auto languages=blurayMetadata_.value("languages").toObject();
+    for(const auto &value:media_.value("streams").toArray()){auto stream=value.toObject();const auto lang=languages.value(QString::number(stream.value("streamId").toInt())).toString();if(!lang.isEmpty())stream.insert("language",lang);streams<<stream;}
+    media_.insert("streams",streams);
+}
+bool PlayerWindow::openBluRay(const QString &path) {
+    if(QFileInfo(path).isFile()){
+        auto image=QDir::toNativeSeparators(path);image.replace("'","''");const auto script=QString("$ErrorActionPreference='Stop'; Mount-DiskImage -ImagePath '%1' -PassThru | Get-Volume | Where-Object DriveLetter | ForEach-Object { $_.DriveLetter + ':\\' }").arg(image);
+        auto *mount=new QProcess(this);connect(mount,&QProcess::finished,this,[this,mount](int code){const auto root=QString::fromUtf8(mount->readAllStandardOutput()).trimmed();if(code==0 && QFileInfo(root).isDir())openBluRay(root);else setError(tr("装载 BD 镜像失败：%1").arg(QString::fromUtf8(mount->readAllStandardError())));mount->deleteLater();});
+        connect(mount,&QProcess::errorOccurred,this,[this,mount]{setError(mount->errorString());mount->deleteLater();});mount->start("powershell.exe",{"-NoProfile","-NonInteractive","-EncodedCommand",QString::fromLatin1(QByteArray(reinterpret_cast<const char *>(script.utf16()),script.size()*2).toBase64())});return true;
+    }
+    message_->setText(tr("正在读取 BD 播放列表…"));auto *scan=new QFutureWatcher<BlurayScan>(this);
+    connect(scan,&QFutureWatcher<BlurayScan>::finished,this,[this,scan]{const auto result=scan->result();scan->deleteLater();QVector<BlurayTitle> titles;for(const auto &title:result.titles)if(title.suggested && title.warning.isEmpty())titles<<title;
+        if(titles.isEmpty())for(const auto &title:result.titles)if(title.warning.isEmpty())titles<<title;
+        if(titles.isEmpty()){setError(tr("没有可播放的 BD 节目；请检查视频/CLPI 是否完整。复杂盘型可在 Renderer 中指定模板。%1").arg(result.warnings.join('\n')));return;}
+        QStringList paths;QHash<QString,QString> labels;QString error;for(const auto &title:titles){const auto playlist=BlurayCatalog::prepare(title,&error);if(playlist.isEmpty()){setError(error);return;}paths<<playlist;labels.insert(playlist,title.label);}
+        playlistDirectory_.clear();files_=paths;blurayLabels_=labels;if(openFile(paths.first())){setPlaylistPinned(true);updatePlaylist();}
+    });scan->setFuture(QtConcurrent::run([path]{return BlurayCatalog::scan(path);}));return true;
+}
 void PlayerWindow::chooseLink() {
     const auto url=QInputDialog::getText(this,tr("打开链接"),tr("HTTP / HTTPS 视频直链或 file:/// 本地文件链接"));if(!url.trimmed().isEmpty())openFile(url.trimmed());
 }
@@ -52,6 +80,7 @@ void PlayerWindow::populateFolder(QTreeWidgetItem *parent,const QString &path) {
     }
 }
 bool PlayerWindow::openFolder(const QString &path) {
+    if(QFileInfo(QDir(path).filePath("BDMV/PLAYLIST")).isDir() || QFileInfo(QDir(path).filePath("PLAYLIST")).isDir())return openBluRay(path);
     if(!QFileInfo(path).isDir())return false;playlistDirectory_=QFileInfo(path).absoluteFilePath();files_.clear();
     QDirIterator iterator(playlistDirectory_,QDir::Files|QDir::NoSymLinks,QDirIterator::Subdirectories);
     const QStringList mediaExtensions{"mkv","mp4","mov","avi","webm","ts","m2ts","wmv","flv","mp3","flac","wav","m4a","ogg","opus"};
@@ -64,7 +93,7 @@ void PlayerWindow::updatePlaylist() {
     if(playlist_->property("directory").toString()!=playlistDirectory_ || playlistDirectory_.isEmpty()) {
         playlist_->clear();playlist_->setProperty("directory",playlistDirectory_);
         if(!playlistDirectory_.isEmpty())populateFolder(nullptr,playlistDirectory_);
-        else for(const auto &file:files_) {auto *item=new QTreeWidgetItem(playlist_);const QUrl url(file);item->setText(0,url.scheme()=="http" || url.scheme()=="https"?url.fileName():QFileInfo(file).fileName());item->setData(0,Qt::UserRole,file);item->setToolTip(0,file);}
+        else for(const auto &file:files_) {auto *item=new QTreeWidgetItem(playlist_);const QUrl url(file);item->setText(0,blurayLabels_.contains(file)?blurayLabels_.value(file):url.scheme()=="http" || url.scheme()=="https"?url.fileName():QFileInfo(file).fileName());item->setData(0,Qt::UserRole,file);item->setToolTip(0,file);}
     }
     for(QTreeWidgetItemIterator it(playlist_);*it;++it) {const bool current=(*it)->data(0,Qt::UserRole).toString()==source_;QFont font=(*it)->font(0);font.setBold(current);(*it)->setFont(0,font);if(current)playlist_->setCurrentItem(*it);}
 }

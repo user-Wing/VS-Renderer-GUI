@@ -1,8 +1,8 @@
 # VS-Player / 3FP 色彩管理与 HDR 实现升级规格
 
-> 本文是下一轮 AI 的实现任务书。目标不是重写播放器，也不是为了“支持更多格式”堆开关，而是在现有 3FP + VapourSynth + D3D11 架构上，把视频色彩管理推进到接近 mpv `gpu-next/libplacebo` 的完整程度，并把可合法使用的 HDR 标准与开源实现接入到授权边界。
+> 本文是下一轮 AI 的实现任务书。目标不是重写播放器，也不是为了“支持更多格式”堆开关，而是在现有 3FP + VapourSynth + D3D11 架构上，继续精进 FFFProject 自身的视频色彩管理，并把可合法使用的 HDR 标准与开源实现接入到授权边界。mpv `gpu-next/libplacebo` 只作为对照实现和可选高级模式，不再作为必须追随的主架构。
 >
-> 原则：优先复用成熟开源实现，避免继续手写重复的 tone mapping / gamut mapping / ICC / dithering 算法；保持现有 3FP D3D11、VS 外部帧桥、低延迟播放、字幕和缩放体系。所有新增能力必须有明确 fallback，并且不得把“能识别元数据”宣传成“完整支持某商业 HDR 标准”。
+> 原则：以 FFFProject 最新上游的原生 D3D11/scRGB 色彩路径为基线，优先保留已经验证的 HDR 数值输出；新增能力不能把显示器 ICC、Windows HDR 校准等 DWM 已负责的显示端处理再次放进播放器，避免双重校色。所有新增能力必须有明确 fallback，并且不得把“能识别元数据”宣传成“完整支持某商业 HDR 标准”。
 
 重要补充（开发者修改了来自AI处理的文章）遵照本文件所有的修改都须以**精进色彩管理/HDR/颜色输出质量这些方面**为目标，且**不能影响后续的VS处理链**。下文的很多库，当前VS似乎有很多已经带上了，能用先用本地，不拉项目。没有再拉。
 
@@ -44,128 +44,73 @@
 - `.deps/fff-player/FFF.Native/3FP/Hdr/HdrProcessor.cpp`
 - `.deps/fff-player/FFF.Native/3FP/Api/FFF.Player.Api.h`
 
-### 1.2 与 mpv gpu-next/libplacebo 的主要差距
+### 1.2 最新 FFFProject 与 mpv/libplacebo 的关系
 
-当前差距不在“能不能输出 10-bit”，而在完整 source→display 色彩管理。
+以 2026-09-30 上游 `Lake1059/FFF_Project` HEAD `15995b807bf8a27037d2697fcdb89d13064ee247` 为基线，FFFProject 已经不是早期“709/2020 简易模式”可以概括的状态。最新代码专门处理了 P3/BT.2020 区分、宽色域 SDR 的 scRGB 呈现、Windows SDR white、FP16 scRGB 超 1.0/负值保真、HDR/SDR 交换链切换、BT.2390 + IPT、动态 HDR 分类以及 Dolby 扩展接口。
 
-现有 3FP 核心模型仍大致是：
+因此后续不应把“迁移到 libplacebo”视为色准升级的前提。开发者反馈当前 HDR 色准已经优于 mpv；仅凭代码不能把“所有场景都优于 mpv”当成已证明事实，但可以确认 FFFProject 在 Windows Advanced Color/scRGB 契约上进行了大量专门实现和数值约束，必须先保留这些优势，再做同条件 A/B 验证。
 
-```text
-709 / 2020
-+
-SDR / PQ / HLG
-+
-自有 HDR tone mapping
-+
-8/10-bit SDR 或 FP16 scRGB HDR 输出
-```
+当前真正需要继续补齐的是：
 
-mpv/libplacebo 的完整模型则更接近：
-
-```text
-源像素表示
-→ range / matrix / chroma location
-→ primaries / transfer / white point
-→ Dolby/HDR10+/HDR metadata reshape
-→ linear-light working space
-→ target display primaries / transfer / luminance / black point
-→ tone mapping
-→ gamut mapping
-→ ICC / 3DLUT
-→ scaling / overlay
-→ target bit depth
-→ dithering
-→ swapchain
-```
-
-当前需要重点补齐：
-
-- 视频 ICC / 显示器 profile 管理；
-- 完整 target display model，而不是只读取峰值后把主要 HDR tone mapping 交给 Windows/显示器；
-- 更完整的 primaries / transfer / matrix 支持；
 - HDR10+ ST 2094-40 动态 metadata 的完整利用；
-- Dolby Vision RPU reshape，而不是只识别和 fallback；
-- 更成熟的 gamut mapping；
-- 8-bit/10-bit 末端量化前 dithering；
-- BT.2020 constant-luminance 的正确路径；
-- 统一 HDR/SDR/广色域图片与视频的颜色语义，避免播放器视频和图片编辑器各自一套逻辑。
+- Dolby Vision RPU / EL / FEL 在授权边界内的真实处理；
+- HDR Vivid 与 Ultra HDR/gain-map；
+- BT.2020 constant-luminance 等少数边缘色彩空间；
+- 末端量化/dithering 是否需要以及如何不破坏现有原生输出；
+- VS 滤镜链改变 transfer/primaries 后的 metadata 一致性；
+- 与 mpv/libplacebo 的同条件数值对照，而不是默认认为后者就是正确答案。
+
+**显示器 ICC 不属于上述缺口。** 最新 FFFProject README 明确规定：播放器不读取 ICC，也不在 shader 中补偿显示设置；ICC、HDR 校准和 SDR 亮度映射由 DWM 在窗口合成时应用一次。这个设计应继续保留。
 
 ## 2. 总体实现策略
 
-### 2.1 不再继续手写一套“迷你 libplacebo”
+### 2.1 以 FFFProject 原生色彩引擎为主
 
-下一轮修改的首选方案是把 **libplacebo 作为 3FP 的主色彩处理引擎**，优先使用其 Direct3D 11 backend，而不是把当前播放器改成 Vulkan。
+下一轮修改必须把 **FFFProject 原生 D3D11/scRGB renderer 作为默认和权威路径**。不得为了“更像 mpv”而让 libplacebo 自动接管当前 HDR 主画面。
 
-截至本文编写时，libplacebo 官方已提供：
-
-- Vulkan；
-- OpenGL；
-- Direct3D 11；
-- FFmpeg AVFrame interop；
-- high-level renderer；
-- ICC；
-- 3DLUT；
-- HDR peak detection；
-- 多种 tone mapping；
-- perceptual gamut mapping；
-- dithering；
-- Dolby Vision reshaping；
-- deband、scaling、shader hooks 等。
-
-因此建议结构改为：
+建议结构：
 
 ```text
 FFmpeg / D3D11VA / VapourSynth frame
                 ↓
-       统一 FrameColorMetadata
+       FFFProject 原生 metadata / HDR processor
                 ↓
-        libplacebo D3D11 renderer
+       3FP D3D11 native shader
       ├─ range / matrix / chroma
-      ├─ primaries / transfer
-      ├─ HDR metadata
-      ├─ DV reshape
-      ├─ HDR10+ metadata
-      ├─ tone mapping
-      ├─ gamut mapping
-      ├─ ICC / 3DLUT
-      ├─ dithering
-      └─ scaling（可按需启用）
-                ↓
-  3FP 已有 D3D11 swapchain / overlay / pacing
+      ├─ Rec.709 / Rec.2020 / P3
+      ├─ PQ / HLG
+      ├─ BT.2390 + IPT HDR→SDR
+      ├─ Dolby/HDR dynamic extension
+      ├─ native scaling / overlay
+      └─ BGRA8 / RGB10A2 / FP16 scRGB
                 ↓
       Windows DWM / Advanced Color
+      └─ 系统 ICC / HDR 校准 / SDR brightness
 ```
 
-允许两种集成层级：
+这里的关键边界是：**播放器负责把内容正确变成 Windows 约定的目标交换链数值；DWM 负责把交换链映射到实际显示器。** 两层不能重复。
 
-**方案 A，优先：** libplacebo 接管视频主画面颜色处理，但 3FP 保留 swapchain、字幕、VRR/pacing、窗口、播放器状态和 overlay 合成。
+libplacebo 仍可使用，但只放在用户已经指定的“自定义：Libplacebo 高级调控”中，作为实验/高级调节/对照路径。它不能成为默认 Auto backend，也不能因为启用它而绕过 FFFProject 已有的 scRGB、P3、HDR metadata、Dolby 扩展和 Windows Advanced Color 逻辑。
 
-**方案 B，若 A 的 D3D11 resource interop 成本或接口限制明显：** libplacebo 接管完整 video render target，再交给现有 3FP compositor 合成字幕。不要为了保留当前手写 shader 而复制 libplacebo 的 ICC/tone/gamut/dither 代码。
-
-### 2.2 保留现有 renderer 作为 fallback
-
-不得一次删除当前 `PixelShaderSource`、BT.2390/IPT 与 D3D11 VideoProcessor 路径。
-
-增加运行时后端概念：
+### 2.2 两种色彩模式
 
 ```text
 Color engine:
-- Auto
-- libplacebo
-- 3FP legacy
+- 3FP Native（默认）
+- Libplacebo Advanced（手动选择）
 ```
 
-默认 Auto：
+规则：
 
-1. libplacebo D3D11 初始化成功 → 使用 libplacebo；
-2. libplacebo 初始化失败或当前像素资源无法导入 → 使用 3FP legacy；
-3. fallback 必须写入 snapshot / info panel，不能静默。
-
-这样可以保证当前播放能力不因大规模色彩升级倒退。
+1. 默认永远进入 3FP Native；
+2. Libplacebo Advanced 只有用户显式选择时启用；
+3. 高级模式失败时可回退 3FP Native，并报告原因；
+4. A/B 对照必须保证同一源帧、同一目标峰值和同一 Windows 显示环境；
+5. 不删除当前 `PixelShaderSource`、BT.2390/IPT、P3/scRGB 与 D3D11 VideoProcessor 路径。
 
 ## 3. 依赖引入策略
 
-### 3.1 libplacebo：核心依赖
+### 3.1 libplacebo：可选高级依赖
 
 上游：
 
@@ -177,15 +122,13 @@ Color engine:
 - D3D11 GPU abstraction；
 - FFmpeg frame interop；
 - color space decode/encode；
-- ICC；
-- gamut mapping；
-- HDR tone mapping；
-- HDR10+ metadata；
-- Dolby Vision；
-- dithering；
-- 3DLUT；
-- peak detection；
-- 未来可统一 Jinc/anti-ringing/deband/custom shader。
+- 高级 gamut/tone mapping 实验；
+- HDR10+ / Dolby Vision 等实现对照；
+- dithering / deband / custom shader 实验；
+- A/B reference；
+- 用户手动选择的高级调控。
+
+**不把显示器 ICC/3DLUT 作为引入 libplacebo 的理由。** 默认 3FP Native 继续把显示器校准交给 DWM。
 
 授权：
 
@@ -197,28 +140,26 @@ Color engine:
 构建要求：
 
 - Windows D3D11 backend 必须开启；
-- 若启用 ICC，应构建 lcms2 支持；
 - 若启用 Dolby Vision，应构建 libdovi 支持；
 - 尽量使用 shared DLL，便于许可证隔离和替换。
 
-### 3.2 LittleCMS 2：ICC
+### 3.2 LittleCMS 2 / ICC：不进入默认视频显示链
 
-上游：
+LittleCMS 2 仍可服务于图片编辑、离线转换或“源文件自带 ICC”的内容解释，但 **不负责读取当前显示器 ICC 并在视频 shader 中再校色一次**。
 
-- https://github.com/mm2/Little-CMS
+FFFProject 最新上游已经明确选择 Windows 原生契约：
 
-用途：
+```text
+3FP 生成标准 SDR / RGB10A2 / FP16 scRGB
+        ↓
+DWM / Advanced Color
+        ↓
+系统 ICC + HDR calibration + SDR brightness
+        ↓
+物理显示器
+```
 
-- ICC v2/v4 profile；
-- 显示器 ICC；
-- source ICC；
-- profile transform / 3DLUT generation。
-
-授权：
-
-- MIT。
-
-优先让 libplacebo 通过 lcms2 使用 ICC，不要在 3FP 再造一套与 libplacebo 并行的 CMS。图片编辑器现有 Qt QColorSpace/ICC 可暂时保留，但长期应建立统一的颜色元数据表示。
+因此默认视频播放链不需要 lcms2，也不需要建立 monitor ICC cache/3DLUT。若未来做专业软打样或离线导出，那是独立功能，不能混入普通播放。
 
 ### 3.3 libdovi / dovi_tool：Dolby Vision 开源边界
 
@@ -439,57 +380,72 @@ otherwise → 601
 
 需要：
 
-- 优先让 libplacebo 根据 FFmpeg colorspace 处理；
-- legacy path 也必须拆分 CL / NCL；
+- 3FP Native 路径必须先拆分 CL / NCL，不能把问题转交给可选后端；
+- Libplacebo Advanced 同样要验证 CL / NCL 行为，但它不是默认修复手段；
 - 增加测试图，确认 constant-luminance 不再走普通 NCL 逆矩阵。
 
-## 6. 显示器色彩管理
+## 6. 显示器色彩管理：遵循 Windows / DWM 契约
 
-### 6.1 自动目标显示器识别
+### 6.1 播放器需要识别什么
 
-窗口跨显示器时，重新解析：
+窗口跨显示器时，3FP 仍需要重新解析与**交换链选择和 HDR 数值契约**有关的信息：
 
 - 当前 HMONITOR；
 - BitsPerColor；
 - DXGI colorspace；
-- HDR/Advanced Color 状态；
+- HDR / Advanced Color 状态；
 - min/max/full-frame luminance；
-- Windows HDR calibration 信息；
-- 当前显示器 ICC profile。
+- Windows SDR white level；
+- scRGB 是否可用。
 
-必须支持从一个显示器拖到另一个显示器后动态重建 color target。
+这些信息用于决定 BGRA8、RGB10A2 或 FP16 scRGB，以及 HDR/SDR paper white 和 fallback。窗口跨显示器后必须重新检测。
 
-### 6.2 ICC
+### 6.2 显示器 ICC 不由播放器再处理
 
-目标：
+最新 FFFProject README 已明确：
+
+> 播放器不读取 ICC，也不在 shader 中补偿显示设置；ICC、HDR 校准和 SDR 亮度映射只由 DWM 在窗口合成时应用一次。
+
+因此默认视频播放链应保持：
 
 ```text
-Source color space
-→ linear working space
-→ target display ICC / 3DLUT
-→ target framebuffer
+源视频色彩语义
+→ 3FP Native 生成标准 SDR / RGB10A2 / FP16 scRGB
+→ Present
+→ DWM / Advanced Color
+→ 系统 ICC + HDR Calibration + SDR brightness
+→ 物理显示器
 ```
 
-规则：
+不要增加“显示器 ICC：自动/关闭/自定义”这一层，也不要读取 monitor ICC 后生成 3DLUT 再套进 shader。这样做很容易和 DWM 的系统颜色管理发生**双重校色**。
 
-- Auto：使用当前显示器系统 ICC；
-- Off：禁用 ICC，仅使用标准 target primaries；
-- Custom：指定 ICC 文件；
-- 允许 cache 生成后的 3DLUT，避免每帧 CPU CMS。
+这里要区分两种 ICC：
 
-不能把图片编辑器中的 Qt QColorSpace 当成视频 ICC 已完成；视频要进入同一 target profile 体系。
+- **显示器 ICC**：属于 Windows/DWM，播放器不碰。
+- **源内容嵌入 ICC**：常见于图片，属于“这个文件本身是什么颜色”的解释，可以在图片/离线转换链处理；它不是显示器校准。
 
-### 6.3 HDR 下的 ICC
+### 6.3 LUT 到底是什么，是否需要
 
-不要机械地把 SDR ICC LUT 直接套到 HDR scRGB 上。
+LUT（Look-Up Table，查找表）本质上是预先计算好的映射：
 
-需要依据 libplacebo 的 target color model 和 Windows Advanced Color 路径处理；HDR 下 profile/target primaries 的适用方式必须通过真实 HDR 显示器验证。
+- **1D LUT**：每个通道独立映射，常用于 gamma、白平衡、单通道校准。
+- **3D LUT**：输入 RGB 三维坐标，输出另一组 RGB，能同时表达 gamma、色域变换和复杂颜色风格。
+- 常见文件是 `.cube`。
+
+在标准视频播放里，大部分时候**不需要额外 LUT**。BT.709、BT.2020、PQ、HLG、P3、矩阵转换、BT.2390 等都有明确数学定义，FFFProject 直接按公式/metadata 处理更透明，也更容易验证数值正确性。
+
+LUT 只保留两个可选用途：
+
+1. **创意/风格 LUT**：用户故意改变画面，例如电影调色 `.cube`。这是效果器，不是“色彩正确性”功能，默认关闭。
+2. **特殊专业软打样/设备仿真 LUT**：仅在明确需要模拟另一目标设备时使用，必须独立于普通播放，不得和系统显示器 ICC 叠加。
+
+所以普通播放器 UI 不增加 LUT。若以后做高级模式，只放在 Libplacebo Advanced / Developer 下，并明确标为“用户效果/软打样”，不能默认启用。
 
 ## 7. Tone mapping 与 gamut mapping
 
 ### 7.1 默认算法
 
-优先直接使用 libplacebo 默认/高质量 preset。
+默认继续使用并优化 FFFProject 原生 HDR/tone mapping。Libplacebo 的 preset 只属于用户手动选择的 Advanced 模式，不得替换 Native 默认。
 
 建议用户层只暴露少数模式：
 
@@ -501,7 +457,7 @@ Tone mapping:
 - BT.2390 compatibility
 ```
 
-不要把 libplacebo 内部十几个参数全部暴露到普通设置页。
+普通设置页不要暴露大量算法参数；原生模式保持少量稳定策略，Libplacebo Advanced 的详细参数放进开发者/高级页。
 
 开发者高级设置可以提供：
 
@@ -574,7 +530,7 @@ HDR10 是基线能力，必须成为所有动态 HDR fallback 的稳定底座。
 - Rec.2020 gamut mapping；
 - overlay/subtitle 的 SDR white 与 HDR 主画面关系正确。
 
-优先让 libplacebo 处理扩展 HLG gamma，不继续维护一套简化常量公式作为默认。
+HLG 默认必须在 3FP Native 中按标准继续完善；Libplacebo 只用于 A/B 和高级模式，不能成为修复 Native HLG 的替代品。
 
 ## 10. HDR10+
 
@@ -855,21 +811,23 @@ UI 第一版只暴露：
 - final output value；
 - 当前 color engine；
 - tone/gamut mapping；
-- ICC；
+- DWM/Advanced Color contract；
 - output bit depth。
 
-用于 A/B 对比 libplacebo 与 legacy。
+显示器 ICC 不作为像素探针内部 stage，因为它发生在 Present 之后的 DWM/系统显示链。用于 A/B 对比 3FP Native、mpv gpu-next 与可选 Libplacebo Advanced。
 
 ## 18. UI
 
 普通用户只需要：
 
 ```text
-色彩管理：自动 / 关闭
+色彩引擎：3FP Native（默认） / Libplacebo Advanced
 HDR：自动 / 映射到 SDR / 强制 HDR（开发者）
 Tone mapping：自动 / 高质量
-显示器 ICC：自动 / 关闭 / 自定义
 Dithering：自动 / 关闭
+
+显示器 ICC 不提供播放器内开关，由 Windows/DWM 统一管理。
+LUT 不放普通设置页；仅 Advanced/Developer 可选加载创意 .cube LUT，默认关闭。
 ```
 
 开发者信息页显示：
@@ -882,15 +840,15 @@ MaxCLL 812 · MaxFALL 240
 HDR10+ / DV / Vivid metadata state
 
 Pipeline:
-D3D11VA → libplacebo D3D11
+D3D11VA → 3FP Native / Libplacebo Advanced
 DV reshape: active / fallback
-Tone map: spline / ST2094-40 / ...
-Gamut map: perceptual
-ICC: <monitor profile>
+Tone map: native BT.2390/IPT / advanced ...
+Gamut: Rec.709 / Rec.2020 / P3
 Dither: ...
 Target:
 scRGB FP16 / RGB10A2 / BGRA8
-Display peak / black / BPC
+Display peak / SDR white / black / BPC
+Display color management: Windows DWM / system ICC
 ```
 
 ## 19. 自动 fallback 规则
@@ -905,15 +863,21 @@ metadata-aware source decode
 → FP16 scRGB
 ```
 
-失败：
+默认 Native 路径失败：
 
 ```text
-libplacebo HDR
-→ 3FP legacy HDR
-→ 3FP HDR→SDR
+3FP Native HDR
+→ 3FP Native HDR→SDR fallback
 ```
 
-不得黑屏。
+用户手动选择 Libplacebo Advanced 时：
+
+```text
+Libplacebo Advanced
+→ 3FP Native
+```
+
+不得因为高级后端失败而黑屏，也不得自动把 Libplacebo 置于 Native 之前。
 
 ### 19.2 HDR source → SDR display
 
@@ -921,9 +885,9 @@ libplacebo HDR
 dynamic metadata
 → tone map
 → gamut map
-→ ICC
 → dither
-→ SDR
+→ SDR swapchain
+→ DWM/system ICC
 ```
 
 ### 19.3 未知 colorspace
@@ -941,7 +905,8 @@ dynamic metadata
 要求：
 
 - D3D11 hardware frame 优先 zero-copy / GPU-to-GPU；
-- libplacebo D3D11 resource interop；
+- 3FP Native 保持当前 GPU-to-GPU 路径；
+- Libplacebo Advanced 若启用，再要求 D3D11 resource interop；
 - VS CPU frame允许 upload；
 - 只有无法导入的特殊 format 才 swscale fallback；
 - 记录：
@@ -950,7 +915,7 @@ dynamic metadata
   - upload；
   - color mapping GPU；
   - present；
-- 不允许引入“为了 ICC 每帧重新生成 3DLUT”之类明显错误实现。
+- 不允许在默认视频链加入 monitor ICC/3DLUT；显示器校准留给 DWM。
 
 ## 21. 测试矩阵
 
@@ -986,8 +951,9 @@ dynamic metadata
 - SDR 10-bit；
 - Windows HDR desktop；
 - HDR display with zero/invalid luminance report；
-- monitor A/B ICC；
-- 窗口跨显示器。
+- 窗口跨显示器；
+- 系统 ICC/HDR 校准变化不应改变 3FP 后缓冲原始数值，只应影响 DWM 后的实际显示结果；
+- 更换显示器后正确重探测 HDR capability / SDR white / BPC。
 
 ### 21.4 A/B reference
 
@@ -996,20 +962,20 @@ dynamic metadata
 对同一帧：
 
 ```text
-VS-Player libplacebo
+VS-Player 3FP Native
 mpv gpu-next
-VS-Player legacy
+VS-Player Libplacebo Advanced（若启用）
 ```
 
 在相同：
 
-- target primaries；
-- target transfer；
-- target peak；
-- tone mapper；
-- ICC off/on；
+- source metadata；
+- target primaries / transfer；
+- target peak / SDR white；
+- tone-mapping 目标；
+- 同一 Windows HDR / DWM 环境；
 
-条件下截图/浮点读回。
+条件下优先比较**后缓冲原始数值/浮点读回**。系统 ICC 是 Present 之后的显示层变量，不作为播放器内部 A/B 开关。
 
 允许少量 rounding，不允许系统性色偏、range 错、gamma 错和明显 banding。
 

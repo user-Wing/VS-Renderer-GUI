@@ -1,0 +1,108 @@
+diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -510,6 +510,7 @@ std::int64_t PlayerSession::StreamTimestampPosition100ns(const AVFormatContext*
+ }
+ 
+ bool PlayerSession::ShouldGateAudioAtVideoStart() const noexcept {
++    if (clockOnly_.load()) return false;
+     if (format_ == nullptr || videoStream_ < 0 ||
+         videoStream_ >= static_cast<std::int32_t>(format_->nb_streams)) return false;
+     const auto* stream = format_->streams[videoStream_];
+@@ -2174,7 +2175,7 @@ void PlayerSession::DoOpen(std::string path) noexcept {
+     snapshot_.decodeMode = decodeMode_;
+     bool hardwareFallback = false;
+     std::string hardwareFailureReason;
+-    if (videoStream_ >= 0) {
++    if (videoStream_ >= 0 && !clockOnly_.load()) {
+         auto result = decodeMode_ == FFF3FPDecodeMode::D3D11 && !staticImage_
+             ? OpenHardwareVideoDecoder(format_, videoStream_, &videoDecoder_, &hardwareFailureReason)
+             : OpenDecoder(format_, videoStream_, true, &videoDecoder_);
+@@ -2214,7 +2215,7 @@ void PlayerSession::DoOpen(std::string path) noexcept {
+         snapshot_.position100ns = 0; snapshot_.frameIndex = -1; snapshot_.framePts = AV_NOPTS_VALUE;
+         snapshot_.selectedVideoStream = videoStream_; snapshot_.selectedAudioStream = audioStream_;
+         snapshot_.videoWidth = snapshot_.videoHeight = 0; snapshot_.isHdrSource = 0;
+-        if (videoStream_ >= 0) { snapshot_.videoWidth = videoDecoder_->width; snapshot_.videoHeight = videoDecoder_->height; ApplyHdrState(snapshot_, videoRenderer_.HdrState()); }
++        if (videoStream_ >= 0) { const auto *parameters=format_->streams[videoStream_]->codecpar;snapshot_.videoWidth = videoDecoder_?videoDecoder_->width:parameters->width; snapshot_.videoHeight = videoDecoder_?videoDecoder_->height:parameters->height; ApplyHdrState(snapshot_, videoRenderer_.HdrState()); }
+         else if (coverArtFrame_ != nullptr) { snapshot_.videoWidth = coverArtFrame_->width; snapshot_.videoHeight = coverArtFrame_->height; snapshot_.isHdrSource = 0; }
+         if (snapshot_.isHdrSource == 0 && snapshot_.requestedColorMode == FFF3FPColorMode::MapToHdr) {
+             snapshot_.requestedColorMode = FFF3FPColorMode::MapToSdr;
+@@ -2353,7 +2354,8 @@ void PlayerSession::PumpPlayback() noexcept {
+     TryReleaseAudioAfterVideoPresentation();
+     UpdateBitRateForPosition(ClockPosition());
+     if (PumpVideoPresentation()) return;
+-    if (videoStream_ < 0 && audioStream_ >= 0 && !audioRenderer_) {
++    if(clockOnly_.load()){snapshot_.position100ns=std::min(ClockPosition(),snapshot_.duration100ns);PublishSnapshot();}
++    if ((videoStream_ < 0 || clockOnly_.load()) && (audioStream_ >= 0 || clockOnly_.load()) && !audioRenderer_) {
+         // Windows can block both shared and exclusive initialization while a
+         // different process owns the endpoint. Keep audio-only media on its
+         // normal wall clock instead of draining the entire file immediately.
+@@ -2392,7 +2394,7 @@ void PlayerSession::PumpPlayback() noexcept {
+         av_packet_free(&packet);
+         return;
+     }
+-    if (videoStream_ < 0 && audioRenderer_ && audioBuffered >= TargetAudioBuffer100ns) { Sleep(2); return; }
++    if ((videoStream_ < 0 || clockOnly_.load()) && audioRenderer_ && audioBuffered >= TargetAudioBuffer100ns) { Sleep(2); return; }
+     if (!draining_ && externalFormat_ != nullptr && audioRenderer_ && !delayAudioUntilVideo &&
+         audioBuffered < TargetAudioBuffer100ns) PumpExternalAudio();
+     const auto videoPacketsFull = pendingVideoPackets_.size() >= MaximumPendingVideoPackets ||
+@@ -3037,6 +3039,16 @@ void PlayerSession::FlushAtEnd() noexcept {
+ void PlayerSession::DoSeek(std::int64_t position, const std::int64_t targetFrame,
+     const bool exact) noexcept {
+     if (!format_) return; position = std::clamp<std::int64_t>(position, 0, snapshot_.duration100ns > 0 ? snapshot_.duration100ns : position);
++    // During a paused forward scrub, continue the already primed decoder.
++    // Reopening the same GOP on every mouse sample discards frame-thread work.
++    const auto currentState=state_.load();
++    if(exact && targetFrame<0 && !clockOnly_.load() && videoDecoder_ && videoFrameQueue_.empty() && pendingVideoPackets_.empty() && !externalFormat_ &&
++        (currentState==FFF3FPState::Ready || currentState==FFF3FPState::Paused) && snapshot_.frameIndex>=0 &&
++        position>snapshot_.position100ns && position-snapshot_.position100ns<=TicksPerSecond/2){
++        seekTarget100ns_=position;seekTargetFrame_=-1;keyframeSeekPending_=false;
++        snapshot_.position100ns=position;++snapshot_.timelineGeneration;ResetClock(position);
++        if(audioRenderer_)audioRenderer_->Reset(position);ArmAudioUntilVideoFrame();PublishSnapshot();return;
++    }
+     auto decodeStartPosition = position;
+     const auto referenceStream = videoStream_ >= 0 ? videoStream_ : audioStream_;
+     auto timestamp = av_rescale_q(position + TimelineOrigin100ns(format_),
+diff --git a/FFF.Native/3FP/Core/PlayerSession.h b/FFF.Native/3FP/Core/PlayerSession.h
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -34,6 +34,7 @@ public:
+     FFFResult Open(const char* localPathUtf8) noexcept;
+     FFFResult Play() noexcept;
+     FFFResult Pause() noexcept;
++    FFFResult SetClockOnly(bool enabled) noexcept { clockOnly_.store(enabled); return FFFResult::Success; }
+     FFFResult DiscardAudioOutput() noexcept;
+     FFFResult Stop() noexcept;
+     FFFResult Close() noexcept;
+@@ -207,6 +208,7 @@ private:
+     AVCodecContext* videoDecoder_;
+     AVCodecContext* audioDecoder_;
+     std::int32_t videoStream_;
++    std::atomic<bool> clockOnly_{false};
+     std::int32_t audioStream_;
+     std::int32_t coverArtStream_;
+     AVFrame* coverArtFrame_;
+diff --git a/FFF.Native/3FP/Api/PlayerApi.cpp b/FFF.Native/3FP/Api/PlayerApi.cpp
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -64,6 +64,7 @@ FFFResult FFF3FP_Create(const FFF3FPConfiguration* configuration, FFF3FPHandle*
+ FFFResult FFF3FP_Open(const FFF3FPHandle player, const char* path) noexcept { return player ? static_cast<PlayerSession*>(player)->Open(path) : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_Play(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->Play() : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_Pause(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->Pause() : FFFResult::InvalidArgument; }
++FFFResult FFF3FP_SetClockOnly(const FFF3FPHandle player, const std::int32_t enabled) noexcept { return player ? static_cast<PlayerSession*>(player)->SetClockOnly(enabled != 0) : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_DiscardAudioOutput(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->DiscardAudioOutput() : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_Stop(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->Stop() : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_Close(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->Close() : FFFResult::InvalidArgument; }
+diff --git a/FFF.Native/3FP/Api/FFF.Player.Api.h b/FFF.Native/3FP/Api/FFF.Player.Api.h
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -495,6 +495,8 @@ FFF3FP_API FFFResult FFF3FP_Create(const FFF3FPConfiguration* configuration,
+ FFF3FP_API FFFResult FFF3FP_Open(FFF3FPHandle player, const char* localPathUtf8) noexcept;
+ FFF3FP_API FFFResult FFF3FP_Play(FFF3FPHandle player) noexcept;
+ FFF3FP_API FFFResult FFF3FP_Pause(FFF3FPHandle player) noexcept;
++// Used before opening a VS source: retain metadata/audio/clock without a second video decoder.
++FFF3FP_API FFFResult FFF3FP_SetClockOnly(FFF3FPHandle player, std::int32_t enabled) noexcept;
+ // Synchronously stops the current audio renderer and discards already-submitted
+ // endpoint buffers. Intended for media/session replacement, not normal pause.
+ FFF3FP_API FFFResult FFF3FP_DiscardAudioOutput(FFF3FPHandle player) noexcept;
+

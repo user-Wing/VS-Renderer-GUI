@@ -78,12 +78,16 @@ private:
     int layerHandle(QPointF point) const;
     void updateLayerTransform(QPointF point,bool proportional);
     void finishLayerTransform();
+    void prepareMovePreview();
     ImageEditorTools *tools_;
     ImageEditorTool tool_ = ImageEditorTool::Hand;
     double zoom_ = 1;
     QPointF origin_,anchor_,current_,lastScreen_;
     QPolygonF polygon_;
     QImage preview_,nativePreview_;
+    QImage overview_,overviewNative_,moveBackdrop_,movePixels_;
+    QRect moveRegion_;
+    QPointF moveDelta_;
     QThread *previewThread_ = nullptr;
     ImageHdrSurface *hdrSurface_;
     bool refreshAgain_ = false;

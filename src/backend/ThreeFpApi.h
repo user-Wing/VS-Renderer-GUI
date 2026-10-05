@@ -190,6 +190,7 @@ public:
     ThreeFpResult open(void *handle, const char *pathUtf8) const;
     ThreeFpResult play(void *handle) const;
     ThreeFpResult pause(void *handle) const;
+    ThreeFpResult setClockOnly(void *handle, bool enabled) const;
     ThreeFpResult stop(void *handle) const;
     ThreeFpResult seek(void *handle, std::int64_t position100ns) const;
     ThreeFpResult seekFrame(void *handle, std::int64_t frame) const;
@@ -237,6 +238,7 @@ private:
     using ExternalAudioFn = ThreeFpResult (*)(void *, const char *, int, std::int64_t);
     using EffectsFn = ThreeFpResult (*)(void *, std::uint32_t, const float *, float, std::int64_t);
     StepFn selectAudio_ = nullptr;
+    StepFn setClockOnly_ = nullptr;
     ExternalAudioFn loadExternalAudio_ = nullptr;
     HandleFn clearExternalAudio_ = nullptr;
     EffectsFn setAudioEffects_ = nullptr;

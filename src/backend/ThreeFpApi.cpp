@@ -42,6 +42,7 @@ ThreeFpApi::ThreeFpApi()
     ok &= resolve(redraw_, "FFF3FP_Redraw");
     ok &= resolve(destroy_, "FFF3FP_Destroy");
     selectAudio_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SelectAudioStream"));
+    setClockOnly_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SetClockOnly"));
     loadExternalAudio_ = reinterpret_cast<ExternalAudioFn>(library_.resolve("FFF3FP_LoadExternalAudio"));
     clearExternalAudio_ = reinterpret_cast<HandleFn>(library_.resolve("FFF3FP_ClearExternalAudio"));
     setAudioEffects_ = reinterpret_cast<EffectsFn>(library_.resolve("FFF3FP_SetAudioEffects"));
@@ -76,6 +77,7 @@ ThreeFpResult ThreeFpApi::create(const ThreeFpConfiguration *c, void **h) const 
 ThreeFpResult ThreeFpApi::open(void *h, const char *p) const { return available() ? open_(h, p) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::play(void *h) const { return available() ? play_(h) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::pause(void *h) const { return available() ? pause_(h) : ThreeFpResult::NativeFailure; }
+ThreeFpResult ThreeFpApi::setClockOnly(void *h,bool enabled) const { return setClockOnly_?setClockOnly_(h,enabled?1:0):ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::stop(void *h) const { return available() ? stop_(h) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::seek(void *h, std::int64_t p) const { return available() ? seek_(h, p) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::seekFrame(void *h, std::int64_t f) const { return available() ? seekFrame_(h, f) : ThreeFpResult::NativeFailure; }

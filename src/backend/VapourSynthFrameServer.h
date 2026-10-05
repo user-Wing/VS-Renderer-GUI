@@ -50,7 +50,7 @@ public:
     QString errorString() const;
     void loadScript(const QString &script, const QString &scriptPath);
     void unloadScript();
-    void requestFrame(int frameIndex, int prefetchFrames = 0);
+    void requestFrame(int frameIndex, int prefetchFrames = 0, bool warmStart = false);
     void setResourceLimits(int threads, int cacheMiB);
 
 signals:

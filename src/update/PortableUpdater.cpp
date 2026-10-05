@@ -98,6 +98,13 @@ void PortableUpdater::verifyChunk() {
     if(!archive_->atEnd()){QTimer::singleShot(0,this,&PortableUpdater::verifyChunk);return;}
     archive_.reset();const auto digest=QString::fromLatin1(hash_->result().toHex());hash_.reset();if(digest.compare(selected_.sha256,Qt::CaseInsensitive)!=0){fail(tr("SHA-256 不匹配，更新包未安装。"));return;}listArchive();
 }
+void PortableUpdater::prepareLocal(const PortableRelease &release,const QString &path) {
+    if(busy_)return;
+    if(!newer(release.version,VSR_VERSION)){fail(tr("本体只允许安装更高版本；下载缓存保留，不会降级。"));return;}
+    if(!QRegularExpression("^[a-fA-F0-9]{64}$").match(release.sha256).hasMatch() || release.size<=0 || QFileInfo(path).size()!=release.size){fail(tr("缓存更新包大小或 SHA-256 无效"));return;}
+    selected_=release;payload_.clear();cancelled_=false;work_=std::make_unique<QTemporaryDir>(QDir::tempPath()+"/vs-gui-update-XXXXXX");if(!work_->isValid() || !QFile::copy(path,work_->filePath("update.7z"))){fail(tr("无法准备本地更新包"));return;}
+    archive_=std::make_unique<QFile>(work_->filePath("update.7z"));if(!archive_->open(QIODevice::ReadOnly)){fail(archive_->errorString());return;}busy_=true;action_->setEnabled(false);progress_->setRange(0,100);progress_->show();hash_=std::make_unique<QCryptographicHash>(QCryptographicHash::Sha256);verifyChunk();
+}
 bool PortableUpdater::safeArchiveListing(const QString &listing) {
     const int separator=listing.indexOf("----------");if(separator<0)return false;
     QSet<QString> paths;bool found=false;
@@ -140,6 +147,7 @@ void PortableUpdater::verifyPayload() {
     payload_=payload.path();busy_=false;progress_->hide();status_->setText(tr("版本 %1 已验证。安装将关闭本程序，完成后重新打开；旧目录保留备份。").arg(selected_.version));action_->setEnabled(true);action_->setText(tr("安装并重启"));emit prepared(payload_);
 }
 void PortableUpdater::install() {
+    if(!newer(selected_.version,VSR_VERSION)){fail(tr("不会降级安装旧本体，下载缓存保留。"));return;}
     if(payload_.isEmpty() || busy_)return;const auto helper=work_->filePath("apply-update.ps1");if(!QFile::copy(tool("apply-update.ps1"),helper)){fail(tr("无法准备安装脚本。"));return;}
     QProcess installer;
 #ifdef Q_OS_WIN

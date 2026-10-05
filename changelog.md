@@ -6,7 +6,16 @@
 
 ## 1.0.5 — 本地构建（2026-10-04）
 
-- 本轮交付范围为源码推送与本地完整便携压缩包；不创建 Release 或 Draft，不上传发行附件。打包排除个人数据目录和 AWJ 更新安全状态文件，保留运行时、许可及内置预设。
+- 2026-10-05 Full：Player 打开 BD 直接加入播放列表；恢复空窗口 HW/SW 切换，修复 Tab 透明度、调整手柄与设置窗口遮挡。设置新增“组件下载”，内置 MKVToolNix 102.0；支持版本列表、自动选择更新、下载校验、固定目录安装、旧本体只下载与组件手动降级。7z 完整性、资源清单、独立解压启动及专项回归通过；源码和无附件 Release Draft 按维护者要求交付，详见 [本轮记录](docs/components-player-1.0.5.md)。
+
+- 2026-10-05：大分辨率 libdav1d 线程上限 16、CPU 平面 YUV 动态纹理上传、固定 bilinear 色彩/格式专用 shader。本地 dist 更新核心，保留 BD、VS 音频时钟与个人配置；两台设备参考像素回归误差为零。780M 真实 8K 软解呈现约 18–19fps，仍未达到 48fps；不宣称 AV1 444 新增硬解支持。详情见 [专项记录](docs/av1-software-decode-1.0.5.md)。本轮未推送、打包或发布。
+
+- 2026-10-05：Renderer 新增 BD Remux，Player 新增 BD 文件夹/镜像入口与节目播放列表。支持 MPLS 元数据与章节、自动剧集候选、JSON 匹配模板、结构反馈、手动文件及 ModelScope Manager 下载桥接。真实 Bloom 第三集 remux、直接播放和跳转通过；镜像、加密盘及复杂结构边界见 [BD 记录](docs/bd-remux-1.0.5.md)。
+
+- 2026-10-04–05 后续本地修复：精确帧输入提交优先于 Enter 全屏；图片滚轮缩放及视频鼠标锚点；编辑器初始工具箭头、未锁定图层 Delete、缓存代理实时移动、概览填补及按内存调整预览。大 PNG 并行预测最终实测 TEST.png 约 8.80 秒进入编辑器。Tab 新增当前/目标帧率、有序尺寸、独立处理链信息及可缩放/调透明度面板。已与 BD 会话统一更新本地 dist。
+- 补帧增加 Jinc/D3D11 双自动入口及八固定组合；VS Player 新增 3FP 仅音频/时钟接口，消除重复源视频解码；调整缓存、预取及进度条预览。完整 RIFE / MVTools 实时无丢帧仍未全部验收通过；后续交付与测试范围见 [交互与调度记录](docs/player-interaction-performance-1.0.5.md)。本轮没有新增推送、打包或线上发布。
+
+- 上一轮交付范围为源码推送与本地完整便携压缩包；不创建 Release 或 Draft，不上传发行附件。打包排除个人数据目录和 AWJ 更新安全状态文件，保留运行时、许可及内置预设。
 
 - 重新从独立 Release 构建目录编译 Renderer / Player，3FP 完整 Rebuild；已覆盖 `dist/VS-Renderer-GUI-windows-x64` 的 `VSRenderer.exe`、`vs-player.exe`、`FFF.Native.dll`，修正 `release.json` 为 1.0.5，并同步本文及说明文档。配置、VPY、缓存和色彩后端保留；旧文件备份在 `build/dist-backup-1.0.5-20261004`。本次只更新本地 dist，未发布线上版本，也未更新 PortableSoft 安装目录。
 

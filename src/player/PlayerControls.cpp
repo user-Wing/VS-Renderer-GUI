@@ -46,16 +46,17 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     volume_ = new QSlider(Qt::Horizontal, this); volume_->setObjectName("playerVolume"); volume_->setRange(0, 100); volume_->setValue(100); volume_->setFixedWidth(105); volume_->setToolTip(tr("音量")); first->addWidget(volume_);
     const auto volume = [this] { clock_->setVolume(volume_->value() / 100.0f); clock_->setMuted(lavAudio_ || mute_->isChecked()); if (lav_) lav_->volume(volume_->value() / 100.0f,!lavAudio_ || mute_->isChecked());settings_->setValue("player/volume",volume_->value());settings_->setValue("player/muted",mute_->isChecked()); };
     connect(volume_, &QSlider::valueChanged, this, volume); connect(mute_, &QPushButton::toggled, this, volume);
-    timelinePreview_=new QTimer(this);timelinePreview_->setInterval(33);
+    timelinePreview_=new QTimer(this);timelinePreview_->setInterval(16);
     connect(timelinePreview_,&QTimer::timeout,this,[this]{
-        if(!timelineDragging_ || !direct_ || timelineTarget_<0){timelinePreview_->stop();return;}
+        if(!timelineDragging_ || timelineTarget_<0){timelinePreview_->stop();return;}
         const auto snap=clock_->snapshot();
-        if(timelineWaiting_ && (snap.timelineGeneration==generation_ || snap.presentedVideoFrames<=timelinePresented_))return;
-        const auto target=timelineTarget_;timelineTarget_=-1;timelinePresented_=snap.presentedVideoFrames;
+        const auto rendered=outputSnapshot();
+        if(timelineWaiting_ && (snap.timelineGeneration==generation_ || rendered.presentedVideoFrames<=timelinePresented_))return;
+        const auto target=timelineTarget_;timelineTarget_=-1;timelinePresented_=rendered.presentedVideoFrames;
         seekTime(target);timelineWaiting_=seekPending_;
     });
     connect(slider,&QSlider::sliderPressed,this,[this]{
-        timelineDragging_=direct_ && clock_->snapshot().selectedVideoStream>=0;
+        timelineDragging_=ready_ && !madvrMode() && clock_->snapshot().selectedVideoStream>=0;
         timelineResume_=timelineDragging_ && playing_;timelineWaiting_=false;
         if(timelineResume_)togglePlayback();
     });
@@ -67,7 +68,7 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     connect(slider, &QSlider::sliderReleased, this, [this, slider] {
         timelinePreview_->stop();timelineDragging_=false;timelineTarget_=-1;timelineWaiting_=false;
         seekTime(clock_->snapshot().duration100ns * slider->sliderPosition() / 100000);
-        if(timelineResume_ && !playing_)togglePlayback();timelineResume_=false;
+        if(timelineResume_ && !playing_){if(direct_)togglePlayback();else autoPlay_=true;}timelineResume_=false;
     });
     auto *row = new QHBoxLayout; row->setContentsMargins(8, 0, 8, 0); row->setSpacing(4); layout->addLayout(row);
     const auto button = [this, row](const QString &text, const QString &tooltip, auto action) {
@@ -97,14 +98,15 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     });
     duration_ = new QLabel("/ 00:00:00.000", this); row->addWidget(duration_);
     frame_ = new QLineEdit("0", this); frame_->setObjectName("playerFrame"); frame_->setFixedWidth(65); frame_->setToolTip(tr("精确输出帧号，从 0 开始；Enter 跳转")); row->addWidget(frame_);
-    connect(frame_, &QLineEdit::returnPressed, this, [this] { bool ok; const auto n = frame_->text().toLongLong(&ok); if (ok) { seekFrame(n); frame_->clearFocus(); } });
+    connect(frame_, &QLineEdit::textEdited, this, [this] { frameEditPending_=true; });
+    connect(frame_, &QLineEdit::editingFinished, this, [this] { commitFrameEdit(); });
     rate_ = new RateSpinBox(this); rate_->setObjectName("playerSpeed"); rate_->setRange(0.1, 16); rate_->setDecimals(2); rate_->setSingleStep(.05); rate_->setValue(1); rate_->setSuffix("×"); rate_->setButtonSymbols(QAbstractSpinBox::NoButtons); rate_->setKeyboardTracking(false); rate_->setFixedWidth(65); row->addWidget(rate_);
     connect(rate_, &QDoubleSpinBox::valueChanged, this, &PlayerWindow::setRate);
     speedButton_=button("▾", tr("倍速配置"), [this] { showSpeedPopup(); }); speedButton_->setObjectName("playerSpeedPopupButton");
     const auto badge = [this, row](const QString &text) { auto *label = new QLabel(text, this); label->setStyleSheet("background:#36383d;color:#c3c8d1;padding:3px;border-radius:2px;"); row->addWidget(label); return label; };
     videoBadge_ = badge("—"); audioBadge_ = badge("—");
     decoderBadge_ = new QPushButton("3FP-HW", this); decoderBadge_->setObjectName("playerDecoder"); decoderBadge_->setToolTip(tr("切换 3FP 硬件 / 软件解码")); row->addWidget(decoderBadge_);
-    connect(decoderBadge_, &QPushButton::clicked, this, [this] { if (lavVideo_) { showSettings(); return; } const auto mode = clock_->snapshot().decodeMode == 2 ? 1u : 2u; if (clock_->setDecodeMode(mode)) {settings_->setValue("decode/mode",mode);if(!source_.isEmpty())openFile(source_);} });
+    connect(decoderBadge_, &QPushButton::clicked, this, [this] { if (lavVideo_) { showSettings(); return; } const auto current=source_.isEmpty()?settings_->value("decode/mode",2).toUInt():clock_->snapshot().decodeMode;const auto mode = current == 2 ? 1u : 2u; if (clock_->setDecodeMode(mode)) {settings_->setValue("decode/mode",mode);if(!source_.isEmpty())openFile(source_);} });
     hdrBadge_ = badge("SDR"); rendererBadge_ = badge("VS"); row->addStretch();
     auto *menuButton = button("☰", tr("打开、预设与设置"), [] {});
     auto *menu = new QMenu(menuButton);

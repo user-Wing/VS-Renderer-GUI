@@ -2,17 +2,25 @@
 
 本文件用于接手开发、定位模块和确认当前边界。用户操作见 [README.md](README.md)，版本变更见 [changelog.md](changelog.md)，逐轮测试与交付记录见 [专项文档](docs/) 和 [历史原文归档](docs/history/development-records-through-2026-10-03.md)。
 
-核对日期：2026-10-04。源码 `CMakeLists.txt` 与本地便携 `release.json` 均为 **1.0.5 本地版**；这不表示已在线发布 1.0.5。
+核对日期：2026-10-05。源码 `CMakeLists.txt` 与本地便携 `release.json` 均为 **1.0.5 本地版**；这不表示已在线发布 1.0.5。
 
 当前修复以返回的 1.0.5 源码为基线；2026-10-04 已重新编译并覆盖 `dist/VS-Renderer-GUI-windows-x64` 的 Renderer、Player、3FP 和版本清单，保留配置及预设。Jinc 8K 原生稳定段、大图启动与编辑操作的结果及未验收项集中于 [本机验收记录](docs/local-1.0.5-performance.md)。此次没有更新其它 PortableSoft 安装目录或发布线上版本。
 
 3FP 色彩管理新增可选 libplacebo D3D11 显示分支，默认保留原生路径。配置入口在 `PlayerColor`，独立 C ABI 在 `src/color/`，3FP 变更以 `patches/3fp-color-management.patch` 重建；高级显示处理位于解码 / VS 输出之后。依赖、专项验证和尚未实现的 HDR 扩展见 [色彩管理记录](docs/color-management-1.0.4.md)。
+
+1.0.5 后续交互更新集中在 `PlayerControls/Window/Info`、`PreviewPane` 和 `ImageEditorCanvas`；补帧八组合与双自动入口在 `PlayerProfiles/Menus`，Player VS 音频时钟专用接口由 `patches/3fp-vs-audio-clock.patch` 提供。2026-10-05 已与 BD 会话统一更新本地 dist，保留配置与预设。大图并行预测、缓存视图与实时性能的验收/未达标项见 [交互与调度记录](docs/player-interaction-performance-1.0.5.md)，不据短时稳态结果宣称所有补帧模式完成。
 
 图像编辑器本轮补充整体图层交互、独立文字像素层、共享层控件和标尺跟踪；入口仍为播放器“详细编辑”。图层变换/合并接口位于 `ImageDocument`，工具选层/文字位于 `ImageEditorTools`，交互在 `ImageEditorCanvas`，菜单和面板在 `ImageEditorWindow`。操作与验证边界见 [图层交互更新](docs/image-editor-interaction-1.0.4.md)。
 
 后续本轮补充平滑显示及视口缓存、滚轮平移、背景锁定、同窗口多文档与图层右键混合选项。混合参数和合并组接口在 `ImageDocument`，标准PSD混合参数在 `ImagePsd`，播放器入口复用窗口在 `PlayerImageTools`；行为、验证与精度边界见 [图像文档与混合选项](docs/image-editor-workflows-1.0.4.md)。
 
 ## 1. 项目定位与成功标准
+
+2026-10-05 Full 组件页面在共享 `src/update/ComponentDownloads.*`，迁移 Player 设置中的本体更新入口；安装辅助脚本为 `tools/apply-components.ps1`，MKVToolNix 固定到 `runtime/mkvtoolnix`。Player BD 入口在 `PlayerPlaylist` 后台读取后直接播放，Renderer 保留 Remux GUI；信息面板自绘透明背景并随播放器激活状态避让设置窗口。验收与发布边界见 [本轮记录](docs/components-player-1.0.5.md)。
+
+2026-10-05 原生软件回退优化位于 `PlayerSession/VideoRenderer`，由两个独立补丁重建；保留 444/10-bit 精度及硬解路径。780M 8K48 软解尚未达标，本地硬解到 8K 短时回归通过。当前部署和实验边界见 [AV1 软件回退记录](docs/av1-software-decode-1.0.5.md)。
+
+2026-10-05 新增共享 `src/bluray/`：BD 元数据解析、节目/模板匹配、章节切片、反馈与 Remux GUI；Renderer 和 Player 复用。原生 `bluray:` 协议用 `patches/3fp-bluray-input.patch` 接入，下载桥接复用 ModelScope Manager。实现、路径和已验收/未验收范围见 [BD 记录](docs/bd-remux-1.0.5.md)。
 
 面向理解视频处理参数、希望用 GUI 组织滤镜而无需反复写脚本，并能快速比较效果的用户。Renderer 是处理与比较工作台；Player 是共享后端的独立视频、音频、图片查看器。
 
@@ -57,7 +65,7 @@ ctest --preset windows-mingw-release
 | 视频、图片分开解码和显示 | 图片不走视频时间轴、VS 或相邻图片预解码 | 图片离线 Anime4K 调整尺寸是独立例外，查看仍不建 VS 图 |
 | 比较滑块裁剪原生父窗口 | 各 pane 保持共同画布坐标，不重复解码或逐帧 CPU 拼图 | 比较导出使用独立离线合成，不能宣称与预览逐像素一致 |
 
-**处理路径：** Renderer 实时链为 GUI → FilterGraph → VPY → VSScript 帧服务 → 3FP 外部帧呈现，源路提供播放时钟。Player 本地视频可走 VS 链或 3FP 原生直通；HTTP/HTTPS 固定原生直通，madVR 使用 LAV/DirectShow，二者不执行 VPY。图片由 PlayerImage 解码后交 PreviewPane 绘制，另存工具调用重采样或 AWJ 后端。详细编辑使用独立 ImageDocument：256px稀疏块、LRU磁盘换出、RGBA8/16/32F及局部历史；PSD走独立层组/蒙版读取、延迟通道展开和区域编辑，快照支持后台预览与PSD/TIFF保存。普通图片仍复用整图解码，受限预览不是高质量金字塔。接口与边界见 [图像编辑方案](docs/image-editor-plan.md)。
+**处理路径：** Renderer 实时链为 GUI → FilterGraph → VPY → VSScript 帧服务 → 3FP 外部帧呈现，源路提供播放时钟。Player 本地视频可走 VS 链或 3FP 原生直通；HTTP/HTTPS 固定原生直通，madVR 使用 LAV/DirectShow，二者不执行 VPY。图片由 PlayerImage 解码后交 PreviewPane 绘制，另存工具调用重采样或 AWJ 后端。详细编辑使用独立 ImageDocument：256px稀疏块、LRU磁盘换出、RGBA8/16/32F及局部历史；PSD走独立层组/蒙版读取、延迟通道展开和区域编辑，快照支持后台预览与PSD/TIFF保存。普通图片仍复用整图解码；查看器后台建立受内存上限约束的显示层级，编辑器保留整图概览与可见区域高质量缓存，均不替代原精度像素。接口与边界见 [图像编辑方案](docs/image-editor-plan.md)。
 
 ## 4. 目录与改动入口
 

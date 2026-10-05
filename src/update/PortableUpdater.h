@@ -29,6 +29,7 @@ public:
     static QString payloadDirectory(const QString &directory);
     void check();
     void prepare(const PortableRelease &release);
+    void prepareLocal(const PortableRelease &release,const QString &archive);
 signals:
     void prepared(const QString &payload);
     void failed(const QString &message);

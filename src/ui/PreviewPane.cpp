@@ -10,6 +10,9 @@
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QPainter>
+#include <QThread>
+#include <memory>
+#include <windows.h>
 
 #include <algorithm>
 
@@ -20,12 +23,35 @@ class NativeVideoSurface final : public QWidget {
 public:
     QImage image;
     QTransform imageTransform;
+    QList<QImage> levels;
+    QList<QThread *> builders;
+    quint64 imageGeneration = 0;
     float zoom = 1, panX = 0, panY = 0;
     explicit NativeVideoSurface(QWidget *parent) : QWidget(parent)
     {
         setAttribute(Qt::WA_NativeWindow);
         setAttribute(Qt::WA_PaintOnScreen);
         setAttribute(Qt::WA_NoSystemBackground);
+    }
+    ~NativeVideoSurface() override {for(auto *thread:builders){thread->requestInterruption();thread->wait();delete thread;}}
+    void buildLevels() {
+        levels.clear();const auto generation=++imageGeneration;
+        for(auto *thread:builders)thread->requestInterruption();
+        if(qint64(image.width())*image.height()<8*1024*1024)return;
+        MEMORYSTATUSEX memory{};memory.dwLength=sizeof(memory);GlobalMemoryStatusEx(&memory);
+        const quint64 budget=std::min<quint64>(512ull*1024*1024,memory.ullAvailPhys/8);
+        const auto source=image;auto result=std::make_shared<QList<QImage>>();
+        auto *thread=QThread::create([source,result,budget]{
+            QImage level=source;quint64 used=0;
+            for(int edge=8192;edge>=256;edge/=2){
+                if(QThread::currentThread()->isInterruptionRequested())return;
+                const auto size=source.size().scaled({edge,edge},Qt::KeepAspectRatio);
+                if(size.width()>=level.width() || quint64(size.width())*size.height()*source.depth()/8+used>budget)continue;
+                level=level.scaled(size,Qt::IgnoreAspectRatio,Qt::SmoothTransformation);
+                if(level.isNull())return;used+=level.sizeInBytes();result->append(level);
+            }
+        });builders.append(thread);
+        connect(thread,&QThread::finished,this,[this,thread,result,generation]{builders.removeOne(thread);if(generation==imageGeneration){levels=*result;update();}thread->deleteLater();});thread->start();
     }
     QPaintEngine *paintEngine() const override { return image.isNull() ? nullptr : QWidget::paintEngine(); }
 protected:
@@ -46,7 +72,11 @@ protected:
         const QRectF source=mapping.inverted().mapRect(destination).intersected(QRectF(QPointF(),image.size()));
         // Draw only the visible source, with its local origin to avoid raster coordinate limits.
         painter.setWorldTransform(QTransform::fromTranslate(source.x(),source.y())*mapping);
-        painter.drawImage(QRectF(QPointF(),source.size()),image,source);
+        const QImage *sample=&image;
+        const double density=std::max(fitted.width()/bounds.width(),fitted.height()/bounds.height())*devicePixelRatioF();
+        for(const auto &level:levels)if(double(level.width())/image.width()>=density)sample=&level;
+        const double sx=double(sample->width())/image.width(),sy=double(sample->height())/image.height();
+        painter.drawImage(QRectF(QPointF(),source.size()),*sample,QRectF(source.x()*sx,source.y()*sy,source.width()*sx,source.height()*sy));
     }
 };
 
@@ -122,7 +152,7 @@ QPointF PreviewPane::pan() const { return QPointF(panX_, panY_); }
 void PreviewPane::setChromeVisible(bool visible) { titleBar_->setVisible(visible); }
 void PreviewPane::setVideoSize(const QSize &size) { videoSize_ = size; }
 void PreviewPane::setImage(const QImage &image) {
-    auto *surface=static_cast<NativeVideoSurface *>(surface_);surface->image=image;
+    auto *surface=static_cast<NativeVideoSurface *>(surface_);surface->image=image;surface->buildLevels();
     surface->imageTransform.reset();
     surface->setAttribute(Qt::WA_PaintOnScreen,image.isNull());
     surface->setAttribute(Qt::WA_NoSystemBackground,image.isNull());
@@ -253,7 +283,7 @@ void PreviewPane::wheelEvent(QWheelEvent *event)
 
 void PreviewPane::applyWheel(QWheelEvent *event, const QPointF &surfacePosition)
 {
-    if(!image().isNull() && !event->modifiers().testFlag(Qt::ControlModifier)){
+    if(!image().isNull() && event->modifiers().testFlag(Qt::ShiftModifier)){
         const auto fitted=imageDisplaySize().scaled(surface_->size(),Qt::KeepAspectRatio)*zoom_;
         const auto pixels=event->pixelDelta();const auto angles=event->angleDelta();
         double dx=pixels.isNull()?angles.x()/120.0*60:pixels.x();double dy=pixels.isNull()?angles.y()/120.0*60:pixels.y();
@@ -277,16 +307,17 @@ void PreviewPane::scheduleRedraw()
 void PreviewPane::updateZoom(float next, const QPointF &anchor)
 {
     next = std::clamp(next, 0.25f, image().isNull()?16.0f:65536.0f);
-    const float ax = surface_->width() > 0 ? static_cast<float>(anchor.x() / surface_->width() * 2.0 - 1.0) : 0.0f;
-    const float ay = surface_->height() > 0 ? static_cast<float>(anchor.y() / surface_->height() * 2.0 - 1.0) : 0.0f;
-    const float delta = next > 0.0f ? (next - zoom_) / next : 0.0f;
-    panX_ = std::clamp(panX_ + ax * delta, -1.0f, 1.0f);
-    panY_ = std::clamp(panY_ + ay * delta, -1.0f, 1.0f);
-    if (next == 1.0f)
-        panX_ = panY_ = 0.0f;
-    zoom_ = next;
-    zoomBadge_->setText(QStringLiteral("%1%").arg(qRound(zoom_ * 100.0f)));
-    surface_->setCursor(zoom_ > 1.0f ? Qt::OpenHandCursor : Qt::CrossCursor);
+    const QSizeF fitted=videoSize_.isEmpty()?QSizeF(surface_->size()):QSizeF(videoSize_.scaled(surface_->size(),Qt::KeepAspectRatio));
+    const auto anchoredPan=[&](double extent,double base,double at,float pan){
+        const double oldSize=base*zoom_,newSize=base*next;
+        const double oldOrigin=(extent-oldSize)/2+pan*std::max(0.,oldSize-extent)/2;
+        const double newOrigin=at-(at-oldOrigin)*next/zoom_;
+        const double overflow=std::max(0.,newSize-extent);
+        return overflow>0?std::clamp(float((newOrigin-(extent-newSize)/2)*2/overflow),-1.f,1.f):0.f;
+    };
+    panX_=anchoredPan(surface_->width(),fitted.width(),anchor.x(),panX_);
+    panY_=anchoredPan(surface_->height(),fitted.height(),anchor.y(),panY_);
+    adoptView(next,panX_,panY_);
     emit viewChanged(zoom_, panX_, panY_);
 }
 

@@ -1,0 +1,85 @@
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/VideoRenderer.cpp
+index b27f9bf..e6e9ac8 100644
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -791,7 +791,9 @@ float4 SampleVideo(Texture2D<float4> sourceTexture,float2 uv) {
+     float effectiveScale=min(OutputWidth/max(float(width),1.0),
+         OutputHeight/max(float(height),1.0))*max(ViewZoom,1.0);
+     if(abs(effectiveScale-1.0)<0.00001)return sourceTexture.SampleLevel(PointSampler,uv,0);
+-#ifdef VSR_JINC
++#ifdef VSR_BILINEAR
++    return sourceTexture.SampleLevel(LinearSampler,uv,0);
++#elif defined(VSR_JINC)
+     return SampleJinc2(sourceTexture,uv,dimensions);
+ #else
+     uint algorithm=effectiveScale>=1.0?(UpscaleAlgorithm & 255):DownscaleAlgorithm;
+@@ -2925,6 +2927,10 @@ FFFResult PlayerVideoRenderer::EnsurePipeline(const std::uint32_t sourceWidth,
+         else texture.Format = bitDepth > 8 ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
+         texture.SampleDesc.Count = 1;
+         texture.Usage = D3D11_USAGE_DEFAULT; texture.BindFlags = D3D11_BIND_SHADER_RESOURCE;
++        if (inputLayout == 1) {
++            texture.Usage = D3D11_USAGE_DYNAMIC;
++            texture.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
++        }
+         if (FAILED(device_->CreateTexture2D(&texture, nullptr, &sourceTextures_[plane])) ||
+             FAILED(device_->CreateShaderResourceView(sourceTextures_[plane], nullptr, &sourceViews_[plane]))) {
+             SetError("Could not create the decoded frame textures."); return FFFResult::DeviceFailure;
+@@ -3126,16 +3132,18 @@ FFFResult PlayerVideoRenderer::DrawWithShader(ID3D11RenderTargetView* target,
+     context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+     context_->VSSetShader(vertexShader_, nullptr, 0);
+     auto *shader=pixelShader_;
+-    if(effect==0 && !projection360 && (cachedVideoSettings_.upscaleAlgorithm&255u)==4u && cachedVideoSettings_.downscaleAlgorithm==4u){
++    const bool fixedBilinear=(cachedVideoSettings_.upscaleAlgorithm&255u)==1u && cachedVideoSettings_.downscaleAlgorithm==1u;
++    if(effect==0 && !projection360 && (fixedBilinear || ((cachedVideoSettings_.upscaleAlgorithm&255u)==4u && cachedVideoSettings_.downscaleAlgorithm==4u))){
+         const auto chroma=(cachedVideoSettings_.upscaleAlgorithm>>8)&255u;
+-        const auto key=chroma | (cachedVideoSettings_.inputLayout<<8) | (cachedVideoSettings_.colorMode<<10) | (cachedVideoSettings_.transfer<<12) | (cachedVideoSettings_.source2020<<14);auto found=jincShaders_.find(key);
++        const auto key=chroma | (cachedVideoSettings_.inputLayout<<8) | (cachedVideoSettings_.colorMode<<10) | (cachedVideoSettings_.transfer<<12) | (cachedVideoSettings_.source2020<<14) | (fixedBilinear ? 1u<<24 : 0u);auto found=jincShaders_.find(key);
+         if(found==jincShaders_.end()){
+             const auto chromaValue=std::to_string(chroma);
+             const auto layoutValue=std::to_string(cachedVideoSettings_.inputLayout),colorValue=std::to_string(cachedVideoSettings_.colorMode),transferValue=std::to_string(cachedVideoSettings_.transfer),primariesValue=std::to_string(cachedVideoSettings_.source2020);
+             char referenceValue[2]{};const bool reference=GetEnvironmentVariableA("VSR_3FP_REFERENCE_JINC",referenceValue,sizeof(referenceValue))>0;
+-            const D3D_SHADER_MACRO macros[]={{"VSR_JINC","1"},{"VSR_CHROMA",chromaValue.c_str()},{"VSR_JINC_REFERENCE",reference?"1":nullptr},{"VSR_LAYOUT",layoutValue.c_str()},{"VSR_COLOR",colorValue.c_str()},{"VSR_TRANSFER",transferValue.c_str()},{"VSR_PRIMARIES",primariesValue.c_str()},{nullptr,nullptr}};
++            const D3D_SHADER_MACRO macros[]={{"VSR_JINC","1"},{"VSR_CHROMA",chromaValue.c_str()},{"VSR_JINC_REFERENCE",reference?"1":nullptr},{"VSR_LAYOUT",layoutValue.c_str()},{"VSR_COLOR",colorValue.c_str()},{"VSR_TRANSFER",transferValue.c_str()},{"VSR_PRIMARIES",primariesValue.c_str()},{"VSR_BILINEAR",fixedBilinear?"1":nullptr},{nullptr,nullptr}};
+             // Do not define the reference macro at all on the production path.
+             auto defines=std::vector<D3D_SHADER_MACRO>(std::begin(macros),std::end(macros));if(!reference)defines.erase(defines.begin()+2);
++            if(!fixedBilinear)defines.erase(defines.end()-2);
+             ComPtr<ID3DBlob> code,errors;ID3D11PixelShader *specialized=nullptr;
+             if(SUCCEEDED(CompileSharedShader(PixelShaderSource,std::strlen(PixelShaderSource),nullptr,defines.data(),nullptr,"main","ps_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&code,&errors)) && SUCCEEDED(device_->CreatePixelShader(code->GetBufferPointer(),code->GetBufferSize(),nullptr,&specialized))){jincShaders_[key]=specialized;shader=specialized;}
+             else{jincShaders_[key]=nullptr;if(errors){extern void FFF3FP_KernelLogImpl(const char*) noexcept;FFF3FP_KernelLogImpl(static_cast<const char *>(errors->GetBufferPointer()));}}
+@@ -4500,10 +4508,32 @@ FFFResult PlayerVideoRenderer::Render(const AVFrame* frame, const bool limitToNa
+         retainedHardwareFrame_ = retained; retainedSurfaceCopied_ = false;
+     } else if (directYuv) {
+         av_frame_free(&retainedHardwareFrame_);
+-        context_->UpdateSubresource(sourceTextures_[0], 0, nullptr, frame->data[0], frame->linesize[0], 0);
+-        context_->UpdateSubresource(sourceTextures_[1], 0, nullptr, frame->data[1], frame->linesize[1], 0);
+-        if (input.layout == 1)
+-            context_->UpdateSubresource(sourceTextures_[2], 0, nullptr, frame->data[2], frame->linesize[2], 0);
++        if (input.layout == 1) {
++            // DISCARD lets the driver rename storage still sampled by the
++            // presenter instead of stalling updates to the same source plane.
++            for (unsigned plane = 0; plane < 3; ++plane) {
++                D3D11_MAPPED_SUBRESOURCE mapped{};
++                if (FAILED(context_->Map(sourceTextures_[plane], 0,
++                    D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
++                    SetError("Could not map the decoded frame plane.");
++                    return FFFResult::DeviceFailure;
++                }
++                const auto xShift = plane == 0 ? 0u : input.chromaWidthShift;
++                const auto yShift = plane == 0 ? 0u : input.chromaHeightShift;
++                const auto rows = (height + (1u << yShift) - 1) >> yShift;
++                const auto rowBytes = ((width + (1u << xShift) - 1) >> xShift) *
++                    (input.bitDepth > 8 ? 2u : 1u);
++                for (unsigned row = 0; row < rows; ++row)
++                    std::memcpy(static_cast<std::uint8_t*>(mapped.pData) +
++                        static_cast<std::size_t>(row) * mapped.RowPitch,
++                        frame->data[plane] + static_cast<std::ptrdiff_t>(row) *
++                            frame->linesize[plane], rowBytes);
++                context_->Unmap(sourceTextures_[plane], 0);
++            }
++        } else {
++            context_->UpdateSubresource(sourceTextures_[0], 0, nullptr, frame->data[0], frame->linesize[0], 0);
++            context_->UpdateSubresource(sourceTextures_[1], 0, nullptr, frame->data[1], frame->linesize[1], 0);
++        }
+     } else {
+         av_frame_free(&retainedHardwareFrame_);
+         const auto bytesPerPixel = input.bitDepth <= 8 ? 4u : 8u;

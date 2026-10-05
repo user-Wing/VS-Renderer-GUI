@@ -5,6 +5,7 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QWheelEvent>
+#include <QLineF>
 
 #include <cmath>
 
@@ -14,6 +15,15 @@ class TestPreviewPane final : public QObject {
     Q_OBJECT
 
 private slots:
+    void wheelAnchorsSourcePixelAndWorksForImages() {
+        PreviewPane pane("Test","Fit");pane.resize(900,600);pane.show();pane.setVideoSize({1920,1080});
+        auto *surface=pane.surface();const QPointF at(surface->width()*.7,surface->height()*.55);
+        const auto coordinate=[&]{const auto fit=QSizeF(QSize(1920,1080).scaled(surface->size(),Qt::KeepAspectRatio));const auto scaled=fit*pane.zoom();const auto pan=pane.pan();const QPointF origin((surface->width()-scaled.width())/2+pan.x()*std::max(0.,scaled.width()-surface->width())/2,(surface->height()-scaled.height())/2+pan.y()*std::max(0.,scaled.height()-surface->height())/2);return QPointF((at.x()-origin.x())/scaled.width(),(at.y()-origin.y())/scaled.height());};
+        pane.adoptView(2,0,0);const auto before=coordinate();QWheelEvent wheel(at,surface->mapToGlobal(at.toPoint()),{},QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);QApplication::sendEvent(surface,&wheel);
+        QVERIFY(QLineF(before,coordinate()).length()<1e-5);
+        QImage image({1920,1080},QImage::Format_ARGB32);image.fill(Qt::red);pane.setImage(image);pane.adoptView(1,0,0);QApplication::sendEvent(surface,&wheel);QCOMPARE(pane.zoom(),1.25f);
+        pane.setImage({});pane.adoptView(1,0,0);QApplication::sendEvent(surface,&wheel);QCOMPARE(pane.zoom(),1.25f);
+    }
     void leftDragPansOnlyAfterZoom()
     {
         PreviewPane pane(QStringLiteral("Test"), QStringLiteral("Fit"));

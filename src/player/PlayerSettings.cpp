@@ -5,7 +5,7 @@
 #include "player/PlayerLanguage.h"
 #include "player/PlayerCache.h"
 #include "player/PlayerAssociations.h"
-#include "update/PortableUpdater.h"
+#include "update/ComponentDownloads.h"
 #include <QColorDialog>
 #include <QFontComboBox>
 #include <QFontDatabase>
@@ -39,8 +39,8 @@
 #include <algorithm>
 
 namespace vsr {
-bool PlayerWindow::madvrMode() const { return !imageMode_ && !networkSource() && settings_->value("player/renderer","VS").toString()=="madVR"; }
-void PlayerWindow::resetStatistics() { skippedFrames_=submittedFrames_=0; frameMilliseconds_=0;if(interpolationWarning_)showInterpolationWarning(false);suspendQualityCheck(); }
+bool PlayerWindow::madvrMode() const { return QFileInfo(source_).suffix().compare("mpls",Qt::CaseInsensitive)!=0 && !imageMode_ && !networkSource() && settings_->value("player/renderer","VS").toString()=="madVR"; }
+void PlayerWindow::resetStatistics() { skippedFrames_=submittedFrames_=0; frameMilliseconds_=0;infoFpsTimer_.invalidate();infoCurrentFps_=0;if(interpolationWarning_)showInterpolationWarning(false);suspendQualityCheck(); }
 void PlayerWindow::toggleFullscreen() {
     suspendQualityCheck();
     if (isFullScreen()) { controls_->show();showNormal(); if(!normalGeometry_.isEmpty()) restoreGeometry(normalGeometry_);
@@ -51,7 +51,9 @@ void PlayerWindow::toggleFullscreen() {
 int PlayerWindow::prefetchCount() const {
     if(imageMode_)return 0;
     if(!settings_->value("performance/predecode",true).toBool()) return 0;
-    if(usage_.cpu>=settings_->value("performance/cpu",50).toInt() || usage_.gpu>=settings_->value("performance/gpu",50).toInt() || usage_.ram>=settings_->value("performance/ram",50).toInt() || usage_.vram>=settings_->value("performance/vram",50).toInt()) return 0;
+    // Compute utilization is not queue pressure: stopping lookahead at 50% GPU
+    // serialized RIFE inference precisely when concurrent work was needed.
+    if(usage_.ram>=settings_->value("performance/ram",50).toInt() || usage_.vram>=95) return 0;
     const auto headroom=usage_.totalMemoryMiB*(settings_->value("performance/ram",50).toInt()-usage_.ram)/100.0;
     const double frameMiB=std::max(1.0,double(clip_.width)*clip_.height*8/1048576);
     return std::clamp(static_cast<int>(headroom/frameMiB),0,std::clamp(settings_->value("performance/frames",8).toInt(),1,16));
@@ -62,7 +64,7 @@ void PlayerWindow::applySettings(bool reopen) {
     usage_=resources_.sample();
     const int cpu=std::clamp(settings_->value("performance/cpu",50).toInt(),1,100);
     const auto headroom=usage_.totalMemoryMiB*(std::clamp(settings_->value("performance/ram",50).toInt(),1,100)-usage_.ram)/100.0+usage_.memoryMiB;
-    server_->setResourceLimits(qMax(1,QThread::idealThreadCount()*cpu/100),std::clamp(static_cast<int>(headroom),64,8192));
+    server_->setResourceLimits(interpolationStage()>=0?qMax(1,QThread::idealThreadCount()):qMax(1,QThread::idealThreadCount()*cpu/100),std::clamp(static_cast<int>(headroom),64,8192));
     applyScaling();
     applyColorSettings();
     auto *visible=direct_?clock_.get():output_.get();
@@ -101,7 +103,7 @@ bool PlayerWindow::loadConfiguration(const QString &path) {
 }
 void PlayerWindow::showSettings() {
     QDialog dialog(this); dialog.setObjectName("playerSettings");dialog.setWindowTitle(tr("VS Player 设置 · %1").arg(VSR_VERSION));dialog.resize(880,620);
-    auto *outer=new QVBoxLayout(&dialog);auto *body=new QHBoxLayout;outer->addLayout(body,1);auto *categories=new QListWidget(&dialog);categories->addItems({tr("基本设置"),tr("主题设置"),tr("播放设置"),tr("性能设置"),tr("解码设置"),tr("渲染设置"),tr("缓存设置"),tr("文件关联")});categories->setFixedWidth(145);body->addWidget(categories);
+    auto *outer=new QVBoxLayout(&dialog);auto *body=new QHBoxLayout;outer->addLayout(body,1);auto *categories=new QListWidget(&dialog);categories->addItems({tr("基本设置"),tr("主题设置"),tr("播放设置"),tr("性能设置"),tr("解码设置"),tr("渲染设置"),tr("缓存设置"),tr("文件关联"),tr("组件下载")});categories->setFixedWidth(145);body->addWidget(categories);
     auto *stack=new QStackedWidget(&dialog);body->addWidget(stack,1);connect(categories,&QListWidget::currentRowChanged,stack,&QStackedWidget::setCurrentIndex);
     const auto page=[&] {auto *scroll=new QScrollArea(stack);scroll->setWidgetResizable(true);auto *widget=new QWidget(scroll);scroll->setWidget(widget);stack->addWidget(scroll);auto *form=new QFormLayout(widget);form->setVerticalSpacing(14);form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);return form;};
     auto *basic=page();auto *volume=new QSpinBox(&dialog);volume->setRange(0,100);volume->setSuffix(" %");volume->setValue(volume_->value());basic->addRow(tr("默认音量"),volume);
@@ -110,7 +112,6 @@ void PlayerWindow::showSettings() {
     auto *language=new QComboBox(&dialog);language->setObjectName("playerLanguage");language->addItem(tr("中文"),"zh_CN");language->addItem("English","en_US");language->setCurrentIndex(qMax(0,language->findData(settings_->value("basic/language","zh_CN"))));basic->addRow(tr("语言"),language);
     auto *autoplay=new QCheckBox(tr("打开文件自动播放；关闭则准备首帧并暂停"),&dialog);autoplay->setObjectName("playerAutoplay");autoplay->setChecked(settings_->value("basic/autoplay",true).toBool());basic->addRow(autoplay);
     basic->addRow(new QLabel(tr("当前版本：%1").arg(VSR_VERSION),&dialog));
-    auto *updates=new QPushButton(tr("检查更新"),&dialog);updates->setObjectName("playerCheckUpdates");basic->addRow(updates);connect(updates,&QPushButton::clicked,&dialog,[&]{PortableUpdater updater(&dialog);updater.check();updater.exec();});
     auto *theme=page();auto *chineseFont=new QFontComboBox(&dialog);chineseFont->setObjectName("playerChineseFont");chineseFont->setCurrentFont(QFont(settings_->value("theme/chineseFont","Microsoft YaHei UI").toString()));theme->addRow(tr("中文字体"),chineseFont);
     auto *latinFont=new QFontComboBox(&dialog);latinFont->setObjectName("playerLatinFont");latinFont->setCurrentFont(QFont(settings_->value("theme/latinFont","Segoe UI").toString()));theme->addRow(tr("西文字体"),latinFont);
     auto *background=new QPushButton(settings_->value("theme/background","#202124").toString(),&dialog);background->setObjectName("playerBackground");theme->addRow(tr("背景色"),background);connect(background,&QPushButton::clicked,&dialog,[&]{const auto color=QColorDialog::getColor(QColor(background->text()),&dialog);if(color.isValid())background->setText(color.name());});
@@ -161,6 +162,7 @@ void PlayerWindow::showSettings() {
     auto *registerButton=new QPushButton(tr("注册所选格式到当前用户"),&dialog);registerButton->setObjectName("playerRegisterAssociations");associations->addRow(registerButton);connect(registerButton,&QPushButton::clicked,&dialog,[&]{QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();if(registerPlayerAssociations(extensions,QDir(QCoreApplication::applicationDirPath()).filePath("vs-player.exe"))){settings_->setValue("associations/extensions",extensions);setError(tr("格式已注册；请在 Windows 默认应用中选择 VS Player。"));}else setError(tr("文件关联注册失败。"));});
     auto *defaultsButton=new QPushButton(tr("打开 Windows 默认应用…"),&dialog);associations->addRow(defaultsButton);connect(defaultsButton,&QPushButton::clicked,&dialog,[]{QDesktopServices::openUrl(QUrl("ms-settings:defaultapps"));});
     auto *associationInfo=new QLabel(tr("注册到当前用户，无需管理员权限。Windows 最终默认程序由用户选择；取消选择会移除 VS Player 的打开方式入口，不改写其他程序的默认关联。"),&dialog);associationInfo->setWordWrap(true);associations->addRow(associationInfo);
+    stack->addWidget(new ComponentDownloads(stack));
     categories->setCurrentRow(0);
     auto *footer=new QHBoxLayout;auto *load=new QPushButton(tr("加载预设…"),&dialog);load->setObjectName("playerLoadSettings");auto *save=new QPushButton(tr("保存预设…"),&dialog);save->setObjectName("playerSaveSettings");footer->addWidget(load);footer->addWidget(save);footer->addStretch();
     auto *cancel=new QPushButton(tr("取消(&N)"),&dialog);cancel->setObjectName("playerCancelSettings");auto *ok=new QPushButton(tr("确定(&Y)"),&dialog);ok->setObjectName("playerConfirmSettings");ok->setDefault(true);auto *apply=new QPushButton(tr("应用(&A)"),&dialog);apply->setObjectName("playerApplySettings");footer->addWidget(cancel);footer->addWidget(ok);footer->addWidget(apply);outer->addLayout(footer);

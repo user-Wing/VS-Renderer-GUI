@@ -27,6 +27,8 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QTreeWidget>
+#include <QToolButton>
+#include <QMenu>
 
 using namespace vsr;
 namespace {
@@ -45,6 +47,21 @@ void hover(ImageEditorCanvas &canvas,QPointF position){
 class TestImageEditorInteraction final : public QObject {
     Q_OBJECT
 private slots:
+    void movePixelsFollowPointerBeforeCommit() {
+        ImageDocument doc({300,220},ImagePrecision::UInt16);doc.addLayer("Background",pixels(doc.size(),Qt::white));const auto id=doc.addLayer("Object",pixels({40,20},Qt::red),{30,40});
+        ImageEditorTools tools(&doc);tools.setLayer(id);ImageEditorCanvas canvas(&tools);canvas.resize(700,540);canvas.show();canvas.actualSize();canvas.setNativeHdrEnabled(false);canvas.setTool(ImageEditorTool::Move);QTRY_VERIFY(!canvas.previewBusy());
+        const auto from=canvas.screenPoint({50,50}),to=canvas.screenPoint({110,50});QTest::mousePress(&canvas,Qt::LeftButton,Qt::NoModifier,from.toPoint());
+        QElapsedTimer timer;timer.start();hover(canvas,to);const auto rendered=canvas.grab().toImage();QVERIFY(timer.elapsed()<100);QCOMPARE(info(doc,id).offset,QPoint(30,40));
+        const auto dpi=rendered.devicePixelRatioF();QCOMPARE(rendered.pixelColor((to*dpi).toPoint()).rgb(),QColor(Qt::red).rgb());QCOMPARE(rendered.pixelColor((from*dpi).toPoint()).rgb(),QColor(Qt::white).rgb());
+        QTest::mouseRelease(&canvas,Qt::LeftButton,Qt::NoModifier,to.toPoint());QCOMPARE(info(doc,id).offset,QPoint(90,40));
+    }
+    void groupedToolsAndDeleteRespectLocks() {
+        ImageEditorWindow editor(pixels({100,80},Qt::white),"test.png");editor.show();
+        bool grouped=false;for(auto *button:editor.findChildren<QToolButton *>())if(button->objectName().startsWith("imageEditorToolGroup_")&&button->menu()&&button->menu()->actions().size()>1){grouped=true;QCOMPARE(button->popupMode(),QToolButton::MenuButtonPopup);}QVERIFY(grouped);
+        auto *add=editor.findChild<QAction *>("imageEditorAddLayer");auto *remove=editor.findChild<QAction *>("imageEditorDeleteLayer");QVERIFY(add&&remove);QCOMPARE(remove->shortcut(),QKeySequence(Qt::Key_Delete));
+        auto *doc=editor.document();add->trigger();const auto count=doc->layers().size();remove->trigger();QCOMPARE(doc->layers().size(),count-1);doc->history()->undo();
+        auto layer=doc->layers().last();layer.locked=true;doc->updateLayer(layer);editor.tools()->setLayer(layer.id);const auto lockedCount=doc->layers().size();remove->trigger();QCOMPARE(doc->layers().size(),lockedCount);
+    }
     void largeLayerLazyPreviewAndEdit(){
         QImage image(48000,384,QImage::Format_ARGB32);image.fill(Qt::red);
         for(int y=0;y<image.height();++y){auto *row=reinterpret_cast<QRgb *>(image.scanLine(y));std::fill(row+24000,row+image.width(),qRgb(0,0,255));}
@@ -67,6 +84,14 @@ private slots:
             QCOMPARE(decoded,QImageReader(path).read().convertToFormat(QImage::Format_RGBA8888));
         }
         generation=2;QVERIFY(decodeRgbaPng(directory.filePath("0.png"),generation,1).isNull());
+    }
+    void parallelRgbaPngMatchesQt(){
+        QTemporaryDir directory;std::atomic<quint64> generation{1};
+        QImage source(20000,1800,QImage::Format_RGBA8888);
+        for(int y=0;y<source.height();++y){auto *row=source.scanLine(y);for(int x=0;x<source.width();++x)for(int c=0;c<4;++c)row[x*4+c]=uchar((x*37+y*71+c*13+(y%17==0?x*y:0))&255);}
+        const auto path=directory.filePath("parallel.png");QVERIFY(source.save(path));
+        const auto decoded=decodeRgbaPng(path,generation,1);QVERIFY(!decoded.isNull());qInfo()<<decoded.text("pngStages");
+        QCOMPARE(decoded,source);QCOMPARE(decoded,QImageReader(path).read().convertToFormat(QImage::Format_RGBA8888));
     }
     void largeImageEditorStartup(){
         const auto path=qEnvironmentVariable("VSR_TEST_IMAGE");if(path.isEmpty())QSKIP("Set VSR_TEST_IMAGE for the real large-image benchmark");

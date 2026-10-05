@@ -509,6 +509,14 @@ quint64 ImageDocument::selectionId() const{return d->state.selectionId;}
 QImage ImageDocument::composite(const QRect &rect) const{return compositePreview(rect,rect.size());}
 QImage ImageDocument::compositePreview(const QRect &rect,QSize outputSize,ImageSamplingQuality quality) const{
     if(rect.isEmpty() || outputSize.isEmpty())return {};
+    // An untouched full-size background needs sampling, not a per-pixel blend
+    // pass. Keep the general compositor for masks, edits and layer effects.
+    if(d->state.layers.size()==1 && QRect(QPoint(),d->state.size).contains(rect)){
+        const auto &layer=d->state.layers.first();const ImageLayerInfo plain;
+        if(layer.qualityPreview && layer.pixels.isEmpty() && layer.mask.isEmpty() && !layer.maskReader && !layer.info.group && layer.info.parentId.isNull() && layer.info.visible && !layer.info.clipping && layer.info.opacity==1 && layer.info.fillOpacity==1 && layer.info.channels==7 && layer.info.blend==ImageBlendMode::Normal && layer.info.maskDefault==255 && layer.info.blendIfSource==plain.blendIfSource && layer.info.blendIfBackdrop==plain.blendIfBackdrop && QRect(layer.info.offset,layer.info.extent).contains(rect)){
+            auto image=layer.qualityPreview(rect.translated(-layer.info.offset),outputSize,quality).convertToFormat(d->format());image.setColorSpace(d->state.space);return image;
+        }
+    }
     auto blank=[&]{QImage image(outputSize,d->format());image.fill(Qt::transparent);image.setColorSpace(d->state.space);return image;};
     std::function<QImage(QUuid,QImage)> render=[&](QUuid parent,QImage out){
         QImage baseAlpha;
