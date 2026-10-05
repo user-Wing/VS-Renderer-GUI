@@ -21,6 +21,7 @@
 #include <QLabel>
 #include <QLineF>
 #include <QLineEdit>
+#include <QPlainTextEdit>
 #include <QWheelEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -47,6 +48,20 @@ void hover(ImageEditorCanvas &canvas,QPointF position){
 class TestImageEditorInteraction final : public QObject {
     Q_OBJECT
 private slots:
+    void rulerEndpointsAndBodyDrag() {
+        ImageDocument document({300,220},ImagePrecision::UInt8);document.addLayer("Background",pixels(document.size(),Qt::white));ImageEditorTools tools(&document);ImageEditorCanvas canvas(&tools);canvas.resize(600,440);canvas.show();canvas.actualSize();canvas.setTool(ImageEditorTool::Ruler);QSignalSpy measurements(&canvas,&ImageEditorCanvas::rulerMeasured);
+        drag(canvas,{40,60},{140,60});QVERIFY(!measurements.isEmpty());QVERIFY(qAbs(measurements.last()[0].toDouble()-100)<1);
+        drag(canvas,{40,60},{60,80});QVERIFY(qAbs(measurements.last()[0].toDouble()-std::hypot(80.,20.))<1);
+        drag(canvas,{140,60},{200,80});QVERIFY(qAbs(measurements.last()[0].toDouble()-140)<1);
+        drag(canvas,{130,80},{160,100});QVERIFY(qAbs(measurements.last()[0].toDouble()-140)<1);
+        drag(canvas,{230,100},{250,100});QVERIFY(qAbs(measurements.last()[0].toDouble()-160)<1);canvas.grab().save("build/ruler-endpoints.png");
+    }
+    void doubleClickTextEditAndUndo() {
+        ImageEditorWindow editor(pixels({400,300},Qt::white),"text.png");editor.setAttribute(Qt::WA_DeleteOnClose,false);editor.show();auto *tools=editor.tools();QFont font("Arial");font.setPixelSize(24);tools->setText("Original",font);tools->setBrushColor(Qt::red);QVERIFY(tools->createText({40,70}));const auto id=tools->layer();const auto original=info(*editor.document(),id);editor.canvas()->setTool(ImageEditorTool::Move);QTRY_VERIFY(!editor.canvas()->previewBusy());
+        const auto originalPixels=editor.document()->composite(QRect(QPoint(),editor.document()->size()));bool visited=false;QTimer::singleShot(0,&editor,[&]{auto *dialog=editor.findChild<QDialog *>("imageEditorTextDialog");if(!dialog)return;visited=true;dialog->findChild<QPlainTextEdit *>("imageEditorEditText")->setPlainText("Edited\nSecond line");dialog->findChild<QSpinBox *>("imageEditorEditTextSize")->setValue(36);dialog->findChild<QCheckBox *>("imageEditorEditTextBold")->setChecked(true);dialog->findChild<QCheckBox *>("imageEditorEditTextItalic")->setChecked(true);dialog->findChild<QDoubleSpinBox *>("imageEditorEditTextSpacing")->setValue(1.8);dialog->accept();});
+        QTest::mouseDClick(editor.canvas(),Qt::LeftButton,Qt::NoModifier,editor.canvas()->screenPoint(original.offset+QPoint(12,12)).toPoint());QVERIFY(visited);const auto changed=info(*editor.document(),id);QCOMPARE(changed.text,QString("Edited\nSecond line"));QVERIFY(changed.textFont.bold());QVERIFY(changed.textFont.italic());QCOMPARE(changed.textFont.pixelSize(),36);QCOMPARE(changed.textLineSpacing,1.8);QCOMPARE(editor.document()->layers().size(),2);
+        const auto changedPixels=editor.document()->composite(QRect(QPoint(),editor.document()->size()));QVERIFY(changedPixels!=originalPixels);editor.document()->history()->undo();QCOMPARE(info(*editor.document(),id).text,original.text);QCOMPARE(editor.document()->composite(QRect(QPoint(),editor.document()->size())),originalPixels);editor.document()->history()->redo();QCOMPARE(info(*editor.document(),id).text,changed.text);QCOMPARE(editor.document()->composite(QRect(QPoint(),editor.document()->size())),changedPixels);QTest::qWait(200);QTRY_VERIFY(!editor.canvas()->previewBusy());editor.grab().save("build/editable-text.png");editor.document()->history()->setClean();
+    }
     void movePixelsFollowPointerBeforeCommit() {
         ImageDocument doc({300,220},ImagePrecision::UInt16);doc.addLayer("Background",pixels(doc.size(),Qt::white));const auto id=doc.addLayer("Object",pixels({40,20},Qt::red),{30,40});
         ImageEditorTools tools(&doc);tools.setLayer(id);ImageEditorCanvas canvas(&tools);canvas.resize(700,540);canvas.show();canvas.actualSize();canvas.setNativeHdrEnabled(false);canvas.setTool(ImageEditorTool::Move);QTRY_VERIFY(!canvas.previewBusy());

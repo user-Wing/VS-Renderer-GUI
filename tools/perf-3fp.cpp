@@ -53,7 +53,7 @@ int wmain(int argc, wchar_t** argv) {
     bool playing = false, measuring = false, failed = false;
     auto measurement = start;
     double first = -1, nextSample = 0;
-    std::puts("wall_s,position_s,decoded,accepted,dropped,coalesced,presents,present_wait_ms,lock_wait_ms,transfer_ms,convert_ms,decode_mode,scaling_mode,swap_w,swap_h,dest_w,dest_h,output_bits,seek_generation,first_frame_s,cpu_s");
+    std::puts("wall_s,position_s,decoded,accepted,dropped,coalesced,presents,present_wait_ms,lock_wait_ms,transfer_ms,convert_ms,decode_mode,scaling_mode,swap_w,swap_h,dest_w,dest_h,output_bits,seek_generation,first_frame_s,cpu_s,queued_video_frames");
     for (;;) {
         MSG msg{};
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
@@ -87,13 +87,13 @@ int wmain(int argc, wchar_t** argv) {
                 user.dwLowDateTime) / 1e7;
             FFF3FPRenderTargetInfo t{}; t.size = sizeof(t); t.version = 1;
             GetRenderTargetInfo(player, &t);
-            std::printf("%.6f,%.6f,%llu,%llu,%llu,%llu,%llu,%.4f,%.4f,%.4f,%.4f,%u,%u,%u,%u,%u,%u,%u,%llu,%.6f,%.6f\n",
+            std::printf("%.6f,%.6f,%llu,%llu,%llu,%llu,%llu,%.4f,%.4f,%.4f,%.4f,%u,%u,%u,%u,%u,%u,%u,%llu,%.6f,%.6f,%u\n",
                 wall, s.position100ns / 1e7, s.decodedVideoFrames, s.presentedVideoFrames,
                 s.droppedVideoFrames, s.coalescedVideoFrames, s.swapChainPresents,
                 s.presentWait100ns / 1e4, s.deviceLockWait100ns / 1e4,
                 s.hardwareTransfer100ns / 1e4, s.softwareConvert100ns / 1e4,
                 unsigned(s.decodeMode), unsigned(s.videoScalingMode), t.swapWidth, t.swapHeight,
-                t.destWidth, t.destHeight, t.outputBitDepth, s.timelineGeneration, first, cpuSeconds);
+                t.destWidth, t.destHeight, t.outputBitDepth, s.timelineGeneration, first, cpuSeconds, s.queuedVideoFrames);
             std::fflush(stdout); nextSample += 1;
         }
         if (measuring && wall >= seconds + 5) break;

@@ -31,7 +31,7 @@ public:
     double tolerance() const { return tolerance_; }
     void setGradientEndColor(const QColor &color) { endColor_=color; }
     QColor gradientEndColor() const { return endColor_; }
-    void setText(const QString &text,const QFont &font) { text_=text;font_=font; }
+    void setText(const QString &text,const QFont &font,double lineSpacing=1.2) { text_=text;font_=font;textLineSpacing_=lineSpacing; }
     void setCloneSource(QPointF point);
     bool hasCloneSource() const { return sourceSet_; }
     bool captureHistorySource();
@@ -50,6 +50,7 @@ public:
     bool fillPath(const QPainterPath &path,const QString &label = {});
     bool strokePath(const QPainterPath &path);
     bool createText(QPointF baseline);
+    bool editText(const QUuid &id,const QString &text,const QFont &font,double lineSpacing);
     bool invertSelection();
     QImage selectedPixels(QPoint *origin = nullptr) const;
     bool layerFromSelection(bool cut);
@@ -84,6 +85,7 @@ private:
     QColor endColor_ = Qt::white;
     QString text_ = QStringLiteral("Text");
     QFont font_ = QFont(QStringLiteral("Arial"),24);
+    double textLineSpacing_ = 1.2;
     double radius_ = 12, opacity_ = 1;
     double tolerance_ = .12;
     ImageEditorTool strokeTool_ = ImageEditorTool::Brush;

@@ -27,7 +27,7 @@ public:
         setObjectName("playerInfoPanel");setWindowFlags(Qt::Tool|Qt::FramelessWindowHint|Qt::WindowDoesNotAcceptFocus);setAttribute(Qt::WA_ShowWithoutActivating);setAttribute(Qt::WA_TranslucentBackground);setTextFormat(Qt::PlainText);
         for(auto *widget=parent;widget;widget=widget->parentWidget())widget->installEventFilter(this);
         setAlignment(Qt::AlignTop|Qt::AlignLeft);setMargin(12);setContentsMargins(0,0,0,30);
-        baseFont_=QFont("Consolas",9);setFont(baseFont_);
+        baseFont_=QFont("Comic Sans MS",9);setFont(baseFont_);
         opacityText_=new QLabel(tr("透明度"),this);percent_=new QLabel(this);percent_->setObjectName("playerInfoOpacityPercent");
         opacity_=new QSlider(Qt::Horizontal,this);opacity_->setObjectName("playerInfoOpacity");opacity_->setRange(0,100);opacity_->setValue(50);opacity_->setToolTip(tr("信息面板背景透明度"));
         grip_=new PlayerInfoGrip(this);grip_->setObjectName("playerInfoResize");
@@ -35,9 +35,9 @@ public:
         layoutControls();
     }
     void showText(const QString &text){
-        QLabel::setText(text);QFontMetrics metrics(baseFont_);int width=0;
+        QLabel::setText(text);setFont(baseFont_);QFontMetrics metrics(baseFont_,this);int width=0;
         const auto lines=text.split('\n');for(const auto &line:lines)width=std::max(width,metrics.horizontalAdvance(line));
-        baseSize_={width+32,int(lines.size())*metrics.lineSpacing()+62};setMinimumSize(baseSize_);
+        baseSize_=QSize(width+32,int(lines.size())*metrics.lineSpacing()+70).boundedTo(parentWidget()->screen()->availableGeometry().size()-QSize(24,24));setMaximumSize(parentWidget()->screen()->availableGeometry().size()-QSize(24,24));setMinimumSize(baseSize_);
         if(!initialized_){resize(baseSize_);initialized_=true;}else resize(size().expandedTo(baseSize_));
         layoutControls();
     }
@@ -58,9 +58,11 @@ private:
     }
     void layoutControls(){
         if(!opacity_ || !grip_)return;
-        opacityText_->setGeometry(12,height()-28,55,22);percent_->setGeometry(width()-77,height()-28,48,22);percent_->setText(QString::number(opacity_->value())+"%");opacity_->setGeometry(70,height()-26,std::max(40,width()-151),18);grip_->setGeometry(width()-22,height()-22,20,20);
         auto font=baseFont_;if(!baseSize_.isEmpty())font.setPointSizeF(std::clamp(9.*std::min(double(width())/baseSize_.width(),double(height())/baseSize_.height()),9.,24.));setFont(font);
-        setStyleSheet(QString("QLabel#playerInfoPanel{background:transparent;color:#f4f4f4;font-family:Consolas;font-size:%1pt;} QLabel,QSlider,QSizeGrip{background:transparent;color:#f4f4f4;} QSlider::groove:horizontal{background:#666;height:4px;} QSlider::handle:horizontal{background:#c8d4ea;width:12px;margin:-4px 0;}").arg(font.pointSizeF()));update();
+        opacityText_->setFont(font);percent_->setFont(font);const QFontMetrics metrics(font);const int footer=metrics.height()+20;setContentsMargins(0,0,0,footer+12);
+        const int labelWidth=metrics.horizontalAdvance(tr("透明度"))+8,percentWidth=metrics.horizontalAdvance("100%")+8;
+        opacityText_->setGeometry(12,height()-footer,labelWidth,metrics.height()+8);percent_->setGeometry(width()-percentWidth-28,height()-footer,percentWidth,metrics.height()+8);percent_->setText(QString::number(opacity_->value())+"%");opacity_->setGeometry(labelWidth+20,height()-footer+4,std::max(40,width()-labelWidth-percentWidth-58),metrics.height());grip_->setGeometry(width()-22,height()-22,20,20);
+        setStyleSheet(QString("QLabel#playerInfoPanel{font-size:%1pt;background:transparent;color:#f4f4f4;} QLabel,QSlider,QSizeGrip{font-size:%1pt;background:transparent;color:#f4f4f4;} QSlider::groove:horizontal{background:#666;height:4px;} QSlider::handle:horizontal{background:#c8d4ea;width:12px;margin:-4px 0;}").arg(font.pointSizeF()));update();
         positionPanel();
     }
     QSlider *opacity_=nullptr;QLabel *opacityText_=nullptr,*percent_=nullptr;QSizeGrip *grip_=nullptr;QFont baseFont_;QSize baseSize_;bool initialized_=false,restore_=false;

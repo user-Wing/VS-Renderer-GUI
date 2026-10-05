@@ -1,6 +1,7 @@
 #include "image/ImageEditorTools.h"
 #include <QImageWriter>
 #include <QPainter>
+#include <QFontMetricsF>
 #include <QSaveFile>
 #include <algorithm>
 #include <array>
@@ -25,6 +26,10 @@ void writePixel(QImage &image,int x,int y,const Pixel &pixel,ImagePrecision prec
     auto *p=image.scanLine(y)+x*4;for(int c=0;c<4;++c)p[c]=qRound(std::clamp(pixel[c],0.f,1.f)*255);
 }
 ImageLayerInfo layerInfo(ImageDocument *document,const QUuid &id) {for(const auto &layer:document->layers())if(layer.id==id)return layer;return {};}
+QPainterPath textPath(QPointF baseline,const QFont &font,const QString &text,double spacing) {
+    QPainterPath path;const double step=QFontMetricsF(font).height()*spacing;
+    for(const auto &line:text.split('\n')){path.addText(baseline,font,line);baseline.ry()+=step;}return path;
+}
 bool layerLocked(ImageDocument *document,const ImageLayerInfo &layer) {
     auto info=layer;const auto layers=document->layers();for(int depth=0;depth<=layers.size();++depth){if(info.locked)return true;if(info.parentId.isNull())return false;info=layerInfo(document,info.parentId);if(info.id.isNull())return false;}return true;
 }
@@ -246,7 +251,7 @@ void ImageEditorTools::effectDab(QPointF point) {
         for(int c=0;c<4;++c)result[c]=old[c]+(result[c]-old[c])*amount;writePixel(pixels,x,y,result,document_->precision());changed=true;
     }}
     if(changed)document_->writeRegion(layer_,bounds.topLeft()-layer.offset,pixels);
-    if(sourceOutside){emit errorOccurred(tr("笔划超出取样源缓存（2048 × 2048）；请重新 Alt 点击设置取样源。"));endStroke();}
+    if(sourceOutside){emit errorOccurred(tr("笔划超出取样源缓存(2048 × 2048)；请重新 Alt 点击设置取样源。"));endStroke();}
 }
 bool ImageEditorTools::boundedCanvas(const QString &operation) const {
     if(qint64(document_->size().width())*document_->size().height()<=16*1024*1024)return true;
@@ -330,14 +335,30 @@ bool ImageEditorTools::strokePath(const QPainterPath &path) {
     if(path.isEmpty())return false;const int steps=std::clamp(int(path.length()/std::max(.5,radius_*.25)),1,100000);if(!beginStroke(path.pointAtPercent(0),ImageEditorTool::Brush))return false;for(int i=1;i<=steps;++i)continueStroke(path.pointAtPercent(double(i)/steps));endStroke();return true;
 }
 bool ImageEditorTools::createText(QPointF baseline) {
-    endStroke();endMove();endSelectionStroke();QPainterPath path;path.addText(baseline,font_,text_);const QRect bounds=path.boundingRect().toAlignedRect().intersected(QRect(QPoint(),document_->size()));if(path.isEmpty() || bounds.isEmpty())return false;
+    endStroke();endMove();endSelectionStroke();const auto path=textPath(baseline,font_,text_,textLineSpacing_);const QRect bounds=path.boundingRect().toAlignedRect().intersected(QRect(QPoint(),document_->size()));if(path.isEmpty() || bounds.isEmpty())return false;
     if(qint64(bounds.width())*bounds.height()>64*1024*1024){emit errorOccurred(tr("文字栅格化暂限 6711 万像素。"));return false;}
     const auto current=layerInfo(document_,layer_);const QUuid parent=current.group?current.id:current.parentId;if(!parent.isNull() && layerLocked(document_,layerInfo(document_,parent))){emit errorOccurred(tr("目标图层组已锁定，请先解锁再添加文字。"));return false;}
     const QUuid before=layer_;const bool wasMask=editingMask_;document_->beginEdit(tr("新建文字像素图层"));
-    const auto id=document_->addLayer(tr("文字 - %1").arg(text_.simplified().left(32)),{},bounds.topLeft());auto info=layerInfo(document_,id);info.parentId=parent;document_->updateLayer(info);
+    const auto id=document_->addLayer(tr("文字 - %1").arg(text_.simplified().left(32)),{},bounds.topLeft());auto info=layerInfo(document_,id);info.parentId=parent;info.text=text_;info.textFont=font_;info.textColor=color_;info.textBaseline=baseline-bounds.topLeft();info.textLineSpacing=textLineSpacing_;document_->updateLayer(info);
     layer_=id;editingMask_=false;paintPath(path);layer_=before;editingMask_=wasMask;
     if(!document_->storageError().isEmpty()){document_->cancelEdit();emit errorOccurred(document_->storageError());return false;}
     document_->commitEdit();setEditingMask(false);setLayer(id);return true;
+}
+bool ImageEditorTools::editText(const QUuid &id,const QString &text,const QFont &font,double lineSpacing) {
+    endStroke();endMove();endSelectionStroke();auto info=layerInfo(document_,id);
+    if(info.text.isEmpty() || text.isEmpty() || layerLocked(document_,info))return false;
+    const QPointF baseline=info.offset+info.textBaseline;
+    const auto path=textPath(baseline,font,text,lineSpacing);const auto bounds=path.boundingRect().toAlignedRect().intersected(QRect(QPoint(),document_->size()));
+    if(bounds.isEmpty() || qint64(bounds.width())*bounds.height()>64*1024*1024)return false;
+    document_->beginEdit(tr("编辑文字"));
+    for(const auto &region:document_->layerRegions(id)){
+        QImage clear(region.size(),document_->pixelFormat());clear.fill(Qt::transparent);document_->writeRegion(id,region.topLeft(),clear);
+    }
+    info.text=text;info.textFont=font;info.textLineSpacing=lineSpacing;document_->updateLayer(info);
+    const auto before=layer_;const auto priorColor=color_;const bool priorMask=editingMask_;
+    layer_=id;color_=info.textColor;editingMask_=false;paintPath(path);layer_=before;color_=priorColor;editingMask_=priorMask;
+    if(!document_->storageError().isEmpty()){document_->cancelEdit();emit errorOccurred(document_->storageError());return false;}
+    document_->commitEdit();return true;
 }
 bool ImageEditorTools::invertSelection() {
     if(!boundedCanvas(tr("反选")))return false;const bool had=document_->hasSelection();document_->beginEdit(tr("反选"));const QSize size=document_->size();for(int top=0;top<size.height();top+=256)for(int left=0;left<size.width();left+=256){const QRect tile(left,top,std::min(256,size.width()-left),std::min(256,size.height()-top));auto mask=document_->selectionRegion(tile);for(int y=0;y<tile.height();++y){auto *row=reinterpret_cast<quint16 *>(mask.scanLine(y));for(int x=0;x<tile.width();++x)row[x]=had?65535-row[x]:0;}document_->writeSelection(tile.topLeft(),mask);}emit selectionInverted();document_->commitEdit();lastSelectionOutline_={};return true;

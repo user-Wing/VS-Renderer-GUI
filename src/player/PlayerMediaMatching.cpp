@@ -36,12 +36,12 @@ double playerMediaMatchScore(const QString &video,const QString &track) {
     return common>=4 && similarity>=.65?similarity:0;
 }
 void PlayerWindow::matchExternalTracks() {
-    if(matchedTracks_ || imageMode_ || networkSource())return;matchedTracks_=true;
+    if(matchedTracks_ || imageMode_ || audioMode_ || networkSource())return;matchedTracks_=true;
     bool video=false;for(const auto &entry:media_.value("streams").toArray())if(entry.toObject().value("type").toString()=="video")video=true;
     if(!video)return;
     QString best[2];double scores[2]{};bool ambiguous[2]{};
     for(const auto &file:QFileInfo(source_).absoluteDir().entryInfoList(QDir::Files,QDir::Name|QDir::IgnoreCase)) {
-        const auto suffix=file.suffix().toLower();const int kind=QStringList{"ass","ssa","srt","sup","vtt"}.contains(suffix)?1:playerAudioExtensions().contains(suffix)?0:-1;
+        const auto suffix=file.suffix().toLower();const int kind=QStringList{"ass","ssa","srt","sup","vtt","mks"}.contains(suffix)?1:playerAudioExtensions().contains(suffix)?0:-1;
         if(kind<0 || file.absoluteFilePath()==source_)continue;
         const auto score=playerMediaMatchScore(source_,file.absoluteFilePath());
         if(score>scores[kind]){scores[kind]=score;best[kind]=file.absoluteFilePath();ambiguous[kind]=false;}

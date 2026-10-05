@@ -24,7 +24,7 @@ MultiCompareView::MultiCompareView(QWidget *parent) : QWidget(parent)
         remove_[i]->setStyleSheet(QStringLiteral("min-height:0px; padding:0px;"));
         remove_[i]->setText(QStringLiteral("×"));
         remove_[i]->setObjectName(QStringLiteral("removeVideo%1").arg(i));
-        remove_[i]->setToolTip(QStringLiteral("移除此视频（不删除文件）"));
+        remove_[i]->setToolTip(QStringLiteral("移除此视频(不删除文件)"));
         remove_[i]->hide();
         connect(remove_[i], &QToolButton::clicked, this, [this, i] {
             if (i < slots_.size()) emit sourceRemoved(slots_[i]);

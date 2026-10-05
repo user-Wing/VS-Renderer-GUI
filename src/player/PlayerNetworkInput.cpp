@@ -125,7 +125,7 @@ private:
         connect(reply, &QNetworkReply::finished, this, [this, reply, generation] {
             if (generation == generation_ && resolver_ == reply) {
                 resolver_ = nullptr;
-                emit errorOccurred(generation, tr("读取网络视频失败：%1（HTTP %2）").arg(reply->errorString()).arg(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()));
+                emit errorOccurred(generation, tr("读取网络视频失败：%1(HTTP %2)").arg(reply->errorString()).arg(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()));
                 reply->deleteLater();
             }
         });

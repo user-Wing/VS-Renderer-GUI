@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QImage>
+#include <QFont>
 #include <QColorSpace>
 #include <QUndoStack>
 #include <QUuid>
@@ -30,6 +31,11 @@ struct ImageLayerInfo {
     std::array<ImageBlendRange,4> blendIfSource{{{0,0,1,1},{0,0,1,1},{0,0,1,1},{0,0,1,1}}};
     std::array<ImageBlendRange,4> blendIfBackdrop{{{0,0,1,1},{0,0,1,1},{0,0,1,1},{0,0,1,1}}};
     ImageBlendMode blend = ImageBlendMode::Normal;
+    QString text;
+    QFont textFont;
+    QColor textColor;
+    QPointF textBaseline;
+    double textLineSpacing = 1.2;
 };
 
 // Document coordinates for composite/selection; layer-local coordinates for pixels/masks.

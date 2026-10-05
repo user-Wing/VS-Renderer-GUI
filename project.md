@@ -2,7 +2,17 @@
 
 本文件用于接手开发、定位模块和确认当前边界。用户操作见 [README.md](README.md)，版本变更见 [changelog.md](changelog.md)，逐轮测试与交付记录见 [专项文档](docs/) 和 [历史原文归档](docs/history/development-records-through-2026-10-03.md)。
 
-核对日期：2026-10-05。源码 `CMakeLists.txt` 与本地便携 `release.json` 均为 **1.0.5 本地版**；这不表示已在线发布 1.0.5。
+核对日期：2026-10-05。源码 `CMakeLists.txt` 与便携 `release.json` 为 **1.0.6**。本轮制作完整包与精简包、上传源码并准备无附件 Release Draft；附件上传与正式发布由维护者操作。精简包仅排除 LAV、madVR、MKVToolNix，并同步移除对应本地组件版本记录；BD 原盘菜单的 libVLC 保留。打包脚本为 `tools/package-portable.ps1`，使用 `-Edition Full` 或 `-Edition Lite`，清单包含隐藏文件并排除个人状态。发行说明见 [1.0.6](docs/release-1.0.6.md)。1.0.5 已正式发布，既有版本与归档保留。
+
+本轮根因修复位于 PlayerWindow 的目标呈现确认、PlayerPlaylist 的章节稳定和 QDialog 模式布局，以及 `patches/3fp-concat-seek.patch` 的全局定位。Player、Renderer 与原生 DLL 重编译交付，真实鼠标及原盘六集回归见 [BD 与进度条验收](docs/player-bd-seek-acceptance-1.0.6.md)。原盘菜单字幕语言交接由 `BlurayCatalog::playbackInput` 从 CLPI 保留传输流 PID，解决拼接流 ID 为零导致回退日语；五种语言图像与独立原盘提取结果一致，见 [字幕语言验收](docs/bd-menu-subtitle-languages-1.0.6.md)。
+
+最新修复覆盖 BD 菜单节目接回滤镜、分段定位、底栏与停靠播放列表、歌词原生显示、目录图片循环，以及编辑器标尺/文字交互。真实 BD、kit A–P 和图像回归结果见 [修复验收记录](docs/player-bd-lyrics-editor-fixes-1.0.6.md)。
+
+1.0.6 音频封面/歌词入口位于 `PlayerAudioMetadata`、`PlayerAudio`；BD 完整节目和音频树位于 `PlayerPlaylist`，MKS 轨道和章节由 `PlayerMenus` 接入，Tab 布局位于 `PlayerInfoPanel`。真实文件测试、操作与边界见 [音频 / BD / MKS 记录](docs/audio-bd-mks-1.0.6.md)。
+
+1.0.6 后续 BD 原盘交互由 `PlayerDiscMenu` 动态加载 `runtime/vlc`，`BlurayCatalog` 准备菜单/短节目缓存；PGS 协议和时间零点修复由 `patches/3fp-bd-subtitles-probe.patch` 重建。稳定视频视口在 `PlayerPlaylist::layoutChrome`，默认开启。首次菜单入口显式激活 PreviewPane 视频层；PlayerDiscMenu 切换时后台释放旧播放器，并保留旧 HWND 到释放完成。底部菜单导航按钮已移除。真实 MyGO 菜单、鼠标操作、HW/SW 切换、字幕、短片以及 Tab/右键回归见 [本轮记录](docs/bd-menu-viewport-1.0.6.md)。
+
+最新输入修复位于 PlayerDiscMenu 的 Qt 逻辑坐标转发、PlayerPlaylist 的模式对话框/工具栏几何，以及 ChapterTimeline/PlayerControls 的点击直跳与预览去重；记录见 [输入与布局](docs/player-input-layout-1.0.6.md)。
 
 当前修复以返回的 1.0.5 源码为基线；2026-10-04 已重新编译并覆盖 `dist/VS-Renderer-GUI-windows-x64` 的 Renderer、Player、3FP 和版本清单，保留配置及预设。Jinc 8K 原生稳定段、大图启动与编辑操作的结果及未验收项集中于 [本机验收记录](docs/local-1.0.5-performance.md)。此次没有更新其它 PortableSoft 安装目录或发布线上版本。
 
@@ -18,7 +28,7 @@
 
 2026-10-05 Full 组件页面在共享 `src/update/ComponentDownloads.*`，迁移 Player 设置中的本体更新入口；安装辅助脚本为 `tools/apply-components.ps1`，MKVToolNix 固定到 `runtime/mkvtoolnix`。Player BD 入口在 `PlayerPlaylist` 后台读取后直接播放，Renderer 保留 Remux GUI；信息面板自绘透明背景并随播放器激活状态避让设置窗口。验收与发布边界见 [本轮记录](docs/components-player-1.0.5.md)。
 
-2026-10-05 原生软件回退优化位于 `PlayerSession/VideoRenderer`，由两个独立补丁重建；保留 444/10-bit 精度及硬解路径。780M 8K48 软解尚未达标，本地硬解到 8K 短时回归通过。当前部署和实验边界见 [AV1 软件回退记录](docs/av1-software-decode-1.0.5.md)。
+2026-10-05 原生软件回退优化位于 `PlayerSession/VideoRenderer`，由两个独立补丁重建；保留 444/10-bit 精度及硬解路径。780M 8K48 软解尚未达标，本地硬解到 8K 短时回归通过。当前部署和实验边界见 [AV1 软件回退记录](docs/av1-software-decode-1.0.5.md)。硬解预取预算由 `patches/3fp-hardware-video-queue.patch` 在 PlayerSession 区分硬件表面 768 MiB 与软件帧 128 MiB，保留八帧队列上限与 150 ms 预取目标；构建脚本自动应用，测量工具增加队列计数。RX 6600 的 1.0.5 报告、原理及本机回归见 [8K 队列记录](docs/hardware-8k-queue-1.0.6.md)。
 
 2026-10-05 新增共享 `src/bluray/`：BD 元数据解析、节目/模板匹配、章节切片、反馈与 Remux GUI；Renderer 和 Player 复用。原生 `bluray:` 协议用 `patches/3fp-bluray-input.patch` 接入，下载桥接复用 ModelScope Manager。实现、路径和已验收/未验收范围见 [BD 记录](docs/bd-remux-1.0.5.md)。
 

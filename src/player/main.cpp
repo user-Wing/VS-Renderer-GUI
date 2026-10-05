@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     const auto iconPath=QDir::toNativeSeparators(QCoreApplication::applicationFilePath())+",-101";
     if (!extensions.isEmpty() && associations.value("ApplicationIcon").toString()!=iconPath)
         vsr::registerPlayerAssociations(extensions, QCoreApplication::applicationFilePath());
-    QFont font("Segoe UI"); font.setPixelSize(13); app.setFont(font);
+    QFont font("Comic Sans MS"); font.setPixelSize(13); app.setFont(font);
     vsr::PlayerWindow window; window.show();
     const auto arguments = app.arguments();
     for (int i = 1; i < arguments.size(); ++i)

@@ -1,0 +1,17 @@
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -3062,7 +3062,13 @@
+     auto timestamp = av_rescale_q(position + TimelineOrigin100ns(format_),
+         AVRational{1, static_cast<int>(TicksPerSecond)},
+         format_->streams[referenceStream]->time_base);
+-    auto seekResult = av_seek_frame(format_, referenceStream, timestamp, AVSEEK_FLAG_BACKWARD);
++    // Concat seeks use the global timeline; preroll retains a decodable GOP.
++    const bool concat = format_->iformat && std::strcmp(format_->iformat->name, "concat") == 0;
++    const auto globalTimestamp = av_rescale_q(position + TimelineOrigin100ns(format_),
++        AVRational{1, static_cast<int>(TicksPerSecond)}, AV_TIME_BASE_Q);
++    auto seekResult = concat
++        ? avformat_seek_file(format_, -1, INT64_MIN, std::max<std::int64_t>(0, globalTimestamp - AV_TIME_BASE), globalTimestamp, 0)
++        : av_seek_frame(format_, referenceStream, timestamp, AVSEEK_FLAG_BACKWARD);
+     if (seekResult < 0 && format_->pb != nullptr &&
+         (format_->pb->seekable & AVIO_SEEKABLE_NORMAL) != 0) {
+         const auto fileSize = avio_size(format_->pb);

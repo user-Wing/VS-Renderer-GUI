@@ -34,6 +34,7 @@ Copy-Item -LiteralPath (Join-Path $buildRoot "runtime/python") -Destination (Joi
 & (Join-Path $PSScriptRoot 'stage-ffmpeg.ps1') -OutputDirectory $output
 if (-not (Test-Path -LiteralPath (Join-Path $buildRoot 'runtime/awj/AWJ.exe'))) { throw 'Missing AWJimage backend; build VSPlayer before staging.' }
 Copy-Item -LiteralPath (Join-Path $buildRoot 'runtime/awj') -Destination (Join-Path $output 'runtime') -Recurse -Force
+& (Join-Path $PSScriptRoot 'stage-bd-menu.ps1') -SourceDirectory (Join-Path $buildRoot 'runtime/vlc') -OutputDirectory (Join-Path $output 'runtime/vlc')
 New-Item -ItemType Directory -Path (Join-Path $output "shaders"), (Join-Path $output "vpy") -Force | Out-Null
 Get-ChildItem -LiteralPath $ShaderDirectory -Filter "*Anime4K*.glsl" -File | Copy-Item -Destination (Join-Path $output "shaders") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets/anime4k-a-fast.glsl"), (Join-Path $projectRoot "assets/anime4k-no-cnn.glsl") -Destination (Join-Path $output "shaders") -Force

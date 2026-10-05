@@ -536,7 +536,7 @@ QWidget *MainWindow::buildSidebar()
     filtersLayout->addWidget(catalogSearch_);
     filtersLayout->addWidget(catalogList_, 3);
     filtersLayout->addWidget(add);
-    filtersLayout->addWidget(new QLabel(QStringLiteral("处理链（自上而下执行）"), filters));
+    filtersLayout->addWidget(new QLabel(QStringLiteral("处理链(自上而下执行)"), filters));
     filtersLayout->addWidget(pipelineList_, 1);
     filtersLayout->addLayout(nodeButtons);
 
@@ -645,8 +645,8 @@ QWidget *MainWindow::buildWorkspace()
     compareLayout->addStretch();
     syncView_ = new QCheckBox(QStringLiteral("同步视图"), compareBar);
     syncView_->setChecked(true);
-    vrrPresent_ = new QCheckBox(QStringLiteral("VRR 低延迟（实验）"), compareBar);
-    vrrPacing_ = new QCheckBox(QStringLiteral("VRR Pacing（实验）"), compareBar);
+    vrrPresent_ = new QCheckBox(QStringLiteral("VRR 低延迟(实验)"), compareBar);
+    vrrPacing_ = new QCheckBox(QStringLiteral("VRR Pacing(实验)"), compareBar);
     vrrPresent_->setProperty("vrrToggle", true); vrrPacing_->setProperty("vrrToggle", true);
     vrrPresent_->setToolTip(QStringLiteral("调用 FFF3FP_SetPresentConfig；不支持时保持 VSync。"));
     vrrPacing_->setToolTip(QStringLiteral("调用 FFF3FP_SetPacingConfig；建议与 VRR 低延迟配合。"));
@@ -706,7 +706,7 @@ QWidget *MainWindow::buildTransport()
     scaler->addItem(QStringLiteral("放大：Lanczos 3"), static_cast<int>(ThreeFpScalingAlgorithm::Lanczos3));
     scaler->addItem(QStringLiteral("放大：Jinc 2"), static_cast<int>(ThreeFpScalingAlgorithm::Jinc2));
     scaler->addItem(QStringLiteral("放大：Spline36"), static_cast<int>(ThreeFpScalingAlgorithm::Spline36));
-    scaler->addItem(QStringLiteral("放大：Super-XBR（单阶段）"), static_cast<int>(ThreeFpScalingAlgorithm::SuperXbrSinglePass));
+    scaler->addItem(QStringLiteral("放大：Super-XBR(单阶段)"), static_cast<int>(ThreeFpScalingAlgorithm::SuperXbrSinglePass));
     scaler->addItem(QStringLiteral("放大：Lanczos 4"), static_cast<int>(ThreeFpScalingAlgorithm::Lanczos4));
     scaler->setToolTip(QStringLiteral("仅超过源像素密度后使用所选算法；缩小固定使用 Lanczos 3。"));
     auto *frameControls = new QWidget(transport);
@@ -1184,7 +1184,7 @@ void MainWindow::updatePlaybackState()
         vsTarget >= 0 && vsTarget != lastVsFrame_)
         requestProcessedFrame(static_cast<int>(vsTarget));
     frameStatus_->setText(QStringLiteral("源帧 %1  |  VS 帧 %2  |  %3×%4  |  %5-bit  |  3FP API %6")
-        .arg(sourceFrame >= 0 ? QString::number(sourceFrame) : QStringLiteral("--（待 VPY 定位）"))
+        .arg(sourceFrame >= 0 ? QString::number(sourceFrame) : QStringLiteral("--(待 VPY 定位)"))
         .arg(lastVsFrame_ >= 0 ? QString::number(lastVsFrame_) : QStringLiteral("--"))
         .arg(snap.videoWidth).arg(snap.videoHeight).arg(snap.videoOutputBitDepth).arg(api_.apiVersion()));
 }

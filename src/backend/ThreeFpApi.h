@@ -198,6 +198,7 @@ public:
     ThreeFpResult stepKeyframe(void *handle, int direction) const;
     ThreeFpResult setPlaybackRate(void *handle, double rate) const;
     QString mediaInfo(void *handle) const;
+    QString sessionError(void *handle) const;
     ThreeFpResult selectAudio(void *handle, int stream) const;
     ThreeFpResult loadExternalAudio(void *handle, const char *path) const;
     ThreeFpResult clearExternalAudio(void *handle) const;
@@ -245,6 +246,7 @@ private:
     RateFn setPlaybackRate_ = nullptr;
     StepFn stepKeyframe_ = nullptr;
     InfoFn mediaInfo_ = nullptr;
+    InfoFn sessionError_ = nullptr;
     OpenFn setExternalOutputFormat_ = nullptr;
     using LayerFn = ThreeFpResult (*)(void *, const TimedTextLayer *);
     using RegionFn = ThreeFpResult (*)(void *, uint32_t, uint32_t, uint32_t, uint32_t, float *, uint32_t, uint32_t *);

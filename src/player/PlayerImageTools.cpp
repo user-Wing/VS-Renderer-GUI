@@ -232,7 +232,7 @@ void PlayerImageTools::startOutput(const ImageOutput &output,bool desktop) {
     emit statusChanged(desktop?tr("正在准备桌面背景…"):tr("正在输出图片…"));
     task_=QThread::create([this,output,desktop]{const auto error=writeOutput(output);QMetaObject::invokeMethod(this,[this,output,desktop,error]{
         if(!error.isEmpty())emit errorOccurred(error);
-        else if(desktop){if(SystemParametersInfoW(SPI_SETDESKWALLPAPER,0,const_cast<wchar_t *>(reinterpret_cast<const wchar_t *>(output.destination.utf16())),SPIF_UPDATEINIFILE|SPIF_SENDCHANGE))emit statusChanged(tr("已设置为桌面背景"));else emit errorOccurred(tr("设置桌面背景失败（Windows 错误 %1）").arg(GetLastError()));}
+        else if(desktop){if(SystemParametersInfoW(SPI_SETDESKWALLPAPER,0,const_cast<wchar_t *>(reinterpret_cast<const wchar_t *>(output.destination.utf16())),SPIF_UPDATEINIFILE|SPIF_SENDCHANGE))emit statusChanged(tr("已设置为桌面背景"));else emit errorOccurred(tr("设置桌面背景失败(Windows 错误 %1)").arg(GetLastError()));}
         else emit statusChanged(tr("已保存：%1").arg(output.destination));
     },Qt::QueuedConnection);});
     task_->setParent(this);connect(task_,&QThread::finished,this,[this]{auto *finished=task_;task_=nullptr;finished->deleteLater();setReady(ready_);});setReady(ready_);task_->start();
@@ -243,7 +243,7 @@ void PlayerImageTools::resizeImage() {
     auto *width=new QSpinBox(dialog),*height=new QSpinBox(dialog);width->setObjectName("imageResizeWidth");height->setObjectName("imageResizeHeight");
     for(auto *s:{width,height})s->setRange(1,1000000);width->setValue(original.width());height->setValue(original.height());
     auto *aspect=new QCheckBox(tr("保持宽高比"),dialog);aspect->setChecked(true);aspect->setObjectName("imageResizeAspect");form->addRow(tr("宽度"),width);form->addRow(tr("高度"),height);form->addRow(aspect);
-    auto *algorithm=new QComboBox(dialog);algorithm->setObjectName("imageResizeAlgorithm");for(const auto &id:QStringList{"jinc","lanczos4","lanczos3","bilinear","nearest","anime4k"})algorithm->addItem(id=="anime4k"?tr("Anime4K Mode A Fast（仅放大 / Vulkan）"):id=="lanczos4"?QStringLiteral("Lanczos 4 taps"):id=="jinc"?QStringLiteral("Jinc（EWA 2 lobes）"):id,id);form->addRow(tr("缩放算法"),algorithm);algorithm->setMinimumContentsLength(28);
+    auto *algorithm=new QComboBox(dialog);algorithm->setObjectName("imageResizeAlgorithm");for(const auto &id:QStringList{"jinc","lanczos4","lanczos3","bilinear","nearest","anime4k"})algorithm->addItem(id=="anime4k"?tr("Anime4K Mode A Fast(仅放大 / Vulkan)"):id=="lanczos4"?QStringLiteral("Lanczos 4 taps"):id=="jinc"?QStringLiteral("Jinc(EWA 2 lobes)"):id,id);form->addRow(tr("缩放算法"),algorithm);algorithm->setMinimumContentsLength(28);
     connect(width,&QSpinBox::valueChanged,dialog,[=](int v){if(aspect->isChecked()){const QSignalBlocker block(height);height->setValue(std::max(1,qRound(double(v)*original.height()/original.width())));}});
     connect(height,&QSpinBox::valueChanged,dialog,[=](int v){if(aspect->isChecked()){const QSignalBlocker block(width);width->setValue(std::max(1,qRound(double(v)*original.width()/original.height())));}});
     auto *buttons=saveButtons(dialog);form->addRow(buttons);connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
@@ -259,13 +259,13 @@ void PlayerImageTools::cropImage() {
 }
 void PlayerImageTools::convertImage() {
     auto output=currentOutput();auto *dialog=new QDialog(window());dialog->setAttribute(Qt::WA_DeleteOnClose);dialog->setWindowTitle(tr("压缩和转换格式 · AWJimage"));dialog->setMinimumWidth(640);auto *form=new QFormLayout(dialog);
-    auto *format=new QComboBox(dialog);format->setObjectName("imageConvertFormat");for(const auto &id:QStringList{"avif","webp","jxl","jpgli","png"})format->addItem(id=="jpgli"?QStringLiteral("JPEG（JPEGli）"):id.toUpper(),id);
-    auto *mode=new QComboBox(dialog);mode->addItems({tr("固定编码质量"),tr("目标视觉质量（自动搜索）")});mode->setObjectName("imageConvertMode");
+    auto *format=new QComboBox(dialog);format->setObjectName("imageConvertFormat");for(const auto &id:QStringList{"avif","webp","jxl","jpgli","png"})format->addItem(id=="jpgli"?QStringLiteral("JPEG(JPEGli)"):id.toUpper(),id);
+    auto *mode=new QComboBox(dialog);mode->addItems({tr("固定编码质量"),tr("目标视觉质量(自动搜索)")});mode->setObjectName("imageConvertMode");
     auto *quality=new QSpinBox(dialog);quality->setRange(1,100);quality->setValue(70);quality->setObjectName("imageConvertQuality");
     auto *speed=new QSpinBox(dialog);speed->setRange(0,10);speed->setValue(5);speed->setObjectName("imageConvertSpeed");
     auto *chroma=new QComboBox(dialog);chroma->addItems({"420","422","444","auto"});chroma->setToolTip(tr("AVIF 使用 YUV；4:2:0 为兼容优先，auto 跟随源采样。"));
-    auto *depth=new QComboBox(dialog);depth->setObjectName("imageConvertDepth");depth->addItem(tr("自动（8→10，最高12bit）"),"auto");for(const auto &bits:QStringList{"8","10","12"})depth->addItem(bits,bits);auto *alpha=new QComboBox(dialog);alpha->addItem(tr("自动保留透明"),"auto");alpha->addItem(tr("强制保留"),"force");alpha->addItem(tr("移除透明"),"off");
-    form->addRow(tr("输出格式"),format);form->addRow(tr("压缩模式"),mode);form->addRow(tr("质量（1–100）"),quality);form->addRow(tr("速度（0慢/10快）"),speed);form->addRow(tr("色度采样"),chroma);form->addRow(tr("AVIF 位深"),depth);form->addRow(tr("Alpha"),alpha);
+    auto *depth=new QComboBox(dialog);depth->setObjectName("imageConvertDepth");depth->addItem(tr("自动(8→10，最高12bit)"),"auto");for(const auto &bits:QStringList{"8","10","12"})depth->addItem(bits,bits);auto *alpha=new QComboBox(dialog);alpha->addItem(tr("自动保留透明"),"auto");alpha->addItem(tr("强制保留"),"force");alpha->addItem(tr("移除透明"),"off");
+    form->addRow(tr("输出格式"),format);form->addRow(tr("压缩模式"),mode);form->addRow(tr("质量(1–100)"),quality);form->addRow(tr("速度(0慢/10快)"),speed);form->addRow(tr("色度采样"),chroma);form->addRow(tr("AVIF 位深"),depth);form->addRow(tr("Alpha"),alpha);
     auto *note=new QLabel(tr("固定质量只编码一次；视觉质量会反复编码并测量，适合追求体积。\nAVIF 使用 AOM，默认 YUV 4:2:0；GPU 仅加速视觉质量指标。\nPNG 100 无损；JPEG 100 为最高质量，仍为有损。"),dialog);note->setWordWrap(true);form->addRow(note);
     const auto update=[=]{const auto id=format->currentData().toString();speed->setEnabled(id=="avif"||id=="webp"||id=="jxl");chroma->setEnabled(id=="avif"||id=="jpgli");depth->setEnabled(id=="avif");alpha->setEnabled(id!="jpgli");if(id=="jpgli")alpha->setCurrentIndex(2);if(id=="png"){mode->setCurrentIndex(0);quality->setValue(100);}mode->setEnabled(id!="png");};connect(format,&QComboBox::currentIndexChanged,dialog,update);update();
     auto *buttons=saveButtons(dialog);form->addRow(buttons);connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);

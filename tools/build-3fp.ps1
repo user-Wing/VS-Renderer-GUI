@@ -84,7 +84,9 @@ if (-not (Test-AppliedPatch $clockPatch)) {
     if ($LASTEXITCODE -ne 0) { throw 'VS audio-clock patch failed.' }
 }
 $blurayPatch = Join-Path $projectRoot 'patches/3fp-bluray-input.patch'
-if (-not (Test-AppliedPatch $blurayPatch)) {
+$bdPlaybackPatch = Join-Path $projectRoot 'patches/3fp-bd-subtitles-probe.patch'
+# The BD probe hunk overlaps the older input patch's context.
+if (-not (Test-AppliedPatch $bdPlaybackPatch) -and -not (Test-AppliedPatch $blurayPatch)) {
     & git -C $source apply --check $blurayPatch
     if ($LASTEXITCODE -ne 0) { throw 'Blu-ray input patch does not apply cleanly.' }
     & git -C $source apply $blurayPatch
@@ -102,6 +104,26 @@ if (-not $softwareFrameApplied) {
     if ($LASTEXITCODE -ne 0) { throw 'Software frame upload patch does not apply cleanly.' }
     & git -C $source apply $softwareFramePatch
     if ($LASTEXITCODE -ne 0) { throw 'Software frame upload patch failed.' }
+}
+if (-not (Test-AppliedPatch $bdPlaybackPatch)) {
+    & git -C $source apply --check $bdPlaybackPatch
+    if ($LASTEXITCODE -ne 0) { throw 'BD subtitle/probe patch does not apply cleanly.' }
+    & git -C $source apply $bdPlaybackPatch
+    if ($LASTEXITCODE -ne 0) { throw 'BD subtitle/probe patch failed.' }
+}
+$concatSeekPatch = Join-Path $projectRoot 'patches/3fp-concat-seek.patch'
+if (-not (Test-AppliedPatch $concatSeekPatch)) {
+    & git -C $source apply --check $concatSeekPatch
+    if ($LASTEXITCODE -ne 0) { throw 'Concat seek patch does not apply cleanly.' }
+    & git -C $source apply $concatSeekPatch
+    if ($LASTEXITCODE -ne 0) { throw 'Concat seek patch failed.' }
+}
+$hardwareQueuePatch = Join-Path $projectRoot 'patches/3fp-hardware-video-queue.patch'
+if (-not (Test-AppliedPatch $hardwareQueuePatch)) {
+    & git -C $source apply --check $hardwareQueuePatch
+    if ($LASTEXITCODE -ne 0) { throw 'Hardware video queue patch does not apply cleanly.' }
+    & git -C $source apply $hardwareQueuePatch
+    if ($LASTEXITCODE -ne 0) { throw 'Hardware video queue patch failed.' }
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/color/ColorBridge.h'), (Join-Path $projectRoot 'src/color/NativeColorEngine.h') -Destination (Join-Path $source 'FFF.Native/3FP/Render') -Force
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"

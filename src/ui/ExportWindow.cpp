@@ -52,7 +52,7 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     auto *settings = new QWidget(tabs_);
     auto *form = new QVBoxLayout(settings);
     form->setContentsMargins(12, 12, 12, 12);
-    form->addWidget(new QLabel(QStringLiteral("3FUI 参数（单文件与批处理共用，VS 设置取自主界面）"), settings));
+    form->addWidget(new QLabel(QStringLiteral("3FUI 参数(单文件与批处理共用，VS 设置取自主界面)"), settings));
     command_ = new QPlainTextEdit(settings);
     command_->setObjectName(QStringLiteral("exportCommand"));
     command_->setPlaceholderText(QStringLiteral("粘贴包含 -i <输入文件> 与 <输出文件> 的完整 FFmpeg 命令。"));
@@ -63,7 +63,7 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     auto *outputRow = new QHBoxLayout;
     singleOutput_ = new QLineEdit(settings);
     singleOutput_->setObjectName(QStringLiteral("singleOutput"));
-    singleOutput_->setPlaceholderText(QStringLiteral("单文件输出路径（MKV）"));
+    singleOutput_->setPlaceholderText(QStringLiteral("单文件输出路径(MKV)"));
     auto *browse = new QPushButton(QStringLiteral("选择输出…"), settings);
     outputRow->addWidget(singleOutput_, 1);
     outputRow->addWidget(browse);
@@ -104,7 +104,7 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     namingRow->addWidget(new QLabel(QStringLiteral("命名规则"), prepare));
     naming_ = new QComboBox(prepare);
     naming_->setObjectName(QStringLiteral("outputNaming"));
-    naming_->addItems({QStringLiteral("原文件名 + 时间戳（默认）"), QStringLiteral("原文件名，不加时间戳（高风险：可能覆盖已有输出）")});
+    naming_->addItems({QStringLiteral("原文件名 + 时间戳(默认)"), QStringLiteral("原文件名，不加时间戳(高风险：可能覆盖已有输出)")});
     namingRow->addWidget(naming_, 1);
     prepareLayout->addLayout(namingRow);
     auto *enqueueAll = new QPushButton(QStringLiteral("全部加入编码队列"), prepare);
@@ -408,7 +408,7 @@ void ExportWindow::stopJob(const std::shared_ptr<Job> &job)
         pipeline_.cancel();
     } else if (job->state == State::Waiting) {
         job->state = State::Stopped;
-        job->item->setText(1, QStringLiteral("已停止（未开始）"));
+        job->item->setText(1, QStringLiteral("已停止(未开始)"));
     }
 }
 
@@ -431,7 +431,7 @@ void ExportWindow::restartStopped()
         job->plan.ffmpegArguments.removeAll(QStringLiteral("-n"));
         if (!job->plan.ffmpegArguments.contains(QStringLiteral("-y"))) job->plan.ffmpegArguments.prepend(QStringLiteral("-y"));
         job->state = State::Waiting;
-        item->setText(1, QStringLiteral("等待中（从头处理）"));
+        item->setText(1, QStringLiteral("等待中(从头处理)"));
         item->setText(2, QStringLiteral("0%"));
         item->setText(3, QStringLiteral("0"));
         item->setText(4, QStringLiteral("估算中"));

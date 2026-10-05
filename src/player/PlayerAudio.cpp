@@ -1,5 +1,6 @@
 #include "player/PlayerWindow.h"
 #include "backend/ThreeFpPlayer.h"
+#include "backend/VapourSynthFrameServer.h"
 #include "backend/LavPlayback.h"
 #include <QSettings>
 #include <QDialog>
@@ -12,8 +13,33 @@
 #include <QSlider>
 #include <QFileInfo>
 #include <array>
+#include <QFutureWatcher>
+#include <QtConcurrentRun>
+#include "ui/PreviewPane.h"
 
 namespace vsr {
+void PlayerWindow::loadAudioMetadata() {
+    if(audioMetadataLoaded_)return;
+    // Video media needs no second probe; probe audio containers and attached artwork.
+    bool video=false;
+    for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()=="video" && !QStringList{"mjpeg","png","bmp"}.contains(stream.value("codec").toString()))video=true;}
+    if(!audioMode_ && video)return;
+    audioMetadataLoaded_=true;const auto path=source_;auto *watcher=new QFutureWatcher<PlayerAudioMetadata>(this);
+    connect(watcher,&QFutureWatcher<PlayerAudioMetadata>::finished,this,[this,watcher,path]{const auto metadata=watcher->result();watcher->deleteLater();if(source_!=path)return;
+        if(!metadata.error.isEmpty()){setError(metadata.error);return;}if(!metadata.audioOnly)return;
+        audioMode_=true;audioMetadata_=metadata;setDirectMode(true);server_->unloadScript();clock_->setClockOnly(true);clip_={};
+        QImage backdrop=metadata.cover;if(backdrop.isNull()){backdrop=QImage(640,640,QImage::Format_RGB32);backdrop.fill(QColor(23,25,30));}
+        pane_->setImage(backdrop);rendererBadge_->setText("Audio");message_->setText(tr("音频播放 · %1").arg(metadata.lyricSource.isEmpty()?tr("无歌词"):metadata.lyricSource));
+        setProperty("audioOnly",true);setProperty("lyricCount",metadata.lyrics.size());setProperty("lyricSource",metadata.lyricSource);updateInfo();updateAudioLyrics(position());
+    });watcher->setFuture(QtConcurrent::run([path]{return PlayerAudioMetadata::read(path);}));
+}
+void PlayerWindow::updateAudioLyrics(qint64 time) {
+    QStringList lines;for(const auto &line:audioMetadata_.lyrics)if(time>=line.start && time<line.end)lines<<line.text;
+    const auto text=lines.join('\n');lyricLabel_->setText(text);
+    const int bottom=controls_->isVisible()?qMin(pane_->surface()->height(),pane_->surface()->mapFromGlobal(controls_->mapToGlobal(QPoint())).y()):pane_->surface()->height();
+    const int height=qMin(bottom/2,qMax(60,lyricLabel_->heightForWidth(qMax(1,pane_->surface()->width()-32))));
+    lyricLabel_->setGeometry(16,bottom-height-20,qMax(1,pane_->surface()->width()-32),height);lyricLabel_->setVisible(!text.isEmpty());lyricLabel_->raise();
+}
 void PlayerWindow::useNativeAudio() {
     if(!lavAudio_)return;
     lavAudio_=false;if(lav_)lav_->volume(0,true);
@@ -29,7 +55,7 @@ void PlayerWindow::selectAudio(int stream) {
 }
 void PlayerWindow::attachAudio(const QString &path) {
     if(!deferred_.isEmpty()){deferredAudio_=path;return;}
-    if(imageMode_ || source_.isEmpty() || !QFileInfo(path).isFile())return;
+    if(imageMode_ || audioMode_ || source_.isEmpty() || !QFileInfo(path).isFile())return;
     const auto state=clock_->snapshot().state;
     if(state!=ThreeFpState::Ready && state!=ThreeFpState::Playing && state!=ThreeFpState::Paused && state!=ThreeFpState::Ended) {
         if(state==ThreeFpState::Idle || state==ThreeFpState::Opening)pendingExternalAudio_=path;return;

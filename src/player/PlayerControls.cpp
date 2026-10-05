@@ -1,4 +1,5 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerDiscMenu.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/LavPlayback.h"
 #include "graph/PresetStore.h"
@@ -53,22 +54,23 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
         const auto rendered=outputSnapshot();
         if(timelineWaiting_ && (snap.timelineGeneration==generation_ || rendered.presentedVideoFrames<=timelinePresented_))return;
         const auto target=timelineTarget_;timelineTarget_=-1;timelinePresented_=rendered.presentedVideoFrames;
-        seekTime(target);timelineWaiting_=seekPending_;
+        seekTime(target);timelineSeekTarget_=target;timelineWaiting_=seekPending_;
     });
     connect(slider,&QSlider::sliderPressed,this,[this]{
-        timelineDragging_=ready_ && !madvrMode() && clock_->snapshot().selectedVideoStream>=0;
-        timelineResume_=timelineDragging_ && playing_;timelineWaiting_=false;
+        timelineDragging_=ready_ && ((discMenu_ && discMenu_->active()) || (!madvrMode() && clock_->snapshot().selectedVideoStream>=0));
+        timelineResume_=timelineDragging_ && playing_;timelineWaiting_=false;timelineSeekTarget_=-1;
         if(timelineResume_)togglePlayback();
     });
     connect(slider, &QSlider::valueChanged, this, [this, slider](int value) {
-        const auto target=clock_->snapshot().duration100ns * value / 100000;
+        const auto target=(discMenu_ && discMenu_->active()?discMenu_->duration():clock_->snapshot().duration100ns) * value / 100000;
         if(slider->isSliderDown() && timelineDragging_){timelineTarget_=target;if(!timelinePreview_->isActive())timelinePreview_->start();}
         else if(!slider->isSliderDown())seekTime(target);
     });
     connect(slider, &QSlider::sliderReleased, this, [this, slider] {
         timelinePreview_->stop();timelineDragging_=false;timelineTarget_=-1;timelineWaiting_=false;
-        seekTime(clock_->snapshot().duration100ns * slider->sliderPosition() / 100000);
-        if(timelineResume_ && !playing_){if(direct_)togglePlayback();else autoPlay_=true;}timelineResume_=false;
+        const auto target=(discMenu_ && discMenu_->active()?discMenu_->duration():clock_->snapshot().duration100ns) * slider->sliderPosition() / 100000;
+        if(target!=timelineSeekTarget_)seekTime(target);timelineSeekTarget_=-1;
+        if(timelineResume_ && !playing_)autoPlay_=true;timelineResume_=false;
     });
     auto *row = new QHBoxLayout; row->setContentsMargins(8, 0, 8, 0); row->setSpacing(4); layout->addLayout(row);
     const auto button = [this, row](const QString &text, const QString &tooltip, auto action) {

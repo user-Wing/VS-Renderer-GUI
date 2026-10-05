@@ -1,0 +1,8 @@
+BD menu runtime: VideoLAN VLC 3.0.23, unmodified official Windows x64 binaries.
+libVLC/libvlccore and the separately loaded VLC plugins retain their original licenses.
+See runtime/vlc/COPYING.txt and AUTHORS.txt. This notice does not relicense those components.
+Official binaries: https://downloads.videolan.org/vlc/3.0.23/win64/
+Corresponding complete source: https://downloads.videolan.org/vlc/3.0.23/vlc-3.0.23.tar.xz
+Project and build instructions: https://www.videolan.org/vlc/
+VLC plugins are loaded only for BD navigation and short programme playback.
+VS Renderer GUI source remains under its existing MIT license.

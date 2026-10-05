@@ -82,7 +82,7 @@ void AnalysisPage::exportComparison()
     QStringList inputs; for(int i=0;i<videoCount_;++i) inputs << paths_[i];
     const auto output=compositionSize();
     exportWindow_->setComposition(script.script,inputs,audio<0?0:offsets_[audio]/10000000.0,audio<0,
-        QStringLiteral("当前对比快照：%1 路，输出 %2×%3（最大源视频分辨率）；保留布局、切割、缩放、偏移和音频选择，从全局时间 0 导出。")
+        QStringLiteral("当前对比快照：%1 路，输出 %2×%3(最大源视频分辨率)；保留布局、切割、缩放、偏移和音频选择，从全局时间 0 导出。")
             .arg(visibleVideos().size()).arg(output.width()).arg(output.height()),output);
     exportWindow_->showNormal(); exportWindow_->raise(); exportWindow_->activateWindow();
 }

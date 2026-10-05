@@ -173,7 +173,7 @@ BlurayScan BlurayCatalog::scan(const QString &path, const QJsonObject &profile) 
             if(!episodePlaylists.isEmpty() && !episodePlaylists.contains(title.playlist))title.suggested=false;
             QSet<QString> unique;for(const auto &clip:title.clips)unique.insert(clip);
             if(title.itemCount>3 && unique.size()*2<title.itemCount && title.ticks/title.itemCount<5*60*45000){title.suggested=false;title.warning=QStringLiteral("大量重复短片，疑似菜单/循环；请手动确认");}
-            if(title.label.isEmpty())title.label=title.suggested?QStringLiteral("%1 · 候选第 %2 集").arg(discName(disc)).arg(episode++):QStringLiteral("%1 · %2（完整节目）").arg(discName(disc),QFileInfo(title.playlist).fileName());
+            if(title.label.isEmpty())title.label=title.suggested?QStringLiteral("%1 · 候选第 %2 集").arg(discName(disc)).arg(episode++):QStringLiteral("%1 · %2(完整节目)").arg(discName(disc),QFileInfo(title.playlist).fileName());
             result.titles<<title;
         }
     }
@@ -191,16 +191,58 @@ QString BlurayCatalog::prepare(const BlurayTitle &title, QString *error) {
     }
     const auto data=complex?bytes:slice(p,title.firstItem,title.itemCount);
     if(data.isEmpty()){if(error)*error=QStringLiteral("无法生成节目播放描述");return {};}
-    QByteArray identity=title.disc.toUtf8()+data;
+    QByteArray identity=QByteArray("VSR_BD_CACHE_V3\n")+title.disc.toUtf8()+data;
     for(const auto &clip:title.clips){QFileInfo f(QDir(title.disc).filePath("STREAM/"+clip+".m2ts"));identity+=QByteArray::number(f.size())+QByteArray::number(f.lastModified().toMSecsSinceEpoch());}
     const QString key=QString::fromLatin1(QCryptographicHash::hash(identity,QCryptographicHash::Sha256).toHex());
     const QDir root(QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).filePath("bluray/"+key));
-    const QString bdmv=root.filePath("BDMV");QDir().mkpath(bdmv+"/PLAYLIST");
-    for(const auto &dir:QStringList{"STREAM","CLIPINF"})if(!linkDirectory(bdmv+"/"+dir,QDir(title.disc).filePath(dir))){if(error)*error=QStringLiteral("视频/CLPI 目录无法建立本地引用。网络盘请先通过 ModelScope Manager 下载完整 BD 到本地磁盘。");return {};}
-    for(const auto &name:QStringList{"index.bdmv","MovieObject.bdmv"}){const auto d=read(QDir(title.disc).filePath(name));if(!d.isEmpty())save(bdmv+"/"+name,d);}
+    const QString bdmv=root.filePath("BDMV");
     const QString playlist=bdmv+"/PLAYLIST/00000.mpls";
+    if(read(playlist)==data && QFileInfo(bdmv+"/STREAM").isDir() && QFileInfo(bdmv+"/CLIPINF").isDir())return playlist;
+    QDir().mkpath(bdmv+"/PLAYLIST");
+    for(const auto &dir:QStringList{"STREAM","CLIPINF"})if(!linkDirectory(bdmv+"/"+dir,QDir(title.disc).filePath(dir))){if(error)*error=QStringLiteral("视频/CLPI 目录无法建立本地引用。网络盘请先通过 ModelScope Manager 下载完整 BD 到本地磁盘。");return {};}
+    if(title.ticks<180*45000){
+        // A single HDMV PlayPL command bypasses playback-library short-title filters.
+        // Only the cache gets this boot programme; authored disc menus use the original root.
+        QByteArray index(78,'\0');index.replace(0,8,"INDX0200");put32(index,8,78);put32(index,40,34);
+        const auto original=read(QDir(title.disc).filePath("index.bdmv"));if(original.size()>=78)index.replace(44,34,original.mid(44,34));
+        index+=QByteArray::fromHex("00000026400000000000000000000000400000004000ffff000000000001400000000000000000000000");
+        QByteArray object(40,'\0');object.replace(0,8,"MOBJ0200");object+=QByteArray::fromHex("0000001600000000000100000001228000000000000000000000");
+        if(!save(bdmv+"/index.bdmv",index) || !save(bdmv+"/MovieObject.bdmv",object)){if(error)*error=QStringLiteral("保存短节目播放入口失败");return {};}
+    }else for(const auto &name:QStringList{"index.bdmv","MovieObject.bdmv"}){const auto d=read(QDir(title.disc).filePath(name));if(!d.isEmpty())save(bdmv+"/"+name,d);}
     if(!save(playlist,data)){if(error)*error=QStringLiteral("保存播放描述失败");return {};}
     return playlist;
+}
+
+QString BlurayCatalog::playbackInput(const QString &playlist,QString *error) {
+    BlurayPlaylist p;if(!parse(read(playlist),&p,error))return {};
+    const auto disc=QFileInfo(QFileInfo(playlist).absolutePath()).absolutePath();
+    BlurayTitle title;title.disc=disc;title.playlist=playlist;title.itemCount=p.parts.size();for(const auto &part:p.parts){title.clips<<part.clip;title.ticks+=part.out-part.in;}
+    const auto cacheRoot=QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).filePath("bluray/");
+    const auto cached=QDir::fromNativeSeparators(playlist).startsWith(QDir::fromNativeSeparators(cacheRoot),Qt::CaseInsensitive)?playlist:prepare(title,error);if(cached.isEmpty())return {};
+    const auto bdmv=QFileInfo(QFileInfo(cached).absolutePath()).absolutePath();
+    if(p.subpaths || std::any_of(p.parts.begin(),p.parts.end(),[](const auto &part){return part.multiAngle;}))return "bluray:"+QFileInfo(bdmv).absolutePath();
+    QByteArray input="ffconcat version 1.0\n";
+    QVector<int> streamIds;
+    for(const auto &part:p.parts){
+        const auto clpi=read(QDir(bdmv).filePath("CLIPINF/"+part.clip+".clpi"));if(clpi.size()<16 || clpi.left(4)!="HDMV")continue;
+        const quint32 start=u32(clpi,12);if(start>quint32(clpi.size()-6))continue;const quint64 end64=quint64(start)+4+u32(clpi,start);if(end64>quint64(clpi.size()) || end64<start+6)continue;
+        const int end=int(end64),programs=static_cast<unsigned char>(clpi[start+5]);int pos=int(start)+6;
+        for(int program=0;program<programs && pos+8<=end;++program){const int count=static_cast<unsigned char>(clpi[pos+6]);pos+=8;
+            for(int stream=0;stream<count && pos+3<=end;++stream){const int pid=u16(clpi,pos),size=static_cast<unsigned char>(clpi[pos+2]);pos+=3;if(pos+size>end){pos=end;break;}if(!streamIds.contains(pid))streamIds<<pid;pos+=size;}
+        }
+    }
+    // Preserve transport PIDs so disc-selected tracks survive menu handoff.
+    const auto languages=metadata(cached).value("languages").toObject();
+    for(const int pid:streamIds){input+="stream\nexact_stream_id "+QByteArray::number(pid)+"\n";const auto language=languages.value(QString::number(pid)).toString();if(!language.isEmpty())input+="stream_meta language "+language.toLatin1()+"\n";}
+    for(const auto &part:p.parts){
+        input+="file 'STREAM/"+part.clip.toUtf8()+".m2ts'\n";
+        input+="inpoint "+QByteArray::number(part.in/45000.,'f',6)+"\n";
+        input+="outpoint "+QByteArray::number(part.out/45000.,'f',6)+"\n";
+        input+="duration "+QByteArray::number((part.out-part.in)/45000.,'f',6)+"\n";
+    }
+    const auto path=QDir(bdmv).filePath("player.ffconcat");
+    if(read(path)!=input && !save(path,input)){if(error)*error=QStringLiteral("无法保存 BD 分段播放描述");return {};}
+    return path;
 }
 
 QJsonObject BlurayCatalog::feedback(const BlurayScan &scan) {
@@ -217,6 +259,28 @@ QString BlurayCatalog::mkvmerge() {
     const QDir app(QCoreApplication::applicationDirPath());
     for(const auto &file:QStringList{app.filePath("runtime/mkvtoolnix/mkvmerge.exe"),app.filePath("mkvmerge.exe"),QStandardPaths::findExecutable("mkvmerge"),QStringLiteral("C:/PortableSoft/Mkvtoolnix/mkvmerge.exe")})if(QFileInfo(file).isFile())return file;
     return {};
+}
+QString BlurayCatalog::clipPlaybackIssue(const QString &path) {
+    const auto parent=QFileInfo(path).absoluteDir();if(parent.dirName().compare("STREAM",Qt::CaseInsensitive)!=0)return {};
+    const auto data=read(QDir(QFileInfo(parent.absolutePath()).absolutePath()).filePath("CLIPINF/"+QFileInfo(path).completeBaseName()+".clpi"));
+    if(data.size()>47 && data.left(4)=="HDMV" && static_cast<unsigned char>(data[47])==5)
+        return QStringLiteral("交互菜单图形 (CLPI application_type=5，IG 0x91)，没有独立视频/音频；请使用 BD 菜单交互模式。");
+    return {};
+}
+QString BlurayCatalog::prepareMenu(const QString &source, QString *error) {
+    const QString disc=QDir(source).filePath("BDMV");auto index=read(disc+"/index.bdmv");const auto objects=read(disc+"/MovieObject.bdmv");
+    if(index.size()<16 || index.left(4)!="INDX"){if(error)*error=QStringLiteral("BD index.bdmv 无效，无法读取主菜单");return {};}
+    const auto offset=u32(index,8);if(offset>quint32(index.size()-28)){if(error)*error=QStringLiteral("BD 主菜单描述截断");return {};}
+    const auto menu=index.mid(int(offset)+16,12);if((static_cast<unsigned char>(menu[0])>>6)==1 && u16(menu,6)==0xffff){if(error)*error=QStringLiteral("这张 BD 没有主菜单，请使用节目列表模式");return {};}
+    // Start at the authored TopMenu object. Its VM/IG assets and all playlists
+    // stay intact; only the cached FirstPlay entry bypasses the disc intro.
+    index.replace(int(offset)+4,12,menu);
+    const auto key=QCryptographicHash::hash(source.toUtf8()+index+objects,QCryptographicHash::Sha256).toHex();
+    const QDir root(QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).filePath("bluray-menu/"+QString::fromLatin1(key)));const auto bdmv=root.filePath("BDMV");QDir().mkpath(bdmv);
+    for(const auto &dir:QStringList{"STREAM","CLIPINF","PLAYLIST","AUXDATA","META","BDJO","JAR"})if(QFileInfo(disc+"/"+dir).isDir() && !linkDirectory(bdmv+"/"+dir,disc+"/"+dir)){if(error)*error=QStringLiteral("BD 菜单素材无法建立本地引用，请先下载完整光盘");return {};}
+    if(read(bdmv+"/index.bdmv")!=index && !save(bdmv+"/index.bdmv",index)){if(error)*error=QStringLiteral("保存 BD 菜单入口失败");return {};}
+    if(read(bdmv+"/MovieObject.bdmv")!=objects && !save(bdmv+"/MovieObject.bdmv",objects)){if(error)*error=QStringLiteral("保存 BD 菜单对象失败");return {};}
+    return root.path();
 }
 QJsonObject BlurayCatalog::metadata(const QString &path) {
     BlurayPlaylist p;QString error;if(!parse(read(path),&p,&error))return {};

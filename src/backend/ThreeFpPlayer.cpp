@@ -71,7 +71,7 @@ ThreeFpPlayer::~ThreeFpPlayer()
 bool ThreeFpPlayer::setClockOnly(bool enabled) { clockOnly_=enabled;return handle_ && api_.setClockOnly(handle_,enabled)==ThreeFpResult::Success; }
 
 bool ThreeFpPlayer::ready() const { return handle_ != nullptr; }
-QString ThreeFpPlayer::lastError() const { return lastError_; }
+QString ThreeFpPlayer::lastError() const { const auto native=api_.sessionError(handle_);return native.isEmpty()?lastError_:native; }
 
 bool ThreeFpPlayer::resetVideoOutput()
 {

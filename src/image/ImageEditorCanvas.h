@@ -48,6 +48,7 @@ signals:
     void toolChanged(ImageEditorTool tool);
     void cursorPositionChanged(QPointF position,bool visible);
     void rulerMeasured(double distance,double angle);
+    void textEditRequested(const QUuid &layer);
     void sliceCreated(const QRect &region);
     void previewReady();
     void previewError(const QString &error);
@@ -105,6 +106,8 @@ private:
     ImageHdrPreviewSettings hdrSettings_;
     QPainterPath vectorPath_;
     QPointF rulerStart_,rulerEnd_;
+    QPointF rulerAnchorStart_,rulerAnchorEnd_;
+    int rulerHandle_=0;
     QRect slice_;
     QRectF cropRect_,cropAnchorRect_;
     int cropHandle_=0;

@@ -1,0 +1,63 @@
+--- a/FFF.Native/3FP/Subtitle/BitmapSubtitleDecoder.cpp
++++ b/FFF.Native/3FP/Subtitle/BitmapSubtitleDecoder.cpp
+@@ -33,14 +33,16 @@
+         if (path == nullptr || *path == '\0') return FFFResult::InvalidArgument;
+         try { path_ = path; } catch (...) { return FFFResult::NativeFailure; }
+         const bool remote = path_.rfind("http://", 0) == 0 || path_.rfind("https://", 0) == 0;
+-        sharedInput_ = remote ? nullptr : SharedFileInput::Open(path, lastError_);
+-        if (!remote && sharedInput_ == nullptr) return FFFResult::NativeFailure;
++        const bool bluray = path_.rfind("bluray:", 0) == 0;
++        sharedInput_ = (remote || bluray) ? nullptr : SharedFileInput::Open(path, lastError_);
++        if (!remote && !bluray && sharedInput_ == nullptr) return FFFResult::NativeFailure;
+         format_ = avformat_alloc_context();
+         if (format_ == nullptr) return Fail("Could not allocate the bitmap subtitle input context.");
+         if (sharedInput_) { format_->pb = sharedInput_->Context(); format_->flags |= AVFMT_FLAG_CUSTOM_IO; }
+         AVDictionary* options = nullptr;
+-        av_dict_set(&options, "protocol_whitelist", remote ? "http,https,tcp,tls,crypto,data" : "file,crypto,data", 0);
++        av_dict_set(&options, "protocol_whitelist", remote ? "http,https,tcp,tls,crypto,data" : bluray ? "bluray,file,crypto,data" : "file,crypto,data", 0);
+         av_dict_set(&options, "rw_timeout", "10000000", 0);
++        if (bluray) { av_dict_set(&options, "probesize", "2097152", 0); av_dict_set(&options, "analyzeduration", "1000000", 0); }
+         const auto openResult = avformat_open_input(&format_, path, nullptr, &options);
+         av_dict_free(&options);
+         if (openResult < 0) return Fail("Could not open the bitmap subtitle: " + FfmpegError(openResult));
+@@ -48,7 +50,7 @@
+             requestedStream < static_cast<std::int32_t>(format_->nb_streams) &&
+             format_->streams[requestedStream]->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE &&
+             format_->streams[requestedStream]->codecpar->codec_id != AV_CODEC_ID_NONE;
+-        if (!requestedStreamReady) {
++        if (bluray || !requestedStreamReady) {
+             const auto infoResult = avformat_find_stream_info(format_, nullptr);
+             if (infoResult < 0) return Fail("Could not inspect the bitmap subtitle: " + FfmpegError(infoResult));
+         }
+--- a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
++++ b/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
+@@ -377,15 +377,16 @@
+             std::string openError;
+             const std::string source(path);
+             const bool remote = source.rfind("http://", 0) == 0 || source.rfind("https://", 0) == 0;
+-            sharedInput = remote ? nullptr : SharedFileInput::Open(path, openError);
+-            if (!remote && sharedInput == nullptr)
++            const bool bluray = source.rfind("bluray:", 0) == 0;
++            sharedInput = (remote || bluray) ? nullptr : SharedFileInput::Open(path, openError);
++            if (!remote && !bluray && sharedInput == nullptr)
+                 throw std::runtime_error(openError);
+             format = avformat_alloc_context();
+             if (format == nullptr)
+                 throw std::runtime_error("Could not allocate the subtitle input context.");
+             if (sharedInput) { format->pb = sharedInput->Context(); format->flags |= AVFMT_FLAG_CUSTOM_IO; }
+             AVDictionary* options = nullptr;
+-            av_dict_set(&options, "protocol_whitelist", remote ? "http,https,tcp,tls,crypto,data" : "file,crypto,data", 0);
++            av_dict_set(&options, "protocol_whitelist", remote ? "http,https,tcp,tls,crypto,data" : bluray ? "bluray,file,crypto,data" : "file,crypto,data", 0);
+             av_dict_set(&options, "rw_timeout", "10000000", 0);
+             auto result = avformat_open_input(&format, path, nullptr, &options);
+             av_dict_free(&options);
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -1964,6 +1964,7 @@
+     av_dict_set(&options, "protocol_whitelist", remote ? "http,https,tcp,tls,crypto,data" : bluray ? "bluray,file,crypto,data" : "file,crypto,data", 0);
+     av_dict_set(&options, "rw_timeout", "10000000", 0);
+     av_dict_set(&options, "ignore_loop", "0", 0);
++    if (bluray) { av_dict_set(&options, "probesize", "2097152", 0); av_dict_set(&options, "analyzeduration", "1000000", 0); }
+     io = (remote || bluray) ? nullptr : SharedFileInput::Open(path.c_str(), error);
+     if (!remote && !bluray && io == nullptr) {
+         av_dict_free(&options);

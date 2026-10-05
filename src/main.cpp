@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QFont>
+#include <QFontDatabase>
 #include <QIcon>
 
 int main(int argc, char *argv[])
@@ -13,8 +14,9 @@ int main(int argc, char *argv[])
     QApplication::setApplicationVersion(QStringLiteral(VSR_VERSION));
     app.setWindowIcon(QIcon(QStringLiteral(":/icons/renderer.ico")));
 
-    QFont font(QStringLiteral("Segoe UI Variable"));
+    QFont font(QStringLiteral("Comic Sans MS"));
     font.setPixelSize(13);
+    QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han,{"Microsoft YaHei UI"});
     app.setFont(font);
     app.setStyleSheet(vsr::applicationStyleSheet());
 

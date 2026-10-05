@@ -52,12 +52,12 @@ struct LavPlayback::Impl {
             const auto dependencyPath=QDir(QFileInfo(path).absolutePath()).filePath(dependency);
             if(madModules.contains(dependencyPath))continue;
             HMODULE loaded=LoadLibraryExW(reinterpret_cast<LPCWSTR>(dependencyPath.utf16()),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-            if(!loaded) {error=QCoreApplication::translate("LavPlayback","madVR 依赖加载失败：%1（Windows 错误 %2）").arg(dependencyPath).arg(GetLastError());return nullptr;}// madVR keeps global worker callbacks; its helper DLLs stay loaded for this process.
+            if(!loaded) {error=QCoreApplication::translate("LavPlayback","madVR 依赖加载失败：%1(Windows 错误 %2)").arg(dependencyPath).arg(GetLastError());return nullptr;}// madVR keeps global worker callbacks; its helper DLLs stay loaded for this process.
             madModules.insert(dependencyPath,loaded);
         }
         HMODULE module = folder=="madVR09217"?madModules.value(path):nullptr;
         if(!module)module = LoadLibraryExW(reinterpret_cast<LPCWSTR>(path.utf16()), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-        if (!module) { error = QCoreApplication::translate("LavPlayback","无法加载随附组件：%1（Windows 错误 %2）").arg(path).arg(GetLastError()); return nullptr; }
+        if (!module) { error = QCoreApplication::translate("LavPlayback","无法加载随附组件：%1(Windows 错误 %2)").arg(path).arg(GetLastError()); return nullptr; }
         if(folder!="madVR09217") modules.push_back(module);
         else madModules.insert(path,module);
         using Factory = HRESULT (WINAPI *)(REFCLSID, REFIID, void **);

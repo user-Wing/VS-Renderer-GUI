@@ -49,6 +49,7 @@ ThreeFpApi::ThreeFpApi()
     stepKeyframe_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_StepKeyframe"));
     setPlaybackRate_ = reinterpret_cast<RateFn>(library_.resolve("FFF3FP_SetPlaybackRate"));
     mediaInfo_ = reinterpret_cast<InfoFn>(library_.resolve("FFF3FP_GetMediaInfo"));
+    sessionError_ = reinterpret_cast<InfoFn>(library_.resolve("FFF3FP_GetLastError"));
     setExternalOutputFormat_ = reinterpret_cast<OpenFn>(library_.resolve("FFF3FP_SetExternalOutputFormat"));
     setSubtitleLayer_ = reinterpret_cast<LayerFn>(library_.resolve("FFF3FP_SetTimedTextLayer"));
     readRegion_ = reinterpret_cast<RegionFn>(library_.resolve("FFF3FP_ReadVideoPixelRegion"));
@@ -80,6 +81,7 @@ ThreeFpResult ThreeFpApi::pause(void *h) const { return available() ? pause_(h) 
 ThreeFpResult ThreeFpApi::setClockOnly(void *h,bool enabled) const { return setClockOnly_?setClockOnly_(h,enabled?1:0):ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::stop(void *h) const { return available() ? stop_(h) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::seek(void *h, std::int64_t p) const { return available() ? seek_(h, p) : ThreeFpResult::NativeFailure; }
+QString ThreeFpApi::sessionError(void *h) const {if(!h || !sessionError_)return {};char text[4096]{};std::uint32_t size=0;return sessionError_(h,text,sizeof(text),&size)==ThreeFpResult::Success?QString::fromUtf8(text):QString();}
 ThreeFpResult ThreeFpApi::seekFrame(void *h, std::int64_t f) const { return available() ? seekFrame_(h, f) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::stepFrame(void *h, std::int32_t d) const { return available() ? stepFrame_(h, d) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setVolume(void *h, float v, std::uint32_t m) const { return available() ? setVolume_(h, v, m) : ThreeFpResult::NativeFailure; }

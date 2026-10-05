@@ -1,0 +1,22 @@
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -34,6 +34,7 @@
+ constexpr std::size_t MinimumQueuedVideoFrames = 3;
+ constexpr std::size_t MinimumMemoryBoundVideoFrames = 2;
+ constexpr std::size_t DecodedVideoQueueBudgetBytes = 128 * 1024 * 1024;
++constexpr std::size_t HardwareVideoQueueBudgetBytes = 768 * 1024 * 1024;
+ constexpr std::uint32_t MaximumSoftwareDecoderThreads = 8;
+ constexpr std::int64_t TargetVideoLookAhead100ns = 1'500'000;
+ // Buffered100ns includes both application PCM and samples already submitted to
+@@ -64,6 +65,10 @@
+     if (queue.empty()) return MaxQueuedVideoFrames;
+     const auto bytesPerFrame = EstimateDecodedFrameBytes(queue.back());
+     if (bytesPerFrame == 0) return MaxQueuedVideoFrames;
+-    const auto memoryBound = DecodedVideoQueueBudgetBytes / bytesPerFrame;
++    // Hardware frames retain decoder-pool surfaces; one 8K P010 surface is 95 MiB.
++    // Keep software memory bounded separately and retain the eight-frame cap.
++    const auto budget = queue.back()->hw_frames_ctx != nullptr
++        ? HardwareVideoQueueBudgetBytes : DecodedVideoQueueBudgetBytes;
++    const auto memoryBound = budget / bytesPerFrame;
+     return std::clamp(memoryBound, MinimumMemoryBoundVideoFrames, MaxQueuedVideoFrames);
+ }

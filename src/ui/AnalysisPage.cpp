@@ -41,7 +41,7 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     layout->setContentsMargins(8, 4, 8, 4);
     layout->setSpacing(4);
     auto *header = new QHBoxLayout;
-    auto *open = new QPushButton(QStringLiteral("打开视频…（最多 9 个）"), this);
+    auto *open = new QPushButton(QStringLiteral("打开视频…(最多 9 个)"), this);
     header->addWidget(open);
     connect(open, &QPushButton::clicked, this, [this] {
         openFiles(QFileDialog::getOpenFileNames(this, QStringLiteral("打开视频"), {},
@@ -115,7 +115,7 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     color->setObjectName(QStringLiteral("colorProcessing"));
     color->setMinimumWidth(240);
     const QStringList colorNames{QStringLiteral("Nearest"),QStringLiteral("Bilinear"),QStringLiteral("Bicubic (Catmull-Rom)"),
-        QStringLiteral("Lanczos 3"),QStringLiteral("Jinc 2"),QStringLiteral("Spline36"),QStringLiteral("Super-XBR（单阶段）"),
+        QStringLiteral("Lanczos 3"),QStringLiteral("Jinc 2"),QStringLiteral("Spline36"),QStringLiteral("Super-XBR(单阶段)"),
         QStringLiteral("Softcubic (B-spline)"),QStringLiteral("Mitchell-Netravali"),QStringLiteral("Bilateral"),QStringLiteral("亮度引导双边重建")};
     for(int i=0;i<colorNames.size();++i) color->addItem(QStringLiteral("颜色处理：%1").arg(colorNames[i]),i);
     color->setCurrentIndex(chromaAlgorithm_);
@@ -128,7 +128,7 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     });
     controls->addWidget(color);
     scaler_=new QComboBox(this); scaler_->setMaximumWidth(185);
-    scaler_->addItems({QStringLiteral("放大：Nearest"),QStringLiteral("放大：Bilinear"),QStringLiteral("放大：Bicubic"),QStringLiteral("放大：Lanczos 3"),QStringLiteral("放大：Jinc 2"),QStringLiteral("放大：Spline36"),QStringLiteral("放大：Super-XBR（单阶段）")});
+    scaler_->addItems({QStringLiteral("放大：Nearest"),QStringLiteral("放大：Bilinear"),QStringLiteral("放大：Bicubic"),QStringLiteral("放大：Lanczos 3"),QStringLiteral("放大：Jinc 2"),QStringLiteral("放大：Spline36"),QStringLiteral("放大：Super-XBR(单阶段)")});
     controls->addWidget(scaler_);
     scaler_->addItem(QStringLiteral("放大：Lanczos 4"));
     connect(scaler_,&QComboBox::currentIndexChanged,this,[this](int index){for(auto &p:players_)if(p)p->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(index==7?8:index),ThreeFpScalingAlgorithm::Lanczos3);});

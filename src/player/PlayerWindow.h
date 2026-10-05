@@ -1,4 +1,5 @@
 #pragma once
+#include "player/PlayerAudioMetadata.h"
 #include "backend/ThreeFpApi.h"
 #include "backend/VapourSynthFrameServer.h"
 #include <QMainWindow>
@@ -30,6 +31,7 @@ class PlayerLanguage;
 class PlayerImage;
 class PlayerImageTools;
 class PlayerInfoPanel;
+class PlayerDiscMenu;
 class PlayerWindow final : public QMainWindow {
     Q_OBJECT
 public:
@@ -64,14 +66,26 @@ private:
     void buildTransport(QVBoxLayout *layout);
     void buildPlaylist(QWidget *parent);
     void updateChrome();
+    void layoutChrome();
+    bool overlayChrome_=false;
     void updatePlaylist();
     void populateFolder(QTreeWidgetItem *parent, const QString &path);
     void chooseFiles();
     void chooseFolder();
     void chooseBluRay();
-    bool openBluRay(const QString &path);
+    void chooseBluRayMode(const QString &path);
+    bool openBluRay(const QString &path, bool menus = false);
+    bool openDiscMenu(const QString &root, bool menus = true);
+    QString discRoot_;
+    std::unique_ptr<PlayerDiscMenu> discMenu_;
+    QWidget *discSurface_=nullptr;
+    bool discMenuNavigation_=false;
+    QString discProgrammeKey_;
+    QElapsedTimer discProgrammeSettling_;
     QHash<QString, QString> blurayLabels_;
     QJsonObject blurayMetadata_;
+    QHash<QString,QJsonObject> blurayProgrammes_;
+    bool handoffDiscProgramme();
     void applyBlurayMetadata();
     void chooseLink();
     void updateState();
@@ -112,6 +126,8 @@ private:
     void applyAudioEffects();
     void showEqualizer();
     void matchExternalTracks();
+    void loadAudioMetadata();
+    void updateAudioLyrics(qint64 time);
     void useNativeAudio();
     void captureImage(bool source);
     void applySettings(bool reopen);
@@ -129,6 +145,13 @@ private:
     std::unique_ptr<PlayerLanguage> language_;
     std::unique_ptr<PlayerImage> imageLoader_;
     bool imageMode_ = false;
+    bool audioMode_ = false, audioMetadataLoaded_ = false;
+    PlayerAudioMetadata audioMetadata_;
+    QLabel *lyricLabel_ = nullptr;
+    QLabel *audioSubtitle_ = nullptr;
+    QHash<QString,QString> blurayGroups_;
+    QJsonArray externalSubtitleTracks_[2],externalChapters_;
+    int externalSubtitleIndex_[2]{-1,-1};
     PlayerImageTools *imageTools_ = nullptr;
     PlayerResources resources_;
     ResourceUsage usage_;
@@ -187,6 +210,7 @@ private:
     QTimer *profileResize_ = nullptr;
     QString preset_;
     QString deferred_;
+    QString pendingMediaOpen_;
     QString deferredSubtitle_;
     int deferredSubtitleSlot_ = 0;
     QString deferredAudio_, pendingExternalAudio_;
@@ -199,8 +223,11 @@ private:
     bool playing_ = false;
     bool autoPlay_ = false;
     bool seekPending_ = false;
+    qint64 seekUiTarget_ = -1, queuedSeek_ = -1;
+    quint64 seekPresented_ = 0;
     QTimer *timelinePreview_ = nullptr;
     qint64 timelineTarget_ = -1;
+    qint64 timelineSeekTarget_ = -1;
     quint64 timelinePresented_ = 0;
     bool timelineDragging_ = false, timelineResume_ = false, timelineWaiting_ = false;
     bool useLav_ = false;

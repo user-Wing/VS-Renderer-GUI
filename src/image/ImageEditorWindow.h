@@ -48,6 +48,7 @@ private:
     void addLayer();
     void deleteLayer();
     void renameLayer();
+    void editTextLayer(const QUuid &id);
     void reorderLayer(int direction);
     void duplicateLayer();
     void mergeLayerDown();
@@ -75,6 +76,7 @@ private:
         QString text;
         QFont font;
         int fontSize = 32;
+        double textLineSpacing = 1.2;
         double cropWidth = 16, cropHeight = 9;
     };
     QList<Page> pages_;

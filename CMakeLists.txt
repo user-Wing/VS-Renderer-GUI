@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.0.5 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.0.6 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -126,6 +126,8 @@ qt_add_executable(VSPlayer WIN32
     src/player/PlayerImageResample.cpp assets/image-tools.qrc
     src/player/main.cpp src/player/PlayerWindow.cpp src/player/PlayerControls.cpp src/player/PlayerInfo.cpp
     src/player/PlayerWindow.h
+    src/player/PlayerAudioMetadata.cpp src/player/PlayerAudioMetadata.h
+    src/player/PlayerDiscMenu.cpp src/player/PlayerDiscMenu.h
     src/player/PlayerSettings.cpp src/player/PlayerColor.cpp src/player/PlayerMenus.cpp src/player/PlayerPlaylist.cpp src/player/PlayerAudio.cpp src/player/PlayerMediaMatching.cpp
     src/player/PlayerNetworkInput.cpp src/player/PlayerNetworkInput.h
     src/player/PlayerProfiles.cpp src/player/PlayerCache.cpp src/player/PlayerLanguage.cpp src/player/PlayerAssociations.cpp

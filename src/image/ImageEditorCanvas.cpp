@@ -195,8 +195,8 @@ void ImageEditorCanvas::paintGuides(QPainter &painter){
         if(dragging_ && (rectangleGesture(tool_) || tool_==ImageEditorTool::Ellipse || tool_==ImageEditorTool::ShapeEllipse || tool_==ImageEditorTool::Lasso || tool_==ImageEditorTool::MagneticLasso))painter.drawPath(gesturePath());
         if((tool_==ImageEditorTool::Polygon || tool_==ImageEditorTool::Path) && !polygon_.isEmpty()){painter.drawPolyline(polygon_);painter.drawLine(polygon_.last(),current_);}
         if(brushTool(tool_) || tool_==ImageEditorTool::QuickSelection)painter.drawEllipse(current_,tools_->brushRadius(),tools_->brushRadius());
-        if(dragging_ && (tool_==ImageEditorTool::Gradient || tool_==ImageEditorTool::Ruler))painter.drawLine(anchor_,current_);
-        if(rulerVisible_)painter.drawLine(rulerStart_,rulerEnd_);
+        if(dragging_ && tool_==ImageEditorTool::Gradient)painter.drawLine(anchor_,current_);
+        if(rulerVisible_){painter.drawLine(rulerStart_,rulerEnd_);const QPointF d(5/zoom_,5/zoom_);for(const auto &point:{rulerStart_,rulerEnd_}){painter.drawLine(point-d,point+d);painter.drawLine(point+QPointF(-d.x(),d.y()),point+QPointF(d.x(),-d.y()));}}
         if(!slice_.isEmpty())painter.drawRect(slice_);
         if(!cropRect_.isEmpty())painter.drawRect(cropRect_);
         if(!vectorPath_.isEmpty())painter.drawPath(vectorPath_);
@@ -231,6 +231,16 @@ void ImageEditorCanvas::mousePressEvent(QMouseEvent *event) {
     if(tool_==ImageEditorTool::MagicWand){const auto prior=selectionOutline_;if(tools_->selectColor(current_.toPoint(),selectionMode_))rememberColorSelection(prior);return;}
     if(tool_==ImageEditorTool::Polygon || tool_==ImageEditorTool::Path){if(polygon_.isEmpty())anchor_=current_;polygon_<<current_;update();return;}
     anchor_=current_;dragging_=true;
+    if(tool_==ImageEditorTool::Ruler){
+        rulerHandle_=0;const double near=8/zoom_;
+        if(rulerVisible_){
+            if(QLineF(current_,rulerStart_).length()<=near)rulerHandle_=1;
+            else if(QLineF(current_,rulerEnd_).length()<=near)rulerHandle_=2;
+            else {const auto delta=rulerEnd_-rulerStart_;const double length=QPointF::dotProduct(delta,delta);const double fraction=length>0?std::clamp(QPointF::dotProduct(current_-rulerStart_,delta)/length,0.,1.):0.;if(QLineF(current_,rulerStart_+delta*fraction).length()<=near)rulerHandle_=3;}
+        }
+        if(!rulerHandle_){rulerStart_=rulerEnd_=current_;rulerVisible_=true;rulerHandle_=2;}
+        rulerAnchorStart_=rulerStart_;rulerAnchorEnd_=rulerEnd_;update();return;
+    }
     if(tool_==ImageEditorTool::Crop){cropAnchorRect_=cropRect_;cropHandle_=0;const double near=8/zoom_;const QList<QPointF> points={cropRect_.topLeft(),cropRect_.topRight(),cropRect_.bottomRight(),cropRect_.bottomLeft(),QPointF(cropRect_.left(),cropRect_.center().y()),QPointF(cropRect_.center().x(),cropRect_.top()),QPointF(cropRect_.right(),cropRect_.center().y()),QPointF(cropRect_.center().x(),cropRect_.bottom())};if(!cropRect_.isEmpty())for(int i=0;i<points.size();++i)if(QLineF(current_,points[i]).length()<=near){cropHandle_=i+2;break;}if(cropHandle_==0 && cropRect_.contains(current_))cropHandle_=1;return;}
     if(brushTool(tool_))dragging_=tools_->beginStroke(current_,tool_);
     else if(tool_==ImageEditorTool::Move)dragging_=tools_->beginMove(current_);
@@ -241,6 +251,10 @@ void ImageEditorCanvas::mouseMoveEvent(QMouseEvent *event) {
     current_=documentPoint(event->position());
     if(panning_){origin_+=event->position()-lastScreen_;lastScreen_=event->position();current_=documentPoint(event->position());emit cursorPositionChanged(current_,true);refreshPreview();emit viewChanged();return;}
     emit cursorPositionChanged(current_,true);
+    if(dragging_ && tool_==ImageEditorTool::Ruler){
+        if(rulerHandle_==1)rulerStart_=current_;else if(rulerHandle_==2)rulerEnd_=current_;else {rulerStart_=rulerAnchorStart_+current_-anchor_;rulerEnd_=rulerAnchorEnd_+current_-anchor_;}
+        const QLineF line(rulerStart_,rulerEnd_);emit rulerMeasured(line.length(),std::atan2(rulerEnd_.y()-rulerStart_.y(),rulerEnd_.x()-rulerStart_.x())*180/3.141592653589793);update();return;
+    }
     if(dragging_ && tool_==ImageEditorTool::Move && transformHandle_<0 && !movePixels_.isNull()){moveDelta_=current_-anchor_;update();return;}
     if(dragging_&&transformHandle_>=0){updateLayerTransform(current_,event->modifiers().testFlag(Qt::ShiftModifier));update();return;}
     if(!dragging_&&tool_==ImageEditorTool::Move){const int h=layerHandle(current_);setCursor(h==1||h==3?Qt::SizeFDiagCursor:h==2||h==4?Qt::SizeBDiagCursor:h==5||h==7?Qt::SizeHorCursor:h==6||h==8?Qt::SizeVerCursor:h==0?Qt::SizeAllCursor:Qt::ArrowCursor);}
@@ -257,13 +271,13 @@ void ImageEditorCanvas::mouseReleaseEvent(QMouseEvent *event) {
     if(transformHandle_>=0){mouseMoveEvent(event);finishLayerTransform();return;}
     mouseMoveEvent(event);if(brushTool(tool_))tools_->endStroke();else if(tool_==ImageEditorTool::Move){tools_->continueMove(current_);tools_->endMove();}else if(tool_==ImageEditorTool::QuickSelection)tools_->endSelectionStroke();
     else if(tool_==ImageEditorTool::Gradient)tools_->fillGradient(anchor_,current_);
-    else if(tool_==ImageEditorTool::Ruler){rulerStart_=anchor_;rulerEnd_=current_;rulerVisible_=true;const QLineF line(anchor_,current_);emit rulerMeasured(line.length(),std::atan2(current_.y()-anchor_.y(),current_.x()-anchor_.x())*180/3.141592653589793);}
+    else if(tool_==ImageEditorTool::Ruler)rulerHandle_=0;
     else if(tool_==ImageEditorTool::ObjectSelection){const auto prior=selectionOutline_;if(tools_->selectObject(QRectF(anchor_,current_).normalized().toAlignedRect(),selectionMode_))rememberColorSelection(prior);}
     else if(tool_==ImageEditorTool::ShapeRectangle || tool_==ImageEditorTool::ShapeEllipse)tools_->fillPath(gesturePath(),tr("栅格化形状"));
     else if(tool_==ImageEditorTool::Slice){slice_=QRectF(anchor_,current_).normalized().toAlignedRect().intersected(QRect(QPoint(),tools_->document()->size()));if(!slice_.isEmpty())emit sliceCreated(slice_);}
     else if(tool_!=ImageEditorTool::Crop)finishSelection();dragging_=false;refreshPreview();update();
 }
-void ImageEditorCanvas::mouseDoubleClickEvent(QMouseEvent *event) {if(event->button()!=Qt::LeftButton)return;if(tool_==ImageEditorTool::Polygon && polygon_.size()>=3)finishSelection();else if(tool_==ImageEditorTool::Path && polygon_.size()>=2){vectorPath_={};vectorPath_.addPolygon(polygon_);polygon_.clear();update();}}
+void ImageEditorCanvas::mouseDoubleClickEvent(QMouseEvent *event) {if(event->button()!=Qt::LeftButton)return;if(tool_==ImageEditorTool::Move || tool_==ImageEditorTool::Hand || tool_==ImageEditorTool::Text){cancelGesture();const auto point=documentPoint(event->position());auto id=tools_->pickLayer(point.toPoint());if(selectedLayerBounds().contains(point))for(const auto &layer:tools_->document()->layers())if(layer.id==tools_->layer() && !layer.text.isEmpty())id=layer.id;for(const auto &layer:tools_->document()->layers())if(layer.id==id && !layer.text.isEmpty() && !layer.locked){tools_->setLayer(id);emit textEditRequested(id);return;}}if(tool_==ImageEditorTool::Polygon && polygon_.size()>=3)finishSelection();else if(tool_==ImageEditorTool::Path && polygon_.size()>=2){vectorPath_={};vectorPath_.addPolygon(polygon_);polygon_.clear();update();}}
 void ImageEditorCanvas::wheelEvent(QWheelEvent *event) {
     if(event->modifiers().testFlag(Qt::ControlModifier)){zoomBy(std::pow(1.2,event->angleDelta().y()/120.0),event->position());event->accept();return;}
     QPointF delta=event->pixelDelta().isNull()?QPointF(event->angleDelta())/3.:QPointF(event->pixelDelta());

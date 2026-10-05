@@ -18,7 +18,7 @@ QString assColor(const QVariantMap &style,const QString &name,const QString &fal
     return QString("&H%1%2%3%4").arg(alpha,2,16,QChar('0')).arg(color.blue(),2,16,QChar('0')).arg(color.green(),2,16,QChar('0')).arg(color.red(),2,16,QChar('0')).toUpper();
 }
 QString srtToAss(const QString &srt,const QVariantMap &style,int slot) {
-    QString font=style.value("font","Segoe UI").toString(); font.remove(','); font.remove('\n');
+    QString font=style.value("font","Comic Sans MS").toString(); font.remove(','); font.remove('\n');
     QString text="[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\n";
     const int alignment=slot==1?8:style.value("alignment",2).toInt();
     text+=QString("Style: Default,%1,%2,%3,&H000000FF,%4,%5,%6,%7,0,0,%8,%9,%10,0,%11,%12,%13,%14,%15,%16,%17,1\n")
@@ -67,7 +67,7 @@ void PlayerSubtitles::load(int slot,const QString &path,int stream,const QString
         const auto utf8=actual.toUtf8(); int result=-7;
         if(t.bitmap && impl_->openBitmap) result=impl_->openBitmap(utf8.constData(),index,&t.handle);
         else if(impl_->openAss) { const auto fonts=(QFileInfo(path).absolutePath()+"\n"+QDir(QCoreApplication::applicationDirPath()).filePath("fonts")).toUtf8(); result=impl_->openAss(utf8.constData(),fonts.constData(),index,&t.handle); }
-        if(result!=0) {impl_->clear(slot);emit errorOccurred(tr("字幕加载失败：%1（%2）").arg(path).arg(result));}
+        if(result!=0) {impl_->clear(slot);emit errorOccurred(tr("字幕加载失败：%1(%2)").arg(path).arg(result));}
     },Qt::QueuedConnection);
 }
 void PlayerSubtitles::render(qint64 time,const QSize &canvas,const QSize &video,bool visible) {
