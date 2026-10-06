@@ -1,3 +1,7 @@
 #pragma once
 #include <QString>
-namespace vsr { double playerMediaMatchScore(const QString &video, const QString &track); }
+#include <QStringList>
+namespace vsr {
+double playerMediaMatchScore(const QString &video, const QString &track);
+QStringList playerMatchingSubtitles(const QString &video);
+}

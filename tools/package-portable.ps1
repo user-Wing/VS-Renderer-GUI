@@ -30,6 +30,9 @@ foreach ($name in @('README.md', 'project.md', 'changelog.md')) {
     Copy-Item -LiteralPath (Join-Path $root $name) -Destination $payload -Force
 }
 Copy-Item -LiteralPath (Join-Path $root 'docs') -Destination $payload -Recurse -Force
+foreach ($name in @('zh_CN.json', 'en_US.json')) {
+    Copy-Item -LiteralPath (Join-Path $root "assets/languages/$name") -Destination (Join-Path $payload "languages/$name") -Force
+}
 if ($Edition -eq 'Lite') {
     $componentsPath = Join-Path $payload 'components.json'
     $components = Get-Content -LiteralPath $componentsPath -Raw | ConvertFrom-Json

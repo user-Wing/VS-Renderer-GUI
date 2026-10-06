@@ -1,6 +1,7 @@
 #include "player/PlayerWindow.h"
 #include "bluray/BlurayCatalog.h"
 #include "player/PlayerInfoPanel.h"
+#include "player/PlayerChromePanel.h"
 #include "player/PlayerDiscMenu.h"
 #include "player/PlayerTracks.h"
 #include "backend/ThreeFpPlayer.h"
@@ -138,6 +139,12 @@ PlayerWindow::PlayerWindow() {
     pane_->surface()->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(pane_->surface(), &QWidget::customContextMenuRequested, this, [this](const QPoint &at) { showContextMenu(pane_->surface()->mapToGlobal(at)); });
     info_ = new PlayerInfoPanel(pane_->surface());info_->hide();
+    audioInfo_=new PlayerInfoPanel(pane_->surface());audioInfo_->setObjectName("playerAudioInfoPanel");audioInfo_->setRightSide(true);audioInfo_->hide();
+    auto *audioMode=static_cast<PlayerInfoPanel *>(info_)->audioMode();audioMode->setCurrentIndex(settings_->value("info/audioDetailed",false).toBool()?1:0);
+    connect(audioMode,&QComboBox::currentIndexChanged,this,[this](int index){settings_->setValue("info/audioDetailed",index==1);updateInfo();});
+    fullscreenTitle_=new PlayerChromePanel(central);fullscreenTitle_->setObjectName("playerFullscreenTitle");
+    auto *titleLayout=new QHBoxLayout(fullscreenTitle_);fullscreenTitleText_=new QLabel(fullscreenTitle_);titleLayout->addWidget(fullscreenTitleText_,1);
+    auto *exitFullscreen=new QPushButton(tr("退出全屏"),fullscreenTitle_);exitFullscreen->setObjectName("playerExitFullscreen");titleLayout->addWidget(exitFullscreen);connect(exitFullscreen,&QPushButton::clicked,this,&PlayerWindow::toggleFullscreen);fullscreenTitle_->hide();
     lyricLabel_=new QLabel(pane_->surface());lyricLabel_->setObjectName("playerLyrics");lyricLabel_->setAttribute(Qt::WA_NativeWindow);lyricLabel_->setTextFormat(Qt::PlainText);lyricLabel_->setAlignment(Qt::AlignCenter);lyricLabel_->setWordWrap(true);lyricLabel_->setAttribute(Qt::WA_TransparentForMouseEvents);lyricLabel_->setStyleSheet("background:rgba(0,0,0,160);color:white;padding:8px;font-size:20px;");lyricLabel_->hide();
     audioSubtitle_=new QLabel(pane_->surface());audioSubtitle_->setObjectName("playerAudioSubtitle");audioSubtitle_->setAttribute(Qt::WA_TransparentForMouseEvents);audioSubtitle_->setStyleSheet("background:transparent;");audioSubtitle_->hide();
     dragHint_=new QLabel(pane_->surface());dragHint_->setObjectName("playerDropHint");dragHint_->setAttribute(Qt::WA_NativeWindow);dragHint_->setAttribute(Qt::WA_TransparentForMouseEvents);dragHint_->setStyleSheet("background:#1d334d;color:#ffffff;padding:16px;border:1px solid #6da8ec;border-radius:8px;");dragHint_->hide();
@@ -146,7 +153,7 @@ PlayerWindow::PlayerWindow() {
     resetZoom_->setToolTip(tr("恢复默认适配比例，并清除拖动偏移"));
     connect(resetZoom_,&QPushButton::clicked,this,[this]{pane_->adoptView(1,0,0);emit pane_->viewChanged(1,0,0);});
     timeline_ = new ChapterTimeline(this); timeline_->setObjectName("playerTimeline");
-    controls_=new QWidget(central);controls_->setObjectName("playerControls");auto *transport=new QVBoxLayout(controls_);transport->setContentsMargins(0,0,0,0);transport->setSpacing(4);layout->addWidget(controls_);buildTransport(transport);
+    controls_=new PlayerChromePanel(central);controls_->setObjectName("playerControls");auto *transport=new QVBoxLayout(controls_);transport->setContentsMargins(0,0,0,0);transport->setSpacing(4);layout->addWidget(controls_);buildTransport(transport);
     message_ = new QLabel(controls_); message_->setObjectName("playerStatus"); message_->setContentsMargins(8, 0, 8, 0); message_->setText(tr("就绪")); transport->addWidget(message_);
     buildPlaylist(central);
     imageTools_=new PlayerImageTools(pane_,central);layout->insertWidget(0,imageTools_);
@@ -192,7 +199,7 @@ PlayerWindow::PlayerWindow() {
         ++submittedFrames_; displayedFrame_=frame;
         if (!output_->submitFrame(frame)) { setError(output_->lastError()); return; }
         lastFrame_ = static_cast<int>(frame.frameIndex);
-        message_->setText(preset_.isEmpty() ? tr("VS 原画播放") : tr("VS 预设：%1").arg(QFileInfo(preset_).fileName()));
+        message_->clear();
         if (autoPlay_ && seekUiTarget_<0 && (lav_ || clock_->snapshot().state == ThreeFpState::Ready || clock_->snapshot().state == ThreeFpState::Paused)) { togglePlayback(); if (playing_) autoPlay_ = false; }
         const int target=frameAtPosition100ns(position(),clip_.totalFrames,clip_.fpsNumerator,clip_.fpsDenominator);
         if(playing_ && frame.frameIndex+1<clip_.totalFrames && frame.frameIndex<target)requestFrame(target);
@@ -286,7 +293,7 @@ bool PlayerWindow::openMedia() {
         const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height());
         if(speed_!=1) { lav_->setRate(speed_); lav_->volume(0,true);clock_->setMuted(mute_->isChecked()); }
         rendererBadge_->setText("madVR");message_->setText(tr("madshi video renderer · LAV DirectShow 输入"));
-    } else { rendererBadge_->setText(direct_?"3FP":"VS"); if(direct_) {ready_=true;pane_->setSurfaceActive(true);if(preset_.isEmpty())message_->setText(tr("原画播放 · 3FP 直通(不建立 VS 帧索引)"));} else refreshScript(); } return true;
+    } else { rendererBadge_->setText(direct_?"3FP":"VS"); if(direct_) {ready_=true;pane_->setSurfaceActive(true);if(preset_.isEmpty())message_->clear();} else refreshScript(); } return true;
 }
 void PlayerWindow::refreshScript() {
     if ((discMenu_ && discMenu_->active()) || imageMode_ || audioMode_ || source_.isEmpty() || mediaInput_.isEmpty() || (madvrMode() && !networkSource())) return;
@@ -303,7 +310,7 @@ void PlayerWindow::refreshScript() {
     setDirectMode(native);
     applyScaling();
     profileSize_=profileTarget();autoPlay_=resume;
-    if(direct_) {server_->unloadScript();ready_=true;lastFrame_=-1;applyScaling();message_->setText(networkSource()?tr("网络视频 · 3FPlayer 直通，VS 预设不生效"):(qualityStage_>=5 || (settings_->value("render/upscale",4).toInt()==7 && settings_->value("render/downscale",4).toInt()==7))?tr("D3D11 原生直通(不使用 Jinc)"):tr("%1 · Jinc 原生直通(无增强)").arg(mode));return;}
+    if(direct_) {server_->unloadScript();ready_=true;lastFrame_=-1;applyScaling();message_->clear();return;}
     if(server_->initializing()){message_->setText(tr("正在初始化 VS，完成后加载滤镜。"));return;}
     output_->resetVideoOutput(); output_->setMuted(true);
     const auto vsSource=mediaInput_;
@@ -435,7 +442,7 @@ void PlayerWindow::nextFile(int direction) {
     while(next>=0 && next<files_.size() && blurayGroups_.value(files_[next])=="menu")next+=direction;
     if(next>=0 && next<files_.size())openFile(files_[next]);
 }
-void PlayerWindow::setError(const QString &message) { message_->setText(message); message_->setToolTip(message); }
+void PlayerWindow::setError(const QString &message) { message_->setText(message); message_->setToolTip(message);message_->show(); }
 void PlayerWindow::updateState() {
     if(!pendingMediaOpen_.isEmpty() && clock_->snapshot().state!=ThreeFpState::Opening){const auto path=pendingMediaOpen_;pendingMediaOpen_.clear();openFile(path);return;}
     if(discMenu_ && discMenu_->active()){
@@ -498,12 +505,13 @@ void PlayerWindow::updateState() {
     if(!positionTimer_.isValid() || positionTimer_.elapsed()>=5000){positionTimer_.restart();savePosition();}
 }
 bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
+    if(event->type()==QEvent::MouseButtonPress)if(auto *widget=qobject_cast<QWidget *>(object);widget && (widget==controls_ || controls_->isAncestorOf(widget)))chromeIdle_.restart();
     if(event->type()==QEvent::MouseButtonPress && frameEditPending_ && isActiveWindow() && object!=frame_)commitFrameEdit();
     if(event->type()==QEvent::Wheel)if(auto *widget=qobject_cast<QWidget *>(object);widget && (widget==pane_ || pane_->isAncestorOf(widget)) && widget!=info_ && !info_->isAncestorOf(widget) && !imageMode_ && settings_->value("player/wheel","volume").toString()=="volume") {const int delta=static_cast<QWheelEvent *>(event)->angleDelta().y();if(delta)volume_->setValue(std::clamp(volume_->value()+(delta>0?5:-5),0,100));return true;}
     if(event->type()==QEvent::ContextMenu)if(auto *widget=qobject_cast<QWidget *>(object);widget && (widget==pane_ || pane_->isAncestorOf(widget))) {showContextMenu(static_cast<QContextMenuEvent *>(event)->globalPos());return true;}
-    if (event->type() == QEvent::KeyPress && isActiveWindow()) {
+    if (event->type() == QEvent::KeyPress && (isActiveWindow() || qApp->activeWindow()==controls_ || qApp->activeWindow()==playlistPanel_ || qApp->activeWindow()==fullscreenTitle_)) {
         auto *key = static_cast<QKeyEvent *>(event);
-        if (key->key() == Qt::Key_Tab && !source_.isEmpty()) { infoVisible_ = !infoVisible_;infoFpsTimer_.invalidate(); updateInfo(); info_->setVisible(infoVisible_); info_->raise(); return true; }
+        if (key->key() == Qt::Key_Tab && !source_.isEmpty()) { infoVisible_ = !infoVisible_;infoFpsTimer_.invalidate(); updateInfo(); if(infoVisible_){info_->show();info_->raise();}else {static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();} return true; }
         const bool editing = qobject_cast<QLineEdit *>(object) || qobject_cast<QDoubleSpinBox *>(object) || qobject_cast<QLineEdit *>(qApp->focusWidget()) || qobject_cast<QDoubleSpinBox *>(qApp->focusWidget());
         if(!editing && discMenu_ && discMenu_->active() && discMenuNavigation_){int command=-1;switch(key->key()){case Qt::Key_Return:case Qt::Key_Enter:command=0;break;case Qt::Key_Up:command=1;break;case Qt::Key_Down:command=2;break;case Qt::Key_Left:command=3;break;case Qt::Key_Right:command=4;break;case Qt::Key_Menu:command=5;break;default:break;}if(command>=0){discMenu_->navigate(command);return true;}}
         if(!editing && (key->key()==Qt::Key_Left || key->key()==Qt::Key_Right)) {

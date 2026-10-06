@@ -22,6 +22,9 @@ $performancePatch = Join-Path $projectRoot 'patches/3fp-present-performance.patc
 $jincPatch = Join-Path $projectRoot 'patches/3fp-jinc-upstream-1.0.5.patch'
 $softwareFramePatch = Join-Path $projectRoot 'patches/3fp-software-frame-upload.patch'
 $softwareFrameApplied = (Test-Path $softwareFramePatch) -and (Test-AppliedPatch $softwareFramePatch)
+$softwareDecodePatch = Join-Path $projectRoot 'patches/3fp-software-decode-pipeline.patch'
+# The pipeline patch overlaps the earlier session/queue patch contexts.
+$softwareDecodeApplied = (Test-Path $softwareDecodePatch) -and (Test-AppliedPatch $softwareDecodePatch)
 $jincApplied = $softwareFrameApplied -or ((Test-Path $jincPatch) -and (Test-AppliedPatch $jincPatch))
 $performanceApplied = $jincApplied -or ((Test-Path $performancePatch) -and (Test-AppliedPatch $performancePatch))
 if (-not $performanceApplied) {
@@ -77,7 +80,7 @@ if ((Test-Path $jincPatch) -and -not $jincApplied) {
     if ($LASTEXITCODE -ne 0) { throw 'Jinc/upstream compatibility patch failed.' }
 }
 $clockPatch = Join-Path $projectRoot 'patches/3fp-vs-audio-clock.patch'
-if (-not (Test-AppliedPatch $clockPatch)) {
+if (-not $softwareDecodeApplied -and -not (Test-AppliedPatch $clockPatch)) {
     & git -C $source apply --check $clockPatch
     if ($LASTEXITCODE -ne 0) { throw 'VS audio-clock patch does not apply cleanly.' }
     & git -C $source apply $clockPatch
@@ -86,14 +89,14 @@ if (-not (Test-AppliedPatch $clockPatch)) {
 $blurayPatch = Join-Path $projectRoot 'patches/3fp-bluray-input.patch'
 $bdPlaybackPatch = Join-Path $projectRoot 'patches/3fp-bd-subtitles-probe.patch'
 # The BD probe hunk overlaps the older input patch's context.
-if (-not (Test-AppliedPatch $bdPlaybackPatch) -and -not (Test-AppliedPatch $blurayPatch)) {
+if (-not $softwareDecodeApplied -and -not (Test-AppliedPatch $bdPlaybackPatch) -and -not (Test-AppliedPatch $blurayPatch)) {
     & git -C $source apply --check $blurayPatch
     if ($LASTEXITCODE -ne 0) { throw 'Blu-ray input patch does not apply cleanly.' }
     & git -C $source apply $blurayPatch
     if ($LASTEXITCODE -ne 0) { throw 'Blu-ray input patch failed.' }
 }
 $av1ThreadsPatch = Join-Path $projectRoot 'patches/3fp-av1-software-threads.patch'
-if (-not (Test-AppliedPatch $av1ThreadsPatch)) {
+if (-not $softwareDecodeApplied -and -not (Test-AppliedPatch $av1ThreadsPatch)) {
     & git -C $source apply --check $av1ThreadsPatch
     if ($LASTEXITCODE -ne 0) { throw 'AV1 software threads patch does not apply cleanly.' }
     & git -C $source apply $av1ThreadsPatch
@@ -105,25 +108,45 @@ if (-not $softwareFrameApplied) {
     & git -C $source apply $softwareFramePatch
     if ($LASTEXITCODE -ne 0) { throw 'Software frame upload patch failed.' }
 }
-if (-not (Test-AppliedPatch $bdPlaybackPatch)) {
+if (-not $softwareDecodeApplied -and -not (Test-AppliedPatch $bdPlaybackPatch)) {
     & git -C $source apply --check $bdPlaybackPatch
     if ($LASTEXITCODE -ne 0) { throw 'BD subtitle/probe patch does not apply cleanly.' }
     & git -C $source apply $bdPlaybackPatch
     if ($LASTEXITCODE -ne 0) { throw 'BD subtitle/probe patch failed.' }
 }
 $concatSeekPatch = Join-Path $projectRoot 'patches/3fp-concat-seek.patch'
-if (-not (Test-AppliedPatch $concatSeekPatch)) {
+if (-not $softwareDecodeApplied -and -not (Test-AppliedPatch $concatSeekPatch)) {
     & git -C $source apply --check $concatSeekPatch
     if ($LASTEXITCODE -ne 0) { throw 'Concat seek patch does not apply cleanly.' }
     & git -C $source apply $concatSeekPatch
     if ($LASTEXITCODE -ne 0) { throw 'Concat seek patch failed.' }
 }
 $hardwareQueuePatch = Join-Path $projectRoot 'patches/3fp-hardware-video-queue.patch'
-if (-not (Test-AppliedPatch $hardwareQueuePatch)) {
+if (-not $softwareDecodeApplied -and -not (Test-AppliedPatch $hardwareQueuePatch)) {
     & git -C $source apply --check $hardwareQueuePatch
     if ($LASTEXITCODE -ne 0) { throw 'Hardware video queue patch does not apply cleanly.' }
     & git -C $source apply $hardwareQueuePatch
     if ($LASTEXITCODE -ne 0) { throw 'Hardware video queue patch failed.' }
+}
+if (-not $softwareDecodeApplied) {
+    & git -C $source apply --check $softwareDecodePatch
+    if ($LASTEXITCODE -ne 0) { throw 'Software decode pipeline patch does not apply cleanly.' }
+    & git -C $source apply $softwareDecodePatch
+    if ($LASTEXITCODE -ne 0) { throw 'Software decode pipeline patch failed.' }
+}
+$audioMetersPatch = Join-Path $projectRoot 'patches/3fp-audio-input-meters.patch'
+if (-not (Test-AppliedPatch $audioMetersPatch)) {
+    & git -C $source apply --check $audioMetersPatch
+    if ($LASTEXITCODE -ne 0) { throw 'Audio input meters patch does not apply cleanly.' }
+    & git -C $source apply $audioMetersPatch
+    if ($LASTEXITCODE -ne 0) { throw 'Audio input meters patch failed.' }
+}
+$hdrReadbackPatch = Join-Path $projectRoot 'patches/3fp-hdr-readback.patch'
+if (-not (Test-AppliedPatch $hdrReadbackPatch)) {
+    & git -C $source apply --check $hdrReadbackPatch
+    if ($LASTEXITCODE -ne 0) { throw 'HDR readback patch does not apply cleanly.' }
+    & git -C $source apply $hdrReadbackPatch
+    if ($LASTEXITCODE -ne 0) { throw 'HDR readback patch failed.' }
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/color/ColorBridge.h'), (Join-Path $projectRoot 'src/color/NativeColorEngine.h') -Destination (Join-Path $source 'FFF.Native/3FP/Render') -Force
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"

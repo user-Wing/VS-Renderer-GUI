@@ -9,6 +9,10 @@
 #include <cstdint>
 
 namespace vsr {
+struct ThreeFpAudioLevels {
+    std::uint32_t size=sizeof(ThreeFpAudioLevels),version=1,channels=0,reserved=0;
+    float values[8]{};
+};
 
 enum class ThreeFpResult : std::int32_t {
     Success = 0,
@@ -203,6 +207,7 @@ public:
     ThreeFpResult loadExternalAudio(void *handle, const char *path) const;
     ThreeFpResult clearExternalAudio(void *handle) const;
     ThreeFpResult setAudioEffects(void *handle, bool enabled, const float *gains, float wave, qint64 delay) const;
+    ThreeFpResult audioLevels(void *handle, ThreeFpAudioLevels *levels, bool input) const;
     ThreeFpResult setVolume(void *handle, float volume, std::uint32_t muted) const;
     ThreeFpResult setPresentConfig(void *handle, bool enabled) const;
     ThreeFpResult setPacingConfig(void *handle, bool enabled) const;
@@ -217,6 +222,7 @@ public:
     ThreeFpResult setExternalOutputFormat(void *handle, const char *format) const;
     ThreeFpResult setSubtitleLayer(void *handle, const TimedTextLayer *layer) const;
     QImage capture(void *handle, int width, int height) const;
+    QImage captureFloat(void *handle, int width, int height) const;
     ThreeFpResult redraw(void *handle) const;
     void destroy(void *handle) const;
 
@@ -243,6 +249,8 @@ private:
     ExternalAudioFn loadExternalAudio_ = nullptr;
     HandleFn clearExternalAudio_ = nullptr;
     EffectsFn setAudioEffects_ = nullptr;
+    using LevelsFn = ThreeFpResult (*)(void *, ThreeFpAudioLevels *);
+    LevelsFn inputLevels_ = nullptr, outputLevels_ = nullptr;
     RateFn setPlaybackRate_ = nullptr;
     StepFn stepKeyframe_ = nullptr;
     InfoFn mediaInfo_ = nullptr;

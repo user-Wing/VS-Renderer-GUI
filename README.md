@@ -4,11 +4,19 @@ Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜�
 
 ## 下载与启动
 
+1.0.7 的源画面和实画面截图统一为 **PNG 每通道 16-bit、最高无损压缩级别**。HDR 默认生成 SDR 预览，同时保存 `.hdr.png` 和原始浮点数据，避免普通 SDR 查看器显示灰暗。右键 → 图像截取默认保存在程序旁 `screenshots/`，可在设置 → 基本设置修改默认路径，也可通过“截图到指定路径…”单次选择文件夹。格式、实际位深和色准对比方法见 [高精度截图](docs/player-high-precision-screenshots-1.0.7.md)。
+
 1. 从 [GitHub Releases](https://github.com/user-Wing/VS-Renderer-GUI/releases) 或 [ModelScope 更新源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) 下载完整便携包。
 2. 解压整个目录，运行 `VSRenderer.exe` 或 `vs-player.exe`。无需另外安装 Qt、Python、VapourSynth。
 3. 系统要求：Windows 10 22H2 或更新的 64 位 Windows，支持 Direct3D 11 的显卡与驱动；RIFE 补帧需要 Vulkan 驱动。
 
-当前版本为 **1.0.6**，提供完整包 `1.0.6.7z` 和精简包 `1.0.6-Lite.7z`。精简包不带 LAV、madVR、MKVToolNix，其余播放、BD 菜单与处理运行时保留；可在设置的“组件下载”中补装。源码上传并准备无附件 Release Draft，发行附件及正式发布由维护者操作。版本说明见 [1.0.6 发行说明](docs/release-1.0.6.md)。
+当前版本为 **1.0.7**：HEVC / AV1 软解线程上限提升至 32，软件帧队列预算提升至 512 MiB，解码与取帧提交分开运行；自动匹配同目录的字幕名称变体，并可在右键字幕菜单切换。具体条件与验证见 [软件解码更新](docs/software-decode-subtitles-1.0.7.md)。提供 `1.0.7.7z` Full 与 `1.0.7-Lite.7z`，源码上传并准备无附件 Release Draft，二进制附件与正式发布由维护者操作。见 [1.0.7 发行说明](docs/release-1.0.7.md)。
+
+底栏算法框按实际档位显示 `A4KCNN+ / A4KCNN / A4K+ / A4K / Jinc / D3D11`。启用补帧时显示两个框：`Jinc / D3D11` 与 `RIFE+ / RIFE / MVT+ / MVT`，不再用单独一行文字显示常驻直通状态。
+
+主题设置可分别调整底部控制栏和右侧播放列表的透明度。全屏控制栏约 1 秒无操作自动隐藏，鼠标进入其实际高度范围即可唤出；顶部可唤出标题和退出全屏按钮。Tab 优先列出当前使用的文件，透明度条独立置于文字下方，并可开启右侧音频详细信息，显示真实输入 / 输出声道峰值电平 (dBFS)。使用和验证见 [透明控制栏与音频信息](docs/player-transparent-audio-info-1.0.7.md)。
+
+精简包不带 LAV、madVR、MKVToolNix，其余播放、BD 菜单与处理运行时保留；可在设置的“组件下载”中补装。既有 1.0.6 已由维护者发布，历史说明见 [1.0.6 发行说明](docs/release-1.0.6.md)。
 
 ## 简要更新说明
 
@@ -92,6 +100,8 @@ D3D11 / Jinc 直通及 VS 模式支持拖动进度条时连续预览；松手精
 HDR显示自动检测Windows能力并回退SDR，视图菜单可调整HDR→SDR映射；真实HDR面板观感尚未验证。操作与限制见 [第二轮编辑说明](docs/image-editor-round2-1.0.4.md)。
 
 图片不使用 VS 或视频预解码，动图目前显示首帧；图片解码使用 CPU。滤镜实时速度取决于素材、分辨率和硬件，可切换较轻的预设或离线导出。
+
+HEVC 444p10 高码率尖峰的本机复现、队列预算与解码线程对照见 [尖峰性能诊断](docs/hevc444-peak-diagnosis-1.0.6.md)。实验参数尚未部署为默认值。
 
 1.0.4开发版采用增强版FFmpeg，支持AVS3编解码及更多旧格式。新增编码器可在导出自定义命令中指定；见 [FFmpeg运行时说明](docs/ffmpeg-enhanced-1.0.4.md)。音频/字幕菜单显示轨道名称、语言和Default/Forced，默认使用编号最前的Default轨道，无Default时选择同类首条音频/字幕。程序文件约625 MB，用户缓存另计；见 [轨道与体积](docs/tracks-size-1.0.4.md)。
 

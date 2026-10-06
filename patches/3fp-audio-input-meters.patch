@@ -1,0 +1,185 @@
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -574,6 +574,7 @@
+     std::uint32_t x, std::uint32_t y, std::uint32_t width, std::uint32_t height,
+     float* dst, std::uint32_t dstFloatCount,
+     std::uint32_t* outputBitDepth) noexcept;
++FFF3FP_API FFFResult FFF3FP_GetAudioInputPeakLevels(FFF3FPHandle player, FFF3FPAudioPeakLevels* levels) noexcept;
+ FFF3FP_API FFFResult FFF3FP_GetAudioPeakLevels(FFF3FPHandle player,
+     FFF3FPAudioPeakLevels* levels) noexcept;
+ FFF3FP_API FFFResult FFF3FP_GetTimedTextStatus(FFF3FPHandle player,
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -151,6 +151,9 @@
+         x, y, width, height, dst, dstFloatCount, outputBitDepth) :
+         FFFResult::InvalidArgument;
+ }
++FFFResult FFF3FP_GetAudioInputPeakLevels(const FFF3FPHandle player, FFF3FPAudioPeakLevels* levels) noexcept {
++    return player && levels ? static_cast<PlayerSession*>(player)->GetAudioInputPeakLevels(*levels) : FFFResult::InvalidArgument;
++}
+ FFFResult FFF3FP_GetAudioPeakLevels(const FFF3FPHandle player,
+     FFF3FPAudioPeakLevels* levels) noexcept {
+     return player && levels ? static_cast<PlayerSession*>(player)->GetAudioPeakLevels(*levels)
+--- a/FFF.Native/3FP/Audio/WasapiRenderer.cpp
++++ b/FFF.Native/3FP/Audio/WasapiRenderer.cpp
+@@ -178,7 +178,7 @@
+     return FFFResult::Success;
+ }
+ 
+-FFFResult PlayerWasapiRenderer::Enqueue(const AVFrame* frame, const std::int64_t position100ns) noexcept {
++FFFResult PlayerWasapiRenderer::Enqueue(const AVFrame* frame, const std::int64_t position100ns, const AVFrame* inputFrame) noexcept {
+     if (frame == nullptr || frame->nb_samples <= 0) return FFFResult::InvalidArgument;
+     // Enqueue, reset and volume changes are serialized by PlayerSession's worker.
+     // Do not take the PCM queue mutex while resampling or applying gain: the
+@@ -271,13 +271,38 @@
+             samples[index] = static_cast<std::int32_t>(std::llround(samples[index] * gain));
+     }
+     const auto gapBytes = static_cast<std::size_t>(gapFrames) * outputBlockAlign_;
++    AudioChunk chunk;
++    chunk.silenceBytes = gapBytes;
++    const auto* source = inputFrame ? inputFrame : frame;
++    const auto format = static_cast<AVSampleFormat>(source->format);
++    const auto packed = av_get_packed_sample_fmt(format);
++    const auto planarInput = av_sample_fmt_is_planar(format) != 0;
++    const auto sampleBytes = av_get_bytes_per_sample(format);
++    chunk.inputChannels = std::min<unsigned>(source->ch_layout.nb_channels, PlayerAudioRuntimeState::MaximumChannels);
++    if (sampleBytes > 0) for (unsigned channel = 0; channel < chunk.inputChannels; ++channel) {
++        double peak = 0;
++        for (int sample = 0; sample < source->nb_samples; ++sample) {
++            const auto* data = source->extended_data[planarInput ? channel : 0] +
++                (planarInput ? sample : sample * source->ch_layout.nb_channels + channel) * sampleBytes;
++            double value = 0;
++            switch (packed) {
++            case AV_SAMPLE_FMT_U8: value = (int(*data) - 128) / 128.; break;
++            case AV_SAMPLE_FMT_S16: { std::int16_t v; std::memcpy(&v,data,2);value=v/32768.;break; }
++            case AV_SAMPLE_FMT_S32: { std::int32_t v; std::memcpy(&v,data,4);value=v/2147483648.;break; }
++            case AV_SAMPLE_FMT_S64: { std::int64_t v; std::memcpy(&v,data,8);value=v/9223372036854775808.;break; }
++            case AV_SAMPLE_FMT_FLT: { float v; std::memcpy(&v,data,4);value=v;break; }
++            case AV_SAMPLE_FMT_DBL: { double v; std::memcpy(&v,data,8);value=v;break; }
++            default: break;
++            }
++            if (std::isfinite(value)) peak = std::max(peak,std::abs(value));
++        }
++        chunk.inputPeaks[channel] = static_cast<float>(peak);
++    }
+     {
+         std::lock_guard lock(mutex_);
+         // PlayerSession throttles production by media time. Keep the current decoded
+         // frame intact even when a codec emits a burst; rejecting after resampling
+         // would advance the resampler/timeline and silently create an audible hole.
+-        AudioChunk chunk;
+-        chunk.silenceBytes = gapBytes;
+         chunk.bytes = std::move(converted);
+         queuedBytes_ += gapBytes + chunk.bytes.size();
+         queue_.push_back(std::move(chunk));
+@@ -774,6 +799,7 @@
+                     RequestRestart("The WASAPI output buffer was invalidated.");
+                 continue;
+             }
++            if (runtimeState_) runtimeState_->ClearValues();
+             auto remaining = copied;
+             auto* write = destination;
+             while (remaining > 0 && !queue_.empty()) {
+@@ -786,6 +812,11 @@
+                 if (remaining > 0 && chunk.offset < chunk.bytes.size()) {
+                     const auto bytes = std::min(remaining, chunk.bytes.size() - chunk.offset);
+                     std::memcpy(write, chunk.bytes.data() + chunk.offset, bytes);
++                    if (runtimeState_) {
++                        runtimeState_->inputChannelCount.store(chunk.inputChannels, std::memory_order_release);
++                        for (unsigned channel = 0; channel < chunk.inputChannels; ++channel)
++                            runtimeState_->inputValues[channel].store(std::max(chunk.inputPeaks[channel],runtimeState_->inputValues[channel].load()),std::memory_order_relaxed);
++                    }
+                     chunk.offset += bytes; write += bytes; remaining -= bytes;
+                 }
+                 if (chunk.silenceBytes == 0 && chunk.offset == chunk.bytes.size()) {
+--- a/FFF.Native/3FP/Audio/WasapiRenderer.h
++++ b/FFF.Native/3FP/Audio/WasapiRenderer.h
+@@ -33,6 +33,7 @@
+ 
+     void ClearValues() noexcept {
+         for (auto& value : values) value.store(0.0f, std::memory_order_relaxed);
++        for (auto& value : inputValues) value.store(0.0f, std::memory_order_relaxed);
+     }
+ 
+     void ResetDiagnostics() noexcept {
+@@ -46,7 +47,7 @@
+     }
+ 
+     void ClearAll() noexcept {
+-        SetChannels(0);
++        SetChannels(0);inputChannelCount.store(0);
+         ResetDiagnostics();
+     }
+ 
+@@ -58,6 +59,8 @@
+         return count;
+     }
+ 
++    std::atomic<std::uint32_t> inputChannelCount{0};
++    std::array<std::atomic<float>, MaximumChannels> inputValues{};
+     std::atomic<std::uint32_t> channelCount{0};
+     std::array<std::atomic<float>, MaximumChannels> values{};
+     std::atomic<std::int64_t> buffered100ns{0};
+@@ -77,7 +80,7 @@
+ 
+     FFFResult Start() noexcept;
+     void Stop() noexcept;
+-    FFFResult Enqueue(const AVFrame* frame, std::int64_t position100ns) noexcept;
++    FFFResult Enqueue(const AVFrame* frame, std::int64_t position100ns, const AVFrame* inputFrame = nullptr) noexcept;
+     void SetPaused(bool paused) noexcept;
+     void Reset(std::int64_t position100ns) noexcept;
+     void SetVolume(float volume, bool muted) noexcept;
+@@ -102,6 +105,8 @@
+         std::vector<std::uint8_t> bytes;
+         std::size_t offset = 0;
+         std::size_t silenceBytes = 0;
++        std::uint32_t inputChannels = 0;
++        std::array<float, PlayerAudioRuntimeState::MaximumChannels> inputPeaks{};
+     };
+     void RenderThread() noexcept;
+     FFFResult EnsureResampler(const AVFrame* frame) noexcept;
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -1573,7 +1573,7 @@
+     FFFResult result = FFFResult::Success;
+     while (av_buffersink_get_frame(tempoOutput_, output) >= 0) {
+         const auto outputPosition = tempoOrigin_ + av_rescale(tempoSamples_, 10000000, output->sample_rate);
+-        result = audioRenderer_->Enqueue(output, outputPosition);
++        result = audioRenderer_->Enqueue(output, outputPosition, frame);
+         tempoSamples_ += output->nb_samples;
+         av_frame_unref(output);
+         if (result != FFFResult::Success) break;
+@@ -1936,6 +1936,13 @@
+     std::fill(std::begin(output.values), std::end(output.values), 0.0f);
+     output.channelCount = audioRuntimeState_.Copy(output.values,
+         static_cast<std::uint32_t>(std::size(output.values)));
++    return FFFResult::Success;
++}
++FFFResult PlayerSession::GetAudioInputPeakLevels(FFF3FPAudioPeakLevels& output) const noexcept {
++    if (output.size < sizeof(FFF3FPAudioPeakLevels) || output.version != 1) return FFFResult::InvalidArgument;
++    output.channelCount = audioRuntimeState_.inputChannelCount.load(std::memory_order_acquire);output.reserved = 0;
++    for (unsigned channel = 0; channel < std::size(output.values); ++channel)
++        output.values[channel] = channel < output.channelCount ? audioRuntimeState_.inputValues[channel].load(std::memory_order_relaxed) : 0.f;
+     return FFFResult::Success;
+ }
+ std::string PlayerSession::MediaInfo() const { std::lock_guard lock(mutex_); return mediaInfoJson_; }
+@@ -3693,7 +3700,8 @@
+                      << ",\"outputChannels\":" << audioRenderer_->OutputChannels()
+                      << ",\"outputBitsPerSample\":" << audioRenderer_->OutputBitsPerSample()
+                      << ",\"outputValidBitsPerSample\":" << validBits
+-                     << ",\"outputFloat\":" << (audioRenderer_->OutputIsFloat() ? "true" : "false");
++                     << ",\"outputFloat\":" << (audioRenderer_->OutputIsFloat() ? "true" : "false")
++                     << ",\"outputExclusive\":" << (audioExclusive_ ? "true" : "false");
+             }
+         }
+         AVDictionaryEntry* language = av_dict_get(stream->metadata, "language", nullptr, 0);
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -84,6 +84,7 @@
+         std::uint32_t width, std::uint32_t height, float* dst,
+         std::uint32_t dstFloatCount, std::uint32_t* outputBitDepth) noexcept;
+     FFFResult GetAudioPeakLevels(FFF3FPAudioPeakLevels& levels) const noexcept;
++    FFFResult GetAudioInputPeakLevels(FFF3FPAudioPeakLevels& levels) const noexcept;
+     FFFResult GetTimedTextStatus(FFF3FPTimedTextStatus& status) noexcept;
+     FFFResult GetDanmakuStatus(FFF3FPTimedTextStatus& status) noexcept;
+     FFFResult GetLyricsStatus(FFF3FPTimedTextStatus& status) noexcept;

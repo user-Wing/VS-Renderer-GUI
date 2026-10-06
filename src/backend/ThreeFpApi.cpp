@@ -46,6 +46,8 @@ ThreeFpApi::ThreeFpApi()
     loadExternalAudio_ = reinterpret_cast<ExternalAudioFn>(library_.resolve("FFF3FP_LoadExternalAudio"));
     clearExternalAudio_ = reinterpret_cast<HandleFn>(library_.resolve("FFF3FP_ClearExternalAudio"));
     setAudioEffects_ = reinterpret_cast<EffectsFn>(library_.resolve("FFF3FP_SetAudioEffects"));
+    inputLevels_ = reinterpret_cast<LevelsFn>(library_.resolve("FFF3FP_GetAudioInputPeakLevels"));
+    outputLevels_ = reinterpret_cast<LevelsFn>(library_.resolve("FFF3FP_GetAudioPeakLevels"));
     stepKeyframe_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_StepKeyframe"));
     setPlaybackRate_ = reinterpret_cast<RateFn>(library_.resolve("FFF3FP_SetPlaybackRate"));
     mediaInfo_ = reinterpret_cast<InfoFn>(library_.resolve("FFF3FP_GetMediaInfo"));
@@ -96,12 +98,16 @@ ThreeFpResult ThreeFpApi::readPixel(void *h, ThreeFpPixelProbe *p) const { retur
 ThreeFpResult ThreeFpApi::submitExternalVideoFrame(void *h, const ThreeFpExternalVideoFrame *f) const { return available() ? submitExternalVideoFrame_(h, f) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setExternalOutputFormat(void *h, const char *f) const { return setExternalOutputFormat_ ? setExternalOutputFormat_(h,f) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setSubtitleLayer(void *h, const TimedTextLayer *layer) const { return setSubtitleLayer_ ? setSubtitleLayer_(h,layer) : ThreeFpResult::NotSupported; }
-QImage ThreeFpApi::capture(void *h, int width, int height) const {
+QImage ThreeFpApi::captureFloat(void *h, int width, int height) const {
     if (!readRegion_ || width <= 0 || height <= 0 || static_cast<qint64>(width)*height > 40000000) return {};
-    std::vector<float> pixels(static_cast<size_t>(width)*height*4); uint32_t depth=0;
-    if (readRegion_(h,0,0,width,height,pixels.data(),static_cast<uint32_t>(pixels.size()),&depth) != ThreeFpResult::Success) return {};
+    QImage image(width,height,QImage::Format_RGBA32FPx4); uint32_t depth=0;
+    if(image.isNull() || readRegion_(h,0,0,width,height,reinterpret_cast<float *>(image.bits()),uint32_t(width*height*4),&depth) != ThreeFpResult::Success) return {};
+    image.setText("readbackBitDepth",QString::number(depth));return image;
+}
+QImage ThreeFpApi::capture(void *h, int width, int height) const {
+    const auto floating=captureFloat(h,width,height);if(floating.isNull())return {};
     QImage image(width,height,QImage::Format_RGB32);
-    for (int y=0;y<height;++y) { auto *row=reinterpret_cast<QRgb *>(image.scanLine(y)); for(int x=0;x<width;++x) { const auto at=(static_cast<size_t>(y)*width+x)*4; row[x]=qRgb(qRound(std::clamp(pixels[at],0.0f,1.0f)*255),qRound(std::clamp(pixels[at+1],0.0f,1.0f)*255),qRound(std::clamp(pixels[at+2],0.0f,1.0f)*255)); } }
+    for (int y=0;y<height;++y) {const auto *pixels=reinterpret_cast<const float *>(floating.constScanLine(y));auto *row=reinterpret_cast<QRgb *>(image.scanLine(y)); for(int x=0;x<width;++x) { const auto at=x*4; row[x]=qRgb(qRound(std::clamp(pixels[at],0.0f,1.0f)*255),qRound(std::clamp(pixels[at+1],0.0f,1.0f)*255),qRound(std::clamp(pixels[at+2],0.0f,1.0f)*255)); } }
     return image;
 }
 ThreeFpResult ThreeFpApi::redraw(void *h) const { return available() ? redraw_(h) : ThreeFpResult::NativeFailure; }
@@ -113,6 +119,7 @@ ThreeFpResult ThreeFpApi::selectAudio(void *h,int stream) const {return selectAu
 ThreeFpResult ThreeFpApi::loadExternalAudio(void *h,const char *path) const {return loadExternalAudio_?loadExternalAudio_(h,path,-1,0):ThreeFpResult::NotSupported;}
 ThreeFpResult ThreeFpApi::clearExternalAudio(void *h) const {return clearExternalAudio_?clearExternalAudio_(h):ThreeFpResult::NotSupported;}
 ThreeFpResult ThreeFpApi::setAudioEffects(void *h,bool enabled,const float *gains,float wave,qint64 delay) const {return setAudioEffects_?setAudioEffects_(h,enabled?1u:0u,gains,wave,delay):ThreeFpResult::NotSupported;}
+ThreeFpResult ThreeFpApi::audioLevels(void *h,ThreeFpAudioLevels *levels,bool input) const {const auto fn=input?inputLevels_:outputLevels_;return fn?fn(h,levels):ThreeFpResult::NotSupported;}
 QString ThreeFpApi::mediaInfo(void *h) const {
     if (!mediaInfo_ || !h) return {};
     std::uint32_t length = 0; mediaInfo_(h, nullptr, 0, &length);

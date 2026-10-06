@@ -1,4 +1,5 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerChromePanel.h"
 #include "player/PlayerDiscMenu.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/LavPlayback.h"
@@ -129,7 +130,7 @@ void PlayerWindow::chooseLink() {
     const auto url=QInputDialog::getText(this,tr("打开链接"),tr("HTTP / HTTPS 视频直链或 file:/// 本地文件链接"));if(!url.trimmed().isEmpty())openFile(url.trimmed());
 }
 void PlayerWindow::buildPlaylist(QWidget *parent) {
-    playlistPanel_=new QWidget(parent);playlistPanel_->setObjectName("playerPlaylistPanel");playlistPanel_->setAttribute(Qt::WA_NativeWindow);
+    playlistPanel_=new PlayerChromePanel(parent);playlistPanel_->setObjectName("playerPlaylistPanel");playlistPanel_->setAttribute(Qt::WA_NativeWindow);
     playlistPanel_->setStyleSheet("background:#292b30;border:1px solid #50535a;");auto *layout=new QVBoxLayout(playlistPanel_);
     auto *title=new QHBoxLayout;title->addWidget(new QLabel(tr("播放列表"),playlistPanel_),1);auto *menu=new QPushButton(tr("BD 菜单"),playlistPanel_);menu->setObjectName("playerOpenDiscMenu");title->addWidget(menu);connect(menu,&QPushButton::clicked,this,[this]{if(!discRoot_.isEmpty())openDiscMenu(discRoot_);});auto *close=new QPushButton("×",playlistPanel_);close->setObjectName("playerPlaylistClose");close->setFixedWidth(30);title->addWidget(close);layout->addLayout(title);connect(close,&QPushButton::clicked,this,[this]{setPlaylistPinned(false);playlistDismissed_=true;playlistPanel_->hide();});
     playlistWidth_=std::clamp(settings_->value("playlist/width",320).toInt(),180,800);
@@ -180,33 +181,42 @@ void PlayerWindow::setPlaylistPinned(bool pinned) {
 }
 void PlayerWindow::dockPlaylist() {
     layoutChrome();
-    if(playlistPinned_ && !isFullScreen()){videoSplit_->addWidget(playlistPanel_);playlistPanel_->setMinimumWidth(180);videoSplit_->setSizes({qMax(1,videoSplit_->width()-playlistWidth_),playlistWidth_});playlistPanel_->show();}
-    else {playlistPanel_->hide();playlistPanel_->setParent(centralWidget());playlistPanel_->setMinimumWidth(0);}
+    if(playlistPinned_ && !isFullScreen()){playlistPanel_->setWindowFlags(Qt::Widget);videoSplit_->addWidget(playlistPanel_);playlistPanel_->setMinimumWidth(180);videoSplit_->setSizes({qMax(1,videoSplit_->width()-playlistWidth_),playlistWidth_});playlistPanel_->show();}
+    else {playlistPanel_->hide();playlistPanel_->setParent(centralWidget(),Qt::Tool|Qt::FramelessWindowHint);playlistPanel_->setAttribute(Qt::WA_TranslucentBackground);playlistPanel_->setMinimumWidth(0);}
 }
 void PlayerWindow::layoutChrome() {
-    const bool overlay=settings_->value("render/stableViewport",true).toBool();
+    const bool overlay=isFullScreen() || settings_->value("render/stableViewport",true).toBool() || settings_->value("theme/bottomTransparency",50).toInt()>0 || settings_->value("theme/playlistTransparency",50).toInt()>0;
     auto *layout=qobject_cast<QVBoxLayout *>(centralWidget()->layout());
-    if(overlay!=overlayChrome_){overlayChrome_=overlay;if(overlay){layout->removeWidget(videoSplit_);layout->removeWidget(controls_);layout->removeWidget(imageTools_);controls_->setAttribute(Qt::WA_NativeWindow);}
-        else {layout->insertWidget(0,imageTools_);layout->addWidget(videoSplit_,1);layout->addWidget(controls_);}}
-    if(overlay){videoSplit_->setGeometry(centralWidget()->rect());const int h=controls_->sizeHint().height();controls_->setGeometry(0,centralWidget()->height()-h,centralWidget()->width(),h);controls_->raise();if(imageTools_){imageTools_->setGeometry(0,0,centralWidget()->width(),imageTools_->sizeHint().height());imageTools_->raise();}}
+    if(overlay!=overlayChrome_){overlayChrome_=overlay;if(overlay){layout->removeWidget(videoSplit_);layout->removeWidget(controls_);layout->removeWidget(imageTools_);controls_->setWindowFlags(Qt::Tool|Qt::FramelessWindowHint);controls_->setAttribute(Qt::WA_TranslucentBackground);}
+        else {controls_->setWindowFlags(Qt::Widget);layout->insertWidget(0,imageTools_);layout->addWidget(videoSplit_,1);layout->addWidget(controls_);}}
+    if(overlay){videoSplit_->setGeometry(centralWidget()->rect());const int h=controls_->sizeHint().height();controlsTop_=centralWidget()->height()-h;controls_->setGeometry(QRect(centralWidget()->mapToGlobal(QPoint(0,controlsTop_)),QSize(centralWidget()->width(),h)));controls_->raise();if(imageTools_){imageTools_->setGeometry(0,0,centralWidget()->width(),imageTools_->sizeHint().height());imageTools_->raise();}}
 }
 void PlayerWindow::updateChrome() {
     layoutChrome();
+    const auto *active=qApp->activeWindow();const bool activePlayer=isActiveWindow() || active==controls_ || active==playlistPanel_ || active==fullscreenTitle_;
+    if(!isVisible() || isMinimized() || !activePlayer){controls_->hide();if(playlistPanel_->isWindow())playlistPanel_->hide();fullscreenTitle_->hide();return;}
     if(!isFullScreen())controls_->show();
     const auto pos=centralWidget()->mapFromGlobal(QCursor::pos());const bool inside=centralWidget()->rect().contains(pos);
-    if(!playlistPinned_ || isFullScreen()) {
+    const bool moved=QCursor::pos()!=chromePointer_;chromePointer_=QCursor::pos();
+    if(infoVisible_ && !imageMode_ && !(discMenu_ && discMenu_->active()) && settings_->value("info/audioDetailed",false).toBool())for(const auto &value:media_.value("streams").toArray()){const auto audio=value.toObject();if(audio.value("type").toString()=="audio" && audio.value("index").toInt()==clock_->snapshot().selectedAudioStream){updateAudioInfo(audio,clock_->snapshot().audioBitRate);break;}}
+    if(playlistPanel_->isWindow()) {
         const int bottom=centralWidget()->height()-controls_->sizeHint().height();
-        const int panelWidth=qMin(playlistWidth_,centralWidget()->width()/2);playlistPanel_->setGeometry(centralWidget()->width()-panelWidth,0,panelWidth,bottom);
-        if(!inside || pos.x()<playlistPanel_->x()-12)playlistDismissed_=false;
-        if(playlistPinned_ || (!playlistDismissed_ && inside && isActiveWindow() && pos.x()>=playlistPanel_->x() && pos.y()<bottom)) {playlistPanel_->show();playlistPanel_->raise();}
-        else if(!playlistPinned_ && playlistPanel_->isVisible() && (!inside || pos.x()<playlistPanel_->x()-12 || pos.y()>=bottom))playlistPanel_->hide();
+        const int panelTop=isFullScreen()?fullscreenTitle_->sizeHint().height():0;
+        const int panelWidth=qMin(playlistWidth_,centralWidget()->width()/2);playlistPanel_->setGeometry(QRect(centralWidget()->mapToGlobal(QPoint(centralWidget()->width()-panelWidth,panelTop)),QSize(panelWidth,bottom-panelTop)));
+        if(!inside || pos.x()<centralWidget()->width()-panelWidth-12)playlistDismissed_=false;
+        if(playlistPinned_ || (!playlistDismissed_ && inside && activePlayer && pos.x()>=centralWidget()->width()-panelWidth && pos.y()>=panelTop && pos.y()<bottom)) {playlistPanel_->show();playlistPanel_->raise();}
+        else if(!playlistPinned_ && playlistPanel_->isVisible() && (!inside || pos.x()<centralWidget()->width()-panelWidth-12 || pos.y()<panelTop || pos.y()>=bottom))playlistPanel_->hide();
     }
     controls_->raise();
-    if(!isFullScreen()){controls_->show();return;}
-    const bool bottom=inside && pos.y()>=centralWidget()->height()-(controls_->isVisible()?controls_->height()+6:24);
+    if(!isFullScreen()){controls_->show();fullscreenTitle_->hide();return;}
+    const bool bottom=inside && pos.y()>=controlsTop_-6;
     auto *focus=qApp->focusWidget();const bool editing=focus && controls_->isAncestorOf(focus) && (qobject_cast<QLineEdit *>(focus) || qobject_cast<QDoubleSpinBox *>(focus));
     if(qApp->activePopupWidget())return;
-    if(bottom || editing) {controls_->show();chromeIdle_.restart();}
-    else if(chromeIdle_.isValid() && chromeIdle_.elapsed()>=2000)controls_->hide();
+    if((bottom && moved) || editing) {controls_->show();chromeIdle_.restart();}
+    else if(chromeIdle_.isValid() && chromeIdle_.elapsed()>=1000)controls_->hide();
+    fullscreenTitleText_->setText(windowTitle());const int titleHeight=fullscreenTitle_->sizeHint().height();
+    fullscreenTitle_->setGeometry(QRect(centralWidget()->mapToGlobal(QPoint()),QSize(centralWidget()->width(),titleHeight)));
+    if(inside && pos.y()<=titleHeight){fullscreenTitle_->show();fullscreenTitle_->raise();titleIdle_.restart();}
+    else if(!titleIdle_.isValid() || titleIdle_.elapsed()>=1000)fullscreenTitle_->hide();
 }
 }

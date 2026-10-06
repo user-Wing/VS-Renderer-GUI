@@ -2,7 +2,17 @@
 
 本文件用于接手开发、定位模块和确认当前边界。用户操作见 [README.md](README.md)，版本变更见 [changelog.md](changelog.md)，逐轮测试与交付记录见 [专项文档](docs/) 和 [历史原文归档](docs/history/development-records-through-2026-10-03.md)。
 
-核对日期：2026-10-05。源码 `CMakeLists.txt` 与便携 `release.json` 为 **1.0.6**。本轮制作完整包与精简包、上传源码并准备无附件 Release Draft；附件上传与正式发布由维护者操作。精简包仅排除 LAV、madVR、MKVToolNix，并同步移除对应本地组件版本记录；BD 原盘菜单的 libVLC 保留。打包脚本为 `tools/package-portable.ps1`，使用 `-Edition Full` 或 `-Edition Lite`，清单包含隐藏文件并排除个人状态。发行说明见 [1.0.6](docs/release-1.0.6.md)。1.0.5 已正式发布，既有版本与归档保留。
+核对日期：2026-10-06。当前版本为 **1.0.7**；本轮授权制作 Full / Lite 压缩包、上传源码及准备无附件 Release Draft，二进制上传与正式发布由维护者操作。原生入口 `patches/3fp-software-decode-pipeline.patch` 将 HEVC / AV1 软解上限提升至 32 线程、软件帧预算提升至 512 MiB，并增加独立解码线程及有界交接；正常取帧提交、音频与快照继续由会话线程维护。字幕匹配在 `PlayerMediaMatching`，候选切换在 `PlayerMenus`。细节与验证见 [软件解码更新](docs/software-decode-subtitles-1.0.7.md) 与 [发行说明](docs/release-1.0.7.md)。
+
+2026-10-06 增加独立底部 / 播放列表透明度、全屏控制栏实际高度唤出及顶部标题覆盖层。`PlayerChromePanel` 负责原生视频上的透明合成；`PlayerInfoPanel` 将可滚动文字和底部透明度条分开。Tab 可选择右侧音频详细面板，输入电平扩展位于 `patches/3fp-audio-input-meters.patch`，由 `ThreeFpApi` / `ThreeFpPlayer` 读取并在 `PlayerInfo` 显示。记录见 [透明控制栏与音频信息](docs/player-transparent-audio-info-1.0.7.md)。
+
+1.0.7 精简包仅排除 LAV、madVR、MKVToolNix，并同步移除对应本地组件版本记录；BD 原盘菜单的 libVLC 保留。打包脚本为 `tools/package-portable.ps1`，使用 `-Edition Full` 或 `-Edition Lite`，清单包含隐藏文件并排除个人状态；发行语言文件来自最新源码，保留本地安装中的自定义语言文件。既有 1.0.6 已发布，历史说明见 [1.0.6](docs/release-1.0.6.md)。
+
+1.0.7 高精度截图入口位于 `PlayerMenus`，`PlayerPng::writeScreenshotPng` 写 RGBA16 PNG 和 HDR 浮点附件；`ThreeFpApi::captureFloat` 保留渲染表面精度，`PreviewPane::captureImage` 处理图片实画面。`patches/3fp-hdr-readback.patch` 修复 FP16 数值读回，并由 `tools/build-3fp.ps1` 在现有补丁之后应用。格式与验收见 [截图记录](docs/player-high-precision-screenshots-1.0.7.md)。
+
+默认截图目录通过 `screenshot/path` 保存，设置入口在基本设置；右键指定目录仅用于本次截取。HDR 同时保存 sRGB 色调映射预览、独立 HDR PNG 与未截断浮点附件。`PlayerProfiles::updateAlgorithmBadges` 更新底栏当前增强 / 补帧档位，保留加载提示和错误信息，隐藏空状态行。
+
+2026-10-05 HEVC 444p10 尖峰诊断复现本机 600 Mbps 无丢帧、800 Mbps 丢帧。隔离对照中仅扩至 512 MiB 仍丢，保持 128 MiB 并将软解上限从八线程改为十六线程，两轮零丢帧；解码等待与会话取帧提交共用线程是关键限制。仅补充诊断文档，未部署候选或改变默认参数，见 [尖峰诊断](docs/hevc444-peak-diagnosis-1.0.6.md)。
 
 本轮根因修复位于 PlayerWindow 的目标呈现确认、PlayerPlaylist 的章节稳定和 QDialog 模式布局，以及 `patches/3fp-concat-seek.patch` 的全局定位。Player、Renderer 与原生 DLL 重编译交付，真实鼠标及原盘六集回归见 [BD 与进度条验收](docs/player-bd-seek-acceptance-1.0.6.md)。原盘菜单字幕语言交接由 `BlurayCatalog::playbackInput` 从 CLPI 保留传输流 PID，解决拼接流 ID 为零导致回退日语；五种语言图像与独立原盘提取结果一致，见 [字幕语言验收](docs/bd-menu-subtitle-languages-1.0.6.md)。
 

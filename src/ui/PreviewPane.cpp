@@ -10,6 +10,7 @@
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QPainter>
+#include <QColorSpace>
 #include <QThread>
 #include <memory>
 #include <windows.h>
@@ -160,6 +161,16 @@ void PreviewPane::setImage(const QImage &image) {
     adoptView(zoom_,panX_,panY_);surface->update();
 }
 QImage PreviewPane::image() const { return static_cast<NativeVideoSurface *>(surface_)->image; }
+QImage PreviewPane::captureImage() const {
+    const auto *view=static_cast<NativeVideoSurface *>(surface_);if(view->image.isNull())return {};
+    const auto format=view->image.format();const bool floating=format==QImage::Format_RGBA32FPx4 || format==QImage::Format_RGBA16FPx4 || format==QImage::Format_RGBX32FPx4 || format==QImage::Format_RGBX16FPx4;
+    const auto ratio=surface_->devicePixelRatioF();QImage result(surface_->size()*ratio,floating?QImage::Format_RGBA32FPx4:QImage::Format_RGBA64);result.setDevicePixelRatio(ratio);result.setColorSpace(view->image.colorSpace());
+    QPainter painter(&result);painter.fillRect(QRectF(QPointF(),surface_->size()),QColor("#101010"));painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    const auto bounds=view->imageTransform.mapRect(QRectF(QPointF(),view->image.size()));const auto fitted=bounds.size().scaled(surface_->size(),Qt::KeepAspectRatio)*view->zoom;
+    const QPointF origin((surface_->width()-fitted.width())/2+view->panX*std::max(0.0,fitted.width()-surface_->width())/2,(surface_->height()-fitted.height())/2+view->panY*std::max(0.0,fitted.height()-surface_->height())/2);
+    QTransform screen;screen.translate(origin.x(),origin.y());screen.scale(fitted.width()/bounds.width(),fitted.height()/bounds.height());screen.translate(-bounds.x(),-bounds.y());
+    painter.setWorldTransform(view->imageTransform*screen);painter.drawImage(QPointF(),view->image);return result;
+}
 QTransform PreviewPane::imageTransform() const { return static_cast<NativeVideoSurface *>(surface_)->imageTransform; }
 QSize PreviewPane::imageDisplaySize() const { return imageTransform().mapRect(QRectF(QPointF(),image().size())).size().toSize(); }
 void PreviewPane::setImageTransform(const QTransform &transform) {

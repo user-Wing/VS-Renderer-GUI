@@ -115,6 +115,7 @@ private:
     void applyColorSettings();
     void showSpeedPopup();
     void updateInfo();
+    void updateAudioInfo(const QJsonObject &audio, quint64 bitRate);
     void nextFile(int direction);
     void setError(const QString &message);
     void showContextMenu(const QPoint &position);
@@ -129,7 +130,9 @@ private:
     void loadAudioMetadata();
     void updateAudioLyrics(qint64 time);
     void useNativeAudio();
-    void captureImage(bool source);
+    QString screenshotDirectory() const;
+    void captureImage(bool source, const QString &directory = {});
+    void saveScreenshot(const QString &path,const QImage &image,const QJsonObject &metadata);
     void applySettings(bool reopen);
     void applyAppearance();
     bool madvrMode() const;
@@ -163,6 +166,9 @@ private:
     PreviewPane *pane_ = nullptr;
     QWidget *hidden_ = nullptr;
     QLabel *info_ = nullptr;
+    PlayerInfoPanel *audioInfo_ = nullptr;
+    QWidget *fullscreenTitle_ = nullptr;
+    QLabel *fullscreenTitleText_ = nullptr;
     QLabel *message_ = nullptr;
     QLabel *dragHint_ = nullptr;
     QLabel *interpolationWarning_ = nullptr;
@@ -171,6 +177,9 @@ private:
     QPushButton *decoderBadge_ = nullptr;
     QLabel *hdrBadge_ = nullptr;
     QLabel *rendererBadge_ = nullptr;
+    QLabel *algorithmBadge_ = nullptr;
+    QLabel *interpolationBadge_ = nullptr;
+    void updateAlgorithmBadges();
     QSlider *timeline_ = nullptr;
     QSlider *volume_ = nullptr;
     QPushButton *mute_ = nullptr;
@@ -192,6 +201,9 @@ private:
     QTreeWidget *playlist_ = nullptr;
     QString playlistDirectory_;
     QElapsedTimer chromeIdle_;
+    QElapsedTimer titleIdle_;
+    int controlsTop_ = 0;
+    QPoint chromePointer_{-1,-1};
     QString source_;
     QString mediaInput_;
     bool direct_ = false;
@@ -242,6 +254,7 @@ private:
     int manualFrame_ = -1;
     int requested_ = -1;
     int lastFrame_ = -1;
+    bool screenshotPending_ = false;
     int infoTick_ = 0;
     quint64 generation_ = 0;
     double speed_ = 1;

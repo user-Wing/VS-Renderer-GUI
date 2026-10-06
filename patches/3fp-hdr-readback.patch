@@ -1,0 +1,40 @@
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/VideoRenderer.cpp
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -13,6 +13,7 @@
+ }
+ 
+ #include <d3dcompiler.h>
++#include <DirectXPackedVector.h>
+ #include <cstdio>
+ #include <cctype>
+ #include <d2d1effects.h>
+@@ -5229,11 +5230,11 @@
+         probe.alpha = static_cast<float>((packed >> 30) & 0x3u) / 3.0f;
+     } else if (description.Format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+         // scRGB linear output (1.0 = 80 nits); report raw linear values.
+-        const auto* rgba = static_cast<const float*>(mapped.pData);
+-        probe.red = rgba[0];
+-        probe.green = rgba[1];
+-        probe.blue = rgba[2];
+-        probe.alpha = rgba[3];
++        const auto* rgba = static_cast<const DirectX::PackedVector::HALF*>(mapped.pData);
++        probe.red = DirectX::PackedVector::XMConvertHalfToFloat(rgba[0]);
++        probe.green = DirectX::PackedVector::XMConvertHalfToFloat(rgba[1]);
++        probe.blue = DirectX::PackedVector::XMConvertHalfToFloat(rgba[2]);
++        probe.alpha = DirectX::PackedVector::XMConvertHalfToFloat(rgba[3]);
+     }
+     context_->Unmap(staging.Get(), 0);
+     probe.scalingMode = actualVideoScalingMode_.load();
+@@ -5323,8 +5324,9 @@
+                 out += 4;
+             }
+         } else { // R16G16B16A16_FLOAT
+-            const auto* rgba = reinterpret_cast<const float*>(rowPtr);
+-            std::memcpy(out, rgba, static_cast<std::size_t>(copyWidth) * 4u * sizeof(float));
++            const auto* rgba = reinterpret_cast<const DirectX::PackedVector::HALF*>(rowPtr);
++            for (std::size_t i = 0; i < static_cast<std::size_t>(copyWidth) * 4u; ++i)
++                out[i] = DirectX::PackedVector::XMConvertHalfToFloat(rgba[i]);
+             out += static_cast<std::size_t>(copyWidth) * 4u;
+         }
+     }

@@ -1,4 +1,5 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerDiscMenu.h"
 #include "backend/ThreeFpPlayer.h"
 #include "graph/PresetStore.h"
 #include "ui/PreviewPane.h"
@@ -36,6 +37,14 @@ int PlayerWindow::initialQualityStage() const {
 }
 QStringList PlayerWindow::qualityNames() const {
     return {tr("Anime4K CNN + 额外增强"),tr("Anime4K CNN"),tr("Anime4K no CNN + 额外增强"),tr("Anime4K no CNN"),tr("Jinc 直通"),tr("D3D11 原生直通")};
+}
+void PlayerWindow::updateAlgorithmBadges(){
+    message_->setVisible(!message_->text().isEmpty());
+    const bool video=!imageMode_ && !audioMode_ && !madvrMode() && !(discMenu_ && discMenu_->active());algorithmBadge_->setVisible(video);interpolationBadge_->hide();if(!video)return;
+    const int interpolation=interpolationStage();
+    if(interpolation>=0 && !direct_){algorithmBadge_->setText(interpolationRenderer()?"D3D11":"Jinc");interpolationBadge_->setText(QStringList{"RIFE+","RIFE","MVT+","MVT"}.at(interpolation));interpolationBadge_->show();}
+    else if(!direct_ && profile()=="Anime")algorithmBadge_->setText(QStringList{"A4KCNN+","A4KCNN","A4K+","A4K","Jinc","D3D11"}.at(std::clamp(qualityStage_,0,5)));
+    else{const bool native=qualityStage_>=5 || (settings_->value("render/upscale",4).toInt()==7 && settings_->value("render/downscale",4).toInt()==7);algorithmBadge_->setText(native?"D3D11":"Jinc");}
 }
 int PlayerWindow::interpolationStage() const {
     const QFileInfo file(preset_);

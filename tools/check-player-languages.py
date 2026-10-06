@@ -6,7 +6,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 packs = {name: json.loads((root / f"assets/languages/{name}.json").read_text(encoding="utf-8"))
          for name in ("zh_CN", "en_US")}
-sources = list((root / "src/player").glob("*.cpp")) + [root / "src/backend/LavPlayback.cpp", root / "src/update/PortableUpdater.cpp"]
+sources = list((root / "src/player").glob("*.cpp")) + [root / "src/player/PlayerInfoPanel.h", root / "src/backend/LavPlayback.cpp", root / "src/update/PortableUpdater.cpp"]
 required = set()
 for path in sources:
     if path.stem in ("PlayerLanguage", "PlayerAssociations", "PlayerCache"):

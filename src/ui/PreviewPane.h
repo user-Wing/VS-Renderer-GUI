@@ -23,6 +23,7 @@ public:
     void setVideoSize(const QSize &size);
     void setImage(const QImage &image);
     QImage image() const;
+    QImage captureImage() const;
     void setImageTransform(const QTransform &transform);
     QTransform imageTransform() const;
     QSize imageDisplaySize() const;

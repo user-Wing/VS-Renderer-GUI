@@ -38,6 +38,7 @@ public:
     bool loadExternalAudio(const QString &path);
     bool clearExternalAudio();
     bool setAudioEffects(bool enabled, const float *gains, float wave, qint64 delay);
+    bool audioLevels(ThreeFpAudioLevels &levels, bool input) const;
     bool setVrrPresent(bool enabled);
     bool setVrrPacing(bool enabled);
     bool setScalingAlgorithms(ThreeFpScalingAlgorithm upscale, ThreeFpScalingAlgorithm downscale);
@@ -53,6 +54,7 @@ public:
     void setAntiRinging(bool enabled);
     bool setSubtitle(const QImage &image);
     QImage capture() const;
+    QImage captureFloat() const;
 
 signals:
     void errorOccurred(const QString &message);

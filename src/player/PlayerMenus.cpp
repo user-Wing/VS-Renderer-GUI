@@ -3,6 +3,8 @@
 #include "player/PlayerDiscMenu.h"
 #include "player/PlayerTracks.h"
 #include "player/PlayerSubtitles.h"
+#include "player/PlayerMediaMatching.h"
+#include "player/PlayerPng.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/LavPlayback.h"
 #include "graph/PresetStore.h"
@@ -17,6 +19,7 @@
 #include <QFileDialog>
 #include <QProcess>
 #include <QPainter>
+#include <QColorSpace>
 #include <QLabel>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -104,9 +107,11 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     auto *muted=audio->addAction(tr("静音"));muted->setCheckable(true);muted->setChecked(mute_->isChecked());connect(muted,&QAction::toggled,mute_,&QPushButton::setChecked);
     audio->addAction(tr("均衡器…"),this,&PlayerWindow::showEqualizer);
     auto *subtitles=PlayerMenu::add(menu,tr("字幕设置"));
+    const auto matchedSubtitles=networkSource() || imageMode_ || audioMode_ || source_.isEmpty()?QStringList{}:playerMatchingSubtitles(source_);
     const auto tracks=[&](const QString &title,int slot) {auto *list=PlayerMenu::add(subtitles,title);auto *group=new QActionGroup(list);group->setExclusive(true);auto *off=list->addAction(tr("无"),this,[this,slot]{selectSubtitle(slot,-1);});off->setCheckable(true);off->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==-1);group->addAction(off);
         const auto external=slot==0?externalSubtitle_:externalSecondarySubtitle_;
         if(!external.isEmpty()) {auto *mounted=list->addAction(tr("挂载：%1").arg(QFileInfo(external).fileName()),this,[this,slot]{selectSubtitle(slot,-2);});mounted->setCheckable(true);mounted->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==-2);group->addAction(mounted);}
+        for(const auto &path:matchedSubtitles)if(path!=external){auto *action=list->addAction(QFileInfo(path).fileName(),this,[this,path,slot]{attachSubtitle(path,slot);});action->setToolTip(path);action->setCheckable(true);group->addAction(action);}
         for(const auto &entry:externalSubtitleTracks_[slot]){const auto track=entry.toObject();const int index=track.value("index").toInt();auto *action=list->addAction(tr("MKS 轨 %1 · %2 · %3").arg(index+1).arg(track.value("codec_name").toString(),track.value("tags").toObject().value("language").toString()),this,[this,slot,index]{externalSubtitleIndex_[slot]=index;selectSubtitle(slot,-2);});action->setCheckable(true);action->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==-2 && externalSubtitleIndex_[slot]==index);group->addAction(action);}
         int ordinal=0;
         for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()!="subtitle")continue;const int index=stream.value("index").toInt();auto *action=list->addAction(playerTrackLabel(stream,ordinal++),this,[this,slot,index]{selectSubtitle(slot,index);});action->setToolTip(QString("%1 · stream 0:%2").arg(stream.value("codec").toString()).arg(index));action->setCheckable(true);action->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==index);group->addAction(action);}
@@ -119,7 +124,8 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     subtitles->addAction(tr("字幕样式设置…(SRT)"),this,&PlayerWindow::showSubtitleStyle);
     subtitles->setEnabled(!imageMode_);
     if(!media_.value("chapters").toArray().isEmpty()){auto *chapters=PlayerMenu::add(menu,tr("章节"));for(const auto &value:media_.value("chapters").toArray()){const auto chapter=value.toObject();const auto at=qint64(chapter.value("start100ns").toDouble());chapters->addAction(chapter.value("title").toString()+QString(" · %1 s").arg(at/10000000.,0,'f',3),this,[this,at]{seekTime(at);});}}
-    auto *capture=PlayerMenu::add(menu,tr("图像截取"));capture->addAction(imageMode_?tr("截取图片原始像素 PNG"):tr("截取当前源画面 · VS 处理后 PNG"),this,[this]{captureImage(true);})->setEnabled(!madvrMode() || imageMode_);capture->addAction(tr("截取实画面 · 含字幕及显示效果 PNG"),this,[this]{captureImage(false);});
+    auto *capture=PlayerMenu::add(menu,tr("图像截取"));capture->addAction(imageMode_?tr("截取图片原始像素 · PNG 16-bit/通道"):direct_?tr("截取当前源画面 · PNG 16-bit/通道"):tr("截取当前源画面 · VS 处理后 PNG 16-bit/通道"),this,[this]{captureImage(true);})->setEnabled(!madvrMode() || imageMode_);capture->addAction(tr("截取实画面 · 含字幕及显示效果 PNG 16-bit/通道"),this,[this]{captureImage(false);});
+    auto *captureTo=PlayerMenu::add(menu,tr("截图到指定路径…"));for(bool source:{true,false})captureTo->addAction(source?tr("源画面 · 选择文件夹保存…"):tr("实画面 · 选择文件夹保存…"),this,[this,source]{const auto directory=QFileDialog::getExistingDirectory(this,tr("选择截图保存文件夹"),screenshotDirectory());if(!directory.isEmpty())captureImage(source,directory);})->setEnabled(!source || !madvrMode() || imageMode_);
     auto *scaling=PlayerMenu::add(menu,tr("缩放算法"));const QStringList algorithms{"Nearest","Bilinear","Cubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11 Native","Lanczos4(4 taps)"};
     for(int side=0;side<2;++side){auto *list=PlayerMenu::add(scaling,side?tr("缩小"):tr("放大"));auto *group=new QActionGroup(list);const QString key=side?"render/downscale":"render/upscale";for(int n=0;n<algorithms.size();++n){auto *action=list->addAction(algorithms[n]);action->setCheckable(true);action->setChecked((interpolationStage()>=0?(interpolationRenderer()?7:4):fixedAnimeStage()>=4?(fixedAnimeStage()==4?4:7):settings_->value(key,4).toInt())==n);group->addAction(action);connect(action,&QAction::triggered,this,[this,key,n]{settings_->setValue(key,n);if(fixedAnimeStage()<0)qualityStage_=n==7?5:direct_?4:qualityStage_;suspendQualityCheck();if(n==7 && fixedAnimeStage()<0 && !profile().isEmpty() && !source_.isEmpty())refreshScript();else applyScaling();(direct_?clock_:output_)->redraw();});}list->setEnabled(!madvrMode() && fixedAnimeStage()<4 && interpolationStage()<0);}
     auto *ring=scaling->addAction(tr("Anti-ringing · relaxed(仅 Jinc)"));ring->setCheckable(true);ring->setChecked(settings_->value("render/antiring",true).toBool());ring->setEnabled(!madvrMode() && fixedAnimeStage()!=5);connect(ring,&QAction::toggled,this,[this](bool enabled){settings_->setValue("render/antiring",enabled);(direct_?clock_:output_)->setAntiRinging(enabled);(direct_?clock_:output_)->redraw();});
@@ -143,22 +149,52 @@ void PlayerWindow::showSubtitleStyle() {
     auto *buttons=new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel,&dialog);outer->addWidget(buttons);connect(buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
     if(dialog.exec()==QDialog::Accepted){settings_->setValue("subtitle/style/font",font->currentFont().family());settings_->setValue("subtitle/style/bold",bold->isChecked());settings_->setValue("subtitle/style/italic",italic->isChecked());settings_->setValue("subtitle/style/alignment",alignment->currentData());settings_->setValue("subtitle/style/box",box->isChecked());for(auto it=numbers.begin();it!=numbers.end();++it)settings_->setValue("subtitle/style/"+it.key(),it.value()->value());for(auto it=choices.begin();it!=choices.end();++it)settings_->setValue("subtitle/style/"+it.key(),it.value()->property("color"));selectSubtitle(0,primarySubtitle_);selectSubtitle(1,secondarySubtitle_);settings_->sync();}
 }
-void PlayerWindow::captureImage(bool source) {
-    if(source && !imageMode_ && direct_){setError(tr("原生直通时请使用实画面截图；VS 未生成独立源帧。"));return;}
-    if(source && !imageMode_ && displayedFrame_.planes[0].isEmpty()) {setError(tr("还没有可截取的 VS 帧。"));return;}
-    const QDir dir(QDir(QCoreApplication::applicationDirPath()).filePath("screenshots"));QDir().mkpath(dir.absolutePath());const auto name=QString("%1-%2-%3.png").arg(QFileInfo(source_).completeBaseName(),QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz"),source?"VS":"display");const QString file=dir.filePath(name);
-    if(imageMode_){const auto image=source?pane_->image():pane_->surface()->grab().toImage();if(!image.isNull() && image.save(file,"PNG"))setError(tr("已保存无损 PNG：%1").arg(file));else setError(tr("截图保存失败。"));return;}
-    if(!source) {auto image=madvrMode()&&lav_?lav_->capture():(direct_?clock_:output_)->capture();if(image.isNull()){setError(tr("当前渲染器未返回可截取画面。"));return;}if(infoVisible_){QPainter painter(&image);const auto ratio=pane_->surface()->devicePixelRatioF();painter.scale(ratio,ratio);info_->render(&painter,info_->pos());}if(image.save(file,"PNG"))setError(tr("已保存无损 PNG：%1").arg(file));else setError(tr("截图保存失败。"));return;}
+void PlayerWindow::saveScreenshot(const QString &path,const QImage &image,const QJsonObject &metadata){
+    auto *watcher=new QFutureWatcher<QString>(this);connect(watcher,&QFutureWatcher<QString>::finished,this,[this,watcher,path,metadata]{const auto error=watcher->result();watcher->deleteLater();screenshotPending_=false;setError(error.isEmpty()?(metadata.value("hdr").toBool()?tr("已保存高精度 PNG、HDR 浮点数据及色彩信息：%1"):tr("已保存高精度无损 PNG：%1")).arg(path):tr("截图失败：%1").arg(error));});
+    watcher->setFuture(QtConcurrent::run([path,image,metadata]{return writeScreenshotPng(path,image,metadata);}));
+}
+QString PlayerWindow::screenshotDirectory() const {const auto path=settings_->value("screenshot/path").toString().trimmed();return path.isEmpty()?QDir(QCoreApplication::applicationDirPath()).filePath("screenshots"):QFileInfo(path).absoluteFilePath();}
+void PlayerWindow::captureImage(bool source,const QString &directory) {
+    if(screenshotPending_){setError(tr("正在保存截图，请稍候。"));return;}
+    if(source && !imageMode_ && !direct_ && displayedFrame_.planes[0].isEmpty()) {setError(tr("还没有可截取的 VS 帧。"));return;}
+    const QDir dir(directory.isEmpty()?screenshotDirectory():directory);QDir().mkpath(dir.absolutePath());const auto name=QString("%1-%2-%3.png").arg(QFileInfo(source_).completeBaseName(),QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz"),source?(imageMode_ || direct_?"source":"VS"):"display");const QString file=dir.filePath(name);
+    QJsonObject metadata{{"sourceFile",source_},{"stage",source?"source":"display"},{"position100ns",double(position())},{"hdr",false},{"encoding","encoded-RGB"}};
+    if(imageMode_){const auto image=source?pane_->image():pane_->captureImage();if(image.isNull()){setError(tr("没有可截取画面。"));return;}const auto transfer=image.colorSpace().transferFunction();const auto format=image.format();const bool floating=format==QImage::Format_RGBA32FPx4 || format==QImage::Format_RGBA16FPx4 || format==QImage::Format_RGBX32FPx4 || format==QImage::Format_RGBX16FPx4;metadata["hdr"]=floating || transfer==QColorSpace::TransferFunction::St2084 || transfer==QColorSpace::TransferFunction::Hlg;if(transfer==QColorSpace::TransferFunction::Linear)metadata["encoding"]="linear-RGB";metadata["inputBitDepthPerChannel"]=image.pixelFormat().bitsPerPixel()/std::max(1,int(image.pixelFormat().channelCount()));screenshotPending_=true;saveScreenshot(file,image,metadata);return;}
+    if(!source){auto *renderer=direct_?clock_.get():output_.get();const auto status=renderer->colorStatus();auto image=madvrMode()&&lav_?lav_->capture():renderer->captureFloat();if(image.isNull()){setError(tr("当前渲染器未返回可截取画面。"));return;}
+        metadata["hdr"]=!madvrMode() && status.outputHdr;metadata["inputBitDepthPerChannel"]=madvrMode()?8:int(status.outputBits);metadata["renderer"]=madvrMode()?"madVR 8-bit capture interface":QString::fromUtf8(status.engine);metadata["qtInfoOverlay"]=infoVisible_;metadata["readbackBitDepth"]=image.text("readbackBitDepth").toInt();metadata["outputHdr"]=bool(status.outputHdr);metadata["tone"]=int(status.tone);metadata["gamut"]=int(status.gamut);metadata["dither"]=int(status.dither);metadata["targetPeakNits"]=status.targetPeak;metadata["iccProfile"]=QString::fromUtf8(status.profile);metadata["lutActive"]=bool(status.lutActive);
+        if(status.outputHdr && !madvrMode()){metadata["encoding"]="scRGB-linear";metadata["linearUnitNits"]=80;image.setColorSpace(QColorSpace(QColorSpace::SRgbLinear));}
+        else if(status.activeEngine==1 && status.iccState==1){QFile profile(QString::fromUtf8(status.profile));if(profile.open(QIODevice::ReadOnly))image.setColorSpace(QColorSpace::fromIccProfile(profile.readAll()));}
+        else{metadata["pngPrimaries"]=1;metadata["pngTransfer"]=status.activeEngine==1 || madvrMode()?13:1;}
+        if(infoVisible_){QPainter painter(&image);const auto ratio=pane_->surface()->devicePixelRatioF();painter.scale(ratio,ratio);info_->render(&painter,info_->pos());}
+        screenshotPending_=true;saveScreenshot(file,image,metadata);return;}
     const auto frame=displayedFrame_;QString format;int bytes=1,subW=0,subH=0;const unsigned value=static_cast<unsigned>(frame.format);
     if(value<10){format=value==1?"gray":"gray16le";bytes=value==1?1:2;}
     else {const int depth=value%10;bytes=depth?2:1;const int bits=depth==0?8:depth==1?10:depth==2?12:16;
         if(value>=40)format=bits==8?"gbrp":QString("gbrp%1le").arg(bits);
         else {const auto sampling=value>=30?"444":value>=20?"422":"420";format=QString("yuv%1p").arg(sampling)+(bits==8?QString():QString::number(bits)+"le");subW=value<30?1:0;subH=value<20?1:0;}}
-    auto *process=new QProcess(this);process->setObjectName("playerScreenshotProcess");connect(process,&QProcess::errorOccurred,this,[this,process](QProcess::ProcessError error){if(error==QProcess::FailedToStart){setError(tr("截图进程无法启动：%1").arg(process->errorString()));process->deleteLater();}});connect(process,&QProcess::finished,this,[this,process,file](int code){setError(code==0?tr("已保存 VS 源 PNG：%1").arg(file):tr("截图失败：%1").arg(QString::fromUtf8(process->readAllStandardError())));process->deleteLater();});
+    const auto status=clock_->colorStatus();const auto snap=clock_->snapshot();const int width=direct_?int(snap.videoWidth):frame.width,height=direct_?int(snap.videoHeight):frame.height;
+    if(width<=0 || height<=0){setError(tr("还没有可截取的源帧。"));return;}
+    QJsonObject stream;if(direct_)for(const auto &entry:QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object().value("streams").toArray())if(entry.toObject().value("index").toInt()==snap.selectedVideoStream){stream=entry.toObject();break;}
+    const int primaries=direct_?(status.sourceKind?int(status.sourcePrimaries):stream.value("colorPrimaries").toInt(2)):int(frame.colorPrimaries),transfer=direct_?(status.sourceKind?int(status.sourceTransfer):stream.value("colorTransfer").toInt(2)):int(frame.colorTransfer);
+    metadata["hdr"]=transfer==16 || transfer==18;metadata["pngPrimaries"]=primaries;metadata["pngTransfer"]=transfer;metadata["inputBitDepthPerChannel"]=direct_?(status.sourceKind?int(status.sourceBits):stream.value("bitDepth").toInt()):value<10?(value==1?8:16):(value%10==0?8:value%10==1?10:value%10==2?12:16);
+    const int matrix=direct_?(status.sourceKind?int(status.sourceMatrix):stream.value("colorSpace").toInt(2)):int(frame.colorMatrix);
+    metadata["sourceMatrix"]=matrix;metadata["sourceRange"]=direct_?(status.sourceKind?int(status.sourceRange):stream.value("colorRange").toInt()):int(frame.colorRange);metadata["frameIndex"]=double(direct_?snap.frameIndex:frame.frameIndex);
+    QString conversion="zscale=matrix=gbr:range=full";
+    if(matrix==2 || (!direct_ && value<40 && matrix==0)){const auto fallback=direct_ && stream.value("colorModel").toString()=="RGB"?0:primaries==9 || transfer==16 || transfer==18?9:width>=1280?1:6;conversion+=QString(":matrixin=%1").arg(fallback);metadata["conversionMatrixFallback"]=fallback;}
+    else if(direct_)conversion+=QString(":matrixin=%1").arg(matrix);
+    auto *process=new QProcess(this);process->setObjectName("playerScreenshotProcess");connect(process,&QProcess::errorOccurred,this,[this,process](QProcess::ProcessError error){if(error==QProcess::FailedToStart){screenshotPending_=false;setError(tr("截图进程无法启动：%1").arg(process->errorString()));process->deleteLater();}});
+    connect(process,&QProcess::finished,this,[this,process,file,metadata,width,height](int code){const auto data=process->readAllStandardOutput();const auto error=QString::fromUtf8(process->readAllStandardError());process->deleteLater();if(code!=0 || data.size()!=qint64(width)*height*12){screenshotPending_=false;setError(tr("截图失败：%1").arg(error));return;}
+        QImage image(width,height,QImage::Format_RGBA32FPx4);const auto *planes=reinterpret_cast<const float *>(data.constData());const qsizetype samples=qsizetype(width)*height;for(int y=0;y<height;++y){auto *row=reinterpret_cast<float *>(image.scanLine(y));for(int x=0;x<width;++x){const qsizetype at=qsizetype(y)*width+x;row[x*4]=planes[samples*2+at];row[x*4+1]=planes[at];row[x*4+2]=planes[samples+at];row[x*4+3]=1;}}
+        saveScreenshot(file,image,metadata);
+    });
     QStringList arguments{"-v","error","-f","rawvideo","-pixel_format",format,"-video_size",QString("%1x%2").arg(frame.width).arg(frame.height)};
     if(value>=10 && value<40) {const QHash<unsigned,QString> matrices{{1,"bt709"},{5,"bt470bg"},{6,"smpte170m"},{9,"bt2020nc"},{10,"bt2020c"}};if(matrices.contains(frame.colorMatrix))arguments<<"-colorspace"<<matrices.value(frame.colorMatrix);if(frame.colorRange)arguments<<"-color_range"<<(frame.colorRange==2?"pc":"tv");}
-    arguments<<"-i"<<"pipe:0"<<"-frames:v"<<"1"<<"-pix_fmt"<<"rgb48be"<<"-y"<<file;
+    if(direct_){arguments={"-v","error","-ss",QString::number(std::max<qint64>(0,snap.position100ns)/10000000.0,'f',7)};if(mediaInput_.endsWith(".ffconcat",Qt::CaseInsensitive))arguments<<"-safe"<<"0";arguments<<"-i"<<(mediaInput_.isEmpty()?source_:mediaInput_)<<"-map"<<QString("0:%1").arg(snap.selectedVideoStream);}
+    else arguments<<"-i"<<"pipe:0";
+    arguments<<"-frames:v"<<"1"<<"-vf"<<conversion+",format=gbrpf32le"<<"-pix_fmt"<<"gbrpf32le"<<"-f"<<"rawvideo"<<"pipe:1";
+    screenshotPending_=true;
     process->start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),arguments);
+    if(direct_)return;
     for(int plane=0;plane<4;++plane)if(!frame.planes[plane].isEmpty()){const int width=plane>0&&value<40?(frame.width+(1<<subW)-1)>>subW:frame.width;const int height=plane>0&&value<40?(frame.height+(1<<subH)-1)>>subH:frame.height;for(int y=0;y<height;++y)process->write(frame.planes[plane].constData()+y*frame.strides[plane],width*bytes);}process->closeWriteChannel();
 }
 }

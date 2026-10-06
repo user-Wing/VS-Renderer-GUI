@@ -14,12 +14,16 @@
 #include <QSettings>
 #include <QThread>
 #include <QColorSpace>
+#include <QPainter>
 #include <windows.h>
 #include <psapi.h>
 #include <dxgi.h>
 
 namespace vsr {
 void PlayerWindow::updateInfo() {
+    updateAlgorithmBadges();
+    static_cast<PlayerInfoPanel *>(info_)->setWidthLimit(settings_->value("info/audioDetailed",false).toBool() && !imageMode_?std::max(320,pane_->surface()->width()-524):0);
+    if(!infoVisible_ || imageMode_ || (discMenu_ && discMenu_->active()))audioInfo_->hidePanel();
     if(discMenu_ && discMenu_->active()){
         const auto programme=discMenu_->programme();
         if(infoVisible_)static_cast<PlayerInfoPanel *>(info_)->showText(tr("BD：%1\n渲染器：libVLC · 光盘导航/菜单合成\n位置：%2 s · 时长：%3 s\n输入视频：%4 × %5 · %6 fps\n视口：%7 × %8\n当前音轨：%9 · 当前字幕：%10\n章节：%11\n模式：%12\n处理链：菜单交互；正片识别后恢复所选滤镜").arg(source_).arg(position()/10000000.,0,'f',2).arg(discMenu_->duration()/10000000.,0,'f',2).arg(programme.value("width").toInt()).arg(programme.value("height").toInt()).arg(programme.value("fps").toDouble(),0,'f',3).arg(pane_->surface()->width()).arg(pane_->surface()->height()).arg(programme.value("audio").toInt()).arg(programme.value("subtitle").toInt()).arg(programme.value("chapters").toArray().size()).arg(discMenuNavigation_?tr("交互菜单 (方向键/Enter)"):tr("短节目")));
@@ -41,7 +45,7 @@ void PlayerWindow::updateInfo() {
              <<tr("图片渲染器：Qt Raster · 可见区域裁切 · SDR")
              <<tr("VS 滤镜：未启用 · 预解码：未启用")
              <<tr("CPU：%1 · GPU：%2 · 内存：%3 MiB").arg(usage_.processCpu>=0?QString::number(usage_.processCpu,'f',1)+"%":tr("采样中"),usage_.gpu>=0?QString::number(usage_.gpu,'f',1)+"%":tr("未提供")).arg(usage_.memoryMiB);
-        static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));info_->raise();return;
+        static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));info_->raise();if(fullscreenTitle_->isVisible())fullscreenTitle_->raise();return;
     }
     usage_=resources_.sample();
     const auto refreshed = QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();
@@ -150,6 +154,37 @@ void PlayerWindow::updateInfo() {
         if(videoStart>=0 && audioStart>videoStart){auto audioLines=lines.mid(audioStart,audioEnd-audioStart+1);lines=lines.mid(0,videoStart);lines<<tr("视频：无动态视频 · 音频模式")<<(audioMetadata_.cover.isNull()?tr("封面图片：无"):tr("封面图片：%1 × %2 · Qt Raster · 静态图片").arg(audioMetadata_.cover.width()).arg(audioMetadata_.cover.height()))<<tr("VS / 补帧 / 视频硬解：未启用")<<"";lines<<audioLines;lines<<tr("歌词：%1 · %2 行").arg(audioMetadata_.lyricSource.isEmpty()?tr("未提供"):audioMetadata_.lyricSource).arg(audioMetadata_.lyrics.size());}
         lines[1]=tr("当前时间：%1 · 时间轴：%2 / %3").arg(QDateTime::currentDateTime().toString("HH:mm:ss"),formatTime(at),formatTime(source.duration100ns));
     }
-    static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));info_->raise();
+    QStringList files{tr("源文件：%1").arg(source_)};
+    if(!preset_.isEmpty())files<<tr("预设：%1").arg(preset_);
+    if(!externalAudio_.isEmpty())files<<tr("外部音频：%1").arg(externalAudio_);
+    if(!externalSubtitle_.isEmpty())files<<tr("字幕 1：%1").arg(externalSubtitle_);
+    if(!externalSecondarySubtitle_.isEmpty())files<<tr("字幕 2：%1").arg(externalSecondarySubtitle_);
+    lines=files+lines;static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));info_->raise();
+    updateAudioInfo(audio,audioRate);
+    if(fullscreenTitle_->isVisible())fullscreenTitle_->raise();
+}
+void PlayerWindow::updateAudioInfo(const QJsonObject &audio,quint64 bitRate) {
+    if(!infoVisible_ || !settings_->value("info/audioDetailed",false).toBool()){audioInfo_->hidePanel();return;}
+    if(audio.isEmpty()){audioInfo_->hidePanel();return;}
+    ThreeFpAudioLevels input,output;const bool available=!lavAudio_ && clock_->audioLevels(input,true) && clock_->audioLevels(output,false);
+    QImage image(440,490,QImage::Format_ARGB32_Premultiplied);image.fill(Qt::transparent);QPainter p(&image);p.setFont(QFont(settings_->value("theme/latinFont","Comic Sans MS").toString(),10));p.setPen(QColor("#e8eaed"));
+    p.drawText(4,20,tr("音频 %1：%2 | %3").arg(lavAudio_?"DirectShow":"WASAPI",audio.value("codec").toString(),lavAudio_?tr("由后端协商"):audio.value("outputExclusive").toBool()?tr("独占"):tr("共享")));
+    p.drawText(4,46,tr("音频实时比特率：%1 kbps").arg(bitRate/1000));
+    const auto meters=[&](int y,const QString &label,const ThreeFpAudioLevels &levels,bool source){
+        p.setPen(QColor("#b7d9d2"));p.drawText(4,y,label);
+        const int channels=std::clamp(int(levels.channels),0,8);const int count=std::max(1,channels);const int spacing=430/count;
+        QStringList names=channels==1?QStringList{"M"}:channels==2?QStringList{"L","R"}:channels==6?QStringList{"L","R","C","LFE","BL","BR"}:channels==8?QStringList{"L","R","C","LFE","BL","BR","SL","SR"}:QStringList{};
+        if(source && audio.value("channelLayout").toString().contains("5.1(side)"))names={"L","R","C","LFE","SL","SR"};
+        for(int c=0;c<channels;++c){
+            const double db=20*std::log10(std::max(1e-6f,levels.values[c]));const int height=qRound(std::clamp((db+60)/60,0.,1.)*125);const QRect bar(4+c*spacing,y+14,spacing-12,150);
+            p.fillRect(bar,QColor(25,25,27));QLinearGradient gradient(bar.bottomLeft(),bar.topLeft());gradient.setColorAt(0,QColor("#628929"));gradient.setColorAt(.72,QColor("#b98a21"));gradient.setColorAt(1,QColor("#bd1616"));p.fillRect(QRect(bar.left(),bar.top()+125-height,bar.width(),height),gradient);
+            p.setPen(QColor("#e8eaed"));p.drawText(bar.adjusted(0,125,0,0),Qt::AlignCenter,names.value(c,QString::number(c+1)));p.drawText(QRect(bar.left()-3,bar.bottom()+4,spacing-5,20),Qt::AlignCenter,levels.values[c]<=0?QString("−∞"):QString::number(db,'f',1));
+        }
+    };
+    const auto format=audio.value("sampleFormat").toString();const int bits=format.startsWith("u8")?8:format.startsWith("s16")?16:format.startsWith("s64")||format.startsWith("dbl")?64:32;
+    meters(76,tr("输入：%1 Hz | %2 bit %3 | %4 声道").arg(audio.value("sampleRate").toInt()).arg(bits).arg(format.contains("flt")||format.contains("dbl")?tr("浮点"):"PCM").arg(audio.value("channels").toInt()),input,true);
+    meters(282,tr("输出：%1 Hz | %2 bit %3 | %4 声道").arg(audio.value("outputSampleRate").toInt()).arg(audio.value("outputValidBitsPerSample").toInt()).arg(audio.value("outputFloat").toBool()?tr("浮点"):"PCM").arg(audio.value("outputChannels").toInt()),output,false);
+    p.setPen(QColor("#c4c8d1"));p.drawText(4,487,available?tr("声道峰值电平 (dBFS)，输入为混音前 PCM"):tr("当前音频后端未提供电平读数"));p.end();
+    audioInfo_->showText(QString(20,'\n')+QString(65,' '));audioInfo_->showAudioPixmap(QPixmap::fromImage(image));audioInfo_->setVisible(info_->isVisible());
 }
 }

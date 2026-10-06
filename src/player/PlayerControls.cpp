@@ -109,7 +109,7 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     videoBadge_ = badge("—"); audioBadge_ = badge("—");
     decoderBadge_ = new QPushButton("3FP-HW", this); decoderBadge_->setObjectName("playerDecoder"); decoderBadge_->setToolTip(tr("切换 3FP 硬件 / 软件解码")); row->addWidget(decoderBadge_);
     connect(decoderBadge_, &QPushButton::clicked, this, [this] { if (lavVideo_) { showSettings(); return; } const auto current=source_.isEmpty()?settings_->value("decode/mode",2).toUInt():clock_->snapshot().decodeMode;const auto mode = current == 2 ? 1u : 2u; if (clock_->setDecodeMode(mode)) {settings_->setValue("decode/mode",mode);if(!source_.isEmpty())openFile(source_);} });
-    hdrBadge_ = badge("SDR"); rendererBadge_ = badge("VS"); row->addStretch();
+    hdrBadge_ = badge("SDR"); rendererBadge_ = badge("VS");algorithmBadge_=badge("Jinc");algorithmBadge_->setObjectName("playerAlgorithm");algorithmBadge_->setToolTip(tr("算法"));interpolationBadge_=badge({});interpolationBadge_->setObjectName("playerInterpolationAlgorithm");interpolationBadge_->setToolTip(tr("补帧算法"));interpolationBadge_->hide();row->addStretch();
     auto *menuButton = button("☰", tr("打开、预设与设置"), [] {});
     auto *menu = new QMenu(menuButton);
     menu->addAction(tr("打开视频…"), this, &PlayerWindow::chooseFiles);

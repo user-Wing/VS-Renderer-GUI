@@ -209,6 +209,7 @@ VsrColorStatus ThreeFpPlayer::colorStatus() const {
 bool ThreeFpPlayer::setOutputFormat(const QString &format) { outputFormat_=format; return handle_ && check(api_.setExternalOutputFormat(handle_,format.toUtf8().constData()),QStringLiteral("输出像素格式")); }
 void ThreeFpPlayer::setAntiRinging(bool enabled) { antiRinging_=enabled; setScalingAlgorithms(upscale_,downscale_); }
 QImage ThreeFpPlayer::capture() const { const auto size=surface_->size()*surface_->devicePixelRatioF(); return handle_ ? api_.capture(handle_,size.width(),size.height()) : QImage(); }
+QImage ThreeFpPlayer::captureFloat() const { const auto size=surface_->size()*surface_->devicePixelRatioF(); return handle_ ? api_.captureFloat(handle_,size.width(),size.height()) : QImage(); }
 bool ThreeFpPlayer::setSubtitle(const QImage &image) {
     TimedTextCommand command; command.width=image.width(); command.height=image.height(); command.bitmap=image.constBits(); command.bitmapWidth=image.width(); command.bitmapHeight=image.height(); command.bitmapStride=image.bytesPerLine(); command.bitmapBytes=static_cast<uint32_t>(image.sizeInBytes()); command.contentId=++subtitleSequence_;
     TimedTextLayer layer; layer.width=image.width(); layer.height=image.height(); layer.count=image.isNull()?0:1; layer.sequence=subtitleSequence_; layer.commands=&command;
@@ -280,5 +281,7 @@ bool ThreeFpPlayer::check(ThreeFpResult result, const QString &operation)
     emit errorOccurred(lastError_);
     return false;
 }
+
+bool ThreeFpPlayer::audioLevels(ThreeFpAudioLevels &levels,bool input) const {return handle_ && api_.audioLevels(handle_,&levels,input)==ThreeFpResult::Success;}
 
 }
