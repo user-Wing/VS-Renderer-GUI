@@ -16,6 +16,12 @@ ThreeFpApi::ThreeFpApi()
 
     library_.setFileName(path);
     library_.setLoadHints(QLibrary::ResolveAllSymbolsHint | QLibrary::PreventUnloadHint);
+}
+
+void ThreeFpApi::initialize()
+{
+    if (initialized_) return;
+    initialized_ = true;
     if (!library_.load()) {
         error_ = QStringLiteral("无法加载 3FP：%1").arg(library_.errorString());
         return;
@@ -43,6 +49,7 @@ ThreeFpApi::ThreeFpApi()
     ok &= resolve(destroy_, "FFF3FP_Destroy");
     selectAudio_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SelectAudioStream"));
     setClockOnly_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SetClockOnly"));
+    setSoftwarePreScale_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SetSoftwarePreScale"));
     loadExternalAudio_ = reinterpret_cast<ExternalAudioFn>(library_.resolve("FFF3FP_LoadExternalAudio"));
     clearExternalAudio_ = reinterpret_cast<HandleFn>(library_.resolve("FFF3FP_ClearExternalAudio"));
     setAudioEffects_ = reinterpret_cast<EffectsFn>(library_.resolve("FFF3FP_SetAudioEffects"));
@@ -71,7 +78,7 @@ bool ThreeFpApi::resolve(T &target, const char *name)
     return false;
 }
 
-bool ThreeFpApi::available() const { return library_.isLoaded() && error_.isEmpty(); }
+bool ThreeFpApi::available() const { const_cast<ThreeFpApi *>(this)->initialize();return library_.isLoaded() && error_.isEmpty(); }
 QString ThreeFpApi::libraryPath() const { return QFileInfo(library_.fileName()).absoluteFilePath(); }
 QString ThreeFpApi::errorString() const { return error_; }
 std::uint32_t ThreeFpApi::apiVersion() const { return available() ? getApiVersion_() : 0; }
@@ -81,6 +88,7 @@ ThreeFpResult ThreeFpApi::open(void *h, const char *p) const { return available(
 ThreeFpResult ThreeFpApi::play(void *h) const { return available() ? play_(h) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::pause(void *h) const { return available() ? pause_(h) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setClockOnly(void *h,bool enabled) const { return setClockOnly_?setClockOnly_(h,enabled?1:0):ThreeFpResult::NotSupported; }
+ThreeFpResult ThreeFpApi::setSoftwarePreScale(void *h,int height) const { return setSoftwarePreScale_?setSoftwarePreScale_(h,height):ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::stop(void *h) const { return available() ? stop_(h) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::seek(void *h, std::int64_t p) const { return available() ? seek_(h, p) : ThreeFpResult::NativeFailure; }
 QString ThreeFpApi::sessionError(void *h) const {if(!h || !sessionError_)return {};char text[4096]{};std::uint32_t size=0;return sessionError_(h,text,sizeof(text),&size)==ThreeFpResult::Success?QString::fromUtf8(text):QString();}

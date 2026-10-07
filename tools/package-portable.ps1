@@ -7,6 +7,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $program = (Resolve-Path -LiteralPath $ProgramDirectory).Path
+$editor = Join-Path $program 'runtime/photocraft'
+if (-not (Test-Path -LiteralPath (Join-Path $editor 'photocraft.exe'))) { throw 'Build and deploy the pinned PhotoCraft runtime before packaging' }
+$editorSize = (Get-ChildItem -LiteralPath $editor -File | Measure-Object Length -Sum).Sum
+if ($editorSize -gt 45000000) { throw "PhotoCraft runtime exceeds the 45 MB budget: $editorSize bytes" }
 $builtinSource = if ($BuiltinDirectory) { (Resolve-Path -LiteralPath $BuiltinDirectory).Path } else { Join-Path $program 'vpy/builtin' }
 $version = [regex]::Match((Get-Content -LiteralPath (Join-Path $root 'CMakeLists.txt') -Raw), 'project\(VSRenderer VERSION ([0-9.]+)').Groups[1].Value
 if (-not $version) { throw 'Project version not found' }
@@ -20,7 +24,7 @@ if (Test-Path -LiteralPath $payload) { throw 'Release staging directory already 
 if (Test-Path -LiteralPath $archive) { throw 'Archive already exists; do not silently update an existing archive.' }
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 # Construct a clean distribution, retaining the live installation's settings and user files.
-$excludedDirectories = @('cache', (Join-Path $program 'data'), 'shader-cache', 'screenshots', 'vpy', '__pycache__', '.git', '.deps', 'temp', 'logs')
+$excludedDirectories = @('cache', (Join-Path $program 'data'), 'PhotoCraftData', 'shader-cache', 'screenshots', 'vpy', '__pycache__', '.git', '.deps', 'temp', 'logs')
 if ($Edition -eq 'Lite') {
     $excludedDirectories += @((Join-Path $program 'LAVFilters64'), (Join-Path $program 'madVR09217'), (Join-Path $program 'runtime/mkvtoolnix'))
 }

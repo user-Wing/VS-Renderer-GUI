@@ -195,6 +195,7 @@ public:
     ThreeFpResult play(void *handle) const;
     ThreeFpResult pause(void *handle) const;
     ThreeFpResult setClockOnly(void *handle, bool enabled) const;
+    ThreeFpResult setSoftwarePreScale(void *handle, int height) const;
     ThreeFpResult stop(void *handle) const;
     ThreeFpResult seek(void *handle, std::int64_t position100ns) const;
     ThreeFpResult seekFrame(void *handle, std::int64_t frame) const;
@@ -229,6 +230,8 @@ public:
     static QString resultText(ThreeFpResult result);
 
 private:
+    void initialize();
+    bool initialized_ = false;
     template<typename T> bool resolve(T &target, const char *name);
 
     QLibrary library_;
@@ -246,6 +249,7 @@ private:
     using EffectsFn = ThreeFpResult (*)(void *, std::uint32_t, const float *, float, std::int64_t);
     StepFn selectAudio_ = nullptr;
     StepFn setClockOnly_ = nullptr;
+    StepFn setSoftwarePreScale_ = nullptr;
     ExternalAudioFn loadExternalAudio_ = nullptr;
     HandleFn clearExternalAudio_ = nullptr;
     EffectsFn setAudioEffects_ = nullptr;

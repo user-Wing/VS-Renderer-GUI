@@ -211,7 +211,7 @@ struct VapourSynthFrameServer::Impl {
     ~Impl() { clearScript(); }
 };
 
-VapourSynthFrameServer::VapourSynthFrameServer(QObject *parent)
+VapourSynthFrameServer::VapourSynthFrameServer(QObject *parent, bool initializeNow)
     : QObject(parent), impl_(std::make_unique<Impl>()), worker_(new QObject)
 {
     qRegisterMetaType<VapourSynthFrame>();
@@ -221,7 +221,13 @@ VapourSynthFrameServer::VapourSynthFrameServer(QObject *parent)
     connect(&workerThread_, &QThread::finished, worker_, &QObject::deleteLater);
     workerThread_.setObjectName(QStringLiteral("VapourSynthFrameServer"));
     workerThread_.start();
-
+    initializing_ = false;
+    if (initializeNow) initialize();
+}
+void VapourSynthFrameServer::initialize()
+{
+    if (initializationStarted_) return;
+    initializationStarted_ = true;initializing_ = true;
     if (libraryPath_.isEmpty()) {
         initError_ = QStringLiteral("内置 VapourSynth 运行时不完整：未发现 VSScript.dll。请重新构建或解压完整程序包。");
         initializing_ = false;

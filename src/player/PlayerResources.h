@@ -5,7 +5,7 @@ struct ResourceUsage { double cpu = -1, processCpu = -1, gpu = -1, ram = -1, vra
 class PlayerResources final {
 public:
     PlayerResources(); ~PlayerResources();
-    ResourceUsage sample();
+    ResourceUsage sample(bool detailed = true);
 private:
     struct Impl; std::unique_ptr<Impl> impl_;
 };

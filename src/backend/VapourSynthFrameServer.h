@@ -41,7 +41,8 @@ struct VapourSynthFrame {
 class VapourSynthFrameServer final : public QObject {
     Q_OBJECT
 public:
-    explicit VapourSynthFrameServer(QObject *parent = nullptr);
+    explicit VapourSynthFrameServer(QObject *parent = nullptr, bool initializeNow = true);
+    void initialize();
     ~VapourSynthFrameServer() override;
 
     bool available() const;
@@ -69,6 +70,7 @@ private:
     QString initError_;
     bool available_ = false;
     bool initializing_ = true;
+    bool initializationStarted_ = false;
     std::atomic<quint64> scriptGeneration_{0};
     std::atomic<int> desiredFrame_{-1};
     std::atomic_bool frameRequestScheduled_{false};

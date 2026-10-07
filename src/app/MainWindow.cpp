@@ -1,7 +1,6 @@
 #include "app/MainWindow.h"
 
 #include "backend/FrameTimeline.h"
-#include "backend/StartupWarmup.h"
 #include "ui/ExportWindow.h"
 #include "ui/AnalysisPage.h"
 #include "bluray/BlurayWidget.h"
@@ -202,24 +201,22 @@ MainWindow::MainWindow(QWidget *parent)
 
     sourcePlayer_ = std::make_unique<ThreeFpPlayer>(api_, sourcePane_->surface(), this);
     processedPlayer_ = std::make_unique<ThreeFpPlayer>(api_, processedPane_->surface(), this);
-    frameServer_ = std::make_unique<VapourSynthFrameServer>(this);
+    sourcePlayer_->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(7),static_cast<ThreeFpScalingAlgorithm>(7));
+    processedPlayer_->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(7),static_cast<ThreeFpScalingAlgorithm>(7));
+    frameServer_ = std::make_unique<VapourSynthFrameServer>(this,false);
 
     processedPlayer_->setMuted(true);
 
-    runtimeStatus_->setText(QStringLiteral("预热中"));
+    runtimeStatus_->setText(QStringLiteral("就绪"));
     runtimeStatus_->setToolTip(QStringLiteral("3FP: %1\nVSScript: %2")
-        .arg(api_.available() ? api_.libraryPath() : api_.errorString(),
-             frameServer_->available() ? frameServer_->libraryPath() : frameServer_->errorString()));
-    const bool runtimesReady = api_.available() && frameServer_->available();
-    setStatus(runtimesReady ? QStringLiteral("就绪；打开源并点击“渲染预览”。")
-                            : QStringLiteral("%1 %2").arg(api_.errorString(), frameServer_->errorString()), !runtimesReady);
+        .arg(api_.libraryPath(), frameServer_->libraryPath()));
+    setStatus(QStringLiteral("就绪；打开源并点击“渲染预览”。"));
 
     connectPlayback();
     populateCatalog();
 
     connect(frameServer_.get(), &VapourSynthFrameServer::scriptLoaded, this,
             [this](const VapourSynthClipInfo &processed, const VapourSynthClipInfo &source) {
-        if (startupWarmup_ && startupWarmup_->ownsScript()) return;
         vsScriptReady_ = true;
         sourceTotalFrames_ = source.totalFrames;
         sourceFpsNumerator_ = source.fpsNumerator;
@@ -242,7 +239,6 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(frameServer_.get(), &VapourSynthFrameServer::frameReady, this,
             [this](const VapourSynthFrame &frame) {
-        if (startupWarmup_ && startupWarmup_->ownsScript()) return;
         vsFramePending_ = false;
         if (timelineSeekPending_ || requestedVsFrame_ < 0 || frame.frameIndex != requestedVsFrame_)
             return;
@@ -274,7 +270,6 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(frameServer_.get(), &VapourSynthFrameServer::errorOccurred, this,
             [this](const QString &message) {
-        if (startupWarmup_ && startupWarmup_->ownsScript()) return;
         vsScriptReady_ = false;
         vsFramePending_ = false;
         processedPane_->setPlaceholderText(message);
@@ -288,36 +283,10 @@ MainWindow::MainWindow(QWidget *parent)
     stateTimer_->setInterval(33);
     connect(stateTimer_, &QTimer::timeout, this, &MainWindow::updatePlaybackState);
     stateTimer_->start();
-    startupWarmup_ = std::make_unique<StartupWarmup>(sourcePlayer_.get(), processedPlayer_.get(), frameServer_.get(), this);
-    auto *warmupProgress = new QProgressBar(this);
-    warmupProgress->setRange(0, 100);
-    warmupProgress->setFixedWidth(180);
-    statusBar()->addPermanentWidget(warmupProgress);
-    connect(startupWarmup_.get(), &StartupWarmup::progress, this, [this, warmupProgress](int value, const QString &stage) {
-        warmupProgress->setValue(value);
-        warmupProgress->setToolTip(stage);
-        runtimeStatus_->setText(QStringLiteral("预热中"));
-        runtimeStatus_->setToolTip(stage);
-        if (value == 100) warmupProgress->hide();
-    });
-    connect(startupWarmup_.get(), &StartupWarmup::finished, this, [this](bool success, const QString &message) {
-        runtimeStatus_->setText(success ? QStringLiteral("已预热") : QStringLiteral("预热中"));
-        runtimeStatus_->setToolTip(message);
-        primedProcessedOutput_ = success;
-        sourcePane_->setSurfaceActive(false);
-        processedPane_->setSurfaceActive(false);
-        sourcePane_->setBadge(QStringLiteral("Fit"));
-        processedPane_->setBadge(QStringLiteral("VS · 待渲染"));
-        setStatus(message, !success);
-        if (!deferredSource_.isEmpty()) loadSource(std::exchange(deferredSource_, {}));
-    });
-    QTimer::singleShot(0, this, [this] {
-        sourcePane_->setSurfaceActive(true);
-        processedPane_->setSurfaceActive(true);
-        sourcePane_->setBadge(QStringLiteral("启动预热中"));
-        processedPane_->setBadge(QStringLiteral("启动预热中"));
-        setStatus(QStringLiteral("正在预热解码、VS 源滤镜和双路渲染…"));
-        startupWarmup_->start();
+    connect(frameServer_.get(), &VapourSynthFrameServer::initialized, this, [this](bool ok) {
+        if (!pendingPreview_) return;
+        pendingPreview_ = false;
+        if (ok) validateScript();else setStatus(frameServer_->errorString(),true);
     });
 }
 
@@ -638,7 +607,7 @@ QWidget *MainWindow::buildWorkspace()
     compareLayout->setContentsMargins(8, 2, 8, 2);
     compareLayout->setSpacing(12);
     compareLayout->addWidget(new QLabel(QStringLiteral("双路对比 · 左侧播放时钟 / 右侧 VS 同帧"), compareBar));
-    runtimeStatus_ = new QLabel(QStringLiteral("预热中"), compareBar);
+    runtimeStatus_ = new QLabel(QStringLiteral("就绪"), compareBar);
     runtimeStatus_->setObjectName(QStringLiteral("rendererWarmupState"));
     runtimeStatus_->setStyleSheet(QStringLiteral("color:#5c5c5c;border:0;"));
     compareLayout->addWidget(runtimeStatus_);
@@ -708,7 +677,9 @@ QWidget *MainWindow::buildTransport()
     scaler->addItem(QStringLiteral("放大：Spline36"), static_cast<int>(ThreeFpScalingAlgorithm::Spline36));
     scaler->addItem(QStringLiteral("放大：Super-XBR(单阶段)"), static_cast<int>(ThreeFpScalingAlgorithm::SuperXbrSinglePass));
     scaler->addItem(QStringLiteral("放大：Lanczos 4"), static_cast<int>(ThreeFpScalingAlgorithm::Lanczos4));
-    scaler->setToolTip(QStringLiteral("仅超过源像素密度后使用所选算法；缩小固定使用 Lanczos 3。"));
+    scaler->addItem(QStringLiteral("缩放：D3D11 原生直通"),7);
+    scaler->setCurrentIndex(scaler->count()-1);
+    scaler->setToolTip(QStringLiteral("D3D11 使用与播放器相同的原生直通；其他算法的缩小使用 Lanczos 3。"));
     auto *frameControls = new QWidget(transport);
     frameControls->setObjectName(QStringLiteral("rendererFrameControls"));
     auto *frames = new QHBoxLayout(frameControls);
@@ -753,11 +724,11 @@ QWidget *MainWindow::buildTransport()
     });
     connect(scaler, &QComboBox::currentIndexChanged, this, [this, scaler] {
         const auto upscale = static_cast<ThreeFpScalingAlgorithm>(scaler->currentData().toInt());
-        const bool left = sourcePlayer_->setScalingAlgorithms(upscale, ThreeFpScalingAlgorithm::Lanczos3);
-        const bool right = processedPlayer_->setScalingAlgorithms(upscale, ThreeFpScalingAlgorithm::Lanczos3);
+        const auto downscale = scaler->currentData().toInt()==7 ? upscale : ThreeFpScalingAlgorithm::Lanczos3;
+        const bool left = sourcePlayer_->setScalingAlgorithms(upscale, downscale);
+        const bool right = processedPlayer_->setScalingAlgorithms(upscale, downscale);
         setStatus(left && right
-            ? QStringLiteral("放大算法已切换为 %1；缩小保持 Lanczos 3。")
-                .arg(scaler->currentText().section(QStringLiteral("："), 1))
+            ? QStringLiteral("缩放算法：%1").arg(scaler->currentText().section(QStringLiteral("："), 1))
             : QStringLiteral("3FP 缩放算法切换失败。"), !(left && right));
     });
     return transport;
@@ -874,11 +845,6 @@ bool MainWindow::loadSource(const QString &path)
         setStatus(QStringLiteral("源文件不存在：%1").arg(path), true);
         return false;
     }
-    if (startupWarmup_ && startupWarmup_->isRunning()) {
-        deferredSource_ = path;
-        setStatus(QStringLiteral("已接收视频，启动预热结束后自动加载。"));
-        return true;
-    }
     sourcePath_->setText(QDir::toNativeSeparators(path));
     sourcePath_->setToolTip(path);
     if (exportWindow_) exportWindow_->setCurrentSource(path);
@@ -940,10 +906,8 @@ void MainWindow::showScript()
 
 void MainWindow::validateScript()
 {
-    if (startupWarmup_ && startupWarmup_->isRunning()) {
-        setStatus(QStringLiteral("启动链路正在预热，完成后可渲染预览。"));
-        return;
-    }
+    frameServer_->initialize();
+    if (frameServer_->initializing()) {pendingPreview_=true;setStatus(QStringLiteral("正在初始化 VS / Python…"));return;}
     QString error;
     const QString path = writePreviewScript(&error);
     if (path.isEmpty()) {
@@ -968,14 +932,13 @@ void MainWindow::validateScript()
     processedPane_->setSurfaceActive(true);
     processedPane_->setBadge(QStringLiteral("VS · 加载中"));
     setStatus(QStringLiteral("正在通过 VSScript 载入处理链…"));
-    if (!std::exchange(primedProcessedOutput_, false) && !processedPlayer_->resetVideoOutput()) {
+    if (!processedPlayer_->resetVideoOutput()) {
         processedPane_->setSurfaceActive(false);
         processedPane_->setPlaceholderText(processedPlayer_->lastError());
         setStatus(processedPlayer_->lastError(), true);
         return;
     }
     processedPlayer_->setMuted(true);
-    if (startupWarmup_) startupWarmup_->releaseScript();
     frameServer_->loadScript(result.script, path);
 }
 
@@ -1145,7 +1108,7 @@ void MainWindow::openProject()
 
 void MainWindow::updatePlaybackState()
 {
-    if (!sourcePlayer_ || sourcePath_->text().isEmpty() || (startupWarmup_ && startupWarmup_->isRunning()))
+    if (!sourcePlayer_ || sourcePath_->text().isEmpty())
         return;
     const auto snap = sourcePlayer_->snapshot();
     if (sourcePrimePending_ && snap.state != ThreeFpState::Opening) {

@@ -14,12 +14,12 @@ namespace { quint64 ticks(FILETIME value) { ULARGE_INTEGER n{}; n.LowPart=value.
 struct PlayerResources::Impl {
     PDH_HQUERY query = nullptr; PDH_HCOUNTER gpu = nullptr;
     quint64 lastSystem = 0, lastIdle = 0, lastProcess = 0;
-    Impl() { if (PdhOpenQueryW(nullptr,0,&query)==ERROR_SUCCESS) { PdhAddEnglishCounterW(query,L"\\GPU Engine(*)\\Utilization Percentage",0,&gpu); PdhCollectQueryData(query); } }
+    void initialize() { if (!query && PdhOpenQueryW(nullptr,0,&query)==ERROR_SUCCESS) { PdhAddEnglishCounterW(query,L"\\GPU Engine(*)\\Utilization Percentage",0,&gpu); PdhCollectQueryData(query); } }
     ~Impl() { if(query) PdhCloseQuery(query); }
 };
 PlayerResources::PlayerResources():impl_(std::make_unique<Impl>()) {}
 PlayerResources::~PlayerResources() = default;
-ResourceUsage PlayerResources::sample() {
+ResourceUsage PlayerResources::sample(bool detailed) {
     ResourceUsage out; auto &i=*impl_; FILETIME idle{},kernel{},user{},created{},ended{},pk{},pu{};
     if(GetSystemTimes(&idle,&kernel,&user) && GetProcessTimes(GetCurrentProcess(),&created,&ended,&pk,&pu)) {
         const auto total=ticks(kernel)+ticks(user), process=ticks(pk)+ticks(pu), id=ticks(idle);
@@ -28,6 +28,8 @@ ResourceUsage PlayerResources::sample() {
     }
     MEMORYSTATUSEX memory{}; memory.dwLength=sizeof(memory); GlobalMemoryStatusEx(&memory); out.ram=memory.dwMemoryLoad; out.totalMemoryMiB=memory.ullTotalPhys/1048576;
     PROCESS_MEMORY_COUNTERS process{}; process.cb=sizeof(process); if(GetProcessMemoryInfo(GetCurrentProcess(),&process,sizeof(process))) out.memoryMiB=process.WorkingSetSize/1048576;
+    if (!detailed) return out;
+    i.initialize();
     if(i.query && i.gpu && PdhCollectQueryData(i.query)==ERROR_SUCCESS) {
         DWORD bytes=0,count=0;
         if(PdhGetFormattedCounterArrayW(i.gpu,PDH_FMT_DOUBLE,&bytes,&count,nullptr)==PDH_MORE_DATA) {

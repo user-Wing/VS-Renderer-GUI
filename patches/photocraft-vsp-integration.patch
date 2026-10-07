@@ -1,0 +1,442 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index df5fdce..1f6e9b8 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -70,6 +70,11 @@ opt-level = 1
+ lto = "thin"
+ codegen-units = 1
+ 
++# Native VSP portable component: keep the size profile's pixel-crate overrides and unwinding.
++[profile.vsp-release]
++inherits = "wasm-release"
++strip = "symbols"
++
+ # The browser build (apps/photocraft-web, `data-cargo-profile` in its index.html). Hosts cap the
+ # size of a single file (Cloudflare Pages/Workers: 25 MiB), and the wasm is downloaded on every
+ # visit, so this profile optimizes for size: fat LTO, and opt-level "s" for everything except the
+diff --git a/apps/photocraft/src/main.rs b/apps/photocraft/src/main.rs
+index 45a2d84..baa5661 100644
+--- a/apps/photocraft/src/main.rs
++++ b/apps/photocraft/src/main.rs
+@@ -29,6 +29,8 @@ mod gpu_startup;
+ mod linux_libs;
+ mod monitor_profile;
+ mod services;
++#[cfg(windows)]
++mod vsp_pipe;
+ // Windows gets pen pressure from winit (WM_POINTER); the web runner has its own listener.
+ #[cfg(any(target_os = "macos", target_os = "linux", test))]
+ mod tablet;
+@@ -69,6 +71,8 @@ fn main() -> eframe::Result {
+     let mut automation_write_root = std::env::var_os("PHOTOCRAFT_AUTOMATION_WRITE_ROOT").map(std::path::PathBuf::from);
+     let mut files = Vec::new();
+     let mut safe_gpu = false;
++    #[cfg(windows)]
++    let mut vsp_pipe = None;
+     let mut args = std::env::args().skip(1);
+     while let Some(a) = args.next() {
+         match a.as_str() {
+@@ -78,6 +82,8 @@ fn main() -> eframe::Result {
+             "--automation-read-root" => automation_read_root = args.next().map(std::path::PathBuf::from),
+             "--automation-write-root" => automation_write_root = args.next().map(std::path::PathBuf::from),
+             "--safe-gpu" => safe_gpu = true,
++            #[cfg(windows)]
++            "--vsp-pipe" => vsp_pipe = args.next(),
+             "--version" => {
+                 println!("photocraft {}", photocraft_engine::build_info::long_version());
+                 return Ok(());
+@@ -234,6 +240,10 @@ fn main() -> eframe::Result {
+             #[cfg(target_os = "linux")]
+             tablet::spawn_x11(&app.stylus.feed, tablet::DisplayKind::of(cc));
+             // Paths on the command line (Linux/Windows file associations, `photocraft a.psd`).
++            #[cfg(windows)]
++            if let Some(name) = vsp_pipe {
++                app.services.os_events = Some(vsp_pipe::connect(name, &cc.egui_ctx));
++            }
+             app.open_paths(&files);
+             // Portable marker found but its data folder isn't writable (#228): say where settings went.
+             if let Some(w) = &app_dirs::current().warning {
+diff --git a/apps/photocraft/src/vsp_pipe.rs b/apps/photocraft/src/vsp_pipe.rs
+new file mode 100644
+index 0000000..04f5a8d
+--- /dev/null
++++ b/apps/photocraft/src/vsp_pipe.rs
+@@ -0,0 +1,46 @@
++//! Private, user-only Windows named pipe owned by the launching VSP instance.
++//! Closing VSP disconnects the pipe, leaving the editor's unsaved documents intact.
++use photocraft_ui_egui::{OsEvent, OsEventsFn};
++use std::io::{BufRead, BufReader};
++
++pub fn connect(name: String, ctx: &egui::Context) -> OsEventsFn {
++    let (tx, rx) = std::sync::mpsc::channel();
++    let ctx = ctx.clone();
++    std::thread::spawn(move || {
++        let file = match std::fs::OpenOptions::new().read(true).write(true).open(&name) {
++            Ok(file) => file,
++            Err(e) => {
++                log::error!("VSP pipe {name}: {e}");
++                return;
++            }
++        };
++        for line in BufReader::new(file).lines() {
++            let Ok(line) = line else { break };
++            if let Some(path) = open_path(&line) {
++                if tx.send(OsEvent::Open(vec![path])).is_err() {
++                    break;
++                }
++                ctx.request_repaint();
++            }
++        }
++    });
++    Box::new(move || rx.try_iter().collect())
++}
++
++fn open_path(line: &str) -> Option<String> {
++    let value: serde_json::Value = serde_json::from_str(line).ok()?;
++    let path = value.get("open")?.as_str()?;
++    (std::path::Path::new(path).is_absolute() && !path.contains('\0')).then(|| path.to_string())
++}
++
++#[cfg(test)]
++mod tests {
++    #[test]
++    fn accepts_unicode_absolute_paths_only() {
++        let path = std::env::temp_dir().join("中文 folder/image.png").to_string_lossy().into_owned();
++        assert_eq!(super::open_path(&serde_json::json!({"open": path}).to_string()), Some(path));
++        for line in ["{}", "{", r#"{"open":"../x"}"#, r#"{"open":3}"#] {
++            assert!(super::open_path(line).is_none());
++        }
++    }
++}
+diff --git a/crates/engine/src/jobs.rs b/crates/engine/src/jobs.rs
+index 1ec15f0..412308d 100644
+--- a/crates/engine/src/jobs.rs
++++ b/crates/engine/src/jobs.rs
+@@ -413,6 +413,44 @@ impl Session {
+             false,
+             move |ctx| {
+                 ctx.progress(0.0, "Reading");
++                #[cfg(not(target_arch = "wasm32"))]
++                if let OpenSource::Path(ref p) = source {
++                    let mut exchange = p.ends_with(".vspimage").then(|| p.clone());
++                    if exchange.is_none()
++                        && p.to_ascii_lowercase().ends_with(".png")
++                        && std::fs::metadata(p).is_ok_and(|m| m.len() >= 256 << 20)
++                        && let Some(program) = std::env::var_os("VSP_IMAGE_IMPORTER")
++                    {
++                        let stamp =
++                            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| EngineError::Other(e.to_string()))?.as_nanos();
++                        let manifest = std::env::temp_dir().join(format!("vsp-image-{}-{stamp}.vspimage", std::process::id()));
++                        let mut child = std::process::Command::new(program)
++                            .args(["--photocraft-import", p])
++                            .arg(&manifest)
++                            .spawn()
++                            .map_err(|e| EngineError::Other(e.to_string()))?;
++                        loop {
++                            if ctx.cancelled() {
++                                let _ = child.kill();
++                                let _ = child.wait();
++                                return Err(EngineError::Cancelled);
++                            }
++                            if let Some(status) = child.try_wait().map_err(|e| EngineError::Other(e.to_string()))? {
++                                if !status.success() {
++                                    return Err(EngineError::Other("VSP large-image decoding failed".into()));
++                                }
++                                break;
++                            }
++                            std::thread::sleep(std::time::Duration::from_millis(50));
++                        }
++                        exchange = Some(manifest.to_string_lossy().into_owned());
++                    }
++                    if let Some(path) = exchange {
++                        return ctx
++                            .stage(0.0, 1.0, "Importing VSP tiles", |ctl| photocraft_io::vsp_image::import(&path, ctl))
++                            .map_err(|e| EngineError::Other(e.to_string()));
++                    }
++                }
+                 let bytes = match source {
+                     OpenSource::Bytes(b) => b,
+                     OpenSource::Path(p) => Arc::new(read_path(&p)?),
+diff --git a/crates/io/src/lib.rs b/crates/io/src/lib.rs
+index be7d50b..cf49317 100644
+--- a/crates/io/src/lib.rs
++++ b/crates/io/src/lib.rs
+@@ -41,6 +41,8 @@ pub mod slices_map;
+ pub mod smart_map;
+ pub mod text_styles_map;
+ pub mod vector_map;
++#[cfg(not(target_arch = "wasm32"))]
++pub mod vsp_image;
+ 
+ use photocraft_codecs::{CodecError, EncodeOptions};
+ use photocraft_doc::Document;
+diff --git a/crates/io/src/vsp_image.rs b/crates/io/src/vsp_image.rs
+new file mode 100644
+index 0000000..1346058
+--- /dev/null
++++ b/crates/io/src/vsp_image.rs
+@@ -0,0 +1,96 @@
++//! Band-streamed VSP image exchange. No full-size encoded or decoded intermediate buffer.
++use std::io::Read;
++use std::sync::Arc;
++
++use photocraft_color::{ColorMode, PixelFormat, SampleType};
++use photocraft_doc::{Document, Layer, LayerContent};
++use photocraft_geom::{Rect, Size};
++use photocraft_raster::{Interrupt, Surface};
++
++use crate::{ImportResult, IoError};
++
++pub fn import(path: &str, ctl: &Interrupt) -> Result<ImportResult, IoError> {
++    let fail = |e: std::io::Error| IoError::Unsupported(e.to_string());
++    let manifest_file = std::fs::File::open(path).map_err(fail)?;
++    let mut bytes = Vec::new();
++    manifest_file.take(65537).read_to_end(&mut bytes).map_err(fail)?;
++    if bytes.len() > 65536 {
++        return Err(IoError::Unsupported("VSP manifest too large".into()));
++    }
++    let manifest: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| IoError::Unsupported(e.to_string()))?;
++    let number = |key: &str| {
++        manifest.get(key).and_then(|v| v.as_u64()).and_then(|v| u32::try_from(v).ok()).ok_or_else(|| IoError::Unsupported(format!("Invalid VSP {key}")))
++    };
++    let (w, h, bits) = (number("width")?, number("height")?, number("bits")?);
++    if number("version")? != 1 || w == 0 || h == 0 || w > 300000 || h > 300000 {
++        return Err(IoError::Unsupported("Invalid VSP dimensions/version".into()));
++    }
++    let depth = match bits {
++        8 => SampleType::U8,
++        16 => SampleType::U16,
++        32 => SampleType::F32,
++        _ => return Err(IoError::Unsupported("Invalid VSP depth".into())),
++    };
++    let row = u64::from(w) * u64::from(bits / 8) * 4;
++    let total = row * u64::from(h);
++    if total > 16 << 30 {
++        return Err(IoError::Unsupported("VSP image exceeds 16 GiB".into()));
++    }
++    let mut file = std::fs::File::open(format!("{path}.raw")).map_err(fail)?;
++    if file.metadata().map_err(fail)?.len() != total {
++        return Err(IoError::Unsupported("Truncated VSP pixels".into()));
++    }
++    let rows = ((32 << 20) / row).max(1).min(u64::from(h)) as u32;
++    let mut band = vec![0; (row * u64::from(rows)) as usize];
++    let mut surface = Surface::new(PixelFormat::new(ColorMode::Rgb, depth, true));
++    for y in (0..h).step_by(rows as usize) {
++        ctl.check().map_err(|_| IoError::Cancelled)?;
++        let n = rows.min(h - y);
++        let data = band.get_mut(..(row * u64::from(n)) as usize).ok_or_else(|| IoError::Unsupported("Invalid VSP band".into()))?;
++        file.read_exact(data).map_err(fail)?;
++        surface.write_interleaved(Rect::new(0, y as i32, w as i32, (y + n) as i32), data);
++        ctl.progress((y + n) as f32 / h as f32);
++    }
++    let name = manifest.get("name").and_then(|v| v.as_str()).unwrap_or("VSP image");
++    let mut document = Document::new(name, Size::new(w, h), ColorMode::Rgb, depth);
++    if manifest.get("icc").and_then(|v| v.as_bool()) == Some(true) {
++        let profile = std::fs::File::open(format!("{path}.icc")).map_err(fail)?;
++        if profile.metadata().map_err(fail)?.len() > 16 << 20 {
++            return Err(IoError::Unsupported("VSP ICC too large".into()));
++        }
++        let mut bytes = Vec::new();
++        profile.take(16 << 20).read_to_end(&mut bytes).map_err(fail)?;
++        document.icc_profile = Some(Arc::new(bytes));
++    }
++    document.layers.push(Layer::new("Background", LayerContent::Raster(surface)));
++    if manifest.get("temporary").and_then(|v| v.as_bool()) == Some(true) {
++        drop(file);
++        let _ = std::fs::remove_file(format!("{path}.raw"));
++        let _ = std::fs::remove_file(format!("{path}.icc"));
++        let _ = std::fs::remove_file(path);
++    }
++    Ok(ImportResult { document, warnings: Vec::new() })
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn band_import_preserves_all_depths_and_rejects_truncation() {
++        for bits in [8, 16, 32] {
++            let path = std::env::temp_dir().join(format!("vsp-band-{}-{bits}.vspimage", std::process::id()));
++            let path = path.to_string_lossy();
++            std::fs::write(path.as_ref(), format!(r#"{{"version":1,"width":32769,"height":1,"bits":{bits},"name":"wide","icc":false}}"#)).unwrap();
++            let pixels = vec![0x3e; 32769 * 4 * (bits / 8) as usize];
++            std::fs::write(format!("{path}.raw"), &pixels).unwrap();
++            let r = import(&path, &Interrupt::NONE).unwrap();
++            assert_eq!(r.document.size, Size::new(32769, 1));
++            let surface = r.document.layers[0].surface().unwrap();
++            assert_eq!(surface.to_interleaved(Rect::new(0, 0, 32769, 1)), pixels);
++            std::fs::write(format!("{path}.raw"), [1]).unwrap();
++            assert!(import(&path, &Interrupt::NONE).is_err());
++            std::fs::remove_file(path.as_ref()).unwrap();
++            std::fs::remove_file(format!("{path}.raw")).unwrap();
++        }
++    }
++}
+diff --git a/crates/ui-egui/src/canvas.rs b/crates/ui-egui/src/canvas.rs
+index b6398e2..d467dba 100644
+--- a/crates/ui-egui/src/canvas.rs
++++ b/crates/ui-egui/src/canvas.rs
+@@ -15,6 +15,7 @@ use crate::state::{Tool, View};
+ /// Largest texture side we upload; bigger documents display downsampled until the GPU path lands.
+ pub const MAX_TEXTURE: u32 = 4096;
+ 
++#[derive(Default)]
+ pub struct CanvasCache {
+     pub revision: u64,
+     pub texture: Option<egui::TextureHandle>,
+@@ -28,6 +29,7 @@ pub struct CanvasCache {
+     /// `revision`, so the Navigator never shows a stale CPU image after GPU-path edits.
+     pub tex_revision: u64,
+     pub tex_preview_key: u64,
++    viewport: Option<(u64, u64, DRect, egui::TextureHandle)>,
+ }
+ 
+ /// An in-progress pointer gesture on the canvas.
+@@ -553,6 +555,7 @@ pub fn ensure_texture(app: &mut PhotocraftApp, ctx: &egui::Context, idx: usize)
+         on_gpu: false,
+         tex_revision: 0,
+         tex_preview_key: 0,
++        viewport: None,
+     });
+     if cache.tex_revision != revision || cache.texture.is_none() || cache.tex_preview_key != preview_key {
+         let t0 = crate::gpu_canvas::now_ms();
+@@ -649,10 +652,35 @@ pub(crate) fn effect_reach(layers: &[photocraft_doc::Layer]) -> i32 {
+         .unwrap_or(0)
+ }
+ 
++/// Native pixels for a bounded visible region of a gigapixel document.
++fn ensure_large_viewport(app: &mut PhotocraftApp, ctx: &egui::Context, idx: usize, visible: DRect) -> Option<(egui::TextureId, DRect)> {
++    let (doc, key) = display_doc(app, idx);
++    let region = visible.inflate(32).intersect(&doc.bounds());
++    if region.is_empty() || region.width() > MAX_TEXTURE || region.height() > MAX_TEXTURE {
++        return None;
++    }
++    let revision = app.session.documents().get(idx)?.revision;
++    let (display, display_key) = canvas_display(app, &doc);
++    let key = key ^ display_key;
++    let cache = app.canvases.entry(doc.id).or_default();
++    if cache.viewport.as_ref().is_none_or(|(r, k, b, _)| *r != revision || *k != key || !b.contains_rect(&visible.intersect(&doc.bounds()))) {
++        let buffer = photocraft_compose::render(&doc, region);
++        let image = display_image(display.as_deref(), &buffer);
++        let texture = ctx.load_texture(format!("viewport-{}", doc.id.0), image, TextureOptions::LINEAR);
++        cache.viewport = Some((revision, key, region, texture));
++    }
++    cache.viewport.as_ref().map(|(_, _, r, t)| (t.id(), *r))
++}
++
+ /// GPU path: make sure document `idx` is current in the GPU canvas. Brush strokes re-composite
+ /// and upload only their damage rect; everything else re-composites the whole document.
+ /// Returns false if there is no GPU canvas.
+ fn ensure_gpu(app: &mut PhotocraftApp, idx: usize, visible: DRect) -> bool {
++    // The reduced CPU canvas keeps gigapixel documents editable without allocating
++    // full-resolution GPU composites and mipmaps larger than dedicated/shared VRAM.
++    if app.session.documents().get(idx).is_some_and(|st| st.doc.size.area() > crate::gpu_canvas::F16_BUDGET_PX) {
++        return false;
++    }
+     let Some(gpu) = app.gpu.clone() else { return false };
+     let Some((revision, last_damage, id)) = app
+         .session
+@@ -682,6 +710,7 @@ fn ensure_gpu(app: &mut PhotocraftApp, idx: usize, visible: DRect) -> bool {
+         on_gpu: false,
+         tex_revision: 0,
+         tex_preview_key: 0,
++        viewport: None,
+     });
+     let present = cache.on_gpu && gpu.has(id.0, size);
+     if present && cache.revision == revision && cache.preview_key == preview_key {
+@@ -1379,7 +1408,15 @@ pub fn canvas_view(app: &mut PhotocraftApp, ui: &mut egui::Ui, idx: usize, rect:
+                 painter.rect_filled(img_rect, 0.0, Color32::WHITE);
+             }
+         }
+-        if let Some((tex, _scale)) = ensure_texture(app, &ctx, idx) {
++        let viewport = if !flip && view.zoom >= 0.5 && doc.size.area() > crate::gpu_canvas::F16_BUDGET_PX {
++            ensure_large_viewport(app, &ctx, idx, visible_doc_rect(&xf))
++        } else {
++            None
++        };
++        if let Some((tex, region)) = viewport {
++            let destination = Rect::from_two_pos(xf.to_screen(region.x0 as f32, region.y0 as f32), xf.to_screen(region.x1 as f32, region.y1 as f32));
++            painter.image(tex, destination, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), Color32::WHITE);
++        } else if let Some((tex, _scale)) = ensure_texture(app, &ctx, idx) {
+             let uv = if flip { Rect::from_min_max(pos2(1.0, 0.0), pos2(0.0, 1.0)) } else { Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)) };
+             painter.image(tex, img_rect, uv, Color32::WHITE);
+         }
+@@ -2444,6 +2481,26 @@ fn hex(c: [f32; 4]) -> String {
+ 
+ #[cfg(test)]
+ mod tests {
++    #[test]
++    fn gigapixel_viewport_is_bounded_and_reused() {
++        use photocraft_color::{ColorMode, SampleType};
++        let mut document = photocraft_doc::Document::new("huge", photocraft_geom::Size::new(48000, 32000), ColorMode::Rgb, SampleType::U16);
++        let surface = photocraft_raster::Surface::with_default(document.pixel_format(), &[0.1, 0.2, 0.3, 1.0]);
++        document.layers.push(photocraft_doc::Layer::new("Background", photocraft_doc::LayerContent::Raster(surface)));
++        let id = document.id;
++        let mut session = photocraft_engine::Session::new();
++        session.open_document(document, None);
++        let mut app = crate::PhotocraftApp::new(session, crate::Services::default());
++        let ctx = egui::Context::default();
++        let region = photocraft_geom::Rect::new(1000, 2000, 1200, 2200);
++        let first = super::ensure_large_viewport(&mut app, &ctx, 0, region).unwrap();
++        assert_eq!(super::ensure_large_viewport(&mut app, &ctx, 0, region).unwrap(), first);
++        let (_, _, bounds, texture) = app.canvases.get(&id).unwrap().viewport.as_ref().unwrap();
++        assert_eq!(texture.size(), [264, 264]);
++        assert!(bounds.contains_rect(&region));
++        assert!(super::ensure_large_viewport(&mut app, &ctx, 0, photocraft_geom::Rect::new(0, 0, 48000, 32000)).is_none());
++        assert_eq!(app.session.active().unwrap().doc.size, photocraft_geom::Size::new(48000, 32000));
++    }
+     use super::*;
+ 
+     #[test]
+diff --git a/crates/ui-egui/src/file_open.rs b/crates/ui-egui/src/file_open.rs
+index de6f92c..2776fbc 100644
+--- a/crates/ui-egui/src/file_open.rs
++++ b/crates/ui-egui/src/file_open.rs
+@@ -105,7 +105,18 @@ impl PhotocraftApp {
+         for e in events {
+             match e {
+                 OsEvent::Open(paths) => {
+-                    self.open_paths(&paths);
++                    for path in paths {
++                        let abs = absolute(&path);
++                        let existing = self.session.documents().iter().position(|s| s.path.as_deref() == Some(abs.as_str()));
++                        if let Some(index) = existing {
++                            self.jobs.focus = None;
++                            self.session.set_active(index);
++                        } else if let Some(tab) = self.jobs.opens.iter().find(|t| t.path.as_deref() == Some(abs.as_str())) {
++                            self.jobs.focus = Some(tab.job);
++                        } else {
++                            self.open_paths(&[abs]);
++                        }
++                    }
+                     // Bring the window forward when another app (Finder, the Dock) asked us to open.
+                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                     ctx.request_repaint();
+diff --git a/crates/ui-egui/src/file_open/tests.rs b/crates/ui-egui/src/file_open/tests.rs
+index ad704e4..12f84cc 100644
+--- a/crates/ui-egui/src/file_open/tests.rs
++++ b/crates/ui-egui/src/file_open/tests.rs
+@@ -175,6 +175,11 @@ fn os_open_events_open_files_with_paths() {
+     // Drained: a second poll opens nothing more.
+     app.drain_os_events(&ctx);
+     assert_eq!(app.session.documents().len(), 2);
++    let mut again = vec![OsEvent::Open(vec![paths[0].clone()])];
++    app.services.os_events = Some(Box::new(move || std::mem::take(&mut again)));
++    app.drain_os_events(&ctx);
++    assert_eq!(app.session.documents().len(), 2);
++    assert_eq!(app.session.active_index(), Some(0));
+     let _ = std::fs::remove_dir_all(&dir);
+ }
+ 
+diff --git a/crates/ui-egui/src/jobs_ui.rs b/crates/ui-egui/src/jobs_ui.rs
+index c71324d..2e86118 100644
+--- a/crates/ui-egui/src/jobs_ui.rs
++++ b/crates/ui-egui/src/jobs_ui.rs
+@@ -71,6 +71,7 @@ pub fn run(app: &mut PhotocraftApp, id: &str, params: Value) -> Result<Value, St
+ /// Open a file in the background: a tab appears at once and shows the progress; the document
+ /// replaces it when decoded. `path` is remembered for File › Save and Open Recent.
+ pub fn start_open(app: &mut PhotocraftApp, name: &str, path: Option<String>, source: OpenSource) -> Result<(), String> {
++    let path = path.filter(|p| !p.ends_with(".vspimage"));
+     match app.session.start_open(name, source).map_err(|e| e.to_string())? {
+         // Inline (wasm): finish now, like a background open that ended at once.
+         Started::Done(v) => finish_open(app, name, path.as_deref(), &v),

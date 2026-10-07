@@ -18,18 +18,14 @@ bool isTransportReady(ThreeFpState state)
 ThreeFpPlayer::ThreeFpPlayer(ThreeFpApi &api, QWidget *surface, QObject *parent)
     : QObject(parent), api_(api), surface_(surface)
 {
-    if (!api_.available()) {
-        lastError_ = api_.errorString();
-        return;
-    }
-
-    createSession();
 }
 
 bool ThreeFpPlayer::createSession()
 {
-    if (!api_.available() || !surface_)
-        return false;
+    if (handle_) return true;
+    if (!api_.available() || !surface_) {
+        lastError_=api_.errorString();emit errorOccurred(lastError_);return false;
+    }
 
     ThreeFpConfiguration configuration{};
     configuration.size = sizeof(configuration);
@@ -46,10 +42,10 @@ bool ThreeFpPlayer::createSession()
     if (!check(api_.create(&configuration, &handle_), QStringLiteral("创建 3FP 会话")))
         return false;
     if(clockOnly_)api_.setClockOnly(handle_,true);
+    if(softwarePreScaleHeight_)check(api_.setSoftwarePreScale(handle_,softwarePreScaleHeight_),QStringLiteral("CPU pre-scale"));
     if (!check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale_) | ((chromaAlgorithm_ + 1) << 8) | (antiRinging_ ? 65536u : 0u)), downscale_), QStringLiteral("设置缩放算法")))
         return false;
-    if (muted_)
-        check(api_.setVolume(handle_, 1.0f, 1u), QStringLiteral("静音"));
+    check(api_.setVolume(handle_, volume_, muted_ ? 1u : 0u), QStringLiteral("音量"));
     if (!outputFormat_.isEmpty()) api_.setExternalOutputFormat(handle_, outputFormat_.toUtf8().constData());
     if (customColorSettings_) api_.setColorSettings(handle_, &colorSettings_);
     if (vrrPresent_)
@@ -69,12 +65,14 @@ ThreeFpPlayer::~ThreeFpPlayer()
     }
 }
 bool ThreeFpPlayer::setClockOnly(bool enabled) { clockOnly_=enabled;return handle_ && api_.setClockOnly(handle_,enabled)==ThreeFpResult::Success; }
+bool ThreeFpPlayer::setSoftwarePreScale(int height) { if(height!=0 && height!=720 && height!=1080 && height!=2160)return false;softwarePreScaleHeight_=height;return !handle_ || api_.setSoftwarePreScale(handle_,height)==ThreeFpResult::Success; }
 
-bool ThreeFpPlayer::ready() const { return handle_ != nullptr; }
+bool ThreeFpPlayer::ready() const { return const_cast<ThreeFpPlayer *>(this)->createSession(); }
 QString ThreeFpPlayer::lastError() const { const auto native=api_.sessionError(handle_);return native.isEmpty()?lastError_:native; }
 
 bool ThreeFpPlayer::resetVideoOutput()
 {
+    if (!handle_) return true;
     if (handle_) {
         api_.stop(handle_);
         api_.destroy(handle_);
@@ -87,7 +85,7 @@ bool ThreeFpPlayer::resetVideoOutput()
 bool ThreeFpPlayer::openFile(const QString &path)
 {
     const QByteArray utf8 = path.toUtf8();
-    return handle_ && check(api_.open(handle_, utf8.constData()), QStringLiteral("打开媒体"));
+    return createSession() && check(api_.open(handle_, utf8.constData()), QStringLiteral("打开媒体"));
 }
 
 bool ThreeFpPlayer::play()
@@ -147,8 +145,8 @@ void ThreeFpPlayer::setMuted(bool m)
 void ThreeFpPlayer::setVolume(float volume) { volume_ = volume; if (handle_) check(api_.setVolume(handle_, volume_, muted_ ? 1u : 0u), QStringLiteral("音量")); }
 bool ThreeFpPlayer::stepKeyframe(int d) { return handle_ && check(api_.stepKeyframe(handle_, d), QStringLiteral("关键帧")); }
 bool ThreeFpPlayer::setPlaybackRate(double rate) { return handle_ && check(api_.setPlaybackRate(handle_, rate), QStringLiteral("倍速")); }
-bool ThreeFpPlayer::setDecodeMode(unsigned mode) { decodeMode_ = mode; return resetVideoOutput(); }
-void ThreeFpPlayer::setAutomaticHdr(bool enabled) { automaticHdr_ = enabled; resetVideoOutput(); }
+bool ThreeFpPlayer::setDecodeMode(unsigned mode) { if(decodeMode_==mode)return true;decodeMode_ = mode; return resetVideoOutput(); }
+void ThreeFpPlayer::setAutomaticHdr(bool enabled) { if(automaticHdr_==enabled)return;automaticHdr_ = enabled; resetVideoOutput(); }
 bool ThreeFpPlayer::selectAudio(int stream) {return handle_ && check(api_.selectAudio(handle_,stream),QStringLiteral("Select audio track"));}
 bool ThreeFpPlayer::loadExternalAudio(const QString &path) {return handle_ && check(api_.loadExternalAudio(handle_,path.toUtf8().constData()),QStringLiteral("Load external audio"));}
 bool ThreeFpPlayer::clearExternalAudio() {return handle_ && check(api_.clearExternalAudio(handle_),QStringLiteral("Clear external audio"));}
@@ -172,7 +170,7 @@ bool ThreeFpPlayer::setScalingAlgorithms(ThreeFpScalingAlgorithm upscale,
 {
     upscale_ = upscale;
     downscale_ = downscale;
-    return handle_ && check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale) | ((chromaAlgorithm_ + 1) << 8) | (antiRinging_ ? 65536u : 0u)), downscale),
+    return !handle_ || check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale) | ((chromaAlgorithm_ + 1) << 8) | (antiRinging_ ? 65536u : 0u)), downscale),
                             QStringLiteral("设置缩放算法"));
 }
 
@@ -240,7 +238,7 @@ bool ThreeFpPlayer::samplePixel(int x, int y, ThreeFpPixelProbe &sample) const
 
 bool ThreeFpPlayer::submitFrame(const VapourSynthFrame &frame)
 {
-    if (!handle_)
+    if (!createSession())
         return false;
 
     ThreeFpExternalVideoFrame native{};

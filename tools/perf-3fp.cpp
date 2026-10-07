@@ -1,4 +1,6 @@
+#define NOMINMAX
 #include <windows.h>
+#include <algorithm>
 #include "3FP/Api/FFF.Player.Api.h"
 #include <chrono>
 #include <cstdio>
@@ -40,6 +42,10 @@ int wmain(int argc, wchar_t** argv) {
     const auto result = Create(&config, &player);
     if (result != FFFResult::Success) { std::fprintf(stderr, "Create failed: %d\n", int(result)); return 5; }
     SetVolume(player, 1.0f, 1);
+    if(const auto height=std::getenv("VSR_3FP_PRESCALE")) {
+        const auto setPreScale=reinterpret_cast<decltype(&FFF3FP_SetSoftwarePreScale)>(GetProcAddress(dll,"FFF3FP_SetSoftwarePreScale"));
+        if(!setPreScale || setPreScale(player,std::atoi(height))!=FFFResult::Success)return 8;
+    }
     const auto algorithm = static_cast<FFF3FPScalingAlgorithm>(_wtoi(argv[6]));
     SetScalingAlgorithms(player, algorithm, static_cast<FFF3FPScalingAlgorithm>(_wtoi(argv[6]) & 255));
     const int bytes = WideCharToMultiByte(CP_UTF8, 0, argv[2], -1, nullptr, 0, nullptr, nullptr);
@@ -73,7 +79,8 @@ int wmain(int argc, wchar_t** argv) {
             std::fprintf(stderr, "Playback failed/timed out: state=%u\n", unsigned(s.state)); failed = true; break;
         }
         if (s.state == FFF3FPState::Ready && !playing) {
-            Seek(player, 120LL * 10000000); Play(player); playing = true;
+            const double seekSeconds=std::getenv("VSR_PERF_SEEK_SECONDS")?std::atof(std::getenv("VSR_PERF_SEEK_SECONDS")):10.0;
+            Seek(player, static_cast<long long>(std::min(seekSeconds,std::max(0.0,s.duration100ns/1e7-seconds-6))*10000000)); Play(player); playing = true;
         }
         if (playing && !measuring && s.timelineGeneration && s.presentedVideoFrames > 1) {
             measurement = now; measuring = true;

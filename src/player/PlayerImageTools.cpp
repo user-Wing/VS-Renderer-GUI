@@ -1,9 +1,8 @@
 #include "player/PlayerImageTools.h"
 #include "ui/PreviewPane.h"
-#include "image/ImageEditorWindow.h"
-#include "image/ImagePsd.h"
-#include <QApplication>
-#include <QCheckBox>
+#include "player/PhotoCraftEditor.h"
+#include "image/ImageHdr.h"
+#include "player/PlayerPng.h"
 #include <QComboBox>
 #include <QColorSpace>
 #include <QCoreApplication>
@@ -15,22 +14,21 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QImageWriter>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QMessageBox>
-#include <QMouseEvent>
 #include <QPainter>
-#include <QPainterPath>
 #include <QProcess>
 #include <QPushButton>
 #include <QSaveFile>
 #include <QScreen>
-#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QThread>
+#include <QUuid>
 #include <QToolButton>
-#include <QVBoxLayout>
 #include <windows.h>
 #include <algorithm>
 #include <cmath>
@@ -61,68 +59,11 @@ QIcon toolIcon(int index) {
 }
 QString extension(const QString &format) { return format=="jpgli"?QStringLiteral("jpg"):format; }
 QRectF transformedBounds(const ImageOutput &output) { return output.transform.mapRect(QRectF(QPointF(),output.image.size())); }
+bool nativeDocument(const QString &path) {
+    const QStringList formats{"psd","psb","pcraft","dng","cr2","cr3","nef","nrw","arw","pef","orf","rw2","raf"};
+    return QFileInfo::exists(path) && formats.contains(QFileInfo(path).suffix().toLower());
+}
 
-// Preview uses a small copy; selection coordinates remain in full-resolution, oriented pixels.
-class CropView final : public QWidget {
-public:
-    QImage thumbnail;
-    QSize fullSize;
-    QRect selection;
-    double ratio = 0;
-    QPoint anchor;
-    QRect initial;
-    QRect ratioReference;
-    int dragging = 0;
-    explicit CropView(const ImageOutput &output, QWidget *parent) : QWidget(parent) {
-        fullSize=transformedBounds(output).size().toSize();selection=QRect(QPoint(),fullSize);
-        thumbnail=output.image.scaled(1400,1000,Qt::KeepAspectRatio,Qt::FastTransformation).transformed(output.transform);
-        setMinimumSize(480,320);setMouseTracking(true);setObjectName("imageCropView");
-    }
-    QRectF imageRect() const {const QSizeF fitted=QSizeF(fullSize).scaled(size(),Qt::KeepAspectRatio);return QRectF(QPointF((width()-fitted.width())/2,(height()-fitted.height())/2),fitted);}
-    QPoint pixel(const QPointF &at) const {const auto r=imageRect();return QPoint(std::clamp(qRound((at.x()-r.x())*fullSize.width()/r.width()),0,fullSize.width()),std::clamp(qRound((at.y()-r.y())*fullSize.height()/r.height()),0,fullSize.height()));}
-    QRectF screenSelection() const {const auto r=imageRect();return QRectF(r.x()+double(selection.x())/fullSize.width()*r.width(),r.y()+double(selection.y())/fullSize.height()*r.height(),double(selection.width())/fullSize.width()*r.width(),double(selection.height())/fullSize.height()*r.height());}
-    void publish() {setProperty("selection",selection);update();}
-    void setRatio(double value,bool establishReference) {
-        if(establishReference)ratioReference=selection;selection=ratioReference;
-        ratio=value;if(ratio>0){int w=selection.width(),h=qRound(w/ratio);if(h>selection.height()){h=selection.height();w=qRound(h*ratio);}const QPoint center=selection.center();selection=QRect(QPoint(center.x()-w/2,center.y()-h/2),QSize(std::max(1,w),std::max(1,h))).intersected(QRect(QPoint(),fullSize));}publish();
-    }
-    int hit(const QPointF &point) const {
-        const auto s=screenSelection();const auto expanded=s.adjusted(-8,-8,8,8);if(!expanded.contains(point))return 32;
-        int edges=0;if(std::abs(point.x()-s.left())<=8)edges|=1;else if(std::abs(point.x()-s.right())<=8)edges|=2;
-        if(std::abs(point.y()-s.top())<=8)edges|=4;else if(std::abs(point.y()-s.bottom())<=8)edges|=8;
-        return edges?edges:s.contains(point)?16:32;
-    }
-protected:
-    void paintEvent(QPaintEvent *) override {
-        QPainter p(this);p.fillRect(rect(),QColor("#101010"));const auto r=imageRect();p.drawImage(r,thumbnail);
-        const QRectF s=screenSelection();
-        QPainterPath mask;mask.addRect(r);mask.addRect(s);p.fillPath(mask,QColor(0,0,0,130));p.setPen(QPen(Qt::white,1));p.drawRect(s);
-        for(int i=1;i<3;++i){p.drawLine(QPointF(s.x()+s.width()*i/3,s.top()),QPointF(s.x()+s.width()*i/3,s.bottom()));p.drawLine(QPointF(s.left(),s.y()+s.height()*i/3),QPointF(s.right(),s.y()+s.height()*i/3));}
-        p.setBrush(Qt::white);for(const auto &point:QList<QPointF>{s.topLeft(),s.topRight(),s.bottomLeft(),s.bottomRight(),QPointF(s.center().x(),s.top()),QPointF(s.center().x(),s.bottom()),QPointF(s.left(),s.center().y()),QPointF(s.right(),s.center().y())})p.drawRect(QRectF(point-QPointF(3,3),QSizeF(6,6)));
-    }
-    void mousePressEvent(QMouseEvent *e) override {if(e->button()==Qt::LeftButton && imageRect().contains(e->position())){anchor=pixel(e->position());initial=selection;dragging=hit(e->position());if(dragging==32)selection=QRect(anchor,QSize(1,1));publish();}}
-    void mouseMoveEvent(QMouseEvent *e) override {
-        if(!dragging){const int edge=hit(e->position());setCursor(edge==16?Qt::SizeAllCursor:edge==32?Qt::CrossCursor:(edge==1||edge==2)?Qt::SizeHorCursor:(edge==4||edge==8)?Qt::SizeVerCursor:(edge==5||edge==10)?Qt::SizeFDiagCursor:Qt::SizeBDiagCursor);return;}
-        const auto end=pixel(e->position());
-        if(dragging==16){const auto delta=end-anchor;selection.moveTo(std::clamp(initial.x()+delta.x(),0,fullSize.width()-initial.width()),std::clamp(initial.y()+delta.y(),0,fullSize.height()-initial.height()));publish();return;}
-        int left=initial.x(),top=initial.y(),right=left+initial.width(),bottom=top+initial.height();
-        if(dragging==32){left=std::min(anchor.x(),end.x());right=std::max(anchor.x(),end.x());top=std::min(anchor.y(),end.y());bottom=std::max(anchor.y(),end.y());}
-        else{if(dragging&1)left=std::min(end.x(),right-1);if(dragging&2)right=std::max(end.x(),left+1);if(dragging&4)top=std::min(end.y(),bottom-1);if(dragging&8)bottom=std::max(end.y(),top+1);}
-        if(ratio>0){
-            const bool fromLeft=dragging==32?end.x()<anchor.x():dragging&1,fromTop=dragging==32?end.y()<anchor.y():dragging&4;
-            const bool horizontal=dragging==1 || dragging==2,vertical=dragging==4 || dragging==8;
-            int w=std::max(1,right-left),h=std::max(1,bottom-top);const bool heightDriven=vertical || (!horizontal && std::abs(end.y()-anchor.y())*ratio>std::abs(end.x()-anchor.x()));if(heightDriven)w=std::max(1,qRound(h*ratio));else h=std::max(1,qRound(w/ratio));
-            const int fixedX=horizontal?(fromLeft?right:left):vertical?initial.center().x():fromLeft?right:left;
-            const int fixedY=vertical?(fromTop?bottom:top):horizontal?initial.center().y():fromTop?bottom:top;
-            const int maxW=vertical?2*std::min(fixedX,fullSize.width()-fixedX):fromLeft?fixedX:fullSize.width()-fixedX;
-            const int maxH=horizontal?2*std::min(fixedY,fullSize.height()-fixedY):fromTop?fixedY:fullSize.height()-fixedY;
-            if(w>maxW){w=std::max(1,maxW);h=std::max(1,qRound(w/ratio));}if(h>maxH){h=std::max(1,maxH);w=std::max(1,qRound(h*ratio));}
-            left=vertical?fixedX-w/2:fromLeft?fixedX-w:fixedX;top=horizontal?fixedY-h/2:fromTop?fixedY-h:fixedY;right=left+w;bottom=top+h;
-        }
-        selection=QRect(left,top,std::max(1,right-left),std::max(1,bottom-top)).intersected(QRect(QPoint(),fullSize));publish();
-    }
-    void mouseReleaseEvent(QMouseEvent *e) override {if(e->button()==Qt::LeftButton){if(dragging)mouseMoveEvent(e);dragging=0;ratioReference=selection;}}
-};
 QString chooseOutput(QWidget *parent,const QString &source,const QString &suffix) {
     QFileDialog dialog(parent,QObject::tr("另存图片"),QFileInfo(source).absoluteDir().filePath(QFileInfo(source).completeBaseName()+"-edited."+suffix),QString("%1 (*.%2)").arg(suffix.toUpper(),suffix));
     dialog.setAcceptMode(QFileDialog::AcceptSave);dialog.setDefaultSuffix(suffix);
@@ -137,33 +78,66 @@ QDialogButtonBox *saveButtons(QDialog *dialog) {
 PlayerImageTools::PlayerImageTools(PreviewPane *pane,QWidget *parent) : QWidget(parent),pane_(pane) {
     setObjectName("playerImageToolbar");setFixedHeight(38);setStyleSheet("#playerImageToolbar{background:#1e1e1e;} QToolButton{background:transparent;border:0;border-radius:4px;} QToolButton:hover{background:#42464d;} QToolButton:disabled{color:#777;}");
     auto *row=new QHBoxLayout(this);row->setContentsMargins(12,3,12,3);row->setSpacing(12);
-    const QStringList names{tr("详细编辑"),tr("左转"),tr("右转"),tr("镜像"),tr("删除到回收站"),tr("设置为桌面背景"),tr("调整图像大小"),tr("方格裁剪"),tr("压缩和转换格式")};
-    const QStringList ids{"edit","rotateLeft","rotateRight","mirror","recycle","wallpaper","resize","crop","convert"};
-    for(int i=0;i<names.size();++i){auto *button=new QToolButton(this);button->setObjectName("imageTool_"+ids[i]);button->setAccessibleName(names[i]);button->setToolTip(names[i]);button->setIcon(toolIcon(i));button->setIconSize(QSize(24,24));button->setFixedSize(40,40);button->setToolButtonStyle(Qt::ToolButtonIconOnly);button->setEnabled(false);row->addWidget(button);
+    connect(PhotoCraftEditor::instance(),&PhotoCraftEditor::errorOccurred,this,&PlayerImageTools::errorOccurred);
+    const QStringList names{tr("PhotoCraft 图像编辑器"),tr("左转"),tr("右转"),tr("镜像"),tr("删除到回收站"),tr("设置为桌面背景"),tr("高精度导出和格式转换")};
+    const QStringList ids{"edit","rotateLeft","rotateRight","mirror","recycle","wallpaper","convert"};
+    for(int i=0;i<names.size();++i){auto *button=new QToolButton(this);button->setObjectName("imageTool_"+ids[i]);button->setAccessibleName(names[i]);button->setToolTip(names[i]);button->setIcon(toolIcon(i==6?8:i));button->setIconSize(QSize(24,24));button->setFixedSize(40,40);button->setToolButtonStyle(Qt::ToolButtonIconOnly);button->setEnabled(false);row->addWidget(button);
         button->setFixedSize(32,32);button->setIconSize(QSize(21,21));
         connect(button,&QToolButton::clicked,this,[this,i]{
-            if(task_ || (!ready_ && !(i==0 && (QFileInfo(source_).suffix().compare("psd",Qt::CaseInsensitive)==0 || QFileInfo(source_).suffix().compare("psb",Qt::CaseInsensitive)==0))))return;
+            if(task_ || (!ready_ && !(i==0 && nativeDocument(source_))))return;
             if(i==0)editImage();
             else if(i<=3){const QTransform change=i==1?QTransform(0,-1,1,0,0,0):i==2?QTransform(0,1,-1,0,0,0):QTransform::fromScale(-1,1);pane_->setImageTransform(pane_->imageTransform()*change);}
-            else if(i==4)recycleImage();else if(i==5)wallpaper();else if(i==6)resizeImage();else if(i==7)cropImage();else convertImage();
+            else if(i==4)recycleImage();else if(i==5)wallpaper();else convertImage();
         });
     }
     row->addStretch();hide();
 }
 PlayerImageTools::~PlayerImageTools() {if(task_){task_->requestInterruption();task_->wait();}}
 void PlayerImageTools::setSource(const QString &path) {source_=path;setReady(false);setVisible(!path.isEmpty());}
-void PlayerImageTools::setReady(bool ready) {ready_=ready;const auto suffix=QFileInfo(source_).suffix().toLower();for(auto *b:findChildren<QToolButton *>())b->setEnabled(!task_ && (ready || (b->objectName()=="imageTool_edit" && (suffix=="psd" || suffix=="psb"))));}
+void PlayerImageTools::setReady(bool ready) {ready_=ready;const bool document=nativeDocument(source_);for(auto *b:findChildren<QToolButton *>())b->setEnabled(!task_ && (ready || (b->objectName()=="imageTool_edit" && document)));}
 void PlayerImageTools::editImage() {
-    auto existingEditor=[]()->ImageEditorWindow *{for(auto *widget:qApp->topLevelWidgets())if(auto *editor=qobject_cast<ImageEditorWindow *>(widget))return editor;return nullptr;};
+    if(nativeDocument(source_)){PhotoCraftEditor::instance()->open(source_);return;}
     const auto suffix=QFileInfo(source_).suffix().toLower();
-    if(suffix=="psd" || suffix=="psb"){
-        struct Result{std::unique_ptr<ImageDocument> document;QString error;QStringList warnings;};auto result=std::make_shared<Result>();const auto path=source_;
-        task_=QThread::create([result,path]{result->document=ImagePsd::load(path,&result->error,&result->warnings);if(result->document){const auto size=result->document->size();result->document->compositePreview(QRect(QPoint(),size),size.scaled({640,900},Qt::KeepAspectRatio));result->error=result->document->storageError();result->document->moveToThread(qApp->thread());}});
-        connect(task_,&QThread::finished,this,[this,result,path,existingEditor]{task_=nullptr;setReady(ready_);if(!result->error.isEmpty()){emit errorOccurred(result->error);return;}auto *editor=existingEditor();if(editor)editor->addDocument(result->document.release(),path);else editor=new ImageEditorWindow(result->document.release(),path,window());editor->setWindowFlag(Qt::Window);editor->show();editor->raise();editor->activateWindow();if(!result->warnings.isEmpty())QMessageBox::information(editor,tr("PSD 导入说明"),result->warnings.join('\n'));});connect(task_,&QThread::finished,task_,&QObject::deleteLater);setReady(ready_);emit statusChanged(tr("正在读取 PSD 图层与可见预览…"));task_->start();return;
-    }
     const auto transform=pane_->imageTransform();const auto image=transform.isIdentity()?pane_->image():pane_->image().transformed(transform);
+    const bool floating=image.format()==QImage::Format_RGBA32FPx4 || image.format()==QImage::Format_RGBA16FPx4 || image.format()==QImage::Format_RGBX32FPx4 || image.format()==QImage::Format_RGBX16FPx4 || image.format()==QImage::Format_RGBA32FPx4_Premultiplied || image.format()==QImage::Format_RGBA16FPx4_Premultiplied;
+    const bool large=image.sizeInBytes()>=256*1024*1024;
+    const QStringList nativeFormats{"psd","psb","pcraft","png","jpg","jpeg","tif","tiff","webp","gif","bmp","tga","ico","qoi","exr","hdr","pbm","pgm","ppm","pam","pfm","dng","cr2","cr3","nef","nrw","arw","pef","orf","rw2","raf"};
+    if(!large && QFileInfo::exists(source_) && transform.isIdentity() && nativeFormats.contains(suffix) && !(floating && suffix=="png")){
+        PhotoCraftEditor::instance()->open(source_);return;
+    }
     if(image.isNull()){emit errorOccurred(tr("无法准备编辑图片，图像为空或内存不足。"));return;}
-    auto *editor=existingEditor();if(editor)editor->addImage(image,source_);else editor=new ImageEditorWindow(image,source_,window());editor->setWindowFlag(Qt::Window);editor->show();editor->raise();editor->activateWindow();
+    const auto directory=QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/photocraft-imports";
+    if(!QDir().mkpath(directory)){emit errorOccurred(tr("无法创建高精度图像交换目录。"));return;}
+    const auto path=directory+"/"+QFileInfo(source_).completeBaseName().left(96)+"-VSP-view-copy-"+QUuid::createUuid().toString(QUuid::WithoutBraces)+(large?".vspimage":floating?".tif":".png");
+    auto error=std::make_shared<QString>();
+    task_=QThread::create([image,path,floating,large,name=QFileInfo(source_).fileName(),error]{
+        if(large)*error=writeEditorImport(image,path,name);
+        else if(floating){ImageDocument document(image.size(),ImagePrecision::Float32);document.setColorSpace(image.colorSpace());document.addLayer("VSP",image);ImageHdr::exportFloatTiff(&document,path,error.get());}
+        else *error=writeScreenshotPng(path,image,{});
+    });
+    connect(task_,&QThread::finished,this,[this,path,error]{auto *finished=task_;task_=nullptr;finished->deleteLater();setReady(ready_);if(!error->isEmpty()){emit errorOccurred(*error);return;}PhotoCraftEditor::instance()->open(path);emit statusChanged(tr("已打开高精度视图副本，请在 PhotoCraft 中另存为。"));});
+    setReady(ready_);emit statusChanged(tr("正在准备高精度图像…"));task_->start();
+}
+QString PlayerImageTools::writeEditorImport(const QImage &image,const QString &path,const QString &name) {
+    if(image.isNull())return QStringLiteral("Empty editor import");
+    const bool floating=image.pixelFormat().typeInterpretation()==QPixelFormat::FloatingPoint;
+    const int bits=floating?32:image.depth()>32?16:8;
+    const auto format=floating?QImage::Format_RGBA32FPx4:bits==16?QImage::Format_RGBA64:QImage::Format_RGBA8888;
+    ImageSaveFile pixels(path+".raw");if(!pixels.open(QIODevice::WriteOnly))return pixels.errorString();
+    const int rows=std::max(1,32*1024*1024/(image.width()*(bits/8)*4));
+    for(int y=0;y<image.height();y+=rows){
+        const auto band=image.copy(0,y,image.width(),std::min(rows,image.height()-y)).convertToFormat(format);
+        if(band.isNull())return QStringLiteral("Cannot allocate editor import band");
+        const qint64 rowBytes=qint64(image.width())*(bits/8)*4;
+        for(int row=0;row<band.height();++row)if(pixels.write(reinterpret_cast<const char *>(band.constScanLine(row)),rowBytes)!=rowBytes)return pixels.errorString();
+    }
+    if(!pixels.commit())return pixels.errorString();
+    const auto icc=image.colorSpace().iccProfile();
+    if(!icc.isEmpty()){ImageSaveFile profile(path+".icc");if(!profile.open(QIODevice::WriteOnly)||profile.write(icc)!=icc.size()||!profile.commit())return profile.errorString();}
+    ImageSaveFile manifest(path);if(!manifest.open(QIODevice::WriteOnly))return manifest.errorString();
+    const auto json=QJsonDocument(QJsonObject{{"version",1},{"width",image.width()},{"height",image.height()},{"bits",bits},{"name",name},{"icc",!icc.isEmpty()},{"temporary",true}}).toJson(QJsonDocument::Compact);
+    if(manifest.write(json)!=json.size()||!manifest.commit())return manifest.errorString();
+    return {};
 }
 ImageOutput PlayerImageTools::currentOutput() const {ImageOutput output;output.source=source_;output.image=pane_->image();output.transform=pane_->imageTransform();return output;}
 QString PlayerImageTools::backendPath() {return QDir(QCoreApplication::applicationDirPath()).filePath("runtime/awj/AWJ.exe");}
@@ -236,26 +210,6 @@ void PlayerImageTools::startOutput(const ImageOutput &output,bool desktop) {
         else emit statusChanged(tr("已保存：%1").arg(output.destination));
     },Qt::QueuedConnection);});
     task_->setParent(this);connect(task_,&QThread::finished,this,[this]{auto *finished=task_;task_=nullptr;finished->deleteLater();setReady(ready_);});setReady(ready_);task_->start();
-}
-void PlayerImageTools::resizeImage() {
-    auto output=currentOutput();const QSize original=transformedBounds(output).size().toSize();
-    auto *dialog=new QDialog(window());dialog->setAttribute(Qt::WA_DeleteOnClose);dialog->setWindowTitle(tr("调整图像大小"));dialog->setMinimumWidth(560);auto *form=new QFormLayout(dialog);
-    auto *width=new QSpinBox(dialog),*height=new QSpinBox(dialog);width->setObjectName("imageResizeWidth");height->setObjectName("imageResizeHeight");
-    for(auto *s:{width,height})s->setRange(1,1000000);width->setValue(original.width());height->setValue(original.height());
-    auto *aspect=new QCheckBox(tr("保持宽高比"),dialog);aspect->setChecked(true);aspect->setObjectName("imageResizeAspect");form->addRow(tr("宽度"),width);form->addRow(tr("高度"),height);form->addRow(aspect);
-    auto *algorithm=new QComboBox(dialog);algorithm->setObjectName("imageResizeAlgorithm");for(const auto &id:QStringList{"jinc","lanczos4","lanczos3","bilinear","nearest","anime4k"})algorithm->addItem(id=="anime4k"?tr("Anime4K Mode A Fast(仅放大 / Vulkan)"):id=="lanczos4"?QStringLiteral("Lanczos 4 taps"):id=="jinc"?QStringLiteral("Jinc(EWA 2 lobes)"):id,id);form->addRow(tr("缩放算法"),algorithm);algorithm->setMinimumContentsLength(28);
-    connect(width,&QSpinBox::valueChanged,dialog,[=](int v){if(aspect->isChecked()){const QSignalBlocker block(height);height->setValue(std::max(1,qRound(double(v)*original.height()/original.width())));}});
-    connect(height,&QSpinBox::valueChanged,dialog,[=](int v){if(aspect->isChecked()){const QSignalBlocker block(width);width->setValue(std::max(1,qRound(double(v)*original.width()/original.height())));}});
-    auto *buttons=saveButtons(dialog);form->addRow(buttons);connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
-    connect(buttons,&QDialogButtonBox::accepted,this,[=,this]() mutable {output.destination=chooseOutput(dialog,output.source,"png");if(output.destination.isEmpty())return;output.size=QSize(width->value(),height->value());output.resizeAlgorithm=algorithm->currentData().toString();startOutput(output);dialog->accept();});dialog->show();
-}
-void PlayerImageTools::cropImage() {
-    auto output=currentOutput();auto *dialog=new QDialog(window());dialog->setAttribute(Qt::WA_DeleteOnClose);dialog->setWindowTitle(tr("方格裁剪 · 拖动选择区域"));dialog->resize(840,640);auto *layout=new QVBoxLayout(dialog);
-    auto *view=new CropView(output,dialog);layout->addWidget(view,1);view->publish();auto *row=new QHBoxLayout;layout->addLayout(row);auto *ratio=new QComboBox(dialog);ratio->setObjectName("imageCropRatio");ratio->addItems({tr("自由比例"),"1:1","16:9","4:3","3:4","9:16",tr("自定义比例")});row->addWidget(ratio);
-    auto *ratioWidth=new QSpinBox(dialog),*ratioHeight=new QSpinBox(dialog);ratioWidth->setObjectName("imageCropRatioWidth");ratioHeight->setObjectName("imageCropRatioHeight");for(auto *spin:{ratioWidth,ratioHeight}){spin->setRange(1,10000);spin->setValue(1);row->addWidget(spin);}row->addStretch();row->addWidget(new QLabel(tr("PNG · Lossless 无损输出"),dialog));
-    const auto updateRatio=[=](bool establish){const int index=ratio->currentIndex();ratioWidth->setVisible(index==6);ratioHeight->setVisible(index==6);const QList<QSize> values{{0,1},{1,1},{16,9},{4,3},{3,4},{9,16}};const QSize value=index==6?QSize(ratioWidth->value(),ratioHeight->value()):values[index];view->setRatio(double(value.width())/value.height(),establish);};connect(ratio,&QComboBox::currentIndexChanged,dialog,[=]{updateRatio(true);});connect(ratioWidth,&QSpinBox::valueChanged,dialog,[=]{updateRatio(false);});connect(ratioHeight,&QSpinBox::valueChanged,dialog,[=]{updateRatio(false);});updateRatio(true);
-    auto *buttons=saveButtons(dialog);layout->addWidget(buttons);connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
-    connect(buttons,&QDialogButtonBox::accepted,this,[=,this]() mutable {if(view->selection.isEmpty())return;output.destination=chooseOutput(dialog,output.source,"png");if(output.destination.isEmpty())return;output.crop=view->selection;startOutput(output);dialog->accept();});dialog->show();
 }
 void PlayerImageTools::convertImage() {
     auto output=currentOutput();auto *dialog=new QDialog(window());dialog->setAttribute(Qt::WA_DeleteOnClose);dialog->setWindowTitle(tr("压缩和转换格式 · AWJimage"));dialog->setMinimumWidth(640);auto *form=new QFormLayout(dialog);

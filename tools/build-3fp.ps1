@@ -23,8 +23,10 @@ $jincPatch = Join-Path $projectRoot 'patches/3fp-jinc-upstream-1.0.5.patch'
 $softwareFramePatch = Join-Path $projectRoot 'patches/3fp-software-frame-upload.patch'
 $softwareFrameApplied = (Test-Path $softwareFramePatch) -and (Test-AppliedPatch $softwareFramePatch)
 $softwareDecodePatch = Join-Path $projectRoot 'patches/3fp-software-decode-pipeline.patch'
+$softwarePreScalePatch = Join-Path $projectRoot 'patches/3fp-experimental-cpu-prescale.patch'
+$softwarePreScaleApplied = Test-AppliedPatch $softwarePreScalePatch
 # The pipeline patch overlaps the earlier session/queue patch contexts.
-$softwareDecodeApplied = (Test-Path $softwareDecodePatch) -and (Test-AppliedPatch $softwareDecodePatch)
+$softwareDecodeApplied = $softwarePreScaleApplied -or ((Test-Path $softwareDecodePatch) -and (Test-AppliedPatch $softwareDecodePatch))
 $jincApplied = $softwareFrameApplied -or ((Test-Path $jincPatch) -and (Test-AppliedPatch $jincPatch))
 $performanceApplied = $jincApplied -or ((Test-Path $performancePatch) -and (Test-AppliedPatch $performancePatch))
 if (-not $performanceApplied) {
@@ -148,7 +150,20 @@ if (-not (Test-AppliedPatch $hdrReadbackPatch)) {
     & git -C $source apply $hdrReadbackPatch
     if ($LASTEXITCODE -ne 0) { throw 'HDR readback patch failed.' }
 }
+$silentClockPatch = Join-Path $projectRoot 'patches/3fp-silent-video-startup-clock.patch'
+if (-not (Test-AppliedPatch $silentClockPatch)) {
+    & git -C $source apply --check $silentClockPatch
+    if ($LASTEXITCODE -ne 0) { throw 'Silent video startup-clock patch does not apply cleanly.' }
+    & git -C $source apply $silentClockPatch
+    if ($LASTEXITCODE -ne 0) { throw 'Silent video startup-clock patch failed.' }
+}
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/color/ColorBridge.h'), (Join-Path $projectRoot 'src/color/NativeColorEngine.h') -Destination (Join-Path $source 'FFF.Native/3FP/Render') -Force
+if (-not $softwarePreScaleApplied) {
+    & git -C $source apply --check $softwarePreScalePatch
+    if ($LASTEXITCODE -ne 0) { throw 'Experimental CPU pre-scale patch does not apply cleanly.' }
+    & git -C $source apply $softwarePreScalePatch
+    if ($LASTEXITCODE -ne 0) { throw 'Experimental CPU pre-scale patch failed.' }
+}
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
 if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found." }
 $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\Current\Bin\MSBuild.exe" | Select-Object -First 1

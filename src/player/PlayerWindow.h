@@ -57,6 +57,7 @@ public:
     void toggleFullscreen();
 protected:
     bool eventFilter(QObject *, QEvent *) override;
+    void moveEvent(QMoveEvent *) override;
     void dragEnterEvent(QDragEnterEvent *) override;
     void dropEvent(QDropEvent *) override;
     void dragMoveEvent(QDragMoveEvent *) override;
@@ -67,6 +68,7 @@ private:
     void buildPlaylist(QWidget *parent);
     void updateChrome();
     void layoutChrome();
+    void layoutInfoPanels();
     bool overlayChrome_=false;
     void updatePlaylist();
     void populateFolder(QTreeWidgetItem *parent, const QString &path);

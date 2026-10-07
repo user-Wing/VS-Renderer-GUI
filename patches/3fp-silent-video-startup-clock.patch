@@ -1,0 +1,13 @@
+diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -530,6 +530,8 @@ bool PlayerSession::ShouldGateAudioAtVideoStart() const noexcept {
+ 
+ void PlayerSession::ArmAudioUntilVideoFrame() noexcept {
+-    audioBlockedUntilVideoFrame_ = ShouldGateAudioAtVideoStart();
++    // With no audio output there is no audio boundary to release. Leaving this
++    // gate armed would make every video frame bypass its media timestamp wait.
++    audioBlockedUntilVideoFrame_ = audioRenderer_ && ShouldGateAudioAtVideoStart();
+     audioUnblockVideoGeneration_ = 0;
+     audioResumePendingAfterVideoFrame_ = audioBlockedUntilVideoFrame_ &&
+         state_.load() == FFF3FPState::Playing;

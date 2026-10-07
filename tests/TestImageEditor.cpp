@@ -10,7 +10,6 @@
 #include <QTest>
 #include <QToolButton>
 #include <QWheelEvent>
-#include <QPointer>
 #include <cstring>
 
 using namespace vsr;
@@ -23,11 +22,7 @@ private slots:
         wheel(Qt::NoModifier);QCOMPARE(pane.zoom(),3.75f);const auto y=pane.pan().y();wheel(Qt::ShiftModifier);QVERIFY(pane.pan().x()>0);QCOMPARE(pane.pan().y(),y);wheel(Qt::ControlModifier);QVERIFY(pane.zoom()>3.75f);
         pane.setImage({});pane.setVideoSize({1920,1080});pane.adoptView(1,0,0);wheel(Qt::NoModifier);QVERIFY(pane.zoom()>1);
     }
-    void detailedEditorReusesOneWindow() {
-        QTemporaryDir directory;QVERIFY(directory.isValid());QImage image(240,180,QImage::Format_RGBA8888);image.fill(Qt::red);const auto first=directory.filePath("one.png"),second=directory.filePath("two.png");QVERIFY(image.save(first));QVERIFY(image.save(second));
-        PreviewPane pane("Preview","");pane.setImage(image);PlayerImageTools toolbar(&pane);toolbar.setSource(first);toolbar.setReady(true);auto *button=toolbar.findChild<QToolButton *>("imageTool_edit");QVERIFY(button);button->click();QPointer<ImageEditorWindow> editor;for(auto *widget:qApp->topLevelWidgets())if(auto *candidate=qobject_cast<ImageEditorWindow *>(widget))editor=candidate;QVERIFY(editor);QCOMPARE(editor->documentCount(),1);
-        toolbar.setSource(second);toolbar.setReady(true);button->click();QCOMPARE(editor->documentCount(),2);int count=0;for(auto *widget:qApp->topLevelWidgets())if(qobject_cast<ImageEditorWindow *>(widget))++count;QCOMPARE(count,1);toolbar.setSource(first);toolbar.setReady(true);button->click();QCOMPARE(editor->documentCount(),2);QCOMPARE(editor->document()->metadata("sourcePath"),first);editor->close();QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);QVERIFY(editor.isNull());
-    }
+
     void precisionStrokeSelectionAndUndo() {
         ImageDocument document({600,400},ImagePrecision::UInt16);QImage original(600,400,QImage::Format_RGBA64);
         original.fill(QColor::fromRgba64(1001,2003,3005,65535));const auto id=document.addLayer("Source",original);document.history()->clear();
@@ -109,11 +104,7 @@ private slots:
         QVERIFY(hasOutline());document.history()->undo();QTest::qWait(20);QCOMPARE(document.selectionId(),selectionId);QCOMPARE(document.selectionRegion({0,0,400,300}),selectionA);QVERIFY(hasOutline());
         document.history()->redo();QTest::qWait(20);QCOMPARE(document.selectionId(),selectionId);QCOMPARE(document.selectionRegion({0,0,400,300}),selectionA);QVERIFY(hasOutline());
     }
-    void playerDetailedEditorEntry() {
-        PreviewPane pane("Image","IMG");QImage image(30,20,QImage::Format_RGBA8888);image.fill(Qt::blue);pane.setImage(image);
-        PlayerImageTools toolbar(&pane);toolbar.setSource("example.png");toolbar.setReady(true);toolbar.show();auto *button=toolbar.findChild<QToolButton *>("imageTool_edit");QVERIFY(button);QVERIFY(button->isEnabled());QTest::mouseClick(button,Qt::LeftButton);
-        auto *editor=toolbar.findChild<ImageEditorWindow *>("imageEditorWindow");QVERIFY(editor);QCOMPARE(editor->document()->size(),QSize(30,20));QCOMPARE(editor->document()->composite({0,0,1,1}).pixelColor(0,0),QColor(Qt::blue));editor->close();
-    }
+
 };
 QTEST_MAIN(TestImageEditor)
 #include "TestImageEditor.moc"

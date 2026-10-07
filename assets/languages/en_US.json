@@ -577,5 +577,16 @@
   "选择文件夹…": "Choose folder…",
   "默认截图保存路径": "Default screenshot folder",
   "算法": "Algorithm",
-  "补帧算法": "Interpolation algorithm"
+  "补帧算法": "Interpolation algorithm",
+  "CPU 预缩放(实验)": "CPU pre-scale (experimental)",
+  "PhotoCraft 启动超时，请检查图形驱动后重试。": "PhotoCraft startup timed out. Check the graphics driver and retry.",
+  "PhotoCraft 图像编辑器": "PhotoCraft image editor",
+  "PhotoCraft 图像编辑器未安装：%1": "PhotoCraft image editor is not installed: %1",
+  "仅作用于 CPU 软解：在上传前按比例缩小，保留位深和色度格式；降低传输/渲染开销，但牺牲空间细节。硬解与 VS 输出不受影响。": "CPU decoding only: proportionally reduce resolution before upload, retaining bit depth and chroma format. Reduces transfer/rendering work at the cost of spatial detail. Hardware decoding and VS output are unaffected.",
+  "关闭(保持完整源分辨率)": "Off (keep full source resolution)",
+  "已打开高精度视图副本，请在 PhotoCraft 中另存为。": "High-precision view copy opened. Use Save As in PhotoCraft.",
+  "无法创建高精度图像交换目录。": "Unable to create the high-precision image exchange directory.",
+  "无法启动 PhotoCraft 图像编辑器。": "Unable to launch the PhotoCraft image editor.",
+  "正在准备高精度图像…": "Preparing the high-precision image…",
+  "高精度导出和格式转换": "High-precision export and format conversion"
 }

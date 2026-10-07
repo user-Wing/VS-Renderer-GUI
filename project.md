@@ -2,7 +2,14 @@
 
 本文件用于接手开发、定位模块和确认当前边界。用户操作见 [README.md](README.md)，版本变更见 [changelog.md](changelog.md)，逐轮测试与交付记录见 [专项文档](docs/) 和 [历史原文归档](docs/history/development-records-through-2026-10-03.md)。
 
-核对日期：2026-10-06。当前版本为 **1.0.7**；本轮授权制作 Full / Lite 压缩包、上传源码及准备无附件 Release Draft，二进制上传与正式发布由维护者操作。原生入口 `patches/3fp-software-decode-pipeline.patch` 将 HEVC / AV1 软解上限提升至 32 线程、软件帧预算提升至 512 MiB，并增加独立解码线程及有界交接；正常取帧提交、音频与快照继续由会话线程维护。字幕匹配在 `PlayerMediaMatching`，候选切换在 `PlayerMenus`。细节与验证见 [软件解码更新](docs/software-decode-subtitles-1.0.7.md) 与 [发行说明](docs/release-1.0.7.md)。
+核对日期：2026-10-07。当前版本为 **1.0.8**；按维护者最新指示构建 Full / Lite 包并更新 GitHub 源码，正式 Release 和附件由维护者发布，保留维护者手动更新的 FFmpeg。`PlayerPlaylist::layoutInfoPanels` 按顶部标题和底栏实际高度约束 Tab 面板；`PlayerInfoPanel` 为透明度栏保留控件高度及约 5% 间距；音频详细面板可见时禁止鼠标自动弹出播放列表。窗口移动即时同步浮层，仅调整界面几何。验证见 [浮层修复记录](docs/player-overlay-layout-1.0.8.md)。
+
+1.0.8 图像编辑入口已切换到原生 Rust/egui PhotoCraft。`PhotoCraftEditor` 通过当前用户专用命名管道交接文件，独立编辑进程保留完整上游 UI；VSP 可继续播放，退出不会终止编辑器。普通/PSD/RAW 直接打开，视图变换及不支持的编码使用 RGBA16 PNG / float32 TIFF 交换。旧 Qt 编辑窗口不再链接进 VSPlayer，旧源码只保留独立回归与历史参考；`ImageDocument/ImagePsd/ImageHdr` 继续服务本地解码及高精度交换。固定上游提交、许可、≤45 MB 体积预算和实测见 [接入记录](docs/photocraft-editor-1.0.8.md)。
+
+1.0.7 已制作 Full / Lite 压缩包、上传源码并准备无附件 Release Draft，二进制上传与正式发布由维护者操作。原生入口 `patches/3fp-software-decode-pipeline.patch` 将 HEVC / AV1 软解上限提升至 32 线程、软件帧预算提升至 512 MiB，并增加独立解码线程及有界交接；正常取帧提交、音频与快照继续由会话线程维护。字幕匹配在 `PlayerMediaMatching`，候选切换在 `PlayerMenus`。细节与验证见 [软件解码更新](docs/software-decode-subtitles-1.0.7.md) 与 [发行说明](docs/release-1.0.7.md)。
+
+1.0.8 的 `patches/3fp-silent-video-startup-clock.patch` 修复无音频输出时仍启用首帧音频门控、后续视频帧因此绕过 PTS 等待的问题；`tools/build-3fp.ps1` 在既有补丁之后应用它。真实启动、跳转和续播验收为 `TestPlayer::directStartupClock`，见 [启动时钟记录](docs/player-startup-clock-1.0.8.md)。
+1.0.8 的 `BlurayCatalog::playbackInput` 把生成的分段 `inpoint` 前移 1 ms：MPLS 的 PlayItem IN 常等于片段首个 IDR 的时间戳，而 FFmpeg 拼接解复用器按 `inpoint` 定位后会从该 IDR 之后的包继续，原生直通解码器因此没有参考帧，单集与整卷各段开头约 1 秒花屏。`outpoint` / `duration` 保持作者时间轴，段时长与音画同步不变。逐帧哈希与段帧数见 [拼接前置记录](docs/player-bd-concat-preroll-1.0.8.md)。
 
 2026-10-06 增加独立底部 / 播放列表透明度、全屏控制栏实际高度唤出及顶部标题覆盖层。`PlayerChromePanel` 负责原生视频上的透明合成；`PlayerInfoPanel` 将可滚动文字和底部透明度条分开。Tab 可选择右侧音频详细面板，输入电平扩展位于 `patches/3fp-audio-input-meters.patch`，由 `ThreeFpApi` / `ThreeFpPlayer` 读取并在 `PlayerInfo` 显示。记录见 [透明控制栏与音频信息](docs/player-transparent-audio-info-1.0.7.md)。
 
@@ -30,7 +37,7 @@
 
 1.0.5 后续交互更新集中在 `PlayerControls/Window/Info`、`PreviewPane` 和 `ImageEditorCanvas`；补帧八组合与双自动入口在 `PlayerProfiles/Menus`，Player VS 音频时钟专用接口由 `patches/3fp-vs-audio-clock.patch` 提供。2026-10-05 已与 BD 会话统一更新本地 dist，保留配置与预设。大图并行预测、缓存视图与实时性能的验收/未达标项见 [交互与调度记录](docs/player-interaction-performance-1.0.5.md)，不据短时稳态结果宣称所有补帧模式完成。
 
-图像编辑器本轮补充整体图层交互、独立文字像素层、共享层控件和标尺跟踪；入口仍为播放器“详细编辑”。图层变换/合并接口位于 `ImageDocument`，工具选层/文字位于 `ImageEditorTools`，交互在 `ImageEditorCanvas`，菜单和面板在 `ImageEditorWindow`。操作与验证边界见 [图层交互更新](docs/image-editor-interaction-1.0.4.md)。
+旧 Qt 图像编辑器的图层交互记录仅作为 1.0.4 历史参考，当前生产入口使用 PhotoCraft，见 [接入记录](docs/photocraft-editor-1.0.8.md)。
 
 后续本轮补充平滑显示及视口缓存、滚轮平移、背景锁定、同窗口多文档与图层右键混合选项。混合参数和合并组接口在 `ImageDocument`，标准PSD混合参数在 `ImagePsd`，播放器入口复用窗口在 `PlayerImageTools`；行为、验证与精度边界见 [图像文档与混合选项](docs/image-editor-workflows-1.0.4.md)。
 
@@ -85,7 +92,7 @@ ctest --preset windows-mingw-release
 | 视频、图片分开解码和显示 | 图片不走视频时间轴、VS 或相邻图片预解码 | 图片离线 Anime4K 调整尺寸是独立例外，查看仍不建 VS 图 |
 | 比较滑块裁剪原生父窗口 | 各 pane 保持共同画布坐标，不重复解码或逐帧 CPU 拼图 | 比较导出使用独立离线合成，不能宣称与预览逐像素一致 |
 
-**处理路径：** Renderer 实时链为 GUI → FilterGraph → VPY → VSScript 帧服务 → 3FP 外部帧呈现，源路提供播放时钟。Player 本地视频可走 VS 链或 3FP 原生直通；HTTP/HTTPS 固定原生直通，madVR 使用 LAV/DirectShow，二者不执行 VPY。图片由 PlayerImage 解码后交 PreviewPane 绘制，另存工具调用重采样或 AWJ 后端。详细编辑使用独立 ImageDocument：256px稀疏块、LRU磁盘换出、RGBA8/16/32F及局部历史；PSD走独立层组/蒙版读取、延迟通道展开和区域编辑，快照支持后台预览与PSD/TIFF保存。普通图片仍复用整图解码；查看器后台建立受内存上限约束的显示层级，编辑器保留整图概览与可见区域高质量缓存，均不替代原精度像素。接口与边界见 [图像编辑方案](docs/image-editor-plan.md)。
+**处理路径：** Renderer 实时链为 GUI → FilterGraph → VPY → VSScript 帧服务 → 3FP 外部帧呈现，源路提供播放时钟。Player 本地视频可走 VS 链或 3FP 原生直通；HTTP/HTTPS 固定原生直通，madVR 使用 LAV/DirectShow，二者不执行 VPY。图片由 PlayerImage 解码后交 PreviewPane 绘制，另存工具调用重采样或 AWJ 后端。详细编辑由独立 PhotoCraft 原生进程接管，文件经私有命名管道打开；本地 ImageDocument/PSD/HDR 保留于解码、高精度交换与历史核心测试。PhotoCraft 的像素模型、ICC、图层、历史、PSD 和滤镜沿用上游。普通图片查看仍由 PreviewPane 负责，编辑界面与视频播放链互不调用。见 [PhotoCraft 接入](docs/photocraft-editor-1.0.8.md)。
 
 ## 4. 目录与改动入口
 
@@ -121,7 +128,7 @@ dist/          本地便携目录及按版本命名的归档
 | Renderer：设置 / 预设 / 导出 | 导航内嵌设置；独立预设管理；非模态导出设置、准备文件、编码队列 | `MainWindowPresets.cpp`、`PresetDialog.cpp`、`ExportWindow.cpp` |
 | Player 主窗口 | 播放表面、两排控制、悬停/停靠播放列表、信息面板和分级右键菜单 | `src/player/PlayerWindow.cpp`、`PlayerControls.cpp`、`PlayerPlaylist.cpp`、`PlayerMenus.cpp` |
 | Player 设置 / 图片工具 | INI 加载保存和取消/确定/应用；图片顶栏、尺寸、裁剪、转换 | `src/player/PlayerSettings.cpp`、`PlayerImageTools.cpp` |
-| 详细图像编辑 | Photoshop系列工具工作区；原精度像素/组/蒙版与历史；PSD、颜色、HDR及导出 | `src/image/ImageDocument.*`、`ImagePsd.*`、`ImageEditorWindow/Canvas/Tools.*`、`ImageAdjustments.*`、`ImageHdr/Surface.*` |
+| 详细图像编辑 | PhotoCraft 原生完整 UI；多文档、图层、文字、滤镜、PSD、16/32 位及 ICC | `src/player/PhotoCraftEditor.*`、`.deps/photocraft`、`patches/photocraft-vsp-integration.patch`；构建 `tools/build-photocraft.ps1` |
 
 Renderer 默认窗口为1800×900逻辑像素，参数栏独立占用可用高度。基础设计见 [UI 规格](docs/ui-layout-spec.md)，其中1440×900与早期侧栏布局是旧基线；当前布局看 [三栏说明](docs/renderer-panels-1.0.3.md)。切 Renderer 页面会暂停离开的播放页；分析页按需初始化。全局空格用于播放/暂停，缩放后支持左键拖动。
 
@@ -217,3 +224,5 @@ Renderer 默认窗口为1800×900逻辑像素，参数栏独立占用可用高�
 其它常查文档：[Renderer三栏](docs/renderer-panels-1.0.3.md)、[比较导出](docs/renderer-ui-export-1.0.3.md)、[图片与音频](docs/player-images-audio-1.0.3.md)、[手动Anime](docs/player-manual-presets-1.0.3.md)、[GLSL与补帧](docs/mpv-shaders-interpolation-1.0.3.md)、[滤镜覆盖](docs/filter-coverage.md)。专项文档中的旧日期和测试结论属于对应轮次，不自动成为当前全量回归结果。
 
 本轮图像编辑B–D/HDR已以40个相关专项验收（含520MiB、9层PSD真实鼠标编辑/撤销、原生完整查看、CICP P3/PQ AVIF、后台PSD保存快照及独立PSD读取）；记录与边界见 [第二轮交付](docs/image-editor-round2-1.0.4.md)。便携仅更新Player与文档，Renderer/native/配置受哈希保护；没有推送或发布压缩包。
+
+1.0.8 本轮：`ThreeFpApi/ThreeFpPlayer` 延迟加载和创建会话，`VapourSynthFrameServer` 显式按需初始化；MainWindow 不再强制预热双会话。`AnalysisPage` 和 MainWindow 对比默认 D3D11 直通，可切回高精度着色器。`PlayerImageTools::writeEditorImport` 与 PhotoCraft `vsp_image` 分带交换超大 RGBA8/16/float32 图像，复用旧 C++ 解码器；原生工作区和完整图层仍由 PhotoCraft 管理。`patches/3fp-experimental-cpu-prescale.patch` 增加默认关闭的软解预缩放接口和 NVDEC 状态名；CPU 性能暂未验收通过，留待专项更新。详见 [实测记录](docs/performance-large-images-1.0.8.md)。

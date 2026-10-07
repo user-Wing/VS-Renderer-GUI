@@ -38,6 +38,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QKeyEvent>
+#include <QMoveEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -126,7 +127,7 @@ PlayerWindow::PlayerWindow() {
     pane_ = new PreviewPane("VS Player", "VS", central); pane_->setChromeVisible(false); pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nCtrl+P 加载 VPY 预设 · Tab 视频信息")); videoSplit_=new QSplitter(Qt::Horizontal,central);videoSplit_->setObjectName("playerVideoSplit");videoSplit_->addWidget(pane_);layout->addWidget(videoSplit_,1);
     hidden_ = new QWidget(central); hidden_->setAttribute(Qt::WA_NativeWindow); hidden_->resize(320, 180); hidden_->hide();
     clock_ = std::make_unique<ThreeFpPlayer>(api_, hidden_); output_ = std::make_unique<ThreeFpPlayer>(api_, pane_->surface()); output_->setMuted(true); clock_->setAutomaticHdr(true); output_->setAutomaticHdr(true);
-    server_ = std::make_unique<VapourSynthFrameServer>();
+    server_ = std::make_unique<VapourSynthFrameServer>(nullptr,false);
     network_=std::make_unique<PlayerNetworkInput>();
     connect(network_.get(),&PlayerNetworkInput::ready,this,[this](const QString &url){mediaInput_=url;openMedia();});
     connect(network_.get(),&PlayerNetworkInput::errorOccurred,this,[this](const QString &message){autoPlay_=false;setError(message);});
@@ -206,15 +207,16 @@ PlayerWindow::PlayerWindow() {
     });
     connect(pane_, &PreviewPane::viewChanged, this, [this](float z, float x, float y) { resetZoom_->setVisible(z!=1 || x!=0 || y!=0);if(resetZoom_->isVisible())resetZoom_->raise();if(imageMode_){pane_->adoptView(z,x,y);updateInfo();return;}suspendQualityCheck();if(!madvrMode()) (direct_?clock_:output_)->setView(z, x, y); });
     connect(pane_, &PreviewPane::redrawRequested, this, [this] { if(imageMode_){pane_->surface()->update();return;}if(madvrMode()) { if(lav_) { const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height()); } } else (direct_?clock_:output_)->redraw();
-        if(ready_)suspendQualityCheck();if(!profile().isEmpty() && interpolationStage()<0 && ready_ && !networkSource())profileResize_->start(); });
+        if(ready_)suspendQualityCheck();if(!direct_ && !profile().isEmpty() && interpolationStage()<0 && ready_ && !networkSource())profileResize_->start(); });
     ensureProfiles();
     profileResize_=new QTimer(this);profileResize_->setSingleShot(true);profileResize_->setInterval(350);
-    connect(profileResize_,&QTimer::timeout,this,[this]{if(!source_.isEmpty() && !profile().isEmpty() && !media_.isEmpty() && profileTarget()!=profileSize_) {resumeAt_=position();autoPlay_=playing_ || autoPlay_;refreshScript();}});
+    connect(profileResize_,&QTimer::timeout,this,[this]{if(!direct_ && !source_.isEmpty() && !profile().isEmpty() && !media_.isEmpty() && profileTarget()!=profileSize_) {resumeAt_=position();autoPlay_=playing_ || autoPlay_;refreshScript();}});
     applySettings(false);
     qApp->installEventFilter(this);
     timer_ = new QTimer(this); timer_->setTimerType(Qt::PreciseTimer);timer_->setInterval(interpolationStage()>=0?4:10); connect(timer_, &QTimer::timeout, this, &PlayerWindow::updateState); timer_->start();
 }
 PlayerWindow::~PlayerWindow() { qApp->removeEventFilter(this); timer_->stop();timelinePreview_->stop();savePosition(); settings_->sync(); network_->cancel(); discMenu_.reset(); subtitles_.reset(); lav_.reset(); clock_->stop(); server_.reset(); network_.reset(); output_.reset(); clock_.reset(); }
+void PlayerWindow::moveEvent(QMoveEvent *event){QMainWindow::moveEvent(event);if(chromeTimer_){layoutChrome();layoutInfoPanels();}}
 bool PlayerWindow::openFile(const QString &input) {
     if(discMenu_ && discMenu_->active()){discMenu_->close(discSurface_);discSurface_=nullptr;}
     decoderBadge_->setEnabled(true);decoderBadge_->setToolTip(tr("切换 3FP 硬件 / 软件解码"));
@@ -311,6 +313,7 @@ void PlayerWindow::refreshScript() {
     applyScaling();
     profileSize_=profileTarget();autoPlay_=resume;
     if(direct_) {server_->unloadScript();ready_=true;lastFrame_=-1;applyScaling();message_->clear();return;}
+    server_->initialize();
     if(server_->initializing()){message_->setText(tr("正在初始化 VS，完成后加载滤镜。"));return;}
     output_->resetVideoOutput(); output_->setMuted(true);
     const auto vsSource=mediaInput_;
@@ -512,7 +515,7 @@ bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
     if (event->type() == QEvent::KeyPress && (isActiveWindow() || qApp->activeWindow()==controls_ || qApp->activeWindow()==playlistPanel_ || qApp->activeWindow()==fullscreenTitle_)) {
         auto *key = static_cast<QKeyEvent *>(event);
         if (key->key() == Qt::Key_Tab && !source_.isEmpty()) { infoVisible_ = !infoVisible_;infoFpsTimer_.invalidate(); updateInfo(); if(infoVisible_){info_->show();info_->raise();}else {static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();} return true; }
-        const bool editing = qobject_cast<QLineEdit *>(object) || qobject_cast<QDoubleSpinBox *>(object) || qobject_cast<QLineEdit *>(qApp->focusWidget()) || qobject_cast<QDoubleSpinBox *>(qApp->focusWidget());
+        const bool editing = qApp->activePopupWidget() || qobject_cast<QComboBox *>(object) || qobject_cast<QComboBox *>(qApp->focusWidget()) || qobject_cast<QLineEdit *>(object) || qobject_cast<QDoubleSpinBox *>(object) || qobject_cast<QLineEdit *>(qApp->focusWidget()) || qobject_cast<QDoubleSpinBox *>(qApp->focusWidget());
         if(!editing && discMenu_ && discMenu_->active() && discMenuNavigation_){int command=-1;switch(key->key()){case Qt::Key_Return:case Qt::Key_Enter:command=0;break;case Qt::Key_Up:command=1;break;case Qt::Key_Down:command=2;break;case Qt::Key_Left:command=3;break;case Qt::Key_Right:command=4;break;case Qt::Key_Menu:command=5;break;default:break;}if(command>=0){discMenu_->navigate(command);return true;}}
         if(!editing && (key->key()==Qt::Key_Left || key->key()==Qt::Key_Right)) {
             const int direction=key->key()==Qt::Key_Left?-1:1;

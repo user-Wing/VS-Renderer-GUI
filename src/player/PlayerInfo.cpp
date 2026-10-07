@@ -27,7 +27,7 @@ void PlayerWindow::updateInfo() {
     if(discMenu_ && discMenu_->active()){
         const auto programme=discMenu_->programme();
         if(infoVisible_)static_cast<PlayerInfoPanel *>(info_)->showText(tr("BD：%1\n渲染器：libVLC · 光盘导航/菜单合成\n位置：%2 s · 时长：%3 s\n输入视频：%4 × %5 · %6 fps\n视口：%7 × %8\n当前音轨：%9 · 当前字幕：%10\n章节：%11\n模式：%12\n处理链：菜单交互；正片识别后恢复所选滤镜").arg(source_).arg(position()/10000000.,0,'f',2).arg(discMenu_->duration()/10000000.,0,'f',2).arg(programme.value("width").toInt()).arg(programme.value("height").toInt()).arg(programme.value("fps").toDouble(),0,'f',3).arg(pane_->surface()->width()).arg(pane_->surface()->height()).arg(programme.value("audio").toInt()).arg(programme.value("subtitle").toInt()).arg(programme.value("chapters").toArray().size()).arg(discMenuNavigation_?tr("交互菜单 (方向键/Enter)"):tr("短节目")));
-        return;
+        layoutInfoPanels();return;
     }
     if(imageMode_){
         if(!infoVisible_)return;
@@ -45,7 +45,7 @@ void PlayerWindow::updateInfo() {
              <<tr("图片渲染器：Qt Raster · 可见区域裁切 · SDR")
              <<tr("VS 滤镜：未启用 · 预解码：未启用")
              <<tr("CPU：%1 · GPU：%2 · 内存：%3 MiB").arg(usage_.processCpu>=0?QString::number(usage_.processCpu,'f',1)+"%":tr("采样中"),usage_.gpu>=0?QString::number(usage_.gpu,'f',1)+"%":tr("未提供")).arg(usage_.memoryMiB);
-        static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));info_->raise();if(fullscreenTitle_->isVisible())fullscreenTitle_->raise();return;
+        static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));layoutInfoPanels();return;
     }
     usage_=resources_.sample();
     const auto refreshed = QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();
@@ -161,7 +161,7 @@ void PlayerWindow::updateInfo() {
     if(!externalSecondarySubtitle_.isEmpty())files<<tr("字幕 2：%1").arg(externalSecondarySubtitle_);
     lines=files+lines;static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));info_->raise();
     updateAudioInfo(audio,audioRate);
-    if(fullscreenTitle_->isVisible())fullscreenTitle_->raise();
+    layoutInfoPanels();
 }
 void PlayerWindow::updateAudioInfo(const QJsonObject &audio,quint64 bitRate) {
     if(!infoVisible_ || !settings_->value("info/audioDetailed",false).toBool()){audioInfo_->hidePanel();return;}

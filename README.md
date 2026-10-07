@@ -4,13 +4,19 @@ Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜�
 
 ## 下载与启动
 
+当前版本为 **1.0.8**，提供 Full / Lite 便携压缩包并更新 GitHub 源码；二进制上传与正式发布由维护者操作。修复全屏顶部标题与 Tab 面板重叠、音频详细面板被播放列表遮挡、透明度栏空间不足和拖动窗口时底栏滞后；浮层变化保持视频视口与播放链不变。保留维护者手动更新的 FFmpeg。见 [浮层修复记录](docs/player-overlay-layout-1.0.8.md)。
+
+修复无音轨视频直通启动及跳转时按显示器刷新速度推进画面的问题：首帧音频门控仅在存在音频输出时启用，无音轨视频按媒体时间戳等待呈现。原因与真实文件验收见 [启动时钟记录](docs/player-startup-clock-1.0.8.md)。
+
+修复从光盘播放列表加载单集时开头约 1 秒花屏：分段描述里的 `inpoint` 原等于 PlayItem IN，而该值恰好是片段首个 IDR 的时间戳，FFmpeg 拼接解复用器定位后会跳过该 IDR，解码器在没有参考帧的情况下开始工作。现在 `inpoint` 前移 1 ms，`outpoint` / `duration` 与作者时间轴不变。原因、逐帧哈希对比与段帧数见 [拼接前置记录](docs/player-bd-concat-preroll-1.0.8.md)。
+
 1.0.7 的源画面和实画面截图统一为 **PNG 每通道 16-bit、最高无损压缩级别**。HDR 默认生成 SDR 预览，同时保存 `.hdr.png` 和原始浮点数据，避免普通 SDR 查看器显示灰暗。右键 → 图像截取默认保存在程序旁 `screenshots/`，可在设置 → 基本设置修改默认路径，也可通过“截图到指定路径…”单次选择文件夹。格式、实际位深和色准对比方法见 [高精度截图](docs/player-high-precision-screenshots-1.0.7.md)。
 
 1. 从 [GitHub Releases](https://github.com/user-Wing/VS-Renderer-GUI/releases) 或 [ModelScope 更新源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) 下载完整便携包。
 2. 解压整个目录，运行 `VSRenderer.exe` 或 `vs-player.exe`。无需另外安装 Qt、Python、VapourSynth。
 3. 系统要求：Windows 10 22H2 或更新的 64 位 Windows，支持 Direct3D 11 的显卡与驱动；RIFE 补帧需要 Vulkan 驱动。
 
-当前版本为 **1.0.7**：HEVC / AV1 软解线程上限提升至 32，软件帧队列预算提升至 512 MiB，解码与取帧提交分开运行；自动匹配同目录的字幕名称变体，并可在右键字幕菜单切换。具体条件与验证见 [软件解码更新](docs/software-decode-subtitles-1.0.7.md)。提供 `1.0.7.7z` Full 与 `1.0.7-Lite.7z`，源码上传并准备无附件 Release Draft，二进制附件与正式发布由维护者操作。见 [1.0.7 发行说明](docs/release-1.0.7.md)。
+1.0.7 更新：HEVC / AV1 软解线程上限提升至 32，软件帧队列预算提升至 512 MiB，解码与取帧提交分开运行；自动匹配同目录的字幕名称变体，并可在右键字幕菜单切换。具体条件与验证见 [软件解码更新](docs/software-decode-subtitles-1.0.7.md)。上一轮已制作 `1.0.7.7z` Full 与 `1.0.7-Lite.7z`，推送源码及准备无附件 Release Draft，二进制附件与正式发布由维护者操作。见 [1.0.7 发行说明](docs/release-1.0.7.md)。
 
 底栏算法框按实际档位显示 `A4KCNN+ / A4KCNN / A4K+ / A4K / Jinc / D3D11`。启用补帧时显示两个框：`Jinc / D3D11` 与 `RIFE+ / RIFE / MVT+ / MVT`，不再用单独一行文字显示常驻直通状态。
 
@@ -73,11 +79,11 @@ D3D11 / Jinc 直通及 VS 模式支持拖动进度条时连续预览；松手精
 
 停用预设的原画播放同样使用 3FP 直通，不建立 VS 帧索引；Jinc / D3D11 不等待 VS 初始化。内嵌 ASS / SRT 字幕按播放位置增量读取，不再为了提取字幕扫描整部视频。自定义 VPY 和增强 / 补帧仍可能需要首次索引。大文件加载验证边界见 [直通加载说明](docs/player-direct-open-1.0.4.md)。
 
-**图片工具栏**：顶部图标提供旋转、镜像、回收站删除、桌面背景、调整尺寸、裁剪和压缩转换，悬停显示名称；“详细编辑”进入 Photoshop 系列布局的独立编辑窗口，工具组右键切换，顶部调整当前工具参数，右侧选择图层/蒙版/通道与历史。尺寸、裁剪和转换另存输出。转换复用 [AWJimage](https://github.com/Dominic485649/AWJimage) 的 AVIF、WebP、JXL、JPEGli、PNG 编码及固定/视觉质量模式（该转换后端需要 AVX2）。
+**图片工具栏**：点击“PhotoCraft 图像编辑器”打开原生 Rust 编辑工作区，完整采用 PhotoCraft 的菜单、工具组、参数栏、文档标签和右侧面板。裁剪、调整尺寸、文字、图层及滤镜均在此窗口操作；同一播放器重复打开同一路径会切回已有文档，关闭播放器后编辑器仍可保存未完成的工作。
 
-裁剪框可移动、拉伸边角，支持常用和自定义比例，默认PNG无损保存。调整尺寸默认Jinc，可选Lanczos3/4和Anime4K放大；AVIF自动位深将8bit升至10bit，上限12bit。设置的渲染页可选择自动补帧起始档位；最低档仍持续丢帧时，画面左上角提示建议关闭补帧。
+图片查看栏保留旋转、镜像、回收站、桌面背景，以及“高精度导出和格式转换”。后者继续使用 [AWJimage](https://github.com/Dominic485649/AWJimage) 的 AVIF、WebP、JXL、JPEGli、PNG 编码（该后端需要 AVX2）。PhotoCraft 的文件保存方式以自身菜单为准；“另存为”会将当前文档关联到新路径，请选择新文件名以保留原图。
 
-**图层编辑**：点击右侧图层行后，在整体边框内拖动位置，拖动四角或边上的手柄缩放，按住 Shift 保持比例。拖动使用缓存显示代理实时跟随，松手提交原精度位置；Delete 删除当前未锁定图层。多工具组启动即显示下拉箭头。文字插入为独立像素图层；`Ctrl+T` 进入自由变换，Enter 提交、Esc 撤销；`Ctrl+E` 向下合并。顶部“编辑 → 变换”提供翻转与90°/180°旋转，标尺随鼠标标记坐标。实现与限制见 [图层交互更新](docs/image-editor-interaction-1.0.4.md)。
+普通图片、PSD/PSB 和支持的 RAW 直接打开原文件；超大图片复用 VSP 原有解码器，以 32 MiB 分带交换完整分辨率、位深、透明度和 ICC，已验证 48000×32000 PNG；旋转后的视图及 AVIF 等原生编辑器暂不支持的格式，通过 16 位 PNG 或 32 位浮点 TIFF 副本传入，保留 ICC 和 HDR 原始值。视图副本需要在编辑器中另存为。VSP 的高精度截图与 SDR 显示回退继续保留。运行无需安装 Rust，接入、体积和验收见 [PhotoCraft 编辑器记录](docs/photocraft-editor-1.0.8.md)。
 
 | 操作 | 快捷键 / 鼠标 |
 | --- | --- |
@@ -115,3 +121,5 @@ HEVC 444p10 高码率尖峰的本机复现、队列预算与解码线程对照�
 - [工作区清理记录](docs/workspace-cleanup.md)：开发副本与缓存占用；主目录 `Clean-Workspace.bat` 可手动清理，`--preview`仅预览。
 
 源码采用 [MIT License](LICENSE)，随包第三方组件遵循各自许可证，见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+
+1.0.8 延迟加载 3FP、VS/Python、字幕库和 GPU 计数器，直接看图不初始化视频后端。Renderer 对比默认使用 D3D11 原生直通，并保留可选高精度算法。HEVC Rext 4:4:4 10 位在 D3D11VA 不支持时使用 NVDEC/CUDA；正常 D3D11VA 路径保持不变。CPU 预缩放位于解码设置，默认关闭，仅作为实验项，性能验收留待专项更新。实测条件见 [性能与大图验收](docs/performance-large-images-1.0.8.md)。

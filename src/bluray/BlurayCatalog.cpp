@@ -31,6 +31,12 @@ void put32(QByteArray &d, int p, quint32 v) { qToBigEndian(v,d.data()+p); }
 QByteArray read(const QString &path) { QFile f(path); return f.open(QIODevice::ReadOnly)?f.read(8*1024*1024):QByteArray(); }
 bool save(const QString &path, const QByteArray &data) { QSaveFile f(path); return f.open(QIODevice::WriteOnly) && f.write(data)==data.size() && f.commit(); }
 QString cleanName(QString name) { while(name.endsWith(QChar(0)))name.chop(1);return name; }
+// The concat demuxer trims a segment by seeking to inpoint and resuming at the
+// packet after the seek result. A PlayItem IN equal to the clip's first IDR
+// timestamp therefore skips that IDR and the decoder starts without a reference
+// frame, showing roughly a second of corrupt video. A sub-frame preroll keeps
+// the opening IDR in the stream without changing the authored timeline.
+constexpr double SegmentPrerollSeconds = 0.001;
 void roots(const QString &path, int depth, QStringList &found) {
     const QString child=QDir(path).filePath("BDMV");
     if(QFileInfo(QDir(child).filePath("PLAYLIST")).isDir() && QFileInfo(QDir(child).filePath("STREAM")).isDir()){found<<QFileInfo(child).absoluteFilePath();return;}
@@ -236,7 +242,9 @@ QString BlurayCatalog::playbackInput(const QString &playlist,QString *error) {
     for(const int pid:streamIds){input+="stream\nexact_stream_id "+QByteArray::number(pid)+"\n";const auto language=languages.value(QString::number(pid)).toString();if(!language.isEmpty())input+="stream_meta language "+language.toLatin1()+"\n";}
     for(const auto &part:p.parts){
         input+="file 'STREAM/"+part.clip.toUtf8()+".m2ts'\n";
-        input+="inpoint "+QByteArray::number(part.in/45000.,'f',6)+"\n";
+        const double start=part.in/45000.;
+        const double preroll=start>=SegmentPrerollSeconds?SegmentPrerollSeconds:start;
+        input+="inpoint "+QByteArray::number(start-preroll,'f',6)+"\n";
         input+="outpoint "+QByteArray::number(part.out/45000.,'f',6)+"\n";
         input+="duration "+QByteArray::number((part.out-part.in)/45000.,'f',6)+"\n";
     }

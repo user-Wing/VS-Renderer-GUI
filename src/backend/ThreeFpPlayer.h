@@ -23,6 +23,7 @@ public:
     bool play();
     bool pause();
     bool setClockOnly(bool enabled);
+    bool setSoftwarePreScale(int height);
     void stop();
     bool seek(std::int64_t position100ns);
     bool seekFrame(std::int64_t frame);
@@ -70,6 +71,7 @@ private:
     int chromaAlgorithm_ = 1;
     bool muted_ = false;
     bool clockOnly_ = false;
+    int softwarePreScaleHeight_ = 0;
     float volume_ = 1.0f;
     unsigned decodeMode_ = 2;
     bool automaticHdr_ = false;

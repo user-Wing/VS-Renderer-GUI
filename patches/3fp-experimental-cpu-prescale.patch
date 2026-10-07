@@ -1,0 +1,125 @@
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -18,6 +18,7 @@
+ #include <libavutil/spherical.h>
+ #include <libavutil/pixdesc.h>
+ #include <libavutil/dict.h>
++#include <libavutil/opt.h>
+ #include <libavutil/samplefmt.h>
+ #include <libswscale/swscale.h>
+ }
+@@ -414,6 +415,7 @@
+     const auto* type = av_hwdevice_get_type_name(context->type);
+     if (type == nullptr) return {};
+     if (context->type == AV_HWDEVICE_TYPE_D3D11VA) return "DXVA (D3D11VA)";
++    if (context->type == AV_HWDEVICE_TYPE_CUDA) return "NVDEC (CUDA)";
+     return type;
+ }
+ }
+@@ -2539,6 +2541,31 @@
+     }
+ }
+ 
++FFFResult PlayerSession::SetSoftwarePreScale(const std::int32_t height) noexcept {
++    if (height != 0 && height != 720 && height != 1080 && height != 2160)
++        return FFFResult::InvalidArgument;
++    softwarePreScaleHeight_.store(height);
++    return FFFResult::Success;
++}
++
++AVFrame* PlayerSession::PreScaleSoftwareFrame(AVFrame* frame) noexcept {
++    const auto height = softwarePreScaleHeight_.load();
++    if (height == 0 || frame->height <= height || IsHardwareFrame(frame)) return frame;
++    const auto width = std::max(2, static_cast<int>(static_cast<std::int64_t>(frame->width) * height / frame->height) & ~1);
++    auto* output = av_frame_alloc();
++    if (output == nullptr) return nullptr;
++    output->width = width;output->height = height;output->format = frame->format;
++    if (av_frame_get_buffer(output, 32) < 0) { av_frame_free(&output);return nullptr; }
++    if (softwarePreScaler_ == nullptr) softwarePreScaler_ = sws_alloc_context();
++    if (softwarePreScaler_ == nullptr) { av_frame_free(&output);return nullptr; }
++    av_opt_set_int(softwarePreScaler_, "threads", std::min(8u,std::max(1u,std::thread::hardware_concurrency())), 0);
++    av_opt_set_int(softwarePreScaler_, "sws_flags", SWS_BILINEAR | SWS_ACCURATE_RND, 0);
++    if (sws_scale_frame(softwarePreScaler_, output, frame) < 0 || av_frame_copy_props(output, frame) < 0) {
++        av_frame_free(&output);return nullptr;
++    }
++    return output;
++}
++
+ void PlayerSession::SoftwareVideoDecodeWorker() noexcept {
+     auto* frame = av_frame_alloc();
+     for (;;) {
+@@ -2623,6 +2650,7 @@
+     }
+     softwareVideoCondition_.notify_one();
+     if (softwareVideoWorker_.joinable()) softwareVideoWorker_.join();
++    sws_free_context(&softwarePreScaler_);
+     softwareVideoStopping_ = false;
+ }
+ 
+@@ -2932,7 +2960,9 @@
+         return;
+     }
+ 
+-    AVFrame* renderFrame = frame;
++    AVFrame* renderFrame = snapshot_.decodeMode == FFF3FPDecodeMode::Cpu ? PreScaleSoftwareFrame(frame) : frame;
++    if (renderFrame == nullptr) { Fail(FFFResult::NativeFailure, "Software pre-scaling failed.");return; }
++    const auto releaseScaled = std::unique_ptr<AVFrame, decltype([](AVFrame* value) { av_frame_free(&value); })>(renderFrame != frame ? renderFrame : nullptr);
+     if (IsHardwareFrame(frame) && frame->format != AV_PIX_FMT_D3D11) {
+         if (videoTransferFrame_ == nullptr) videoTransferFrame_ = av_frame_alloc();
+         if (videoTransferFrame_ == nullptr) {
+@@ -3489,6 +3519,7 @@
+         << ",\"probeScore\":" << format_->probe_score
+         << ",\"staticImage\":" << (staticImage_ ? "true" : "false")
+         << ",\"videoDecoderThreads\":" << (videoDecoder_ ? videoDecoder_->thread_count : 0)
++        << ",\"softwarePreScaleHeight\":" << softwarePreScaleHeight_.load()
+         << ",\"softwareVideoQueueBudgetBytes\":" << DecodedVideoQueueBudgetBytes
+         << ",\"softwareVideoDecodeAsync\":" <<
+             (videoDecoder_ && snapshot_.decodeMode == FFF3FPDecodeMode::Cpu && !staticImage_ ? "true" : "false")
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -23,11 +23,13 @@
+ struct AVFrame;
+ struct AVPacket;
+ struct AVBufferRef;
++struct SwsContext;
+ struct AVFilterGraph;
+ struct AVFilterContext;
+ 
+ class PlayerSession final {
+ public:
++    FFFResult SetSoftwarePreScale(std::int32_t height) noexcept;
+     explicit PlayerSession(const FFF3FPConfiguration& configuration);
+     ~PlayerSession();
+ 
+@@ -95,6 +97,9 @@
+     std::string LastError() const;
+ 
+ private:
++    AVFrame* PreScaleSoftwareFrame(AVFrame* frame) noexcept;
++    std::atomic<std::int32_t> softwarePreScaleHeight_{0};
++    SwsContext* softwarePreScaler_ = nullptr;
+     using Command = std::function<void()>;
+     enum class StepOperation {
+         Frame,
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -497,6 +497,9 @@
+ FFF3FP_API FFFResult FFF3FP_Pause(FFF3FPHandle player) noexcept;
+ // Used before opening a VS source: retain metadata/audio/clock without a second video decoder.
+ FFF3FP_API FFFResult FFF3FP_SetClockOnly(FFF3FPHandle player, std::int32_t enabled) noexcept;
++// Experimental CPU-only bilinear pre-scale, preserving source pixel format/bit depth.
++// Height 0 disables it; accepted caps: 720, 1080, 2160. Hardware frames bypass it.
++FFF3FP_API FFFResult FFF3FP_SetSoftwarePreScale(FFF3FPHandle player, std::int32_t height) noexcept;
+ // Synchronously stops the current audio renderer and discards already-submitted
+ // endpoint buffers. Intended for media/session replacement, not normal pause.
+ FFF3FP_API FFFResult FFF3FP_DiscardAudioOutput(FFF3FPHandle player) noexcept;
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -65,6 +65,7 @@
+ FFFResult FFF3FP_Play(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->Play() : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_Pause(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->Pause() : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_SetClockOnly(const FFF3FPHandle player, const std::int32_t enabled) noexcept { return player ? static_cast<PlayerSession*>(player)->SetClockOnly(enabled != 0) : FFFResult::InvalidArgument; }
++FFFResult FFF3FP_SetSoftwarePreScale(const FFF3FPHandle player, const std::int32_t height) noexcept { return player ? static_cast<PlayerSession*>(player)->SetSoftwarePreScale(height) : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_DiscardAudioOutput(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->DiscardAudioOutput() : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_Stop(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->Stop() : FFFResult::InvalidArgument; }
+ FFFResult FFF3FP_Close(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->Close() : FFFResult::InvalidArgument; }

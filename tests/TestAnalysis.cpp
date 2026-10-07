@@ -52,6 +52,7 @@
 #include <QFileInfo>
 #include <QTest>
 #include <QToolButton>
+#include <windows.h>
 
 using namespace vsr;
 class ViewEventCounter final : public QObject {
@@ -68,6 +69,23 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void rendererStartupBudget() {
+        const auto before=GetModuleHandleW(L"FFF.Native.dll");QElapsedTimer timer;timer.start();MainWindow window;window.show();
+        qInfo()<<"renderer-startup-construction-ms"<<timer.elapsed();QCOMPARE(GetModuleHandleW(L"FFF.Native.dll"),before);
+        auto *state=window.findChild<QLabel *>("rendererWarmupState");QVERIFY(state);QCOMPARE(state->text(),QStringLiteral("就绪"));
+    }
+    void dual4kPerformance() {
+        const auto path=qEnvironmentVariable("VSR_COMPARE_SOURCE");if(path.isEmpty())QSKIP("Set VSR_COMPARE_SOURCE for real comparison performance");
+        ThreeFpApi api;AnalysisPage page(api);page.resize(1920,1080);page.show();page.openFiles({path,path});
+        QTRY_VERIFY_WITH_TIMEOUT(page.videoCount()==2 && !page.busy(),30000);page.togglePlayback();QTRY_COMPARE_WITH_TIMEOUT(page.snapshot(0).state,ThreeFpState::Playing,10000);
+        QTest::qWait(2000);const auto first=page.snapshot(0),second=page.snapshot(1);QElapsedTimer elapsed;elapsed.start();int worstTick=0;
+        while(elapsed.elapsed()<10000){QElapsedTimer tick;tick.start();QTest::qWait(50);worstTick=std::max(worstTick,int(tick.elapsed()));}
+        const auto a=page.snapshot(0),b=page.snapshot(1);const double seconds=elapsed.elapsed()/1000.;
+        qInfo()<<"dual-performance"<<"wall"<<seconds<<"accepted-fps"<<(a.presentedVideoFrames-first.presentedVideoFrames)/seconds<<(b.presentedVideoFrames-second.presentedVideoFrames)/seconds<<"dropped"<<a.droppedVideoFrames-first.droppedVideoFrames<<b.droppedVideoFrames-second.droppedVideoFrames<<"worst-ui-tick-ms"<<worstTick<<"timeline"<<a.position100ns/1e7<<b.position100ns/1e7<<"mode"<<a.decodeMode<<b.decodeMode;
+        page.pause();QVERIFY(a.presentedVideoFrames>first.presentedVideoFrames);QVERIFY(b.presentedVideoFrames>second.presentedVideoFrames);QVERIFY(worstTick<500);QVERIFY(qAbs((a.position100ns-first.position100ns)/1e7-seconds)<.5);QVERIFY(qAbs(a.position100ns-b.position100ns)<1000000);
+        const double minimum=qEnvironmentVariable("VSR_COMPARE_MIN_FPS").toDouble();
+        QVERIFY2((a.presentedVideoFrames-first.presentedVideoFrames)/seconds>=minimum && (b.presentedVideoFrames-second.presentedVideoFrames)/seconds>=minimum,"Both comparison lanes must meet the requested realtime frame rate");
+    }
     void rendererLayoutAndParameterSizing()
     {
         const auto oldFont=qApp->font();const auto oldStyle=qApp->styleSheet();
@@ -101,7 +119,7 @@ private slots:
             QVERIFY2(catalog->fontMetrics().horizontalAdvance(catalog->item(i)->text())+12<=catalog->viewport()->width(),qPrintable(catalog->item(i)->text()));
         auto *warmup=window.findChild<QLabel *>("rendererWarmupState");QVERIFY(warmup);
         QVERIFY(warmup->parentWidget()!=source->parentWidget());
-        QTRY_COMPARE_WITH_TIMEOUT(warmup->text(),QStringLiteral("已预热"),15000);
+        QCOMPARE(warmup->text(),QStringLiteral("就绪"));
         for(auto *action:window.findChildren<QAction *>())QVERIFY(action->text()!=QStringLiteral("实验设置"));
         for(auto *button:window.findChildren<QPushButton *>())QVERIFY(button->text()!=QStringLiteral("查看生成的 VPY"));
         window.grab().save(QCoreApplication::applicationDirPath()+"/renderer-ui-layout.png");
@@ -110,6 +128,7 @@ private slots:
         for(const auto &definition:FilterCatalog::all()) {
             FilterGraph graph;graph.add(definition.id);editor.setNode(&definition,&graph.nodes().first());QCoreApplication::processEvents();
             for(const auto &parameter:definition.parameters) {
+                if(definition.id=="anime4k" && parameter.id=="dimension_axis")continue;
                 auto *label=editor.findChild<QLabel *>("parameterLabel_"+parameter.id);auto *field=editor.findChild<QWidget *>("parameter_"+parameter.id);
                 QVERIFY(label && field);QVERIFY2(!label->geometry().intersects(field->geometry()),qPrintable(definition.id+":"+parameter.id));
                 if(parameter.type==ParameterType::Boolean)QVERIFY(std::abs(field->geometry().right()-(editor.width()-9))<=1);

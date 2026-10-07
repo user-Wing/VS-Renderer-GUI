@@ -5,8 +5,21 @@
 #include <QDir>
 #include <QSettings>
 #include "player/PlayerAssociations.h"
+#include "player/PlayerImage.h"
+#include "player/PlayerImageTools.h"
+#include <QTimer>
+#include <QFileInfo>
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
+    if(app.arguments().value(1)=="--photocraft-import" && app.arguments().size()==4){
+        vsr::PlayerImage decoder;int result=1;
+        QObject::connect(&decoder,&vsr::PlayerImage::loaded,&app,[&](const QImage &image){
+            const auto error=vsr::PlayerImageTools::writeEditorImport(image,app.arguments()[3],QFileInfo(app.arguments()[2]).fileName());
+            if(!error.isEmpty())qWarning().noquote()<<error;result=error.isEmpty()?0:1;app.quit();
+        });
+        QObject::connect(&decoder,&vsr::PlayerImage::failed,&app,[&](const QString &error){qWarning().noquote()<<error;app.quit();});
+        QTimer::singleShot(0,&app,[&]{decoder.open(app.arguments()[2]);});app.exec();return result;
+    }
     app.setApplicationName("VS Player"); app.setOrganizationName("VSRenderer"); app.setApplicationVersion(VSR_VERSION);
     app.setWindowIcon(QIcon(":/icons/player.ico"));
     QSettings associations("HKEY_CURRENT_USER\\Software\\VSPlayer\\Capabilities", QSettings::NativeFormat);

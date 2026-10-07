@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.0.7 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.0.8 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,7 +36,6 @@ qt_add_library(vsr_image_editor STATIC
     src/image/ImageEditorTools.cpp src/image/ImageEditorTools.h
     src/image/ImageEditorCanvas.cpp src/image/ImageEditorCanvas.h
     src/image/ImageAdjustments.cpp src/image/ImageAdjustments.h
-    src/image/ImageHdr.cpp src/image/ImageHdr.h
     src/image/ImageHdrSurface.cpp src/image/ImageHdrSurface.h
     src/image/ImageEditorWindow.cpp src/image/ImageEditorWindow.h)
 target_link_libraries(vsr_image_editor PUBLIC vsr_image_core)
@@ -159,12 +158,15 @@ if(WIN32)
     target_sources(VSPlayer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/player-icons.rc")
 endif()
 include(tools/image-runtime.cmake)
+target_sources(vsr_image_core PRIVATE src/image/ImageHdr.cpp src/image/ImageHdr.h)
 qt_add_library(vsr_image_decoder STATIC src/player/PlayerImage.cpp src/player/PlayerImage.h src/player/PlayerPng.cpp src/player/PlayerPng.h)
 target_include_directories(vsr_image_decoder PUBLIC src)
 target_link_libraries(vsr_image_decoder PUBLIC Qt6::Core Qt6::Gui PRIVATE avif vsr_turbojpeg vsr_image_core libdeflate_static)
 target_link_libraries(vsr_image_editor PRIVATE vsr_image_decoder)
 include(tools/awj-runtime.cmake)
-target_link_libraries(VSPlayer PRIVATE avif vsr_image_editor vsr_bluray)
+target_sources(VSPlayer PRIVATE src/player/PhotoCraftEditor.cpp src/player/PhotoCraftEditor.h)
+include(tools/photocraft-runtime.cmake)
+target_link_libraries(VSPlayer PRIVATE avif vsr_image_decoder vsr_image_core vsr_bluray)
 
 target_include_directories(VSPlayer PRIVATE src third_party/vapoursynth/include)
 target_link_libraries(VSPlayer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
@@ -208,10 +210,17 @@ if(BUILD_TESTING)
     target_link_libraries(vsr_image_editor_interaction_tests PRIVATE vsr_image_editor Qt6::Test)
     add_test(NAME image-editor-interaction COMMAND vsr_image_editor_interaction_tests)
     qt_add_executable(vsr_image_editor_tests tests/TestImageEditor.cpp
+        src/player/PhotoCraftEditor.cpp src/player/PhotoCraftEditor.h
         src/player/PlayerImageTools.cpp src/player/PlayerImageTools.h src/player/PlayerImageResample.cpp
         src/ui/PreviewPane.cpp src/ui/PreviewPane.h assets/image-tools.qrc)
-    target_link_libraries(vsr_image_editor_tests PRIVATE vsr_image_editor Qt6::Test shell32)
+    target_link_libraries(vsr_image_editor_tests PRIVATE vsr_image_editor Qt6::Test Qt6::Network shell32)
     add_test(NAME image-editor-tools COMMAND vsr_image_editor_tests)
+    qt_add_executable(vsr_photocraft_tests tests/TestPhotoCraft.cpp
+        src/player/PhotoCraftEditor.cpp src/player/PhotoCraftEditor.h
+        src/player/PlayerImageTools.cpp src/player/PlayerImageTools.h src/player/PlayerImageResample.cpp
+        src/ui/PreviewPane.cpp src/ui/PreviewPane.h assets/image-tools.qrc)
+    target_link_libraries(vsr_photocraft_tests PRIVATE vsr_image_decoder vsr_image_core Qt6::Widgets Qt6::Test Qt6::Network shell32)
+    add_test(NAME photocraft-native-editor COMMAND vsr_photocraft_tests)
     qt_add_executable(vsr_graph_tests
         assets/startup.qrc
         tests/TestVpyScript.cpp
@@ -290,7 +299,7 @@ if(BUILD_TESTING)
     list(FILTER analysis_test_sources EXCLUDE REGEX "src/main.cpp|VSRenderer_autogen")
     qt_add_executable(vsr_analysis_tests tests/TestAnalysis.cpp ${analysis_test_sources})
     target_include_directories(vsr_analysis_tests PRIVATE src third_party/vapoursynth/include)
-    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_bluray)
+    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_bluray vsr_components)
     target_compile_definitions(vsr_analysis_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME direct-video-comparison COMMAND vsr_analysis_tests -o analysis-test-results.txt,txt)
 

@@ -40,7 +40,8 @@ struct PlayerSubtitles::Impl {
     OpenAss openAss=nullptr;RenderAss renderAss=nullptr;Copy copyAss=nullptr,copyBitmap=nullptr;Destroy destroyAss=nullptr,destroyBitmap=nullptr;OpenBitmap openBitmap=nullptr;ReadBitmap readBitmap=nullptr;SeekBitmap seekBitmap=nullptr;
     struct Track { void *handle=nullptr; bool bitmap=false,srt=false,hasNext=false,eof=false; SubtitleBitmap frame,next; QImage image,nextImage; qint64 last=-1; }; std::array<Track,2> tracks; QSize emptyCanvas;
     qint64 renderedTime=-1; QSize renderedCanvas,renderedVideo; bool renderedVisible=false; QImage renderedImage;
-    Impl() { library.setLoadHints(QLibrary::PreventUnloadHint); library.load();
+    bool initialized=false;
+    void initialize() { if(initialized)return;initialized=true;library.setLoadHints(QLibrary::PreventUnloadHint); library.load();
         openAss=reinterpret_cast<OpenAss>(library.resolve("FFF3FP_OpenAssSubtitle"));renderAss=reinterpret_cast<RenderAss>(library.resolve("FFF3FP_RenderAssSubtitle"));copyAss=reinterpret_cast<Copy>(library.resolve("FFF3FP_CopyAssSubtitlePixels"));destroyAss=reinterpret_cast<Destroy>(library.resolve("FFF3FP_DestroyAssSubtitle"));
         openBitmap=reinterpret_cast<OpenBitmap>(library.resolve("FFF3FP_OpenBitmapSubtitle"));readBitmap=reinterpret_cast<ReadBitmap>(library.resolve("FFF3FP_ReadBitmapSubtitle"));copyBitmap=reinterpret_cast<Copy>(library.resolve("FFF3FP_CopyBitmapSubtitlePixels"));seekBitmap=reinterpret_cast<SeekBitmap>(library.resolve("FFF3FP_SeekBitmapSubtitle"));destroyBitmap=reinterpret_cast<Destroy>(library.resolve("FFF3FP_DestroyBitmapSubtitle"));
     }
@@ -57,7 +58,7 @@ PlayerSubtitles::PlayerSubtitles():impl_(std::make_unique<Impl>()),worker_(new Q
 PlayerSubtitles::~PlayerSubtitles() { QMetaObject::invokeMethod(worker_,[this]{impl_.reset();},Qt::BlockingQueuedConnection);thread_.quit();thread_.wait(); }
 void PlayerSubtitles::load(int slot,const QString &path,int stream,const QString &codec,const QVariantMap &style) {
     QMetaObject::invokeMethod(worker_,[this,slot,path,stream,codec,style]{
-        impl_->clear(slot); if(path.isEmpty()) return; auto &t=impl_->tracks[slot]; QString actual=path; int index=stream; QTemporaryDir temp;
+        impl_->clear(slot); if(path.isEmpty()) return;impl_->initialize(); auto &t=impl_->tracks[slot]; QString actual=path; int index=stream; QTemporaryDir temp;
         t.srt=codec=="subrip" || QFileInfo(path).suffix().compare("srt",Qt::CaseInsensitive)==0;
         if(t.srt && stream<0) {
             QFile input(actual); if(!input.open(QIODevice::ReadOnly)) {emit errorOccurred(tr("无法读取字幕：%1").arg(actual));return;}

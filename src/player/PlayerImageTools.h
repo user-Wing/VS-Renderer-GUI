@@ -31,6 +31,7 @@ public:
     static QString backendPath();
     static QStringList conversionArguments(const ImageOutput &output, const QString &input, const QString &directory);
     static QString writeOutput(const ImageOutput &output); // Empty string means success.
+    static QString writeEditorImport(const QImage &image, const QString &path, const QString &name);
     static QImage resample(const QImage &image, const QSize &size, const QString &algorithm);
 signals:
     void errorOccurred(const QString &error);
@@ -39,8 +40,6 @@ signals:
 private:
     ImageOutput currentOutput() const;
     void editImage();
-    void resizeImage();
-    void cropImage();
     void convertImage();
     void recycleImage();
     void wallpaper();

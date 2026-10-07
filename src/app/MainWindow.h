@@ -29,7 +29,6 @@ class ParameterEditor;
 class CompareView;
 class PreviewPane;
 class ExportWindow;
-class StartupWarmup;
 class ThreeFpPlayer;
 class VapourSynthFrameServer;
 
@@ -83,9 +82,7 @@ private:
     std::unique_ptr<ThreeFpPlayer> processedPlayer_;
     std::unique_ptr<VapourSynthFrameServer> frameServer_;
     std::unique_ptr<ExportWindow> exportWindow_;
-    std::unique_ptr<StartupWarmup> startupWarmup_;
-    QString deferredSource_;
-    bool primedProcessedOutput_ = false;
+    bool pendingPreview_ = false;
     std::unique_ptr<AnalysisPage> analysisPage_;
     QStackedWidget *pages_ = nullptr;
     QWidget *navigation_ = nullptr;
