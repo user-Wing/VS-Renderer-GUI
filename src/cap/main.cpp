@@ -7,6 +7,7 @@
 #include <QStandardPaths>
 #include <QPointer>
 #include <QDateTime>
+#include <QAbstractTextDocumentLayout>
 #include <windows.h>
 #include <functional>
 #include <cmath>
@@ -96,6 +97,71 @@ protected:
     }
 };
 
+class CaptureTextBox final : public QWidget {
+    QRect bounds_;
+    QPoint dragOrigin_, startPosition_;
+    bool dragging_ = false;
+public:
+    QTextEdit *editor;
+    QColor ink;
+    std::function<void()> selected, changed, beforeMove, moved, undo;
+    CaptureTextBox(QWidget *parent, const QRect &bounds, const QFont &font, const QColor &color)
+        : QWidget(parent), bounds_(bounds), ink(color) {
+        setObjectName("capTextBox");setCursor(Qt::SizeAllCursor);
+        setToolTip(QStringLiteral("框内编辑文字，拖动虚线边缘移动"));
+        editor=new QTextEdit(this);editor->setObjectName("capTextEditor");
+        editor->setAcceptRichText(false);editor->setUndoRedoEnabled(false);
+        editor->setFrameShape(QFrame::NoFrame);editor->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        editor->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);editor->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        editor->document()->setDocumentMargin(0);editor->setFont(font);
+        editor->setStyleSheet("QTextEdit{background:transparent;border:0;padding:0;}");
+        editor->viewport()->setAutoFillBackground(false);editor->installEventFilter(this);
+        connect(editor->document(),&QTextDocument::contentsChanged,this,[this]{fit();if(changed)changed();});
+        setInk(color);fit();
+    }
+    void setInk(const QColor &color) {
+        ink=color;auto palette=editor->palette();palette.setColor(QPalette::Text,color);editor->setPalette(palette);
+    }
+    void fit() {
+        auto *document=editor->document();document->setTextWidth(-1);
+        const int boxWidth=qMin(bounds_.width(),qMax(90,int(std::ceil(document->idealWidth()))+12));
+        document->setTextWidth(qMax(1,boxWidth-12));
+        const int boxHeight=qMin(bounds_.height(),qMax(36,int(std::ceil(document->size().height()))+12));
+        resize(boxWidth,boxHeight);editor->setGeometry(rect().adjusted(6,6,-6,-6));moveWithin(pos());
+    }
+    void moveWithin(const QPoint &point) {
+        move(qBound(bounds_.left(),point.x(),bounds_.right()-width()+1),
+             qBound(bounds_.top(),point.y(),bounds_.bottom()-height()+1));
+    }
+protected:
+    bool eventFilter(QObject *object,QEvent *event) override {
+        if(object==editor){
+            if(event->type()==QEvent::FocusIn && selected)selected();
+            if(event->type()==QEvent::ShortcutOverride && static_cast<QKeyEvent*>(event)->matches(QKeySequence::Undo)){event->accept();return true;}
+            if(event->type()==QEvent::KeyPress){
+                auto *key=static_cast<QKeyEvent*>(event);
+                if(key->matches(QKeySequence::Undo)){if(undo)undo();return true;}
+                if(key->key()==Qt::Key_Escape){parentWidget()->close();return true;}
+            }
+        }
+        return QWidget::eventFilter(object,event);
+    }
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);painter.setPen(QPen(Qt::white,1,Qt::DashLine));painter.drawRect(rect().adjusted(0,0,-1,-1));
+    }
+    void mousePressEvent(QMouseEvent *event) override {
+        if(event->button()!=Qt::LeftButton)return;
+        if(selected)selected();dragOrigin_=event->globalPosition().toPoint();startPosition_=pos();dragging_=false;
+    }
+    void mouseMoveEvent(QMouseEvent *event) override {
+        if(!event->buttons().testFlag(Qt::LeftButton))return;
+        const auto delta=event->globalPosition().toPoint()-dragOrigin_;if(delta.isNull())return;
+        if(!dragging_){if(beforeMove)beforeMove();dragging_=true;}
+        moveWithin(startPosition_+delta);
+    }
+    void mouseReleaseEvent(QMouseEvent *) override {if(dragging_ && moved)moved();dragging_=false;}
+};
+
 class CaptureOverlay final : public QWidget {
     QImage canvas_;
     QRect selection_;
@@ -106,8 +172,19 @@ class CaptureOverlay final : public QWidget {
     bool arrow_ = false;
     int penWidth_ = 3;
     QComboBox *options_ = nullptr;
+    QFontComboBox *fontFamily_ = nullptr;
+    QSpinBox *fontSize_ = nullptr;
+    QToolButton *bold_ = nullptr, *italic_ = nullptr;
+    QWidget *fontOptions_ = nullptr;
+    QButtonGroup *tools_ = nullptr;
+    QFont textFont_;
+    QList<CaptureTextBox*> texts_;
+    QPointer<CaptureTextBox> activeText_, typingText_;
+    struct TextState { QString text; QFont font; QColor ink; QPoint position; };
+    QHash<CaptureTextBox*,TextState> textStates_;
+    bool restoringText_ = false;
     QPushButton *colorButton_ = nullptr, *undoButton_ = nullptr;
-    struct Edit { QRect area; QImage pixels; };
+    struct Edit { QRect area; QImage pixels; QPointer<CaptureTextBox> text; TextState before; bool created=false; };
     QList<Edit> history_;
     QWidget *bar_ = nullptr;
     std::function<void(QImage, bool, bool, bool)> output_;
@@ -132,13 +209,25 @@ public:
         };
         colorButton_=add(QStringLiteral("颜色"), [this] {
             const auto c = QColorDialog::getColor(color_, this);
-            if(c.isValid()){color_=c;updateColor();}
+            if(c.isValid()){if(tool_==Text && activeText_)rememberText(activeText_);color_=c;if(tool_==Text && activeText_){activeText_->setInk(c);textStates_[activeText_]=textState(activeText_);}updateColor();}
         });
         options_=new QComboBox(bar_);options_->setObjectName("capToolOptions");layout->addWidget(options_);
-        auto *tools=new QButtonGroup(this);tools->setExclusive(true);
+        textFont_.setPointSize(18);
+        fontOptions_=new QWidget(bar_);auto *fonts=new QHBoxLayout(fontOptions_);fonts->setContentsMargins(0,0,0,0);fonts->setSpacing(3);
+        fontFamily_=new QFontComboBox(fontOptions_);fontFamily_->setObjectName("capFontFamily");fontFamily_->setEditable(true);fontFamily_->setFixedWidth(160);
+        fontFamily_->completer()->setCaseSensitivity(Qt::CaseInsensitive);fontFamily_->completer()->setCompletionMode(QCompleter::PopupCompletion);
+        fontFamily_->setToolTip(QStringLiteral("字体（可输入名称并自动补全）"));fonts->addWidget(fontFamily_);
+        fontSize_=new QSpinBox(fontOptions_);fontSize_->setObjectName("capFontSize");fontSize_->setRange(1,512);fontSize_->setPrefix(QStringLiteral("字号 "));fontSize_->setValue(18);fonts->addWidget(fontSize_);
+        const auto styleButton=[&](const QString &name,const QString &tip){auto *button=new QToolButton(fontOptions_);button->setText(name);button->setToolTip(tip);button->setCheckable(true);fonts->addWidget(button);return button;};
+        bold_=styleButton("B",QStringLiteral("加粗"));bold_->setObjectName("capFontBold");italic_=styleButton("I",QStringLiteral("斜体"));italic_->setObjectName("capFontItalic");layout->addWidget(fontOptions_);
+        connect(fontFamily_,&QFontComboBox::currentFontChanged,this,[this](const QFont &font){textFont_.setFamily(font.family());applyTextFont();});
+        connect(fontSize_,&QSpinBox::valueChanged,this,[this](int size){textFont_.setPointSize(size);applyTextFont();});
+        connect(bold_,&QToolButton::toggled,this,[this](bool checked){textFont_.setBold(checked);applyTextFont();});
+        connect(italic_,&QToolButton::toggled,this,[this](bool checked){textFont_.setItalic(checked);applyTextFont();});
+        tools_=new QButtonGroup(this);tools_->setExclusive(true);
         const auto tool=[&](const QString &name,Tool value){
-            auto *button=add(name,[this,value]{tool_=value;updateOptions();});
-            button->setCheckable(true);button->setChecked(value==tool_);tools->addButton(button);
+            auto *button=add(name,[this,value]{typingText_=nullptr;tool_=value;updateOptions();});
+            button->setCheckable(true);button->setChecked(value==tool_);tools_->addButton(button,value);
         };
         tool(QStringLiteral("画笔"),Pen);tool(QStringLiteral("矩形"),Rect);
         tool(QStringLiteral("圆形"),Ellipse);tool(QStringLiteral("线"),Line);tool(QStringLiteral("文字"),Text);
@@ -149,7 +238,7 @@ public:
         add(QStringLiteral("AVIF"), [this] {deliver(false,true);});
         add(QStringLiteral("贴图"), [this] {deliver(true,false);});
         add(QStringLiteral("✓"), [this] {deliver(false,false,true);});
-        bar_->setStyleSheet("QWidget{background:#252831;} QPushButton,QComboBox{color:white;background:#3b414e;padding:5px;border:1px solid transparent;} QPushButton:checked{border:2px solid #78baff;background:#24496a;} QPushButton:disabled{color:#858585;}");
+        bar_->setStyleSheet("QWidget{background:#252831;} QPushButton,QComboBox,QSpinBox,QToolButton{color:white;background:#3b414e;padding:5px;border:1px solid transparent;} QPushButton:checked,QToolButton:checked{border:2px solid #78baff;background:#24496a;} QPushButton:disabled{color:#858585;}");
         updateColor();updateOptions();
         bar_->adjustSize();
         bar_->hide();
@@ -158,22 +247,58 @@ public:
         activateWindow();
     }
 private:
+    TextState textState(CaptureTextBox *box) const {return {box->editor->toPlainText(),box->editor->font(),box->ink,box->pos()};}
+    void selectText(CaptureTextBox *box) {
+        if(activeText_!=box)typingText_=nullptr;
+        activeText_=box;textFont_=box->editor->font();color_=box->ink;tool_=Text;tools_->button(Text)->setChecked(true);
+        const QSignalBlocker family(fontFamily_),size(fontSize_),bold(bold_),italic(italic_);
+        fontFamily_->setCurrentFont(textFont_);fontSize_->setValue(textFont_.pointSize());bold_->setChecked(textFont_.bold());italic_->setChecked(textFont_.italic());
+        updateColor();updateOptions();
+    }
+    void rememberText(CaptureTextBox *box,bool typing=false) {
+        if(restoringText_)return;
+        if(!typing || typingText_!=box){Edit edit;edit.text=box;edit.before=textStates_.value(box);history_.append(edit);trimHistory();}
+        typingText_=typing?box:nullptr;undoButton_->setEnabled(true);
+    }
+    void applyTextFont() {
+        if(!activeText_ || tool_!=Text)return;
+        rememberText(activeText_);restoringText_=true;activeText_->editor->setFont(textFont_);activeText_->fit();restoringText_=false;
+        textStates_[activeText_]=textState(activeText_);
+    }
+    void addText(const QPoint &point) {
+        auto *box=new CaptureTextBox(this,selection_,textFont_,color_);box->moveWithin(point);texts_.append(box);textStates_[box]=textState(box);
+        box->selected=[this,box]{selectText(box);};box->undo=[this]{undo();};
+        box->changed=[this,box]{rememberText(box,true);textStates_[box]=textState(box);};
+        box->beforeMove=[this,box]{rememberText(box);};
+        box->moved=[this,box]{textStates_[box]=textState(box);};
+        Edit edit;edit.text=box;edit.created=true;history_.append(edit);trimHistory();typingText_=nullptr;undoButton_->setEnabled(true);
+        box->show();box->raise();bar_->raise();selectText(box);box->editor->setFocus();
+    }
     void updateColor(){colorButton_->setStyleSheet(QString("border-bottom:3px solid %1;").arg(color_.name()));}
     void updateOptions(){
         const QSignalBlocker block(options_);options_->clear();
         if(tool_==Line){options_->addItems({QStringLiteral("直线"),QStringLiteral("箭头")});options_->setCurrentIndex(arrow_?1:0);}
         else{for(int width:{2,3,5,8})options_->addItem(QStringLiteral("%1 px").arg(width),width);options_->setCurrentIndex(options_->findData(penWidth_));}
-        options_->setEnabled(tool_!=Text);positionBar();
+        options_->setVisible(tool_!=Text);fontOptions_->setVisible(tool_==Text);positionBar();
     }
     void remember(const QRect &area){
         const auto pixels=pixelRect(area).intersected(canvas_.rect());if(pixels.isEmpty())return;
-        history_.append({pixels,canvas_.copy(pixels)});qint64 bytes=0;for(const auto &edit:history_)bytes+=edit.pixels.sizeInBytes();
-        while(history_.size()>1 && (history_.size()>32 || bytes>128*1024*1024)){bytes-=history_.first().pixels.sizeInBytes();history_.removeFirst();}
+        Edit edit;edit.area=pixels;edit.pixels=canvas_.copy(pixels);history_.append(edit);typingText_=nullptr;trimHistory();
         undoButton_->setEnabled(true);
+    }
+    void trimHistory(){
+        qint64 bytes=0;for(const auto &edit:history_)bytes+=edit.pixels.sizeInBytes();
+        while(history_.size()>1 && (history_.size()>32 || bytes>128*1024*1024)){bytes-=history_.first().pixels.sizeInBytes();history_.removeFirst();}
     }
     void undo(){
         if(dragging_ || history_.isEmpty())return;
-        const auto edit=history_.takeLast();QPainter painter(&canvas_);painter.setCompositionMode(QPainter::CompositionMode_Source);painter.drawImage(edit.area.topLeft(),edit.pixels);painter.end();
+        const auto edit=history_.takeLast();typingText_=nullptr;
+        if(edit.text){
+            auto *box=edit.text.data();restoringText_=true;
+            if(edit.created){texts_.removeOne(box);textStates_.remove(box);if(activeText_==box)activeText_=nullptr;box->hide();box->deleteLater();setFocus();}
+            else{box->editor->setPlainText(edit.before.text);box->editor->setFont(edit.before.font);box->setInk(edit.before.ink);box->fit();box->moveWithin(edit.before.position);textStates_[box]=textState(box);selectText(box);}
+            restoringText_=false;
+        }else{QPainter painter(&canvas_);painter.setCompositionMode(QPainter::CompositionMode_Source);painter.drawImage(edit.area.topLeft(),edit.pixels);}
         undoButton_->setEnabled(!history_.isEmpty());update();
     }
     void drawLine(QPainter &p,const QPoint &from,const QPoint &to){
@@ -184,13 +309,22 @@ private:
     }
     void positionBar() {
         bar_->adjustSize();
-        const int x = qBound(0, selection_.right() - bar_->width(), width() - bar_->width());
+        const int x = qBound(0, selection_.right() - bar_->width(), qMax(0,width() - bar_->width()));
         const int y = qBound(0, selection_.bottom() + 8, height() - bar_->height());
         bar_->move(x,y);
     }
     void deliver(bool pin, bool avif, bool copy = false) {
         if(selection_.isEmpty()) return;
-        const QImage crop = canvas_.copy(pixelRect(selection_.intersected(rect())));
+        QImage composite=canvas_;
+        if(!texts_.isEmpty()){
+            QPainter painter(&composite);painter.scale(double(canvas_.width())/width(),double(canvas_.height())/height());painter.setClipRect(selection_);
+            for(auto *box:texts_){
+                painter.save();painter.translate(box->pos()+QPoint(6,6));painter.setClipRect(box->editor->viewport()->rect(),Qt::IntersectClip);
+                QAbstractTextDocumentLayout::PaintContext context;context.palette.setColor(QPalette::Text,annotationInk(box->ink));
+                box->editor->document()->documentLayout()->draw(&painter,context);painter.restore();
+            }
+        }
+        const QImage crop = composite.copy(pixelRect(selection_.intersected(rect())));
         if(copy) copyImage(crop);
         output_(crop,pin,avif,copy);
         close();
@@ -200,14 +334,16 @@ protected:
         const double sx=double(canvas_.width())/width(),sy=double(canvas_.height())/height();
         return QRect(qRound(area.x()*sx),qRound(area.y()*sy),qRound(area.width()*sx),qRound(area.height()*sy));
     }
-    void annotationPainter(QPainter &p) {
-        p.scale(double(canvas_.width())/width(),double(canvas_.height())/height());
-        QColor ink=color_;
+    QColor annotationInk(QColor ink) const {
         if(canvas_.text("capHdr")=="scRGB-FP16") {
             const auto linear=[](float c){return c<=.04045f?c/12.92f:std::pow((c+.055f)/1.055f,2.4f);};
             ink=QColor::fromRgbF(linear(ink.redF()),linear(ink.greenF()),linear(ink.blueF()));
         }
-        p.setPen(QPen(ink,penWidth_,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+        return ink;
+    }
+    void annotationPainter(QPainter &p) {
+        p.scale(double(canvas_.width())/width(),double(canvas_.height())/height());
+        p.setPen(QPen(annotationInk(color_),penWidth_,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
     }
     void paintEvent(QPaintEvent *) override {
         QPainter p(this);
@@ -234,16 +370,7 @@ protected:
         if(selecting_) {selection_=QRect(origin_,QSize(1,1));bar_->hide();}
         else if(tool_==Text && selection_.contains(e->pos())) {
             dragging_=false;
-            bool ok=false;
-            const QString text=QInputDialog::getText(this,QStringLiteral("插入文字"),QStringLiteral("内容"),QLineEdit::Normal,{},&ok);
-            if(ok && !text.isEmpty()){
-                remember(selection_);
-                QPainter p(&canvas_);
-                annotationPainter(p);
-                p.setClipRect(selection_);
-                QFont font; font.setPointSize(18); p.setFont(font);p.drawText(e->pos(),text);
-                update();
-            }
+            addText(e->pos());
         }else if(!selecting_ && tool_==Pen){
             remember(selection_);
         }

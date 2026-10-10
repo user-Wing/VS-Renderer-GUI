@@ -1,5 +1,7 @@
 # VS Renderer / VS Player 项目地图
 
+2026-10-11 补充 VSCap 行内文字对象：`src/cap/main.cpp` 的 `CaptureTextBox` 在截图选区内直接编辑，虚线边缘可拖动，左侧参数提供系统字体自动补全、数字字号、加粗和斜体；导出时才合成文字。内容、位置、样式与绘图使用同一撤销历史。工作流测试入口为 `editableTextObjects` / `textAndDrawingUndo`，证据见 [1.0.10 验收](docs/validation-1.0.10.md)。
+
 本文件用于接手开发、定位模块和确认当前边界。用户操作见 [README.md](README.md)，版本变更见 [changelog.md](changelog.md)，逐轮测试与交付记录见 [专项文档](docs/) 和 [历史原文归档](docs/history/development-records-through-2026-10-03.md)。
 
 核对日期：2026-10-10。当前版本为 **1.0.10**。先合并维护者提供的 1.0.9 源码，再完成 HDR→SDR 自动色彩路由、中文按钮、软解统计/线程/字幕优化和 VSCap 编辑条更新。本地新建 `dist/1.0.10-Full` 与 `dist/1.0.10-PlayerLite`，原 1.0.9 包和既有部署保留。源码推送 GitHub，Release 仅准备无附件草稿，由维护者上传及发布。验收、性能差距和构建入口见 [本轮记录](docs/validation-1.0.10.md)。
