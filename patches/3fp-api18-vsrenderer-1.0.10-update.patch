@@ -1,0 +1,132 @@
+diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
+index 8fa13ed..81a0a9d 100644
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -1316,7 +1316,7 @@ FFFResult PlayerSession::SetPresentConfig(const bool enableTearing) noexcept {
+     return FFFResult::Success;
+ }
+ FFFResult PlayerSession::SetColorSettings(const VsrColorSettings& settings) noexcept {
+-    if (settings.size != sizeof(settings) || settings.version != 1 || settings.engine > 1 ||
++    if (settings.size != sizeof(settings) || settings.version != 1 || settings.engine > 2 ||
+         settings.output > 2 || settings.tone > 5 || settings.gamut > 4 || settings.quality > 1 ||
+         settings.icc > 2 || settings.peakDetect > 1 || settings.dither > 1 || settings.inverseTone > 1 ||
+         !std::isfinite(settings.sdrPeak) || settings.sdrPeak <= 0 || settings.sdrPeak > 10000 ||
+@@ -2358,7 +2358,12 @@ FFFResult PlayerSession::OpenDecoder(AVFormatContext* owner, const std::int32_t
+             // 64 contexts doubled memory for little gain in the diagnosis.
+             const auto heavy444 = stream->codecpar->format == AV_PIX_FMT_YUV444P12LE &&
+                 stream->codecpar->width >= 3840 && stream->codecpar->height >= 2160;
+-            const auto workers = heavy444 ? (std::min)(logical * 2, 32u) : (std::min)(logical, 64u);
++            const auto large420 = stream->codecpar->format == AV_PIX_FMT_YUV420P10LE &&
++                stream->codecpar->width >= 7680 && stream->codecpar->height >= 4320;
++            // 8K 4:2:0 measured faster at 16/16 than 32/32, leaving CPU and
++            // memory bandwidth for uploading, audio and subtitles.
++            const auto workers = heavy444 ? (std::min)(logical * 2, 32u) :
++                (std::min)(logical, large420 ? 16u : 64u);
+             context->thread_count = static_cast<int>(workers);
+             result = av_opt_set_int(context->priv_data, "max_frame_delay", workers, 0);
+         }
+@@ -3581,11 +3586,15 @@ FFFResult PlayerSession::DecodePacket(AVCodecContext* decoder, AVPacket* packet,
+     if (reusableFrame == nullptr) return FFFResult::NativeFailure;
+     auto* frame = reusableFrame;
+     av_frame_unref(frame);
+-    const auto handleFrame = [this, video, owner](AVFrame* decoded) {
++    // A paused seek may drain several delayed frames in one packet. Only the
++    // target is a preview; retain later frames for resuming playback.
++    const bool pausedSeek = video && state_.load() != FFF3FPState::Playing &&
++        (seekTarget100ns_ >= 0 || seekTargetFrame_ >= 0 || keyframeSeekPending_);
++    const auto handleFrame = [this, video, owner, pausedSeek](AVFrame* decoded) {
+         if (video) {
+             NormalizeVideoFrameTimestamp(decoded);
+             const auto seeking = seekTarget100ns_ >= 0 || seekTargetFrame_ >= 0 || keyframeSeekPending_;
+-            if (state_.load() == FFF3FPState::Playing && !seeking) QueueVideoFrame(decoded);
++            if (!seeking && (state_.load() == FFF3FPState::Playing || pausedSeek)) QueueVideoFrame(decoded);
+             else PresentVideoFrame(decoded, owner);
+         } else QueueAudioFrame(decoded, owner, owner == format_ ? audioStream_ : externalAudioStream_);
+     };
+@@ -3876,15 +3885,6 @@ void PlayerSession::PresentVideoFrame(AVFrame* frame, AVFormatContext* owner) no
+ 
+     const auto frameDuration = std::max<std::int64_t>(0, lastVideoFrameDuration100ns_);
+     const auto lateTolerance = std::max<std::int64_t>(frameDuration * 2, 500'000);
+-    // A silent CPU-decoded stream has no audio clock to synchronize with.
+-    // If decoding is slower than real-time, rebase the video clock rather than
+-    // discarding every subsequent frame until the media reaches EOF.
+-    // Audio-bearing streams retain real-time A/V synchronization behavior.
+-    if (snapshot_.decodeMode == FFF3FPDecodeMode::Cpu && audioStream_ < 0 && externalAudioStream_ < 0 &&
+-        state_.load() == FFF3FPState::Playing && !fulfillingSeek &&
+-        snapshot_.framePts != AV_NOPTS_VALUE &&
+-        position + lateTolerance < ClockPosition())
+-        ResetClock(position);
+     if (state_.load() == FFF3FPState::Playing && !fulfillingSeek &&
+         !audioBlockedUntilVideoFrame_ &&
+         // A late frame is discardable only when a newer decoded frame can
+diff --git a/FFF.Native/3FP/Render/ColorBridge.h b/FFF.Native/3FP/Render/ColorBridge.h
+index 6ecd34b..b13d908 100644
+--- a/FFF.Native/3FP/Render/ColorBridge.h
++++ b/FFF.Native/3FP/Render/ColorBridge.h
+@@ -8,7 +8,7 @@ extern "C" {
+ /* Separate, optional C ABI: the existing 3FP snapshot/frame ABI stays intact. */
+ typedef struct VsrColorSettings {
+     uint32_t size, version;
+-    uint32_t engine;       /* 0: original 3FP, 1: libplacebo with explicit fallback */
++    uint32_t engine;       /* 0: original 3FP, 1: libplacebo, 2: HDR-to-SDR auto */
+     uint32_t output;       /* 0: display auto, 1: SDR, 2: HDR developer override */
+     uint32_t tone;         /* auto, spline, ST2094-40, BT.2390, clip, linear */
+     uint32_t gamut;        /* auto, perceptual, softclip, relative, clip */
+diff --git a/FFF.Native/3FP/Render/NativeColorEngine.h b/FFF.Native/3FP/Render/NativeColorEngine.h
+index 3bc7615..6b965d9 100644
+--- a/FFF.Native/3FP/Render/NativeColorEngine.h
++++ b/FFF.Native/3FP/Render/NativeColorEngine.h
+@@ -51,6 +51,11 @@ public:
+     bool draw(void* device, const VsrColorDraw& draw) {
+         if (!settings.engine) return false;
+         bypass_.clear();
++        if (settings.engine == 2 && (draw.hdr || !metadata_ ||
++            (metadata_->color_trc != AVCOL_TRC_SMPTE2084 && metadata_->color_trc != AVCOL_TRC_ARIB_STD_B67))) {
++            bypass_ = "Automatic color management: native SDR / HDR output.";
++            return false;
++        }
+         if (!context_) {
+             if (!load()) return false;
+             context_ = create_(device);
+@@ -89,6 +94,7 @@ public:
+         value.requestedEngine = settings.engine;
+         std::snprintf(value.engine, sizeof(value.engine), "3FP native");
+         if (settings.engine && context_) status_(context_, &value);
++        value.requestedEngine = settings.engine;
+         value.streamFields = streamFields_;
+         if (settings.engine && !error_.empty()) {
+             value.activeEngine = 0; std::snprintf(value.fallback, sizeof(value.fallback), "%s", error_.c_str());
+@@ -108,7 +114,9 @@ private:
+     }
+     bool prepare() {
+         error_.clear();
+-        configured_ = configure_(context_, &settings) != 0;
++        auto effective = settings;
++        if (effective.engine == 2) effective.engine = 1;
++        configured_ = configure_(context_, &effective) != 0;
+         prepared_ = configured_ && metadata_ &&
+             frame_(context_, metadata_, format_, rgb_, kind_);
+         return prepared_;
+diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
+index 3f0c6ae..68f2f66 100644
+--- a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
++++ b/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
+@@ -409,9 +409,15 @@ private:
+             auto result = avformat_open_input(&format, path, nullptr, nullptr);
+             if (result < 0)
+                 throw std::runtime_error("Could not open the subtitle container: " + FfmpegError(result));
+-            result = avformat_find_stream_info(format, nullptr);
+-            if (result < 0)
+-                throw std::runtime_error("Could not inspect subtitle streams: " + FfmpegError(result));
++            // Matroska exposes the selected subtitle codec and private header
++            // at open. Avoid probing unrelated 8K video / AAC decoders again.
++            if (requestedStream < 0 || requestedStream >= static_cast<std::int32_t>(format->nb_streams) ||
++                format->streams[requestedStream]->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE ||
++                format->streams[requestedStream]->codecpar->codec_id == AV_CODEC_ID_NONE) {
++                result = avformat_find_stream_info(format, nullptr);
++                if (result < 0)
++                    throw std::runtime_error("Could not inspect subtitle streams: " + FfmpegError(result));
++            }
+             if (requestedStream < 0 || requestedStream >= static_cast<std::int32_t>(format->nb_streams) ||
+                 format->streams[requestedStream]->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE)
+                 throw std::runtime_error("The requested embedded subtitle stream does not exist.");

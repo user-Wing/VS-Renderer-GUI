@@ -1,6 +1,7 @@
 #pragma once
 #include "ColorBridge.h"
 #include <windows.h>
+#include <d3d11.h>
 #include <cstring>
 #include <cstdio>
 #include <string>
@@ -19,7 +20,7 @@ public:
         avcodec_parameters_free(&stream_);
         if(source) {stream_=avcodec_parameters_alloc();if(stream_)avcodec_parameters_copy(stream_,source);}
     }
-    void resetDevice() { if (context_) destroy_(context_); context_ = nullptr; prepared_ = false; }
+    void resetDevice() { if (context_) destroy_(context_); context_ = nullptr; prepared_ = false; for(auto*& texture : importTextures_) { if(texture) texture->Release(); texture=nullptr; } }
     bool configure(const VsrColorSettings& value) {
         settings = value; prepared_ = false;
         if (!settings.engine) return true;
@@ -50,13 +51,42 @@ public:
     bool draw(void* device, const VsrColorDraw& draw) {
         if (!settings.engine) return false;
         bypass_.clear();
+        if (settings.engine == 2 && (draw.hdr || !metadata_ ||
+            (metadata_->color_trc != AVCOL_TRC_SMPTE2084 && metadata_->color_trc != AVCOL_TRC_ARIB_STD_B67))) {
+            bypass_ = "Automatic color management: native SDR / HDR output.";
+            return false;
+        }
         if (!context_) {
             if (!load()) return false;
             context_ = create_(device);
             if (!context_) { failure("libplacebo D3D11 initialization failed; using original 3FP."); return false; }
             if (!prepare()) return false;
         }
-        return prepared_ && draw_(context_, &draw);
+        if (!prepared_) return false;
+        auto imported = draw;
+        auto* d3d = static_cast<ID3D11Device*>(device);
+        ID3D11DeviceContext* immediate = nullptr;
+        d3d->GetImmediateContext(&immediate);
+        for (unsigned i=0;i<3;++i) {
+            auto* source=static_cast<ID3D11Texture2D*>(draw.textures[i]);
+            if(!source) continue;
+            D3D11_TEXTURE2D_DESC desc{};source->GetDesc(&desc);
+            if(desc.Usage!=D3D11_USAGE_DYNAMIC) continue;
+            D3D11_TEXTURE2D_DESC current{};
+            if(importTextures_[i]) importTextures_[i]->GetDesc(&current);
+            if(current.Width!=desc.Width || current.Height!=desc.Height || current.Format!=desc.Format) {
+                if(importTextures_[i]) {importTextures_[i]->Release();importTextures_[i]=nullptr;}
+                desc.Usage=D3D11_USAGE_DEFAULT;desc.CPUAccessFlags=0;
+                desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+                if(FAILED(d3d->CreateTexture2D(&desc,nullptr,&importTextures_[i]))) {
+                    immediate->Release();failure("Could not retain the optional color input.");return false;
+                }
+            }
+            immediate->CopyResource(importTextures_[i],source);
+            imported.textures[i]=importTextures_[i];
+        }
+        immediate->Release();
+        return draw_(context_, &imported);
     }
     void bypass(const char* reason) { bypass_ = reason; }
     VsrColorStatus status() const {
@@ -64,6 +94,7 @@ public:
         value.requestedEngine = settings.engine;
         std::snprintf(value.engine, sizeof(value.engine), "3FP native");
         if (settings.engine && context_) status_(context_, &value);
+        value.requestedEngine = settings.engine;
         value.streamFields = streamFields_;
         if (settings.engine && !error_.empty()) {
             value.activeEngine = 0; std::snprintf(value.fallback, sizeof(value.fallback), "%s", error_.c_str());
@@ -83,7 +114,9 @@ private:
     }
     bool prepare() {
         error_.clear();
-        configured_ = configure_(context_, &settings) != 0;
+        auto effective = settings;
+        if (effective.engine == 2) effective.engine = 1;
+        configured_ = configure_(context_, &effective) != 0;
         prepared_ = configured_ && metadata_ &&
             frame_(context_, metadata_, format_, rgb_, kind_);
         return prepared_;
@@ -111,6 +144,7 @@ private:
     static void moduleAnchor() {}
     HMODULE module_ = nullptr;
     void* context_ = nullptr;
+    ID3D11Texture2D* importTextures_[3]{};
     AVFrame* metadata_ = nullptr;
     AVCodecParameters* stream_ = nullptr;
     unsigned streamFields_ = 0;

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.0.8 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.0.10 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,6 +10,12 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent)
+
+# VS Cap is an independent tray application: no 3FP/VS or media runtime dependency.
+qt_add_executable(VSCap WIN32 src/cap/main.cpp src/cap/DesktopCapture.cpp src/cap/DesktopCapture.h)
+set_target_properties(VSCap PROPERTIES OUTPUT_NAME "vs-cap")
+target_link_libraries(VSCap PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets user32 d3d11 dxgi)
+target_compile_definitions(VSCap PRIVATE VSR_VERSION="${PROJECT_VERSION}")
 qt_add_library(vsr_bluray STATIC src/bluray/BlurayCatalog.cpp src/bluray/BlurayCatalog.h
     src/bluray/BlurayWidget.cpp src/bluray/BlurayWidget.h)
 target_include_directories(vsr_bluray PUBLIC src)
@@ -181,9 +187,38 @@ if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/shaders/mpv-shaders.7z")
     endforeach()
 endif()
 
+# Player-only edition uses the same UI and native player core, with separate
+# settings/association policy and a reduced preset surface.
+get_target_property(VSR_PLAYER_LITE_SOURCES VSPlayer SOURCES)
+list(FILTER VSR_PLAYER_LITE_SOURCES EXCLUDE REGEX "src/backend/(VapourSynthFrameServer|LavPlayback)\\.cpp|src/player/PlayerDiscMenu\\.cpp")
+qt_add_executable(VSPlayerLite WIN32 ${VSR_PLAYER_LITE_SOURCES}
+    src/backend/VapourSynthFrameServer.h src/player/PlayerLiteBackends.cpp
+    src/player/PlayerDiscMenuNative.cpp)
+set_target_properties(VSPlayerLite PROPERTIES
+    OUTPUT_NAME "vs-player"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lite")
+target_include_directories(VSPlayerLite PRIVATE src third_party/vapoursynth/include)
+target_link_libraries(VSPlayerLite PRIVATE vsr_components avif vsr_image_decoder
+    vsr_image_core vsr_bluray Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network
+    ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
+target_compile_definitions(VSPlayerLite PRIVATE
+    VSR_VERSION="${PROJECT_VERSION}" VSR_LITE_PLAYER=1)
+if(MINGW)
+    target_compile_options(VSPlayerLite PRIVATE -Os -ffunction-sections -fdata-sections)
+    target_link_options(VSPlayerLite PRIVATE -Wl,--gc-sections)
+endif()
+
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test Network)
+    qt_add_executable(vsr_cap_tests tests/TestCap.cpp src/cap/DesktopCapture.cpp)
+    target_include_directories(vsr_cap_tests PRIVATE src)
+    target_link_libraries(vsr_cap_tests PRIVATE Qt6::Widgets Qt6::Test d3d11 dxgi)
+    add_test(NAME cap-precision COMMAND vsr_cap_tests)
+    qt_add_executable(vsr_cap_workflow_tests tests/TestCapWorkflow.cpp src/cap/DesktopCapture.cpp)
+    target_include_directories(vsr_cap_workflow_tests PRIVATE src)
+    target_link_libraries(vsr_cap_workflow_tests PRIVATE Qt6::Widgets Qt6::Test d3d11 dxgi user32)
+    add_test(NAME cap-workflow COMMAND vsr_cap_workflow_tests)
     qt_add_executable(vsr_bluray_tests tests/TestBluray.cpp)
     set_target_properties(vsr_bluray_tests PROPERTIES OUTPUT_NAME "vsr-bluray-tests")
     target_link_libraries(vsr_bluray_tests PRIVATE vsr_bluray Qt6::Test)
@@ -313,6 +348,15 @@ if(BUILD_TESTING)
     target_link_libraries(vsr_player_tests PRIVATE vsr_components)
     target_compile_definitions(vsr_player_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME vs-player-playback COMMAND vsr_player_tests -o player-test-results.txt,txt)
+    get_target_property(lite_test_sources VSPlayerLite SOURCES)
+    list(FILTER lite_test_sources EXCLUDE REGEX "src/player/main.cpp|VSPlayerLite_autogen")
+    qt_add_executable(vsr_player_lite_tests tests/TestPlayerLite.cpp ${lite_test_sources})
+    target_include_directories(vsr_player_lite_tests PRIVATE src third_party/vapoursynth/include)
+    target_link_libraries(vsr_player_lite_tests PRIVATE vsr_components avif vsr_image_decoder
+        vsr_image_core vsr_bluray Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Test
+        ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
+    target_compile_definitions(vsr_player_lite_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}" VSR_LITE_PLAYER=1)
+    add_test(NAME lite-native-playback COMMAND vsr_player_lite_tests -o player-lite-results.txt,txt)
     add_test(NAME player-language-packs COMMAND "${CMAKE_BINARY_DIR}/runtime/python/python.exe" "${CMAKE_SOURCE_DIR}/tools/check-player-languages.py")
 
     qt_add_executable(vsr_update_tests tests/TestUpdates.cpp)

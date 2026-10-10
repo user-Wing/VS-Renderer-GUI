@@ -8,7 +8,7 @@ extern "C" {
 /* Separate, optional C ABI: the existing 3FP snapshot/frame ABI stays intact. */
 typedef struct VsrColorSettings {
     uint32_t size, version;
-    uint32_t engine;       /* 0: original 3FP, 1: libplacebo with explicit fallback */
+    uint32_t engine;       /* 0: original 3FP, 1: libplacebo, 2: HDR-to-SDR auto */
     uint32_t output;       /* 0: display auto, 1: SDR, 2: HDR developer override */
     uint32_t tone;         /* auto, spline, ST2094-40, BT.2390, clip, linear */
     uint32_t gamut;        /* auto, perceptual, softclip, relative, clip */

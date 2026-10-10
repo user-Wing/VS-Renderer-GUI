@@ -64,6 +64,13 @@ struct ThreeFpConfiguration {
     std::uint32_t forceHdrOutput;
     std::int32_t preferredAdapterIndex = -1;
     std::uint32_t sdrScRgbMode = 0;
+    std::uint32_t adaptiveDownscaleBeforeUpload = 0;
+    std::uint32_t adaptiveDownscaleDropPercent = 20;
+    std::uint32_t adaptiveDecoderThreads = 0;
+    std::uint32_t minSoftwareDecoderThreads = 4;
+    std::uint32_t maxSoftwareDecoderThreads = 32;
+    std::uint32_t decoderGrowDropPercent = 10;
+    std::uint32_t decoderShrinkDropPercent = 2;
 };
 
 struct ThreeFpSnapshot {
@@ -125,6 +132,16 @@ struct ThreeFpSnapshot {
     std::uint32_t displayPeakNits;
     std::uint32_t displayFullFramePeakNits;
     std::uint32_t effectiveTargetPeakNits;
+    std::uint32_t dynamicMetadataWindows;
+    std::uint32_t dynamicMetadataDegrade;
+    std::uint64_t dynamicMetadataSerial;
+    std::uint64_t dynamicMetadataHeldFrames;
+    std::uint32_t dynamicMetadataTargetedNits;
+    std::uint32_t iamfActive;
+    std::uint32_t iamfChannels;
+    std::int32_t iamfSoundSystem;
+    std::uint64_t videoUpload100ns;
+    std::uint32_t iamfContentChannels;
 };
 
 struct ThreeFpPixelProbe {
@@ -234,7 +251,7 @@ private:
     bool initialized_ = false;
     template<typename T> bool resolve(T &target, const char *name);
 
-    QLibrary library_;
+    mutable QLibrary library_;
     QString error_;
 
     using GetApiVersionFn = std::uint32_t (*)();

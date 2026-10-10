@@ -11,6 +11,12 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $source = (Resolve-Path $FffProject).Path
 $nativeProject = Join-Path $source "FFF.Native\FFF.Native.vcxproj"
 if (-not (Test-Path $nativeProject)) { throw "FFF.Native.vcxproj not found under $source" }
+if ((Get-Content (Join-Path $source 'FFF.Native/3FP/Api/PlayerApi.cpp') -Raw) -match 'PlayerApiVersion\s*=\s*18\s*;') {
+    if ($PlatformToolset -eq 'v143') { throw 'Native API 18 requires the v145 toolset.' }
+    if (-not $OutputDirectory) { $OutputDirectory=Join-Path $projectRoot 'build\mingw-debug' }
+    & "$PSScriptRoot\build-native-api18.ps1" -NativeRoot $source -OutputDirectory $OutputDirectory
+    return
+}
 
 function Test-AppliedPatch([string]$Path) {
     # Windows PowerShell turns git's expected negative check into an error record.

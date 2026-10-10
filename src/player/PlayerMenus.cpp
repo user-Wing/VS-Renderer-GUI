@@ -75,7 +75,17 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     menu->addAction(tr("打开 BD 文件夹…"),this,&PlayerWindow::chooseBluRay);
     menu->addAction(tr("打开 BD 光盘镜像…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("打开 BD 光盘镜像用于播放"),{},"Disc image (*.iso *.img *.vhd *.vhdx)");if(!path.isEmpty())openBluRay(path);});
     menu->addAction(tr("打开链接…"),this,&PlayerWindow::chooseLink);
+#ifdef VSR_LITE_PLAYER
+    if(!discRoot_.isEmpty()) {
+        auto *titles=PlayerMenu::add(menu,tr("BD 原生节目菜单"));
+        for(const auto &path:files_) {
+            const auto name=blurayLabels_.value(path,QFileInfo(path).fileName());
+            titles->addAction(name,this,[this,path]{openFile(path);});
+        }
+    }
+#else
     if(!discRoot_.isEmpty())menu->addAction(tr("BD 主菜单 / 弹出菜单"),this,[this]{if(discMenu_ && discMenu_->active())discMenu_->topMenu();else openDiscMenu(discRoot_);});
+#endif
     if(discMenu_ && discMenu_->active()){menu->addAction(tr("切回节目列表模式 (3FP)"),this,[this]{if(!files_.isEmpty())openFile(files_.first());});
         for(bool audio:{true,false}){auto *tracks=PlayerMenu::add(menu,audio?tr("音轨"):tr("字幕"));for(const auto &track:discMenu_->tracks(audio))tracks->addAction(track.second,this,[this,audio,id=track.first]{discMenu_->selectTrack(audio,id);});}
         menu->addAction(tr("设置…"),this,&PlayerWindow::showSettings);menu->addAction(tr("全屏 / 退出全屏"),this,&PlayerWindow::toggleFullscreen);menu->popup(position);return;
@@ -83,11 +93,18 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     auto *playlist=menu->addAction(tr("播放列表"));playlist->setCheckable(true);playlist->setChecked(playlistPinned_);connect(playlist,&QAction::toggled,this,&PlayerWindow::setPlaylistPinned);
     auto *wheel=PlayerMenu::add(menu,tr("鼠标滚轮"));auto *wheelGroup=new QActionGroup(wheel);for(const auto &mode:QStringList{"volume","zoom"}){auto *action=wheel->addAction(mode=="volume"?tr("音量调节"):imageMode_?tr("放大图片"):tr("放大视频"));action->setCheckable(true);action->setChecked((imageMode_?QString("zoom"):settings_->value("player/wheel","volume").toString())==mode);action->setEnabled(!imageMode_ || mode=="zoom");wheelGroup->addAction(action);connect(action,&QAction::triggered,this,[this,mode]{settings_->setValue("player/wheel",mode);});}
     menu->addSeparator();
+#ifdef VSR_LITE_PLAYER
+    auto *passThrough=PlayerMenu::add(menu,tr("缩放模式"));
+    passThrough->addAction(tr("Jinc"),this,[this]{loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-4-Jinc.vpy"));});
+    passThrough->addAction(tr("D3D11 原生"),this,[this]{loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));});
+#else
     auto *presets=PlayerMenu::add(menu,tr("VapourSynth 预设"));
     const auto presetMenu=[&](const QString &title,const QString &directory) {auto *list=PlayerMenu::add(presets,title);const QDir dir(directory);auto names=dir.entryList({"*.vpy"},QDir::Files,QDir::Name);if(directory.endsWith("/builtin")){names.removeAll("Anime.vpy");names.removeAll("Realistic.vpy");names.prepend("Realistic.vpy");names.prepend("Anime.vpy");}for(const auto &name:names){if(directory.endsWith("/builtin") && name!="Anime.vpy" && name!="Realistic.vpy" && !name.startsWith("Anime-"))continue;auto label=name;if(directory.endsWith("/builtin")){if(name=="Anime.vpy")label=tr("Anime · 自动切换");else if(name.startsWith("Anime-")){const int stage=name.mid(6,1).toInt();if(stage>=0 && stage<6)label=tr("手动 · %1").arg(qualityNames().at(stage));}}auto *action=list->addAction(label,this,[this,path=dir.filePath(name)]{loadPreset(path);});action->setCheckable(true);action->setChecked(QFileInfo(preset_).absoluteFilePath()==QFileInfo(dir.filePath(name)).absoluteFilePath());}if(list->isEmpty()){auto *empty=list->addAction(tr("暂无预设"));empty->setEnabled(false);}return list;};
     presetMenu(tr("开发者内置"),QDir(PresetStore::directory()).filePath("builtin"));auto *user=presetMenu(tr("用户自定义"),PresetStore::directory());user->addSeparator();user->addAction(tr("加载 VPY 文件…"),this,[this]{const auto file=QFileDialog::getOpenFileName(this,tr("加载 VPY"),PresetStore::directory(),"VapourSynth (*.vpy)");if(!file.isEmpty())loadPreset(file);});
     presets->addAction(tr("停用渲染 · Jinc 直通"),this,[this]{loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-4-Jinc.vpy"));});
     presets->addAction(tr("停用渲染 · D3D11 直通"),this,[this]{loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));});presets->setEnabled(!imageMode_);
+#endif
+#ifndef VSR_LITE_PLAYER
     auto *processing=PlayerMenu::add(menu,tr("图像处理"));auto *interpolation=PlayerMenu::add(processing,tr("补帧"));
     auto *interpolationGroup=new QActionGroup(interpolation);
     const auto interpolationChoice=[&](const QString &name,int stage,bool automatic,int renderer=0){auto *action=interpolation->addAction(name,this,[this,stage,automatic,renderer]{setInterpolation(stage,automatic,renderer);});action->setCheckable(true);action->setChecked(automatic?(interpolationAuto_ && interpolationRenderer()==renderer):(stage<0?interpolationStage()<0:!interpolationAuto_ && interpolationStage()==stage%4 && interpolationRenderer()==stage/4));interpolationGroup->addAction(action);};
@@ -96,6 +113,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     interpolation->addSeparator();interpolationChoice(tr("关闭"),-1,false);
     bool hasVideo=false;for(const auto &entry:media_.value("streams").toArray())if(entry.toObject().value("type").toString()=="video")hasVideo=true;
     processing->setEnabled(!imageMode_ && !madvrMode() && !networkSource() && (source_.isEmpty() || hasVideo));
+#endif
     auto *audio=PlayerMenu::add(menu,tr("音频设置"));audio->setEnabled(!imageMode_ && !source_.isEmpty());
     auto *audioTracks=PlayerMenu::add(audio,tr("声音轨道"));auto *audioGroup=new QActionGroup(audioTracks);
     const auto selected=clock_->snapshot().selectedAudioStream;
@@ -127,7 +145,11 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     auto *capture=PlayerMenu::add(menu,tr("图像截取"));capture->addAction(imageMode_?tr("截取图片原始像素 · PNG 16-bit/通道"):direct_?tr("截取当前源画面 · PNG 16-bit/通道"):tr("截取当前源画面 · VS 处理后 PNG 16-bit/通道"),this,[this]{captureImage(true);})->setEnabled(!madvrMode() || imageMode_);capture->addAction(tr("截取实画面 · 含字幕及显示效果 PNG 16-bit/通道"),this,[this]{captureImage(false);});
     auto *captureTo=PlayerMenu::add(menu,tr("截图到指定路径…"));for(bool source:{true,false})captureTo->addAction(source?tr("源画面 · 选择文件夹保存…"):tr("实画面 · 选择文件夹保存…"),this,[this,source]{const auto directory=QFileDialog::getExistingDirectory(this,tr("选择截图保存文件夹"),screenshotDirectory());if(!directory.isEmpty())captureImage(source,directory);})->setEnabled(!source || !madvrMode() || imageMode_);
     auto *scaling=PlayerMenu::add(menu,tr("缩放算法"));const QStringList algorithms{"Nearest","Bilinear","Cubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11 Native","Lanczos4(4 taps)"};
-    for(int side=0;side<2;++side){auto *list=PlayerMenu::add(scaling,side?tr("缩小"):tr("放大"));auto *group=new QActionGroup(list);const QString key=side?"render/downscale":"render/upscale";for(int n=0;n<algorithms.size();++n){auto *action=list->addAction(algorithms[n]);action->setCheckable(true);action->setChecked((interpolationStage()>=0?(interpolationRenderer()?7:4):fixedAnimeStage()>=4?(fixedAnimeStage()==4?4:7):settings_->value(key,4).toInt())==n);group->addAction(action);connect(action,&QAction::triggered,this,[this,key,n]{settings_->setValue(key,n);if(fixedAnimeStage()<0)qualityStage_=n==7?5:direct_?4:qualityStage_;suspendQualityCheck();if(n==7 && fixedAnimeStage()<0 && !profile().isEmpty() && !source_.isEmpty())refreshScript();else applyScaling();(direct_?clock_:output_)->redraw();});}list->setEnabled(!madvrMode() && fixedAnimeStage()<4 && interpolationStage()<0);}
+    for(int side=0;side<2;++side){auto *list=PlayerMenu::add(scaling,side?tr("缩小"):tr("放大"));auto *group=new QActionGroup(list);const QString key=side?"render/downscale":"render/upscale";for(int n=0;n<algorithms.size();++n){
+#ifdef VSR_LITE_PLAYER
+        if(n != 4 && n != 7) continue;
+#endif
+        auto *action=list->addAction(algorithms[n]);action->setCheckable(true);action->setChecked((interpolationStage()>=0?(interpolationRenderer()?7:4):fixedAnimeStage()>=4?(fixedAnimeStage()==4?4:7):settings_->value(key,4).toInt())==n);group->addAction(action);connect(action,&QAction::triggered,this,[this,key,n]{settings_->setValue(key,n);if(fixedAnimeStage()<0)qualityStage_=n==7?5:direct_?4:qualityStage_;suspendQualityCheck();if(n==7 && fixedAnimeStage()<0 && !profile().isEmpty() && !source_.isEmpty())refreshScript();else applyScaling();(direct_?clock_:output_)->redraw();});}list->setEnabled(!madvrMode() && fixedAnimeStage()<4 && interpolationStage()<0);}
     auto *ring=scaling->addAction(tr("Anti-ringing · relaxed(仅 Jinc)"));ring->setCheckable(true);ring->setChecked(settings_->value("render/antiring",true).toBool());ring->setEnabled(!madvrMode() && fixedAnimeStage()!=5);connect(ring,&QAction::toggled,this,[this](bool enabled){settings_->setValue("render/antiring",enabled);(direct_?clock_:output_)->setAntiRinging(enabled);(direct_?clock_:output_)->redraw();});
     scaling->setEnabled(!imageMode_);
     menu->addSeparator();menu->addAction(isFullScreen()?tr("退出全屏 · Enter / Esc"):tr("全屏 · Enter"),this,&PlayerWindow::toggleFullscreen);menu->addAction(tr("设置…"),this,&PlayerWindow::showSettings);menu->popup(position);

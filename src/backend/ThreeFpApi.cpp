@@ -39,7 +39,7 @@ void ThreeFpApi::initialize()
     ok &= resolve(stepFrame_, "FFF3FP_StepFrame");
     ok &= resolve(setVolume_, "FFF3FP_SetVolume");
     ok &= resolve(setPresentConfig_, "FFF3FP_SetPresentConfig");
-    ok &= resolve(setPacingConfig_, "FFF3FP_SetPacingConfig");
+    setPacingConfig_ = reinterpret_cast<ToggleFn>(library_.resolve("FFF3FP_SetPacingConfig"));
     ok &= resolve(setViewTransform_, "FFF3FP_SetViewTransform");
     ok &= resolve(setScalingAlgorithms_, "FFF3FP_SetScalingAlgorithms");
     ok &= resolve(snapshot_, "FFF3FP_GetSnapshot");
@@ -96,7 +96,7 @@ ThreeFpResult ThreeFpApi::seekFrame(void *h, std::int64_t f) const { return avai
 ThreeFpResult ThreeFpApi::stepFrame(void *h, std::int32_t d) const { return available() ? stepFrame_(h, d) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setVolume(void *h, float v, std::uint32_t m) const { return available() ? setVolume_(h, v, m) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setPresentConfig(void *h, bool e) const { return available() ? setPresentConfig_(h, e ? 1u : 0u) : ThreeFpResult::NativeFailure; }
-ThreeFpResult ThreeFpApi::setPacingConfig(void *h, bool e) const { return available() ? setPacingConfig_(h, e ? 1u : 0u) : ThreeFpResult::NativeFailure; }
+ThreeFpResult ThreeFpApi::setPacingConfig(void *h, bool e) const { return available() && setPacingConfig_ ? setPacingConfig_(h, e ? 1u : 0u) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setViewTransform(void *h, float z, float x, float y) const { return available() ? setViewTransform_(h, z, x, y) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setScalingAlgorithms(void *h, ThreeFpScalingAlgorithm u, ThreeFpScalingAlgorithm d) const { return available() ? setScalingAlgorithms_(h, u, d) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::snapshot(void *h, ThreeFpSnapshot *s) const { return available() ? snapshot_(h, s) : ThreeFpResult::NativeFailure; }
@@ -107,6 +107,18 @@ ThreeFpResult ThreeFpApi::submitExternalVideoFrame(void *h, const ThreeFpExterna
 ThreeFpResult ThreeFpApi::setExternalOutputFormat(void *h, const char *f) const { return setExternalOutputFormat_ ? setExternalOutputFormat_(h,f) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setSubtitleLayer(void *h, const TimedTextLayer *layer) const { return setSubtitleLayer_ ? setSubtitleLayer_(h,layer) : ThreeFpResult::NotSupported; }
 QImage ThreeFpApi::captureFloat(void *h, int width, int height) const {
+    if(available() && apiVersion()>=18) {
+        using CopyFrame=ThreeFpResult(*)(void*,void*,uint32_t,uint32_t*,uint32_t*,uint32_t,uint32_t);
+        const auto copy=reinterpret_cast<CopyFrame>(library_.resolve("FFF3FP_CopyFrame"));
+        if(copy) {
+            uint32_t w=0,heightPixels=0;copy(h,nullptr,0,&w,&heightPixels,1,1);
+            if(!w || !heightPixels || uint64_t(w)*heightPixels>40000000)return {};
+            QImage image(int(w),int(heightPixels),QImage::Format_RGBA16FPx4);
+            if(copy(h,image.bits(),uint32_t(image.sizeInBytes()),&w,&heightPixels,1,1)!=ThreeFpResult::Success)return {};
+            auto floating=image.convertToFormat(QImage::Format_RGBA32FPx4);
+            floating.setText("readbackBitDepth","16");return floating;
+        }
+    }
     if (!readRegion_ || width <= 0 || height <= 0 || static_cast<qint64>(width)*height > 40000000) return {};
     QImage image(width,height,QImage::Format_RGBA32FPx4); uint32_t depth=0;
     if(image.isNull() || readRegion_(h,0,0,width,height,reinterpret_cast<float *>(image.bits()),uint32_t(width*height*4),&depth) != ThreeFpResult::Success) return {};
@@ -114,6 +126,7 @@ QImage ThreeFpApi::captureFloat(void *h, int width, int height) const {
 }
 QImage ThreeFpApi::capture(void *h, int width, int height) const {
     const auto floating=captureFloat(h,width,height);if(floating.isNull())return {};
+    width=floating.width();height=floating.height();
     QImage image(width,height,QImage::Format_RGB32);
     for (int y=0;y<height;++y) {const auto *pixels=reinterpret_cast<const float *>(floating.constScanLine(y));auto *row=reinterpret_cast<QRgb *>(image.scanLine(y)); for(int x=0;x<width;++x) { const auto at=x*4; row[x]=qRgb(qRound(std::clamp(pixels[at],0.0f,1.0f)*255),qRound(std::clamp(pixels[at+1],0.0f,1.0f)*255),qRound(std::clamp(pixels[at+2],0.0f,1.0f)*255)); } }
     return image;
@@ -127,7 +140,16 @@ ThreeFpResult ThreeFpApi::selectAudio(void *h,int stream) const {return selectAu
 ThreeFpResult ThreeFpApi::loadExternalAudio(void *h,const char *path) const {return loadExternalAudio_?loadExternalAudio_(h,path,-1,0):ThreeFpResult::NotSupported;}
 ThreeFpResult ThreeFpApi::clearExternalAudio(void *h) const {return clearExternalAudio_?clearExternalAudio_(h):ThreeFpResult::NotSupported;}
 ThreeFpResult ThreeFpApi::setAudioEffects(void *h,bool enabled,const float *gains,float wave,qint64 delay) const {return setAudioEffects_?setAudioEffects_(h,enabled?1u:0u,gains,wave,delay):ThreeFpResult::NotSupported;}
-ThreeFpResult ThreeFpApi::audioLevels(void *h,ThreeFpAudioLevels *levels,bool input) const {const auto fn=input?inputLevels_:outputLevels_;return fn?fn(h,levels):ThreeFpResult::NotSupported;}
+ThreeFpResult ThreeFpApi::audioLevels(void *h,ThreeFpAudioLevels *levels,bool input) const {
+    if(!levels || !h || !available())return ThreeFpResult::InvalidArgument;
+    if(apiVersion()>=18 && outputLevels_) {
+        struct NativeLevels {uint32_t size=sizeof(NativeLevels),version=2,channels=0,inputChannels=0;float values[8]{},inputs[8]{};} native;
+        const auto result=outputLevels_(h,reinterpret_cast<ThreeFpAudioLevels*>(&native));
+        levels->channels=input?native.inputChannels:native.channels;
+        std::copy_n(input?native.inputs:native.values,8,levels->values);return result;
+    }
+    const auto fn=input?inputLevels_:outputLevels_;return fn?fn(h,levels):ThreeFpResult::NotSupported;
+}
 QString ThreeFpApi::mediaInfo(void *h) const {
     if (!mediaInfo_ || !h) return {};
     std::uint32_t length = 0; mediaInfo_(h, nullptr, 0, &length);

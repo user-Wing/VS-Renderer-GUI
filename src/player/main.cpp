@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
     }
     app.setApplicationName("VS Player"); app.setOrganizationName("VSRenderer"); app.setApplicationVersion(VSR_VERSION);
     app.setWindowIcon(QIcon(":/icons/player.ico"));
+#ifndef VSR_LITE_PLAYER
     QSettings associations("HKEY_CURRENT_USER\\Software\\VSPlayer\\Capabilities", QSettings::NativeFormat);
     associations.beginGroup("FileAssociations");
     QStringList extensions;
@@ -32,11 +33,19 @@ int main(int argc, char **argv) {
     const auto iconPath=QDir::toNativeSeparators(QCoreApplication::applicationFilePath())+",-101";
     if (!extensions.isEmpty() && associations.value("ApplicationIcon").toString()!=iconPath)
         vsr::registerPlayerAssociations(extensions, QCoreApplication::applicationFilePath());
+#endif
     QFont font("Comic Sans MS"); font.setPixelSize(13); app.setFont(font);
     vsr::PlayerWindow window; window.show();
     const auto arguments = app.arguments();
+    QTimer::singleShot(0,&window,[&window,arguments]{
+#ifdef VSR_LITE_PLAYER
+    for (int i = 1; i < arguments.size(); ++i)
+        if (!arguments[i].endsWith(".vpy", Qt::CaseInsensitive)) window.openFile(arguments[i]);
+#else
     for (int i = 1; i < arguments.size(); ++i)
         if (arguments[i].endsWith(".vpy", Qt::CaseInsensitive)) window.loadPreset(arguments[i]);
         else window.openFile(arguments[i]);
+#endif
+    });
     return app.exec();
 }

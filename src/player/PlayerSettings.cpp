@@ -84,7 +84,11 @@ void PlayerWindow::applySettings(bool reopen) {
 void PlayerWindow::applyAppearance() {
     language_->setLanguage(settings_->value("basic/language","zh_CN").toString());
     language_->updateWidgets(this);
+#ifdef VSR_LITE_PLAYER
+    pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nJinc / D3D11 · Tab 视频信息"));
+#else
     pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nCtrl+P 加载 VPY 预设 · Tab 视频信息"));
+#endif
     const QColor color(settings_->value("theme/background","#202124").toString());
     QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han,{settings_->value("theme/chineseFont","Microsoft YaHei UI").toString()});
     const auto latin=settings_->value("theme/latinFont","Comic Sans MS").toString();
@@ -147,18 +151,35 @@ void PlayerWindow::showSettings() {
     auto *resizeFirst=new QCheckBox(tr("先 Jinc 到目标分辨率，再做增强(降低过大源的处理量)"),&dialog);resizeFirst->setChecked(settings_->value("performance/resizeBeforeEnhance",false).toBool());resizeFirst->setToolTip(tr("自动识别大于显示器分辨率的视频并降低分辨率。增强滤镜的分辨率越高，性能开销越大；小于目标分辨率的源保持原尺寸，不会先拉伸再增强。"));performance->addRow(resizeFirst);
     auto *resizeExplanation=new QLabel(resizeFirst->toolTip(),&dialog);resizeExplanation->setWordWrap(true);performance->addRow(resizeExplanation);
     auto *limitInfo=new QLabel(tr("占用阈值控制后台预解码；达到阈值便停止追加。CPU 同时限制 VS 工作线程，内存限制缓存目标。当前帧不强行中断，显存/缓存由插件分配，无法保证全机占用绝不超限。"),&dialog);limitInfo->setWordWrap(true);performance->addRow(limitInfo);
-    auto *decode=page();auto *core=new QComboBox(&dialog);core->setObjectName("playerVideoDecoder");core->addItem("3FPlayer (FFF.Native.dll)","3FP");core->addItem("LAV Video Decoder (LAVVideo.ax)","LAV");core->setCurrentIndex(qMax(0,core->findData(settings_->value("decode/video",settings_->value("player/core","3FP")))));decode->addRow(tr("视频解码器"),core);
-    auto *audioCore=new QComboBox(&dialog);audioCore->setObjectName("playerAudioDecoder");audioCore->addItem("3FPlayer (FFF.Native.dll)","3FP");audioCore->addItem("LAV Audio Decoder (LAVAudio.ax)","LAV");audioCore->setCurrentIndex(qMax(0,audioCore->findData(settings_->value("decode/audio",settings_->value("player/core","3FP")))));decode->addRow(tr("音频解码器"),audioCore);
+    auto *decode=page();auto *core=new QComboBox(&dialog);core->setObjectName("playerVideoDecoder");core->addItem("3FPlayer (FFF.Native.dll)","3FP");
+#ifndef VSR_LITE_PLAYER
+    core->addItem("LAV Video Decoder (LAVVideo.ax)","LAV");
+#endif
+    core->setCurrentIndex(qMax(0,core->findData(settings_->value("decode/video",settings_->value("player/core","3FP")))));decode->addRow(tr("视频解码器"),core);
+    auto *audioCore=new QComboBox(&dialog);audioCore->setObjectName("playerAudioDecoder");audioCore->addItem("3FPlayer (FFF.Native.dll)","3FP");
+#ifndef VSR_LITE_PLAYER
+    audioCore->addItem("LAV Audio Decoder (LAVAudio.ax)","LAV");
+#endif
+    audioCore->setCurrentIndex(qMax(0,audioCore->findData(settings_->value("decode/audio",settings_->value("player/core","3FP")))));decode->addRow(tr("音频解码器"),audioCore);
+#ifndef VSR_LITE_PLAYER
     auto *lavAudioConfig=new QPushButton(tr("打开 LAV Audio 配置…"),&dialog);connect(lavAudioConfig,&QPushButton::clicked,&dialog,[this,&dialog]{if(lav_)lav_->showAudioSettings(reinterpret_cast<void *>(dialog.winId()));else{LavPlayback config;config.showAudioSettings(reinterpret_cast<void *>(dialog.winId()));}});
     auto *lavConfig=new QPushButton(tr("打开 LAV Video 配置…"),&dialog);
     connect(lavConfig,&QPushButton::clicked,&dialog,[this,&dialog]{if(lav_)lav_->showVideoSettings(reinterpret_cast<void *>(dialog.winId()));else {LavPlayback config;config.showVideoSettings(reinterpret_cast<void *>(dialog.winId()));}});
+#endif
     auto *hardware=new QComboBox(&dialog);hardware->addItem(tr("3FPlayer · D3D11 硬件解码(不可用时软件回退)"),2);hardware->addItem(tr("3FPlayer · FFmpeg CPU 软件解码"),1);hardware->setCurrentIndex(settings_->value("decode/mode",2).toInt()==2?0:1);decode->addRow(tr("3FP 解码方式"),hardware);
-    auto *output=new QComboBox(&dialog);output->setObjectName("playerOutputFormat");output->addItem(tr("保持 VS 输出(默认)"),QString());
+    auto *output=new QComboBox(&dialog);output->setObjectName("playerOutputFormat");
+#ifdef VSR_LITE_PLAYER
+    output->addItem(tr("原生输出(默认)"),QString());
+#else
+    output->addItem(tr("保持 VS 输出(默认)"),QString());
+#endif
     auto *preScale=new QComboBox(&dialog);preScale->setObjectName("playerSoftwarePreScale");preScale->addItem(tr("关闭(保持完整源分辨率)"),0);preScale->addItem("2160p",2160);preScale->addItem("1080p",1080);preScale->addItem("720p",720);preScale->setCurrentIndex(qMax(0,preScale->findData(settings_->value("decode/softwarePreScaleHeight",0))));decode->addRow(tr("CPU 预缩放(实验)"),preScale);preScale->setToolTip(tr("仅作用于 CPU 软解：在上传前按比例缩小，保留位深和色度格式；降低传输/渲染开销，但牺牲空间细节。硬解与 VS 输出不受影响。"));
     const QStringList formats{"yuv420p","yuv420p10le","yuv420p16le","yuv422p","yuv422p10le","yuv422p16le","yuv444p","yuv444p10le","yuv444p16le","nv12","p010le","p016le","p210le","p216le","uyvy422","yuyv422","yvyu422","ayuv64le","y210le","y216le","xv30le","xv48le","rgb24","bgr24","rgb0","bgra","rgb565le","rgb555le","rgb48le","rgba64le"};
     for(const auto &format:formats)output->addItem(format,format);output->setCurrentIndex(qMax(0,output->findData(settings_->value("decode/output").toString())));decode->addRow(tr("3FP 输出像素格式"),output);
     auto *colorConfig=new QPushButton(tr("打开3FP 解码配置…"),&dialog);colorConfig->setObjectName("playerColorConfig");decode->addRow(colorConfig);connect(colorConfig,&QPushButton::clicked,this,&PlayerWindow::showColorSettings);
+#ifndef VSR_LITE_PLAYER
     decode->addRow(lavConfig);decode->addRow(lavAudioConfig);
+#endif
     auto *decodeInfo=new QLabel(tr("VS 源解码仍由 VPY 定义；LAV 视频选项用于本地文件播放时钟图。音频可独立使用 LAVAudio.ax。网络固定 3FP；内置原生视频路径使用 3FP。倍速音频使用 3FP / atempo。madVR 视频固定 LAV。"),&dialog);decodeInfo->setWordWrap(true);decode->addRow(decodeInfo);
     auto *render=page();auto *renderer=new QComboBox(&dialog);renderer->addItems({"VS","madVR"});renderer->setCurrentText(settings_->value("player/renderer","VS").toString());render->addRow(tr("视频渲染器"),renderer);
     auto *stableViewport=new QCheckBox(tr("划出播放列表/底部控制时不改变渲染分辨率"),&dialog);stableViewport->setObjectName("playerStableViewport");stableViewport->setChecked(settings_->value("render/stableViewport",true).toBool());stableViewport->setToolTip(tr("控制界面覆盖视频，保持视频视口和渲染分辨率，避免重新分配渲染资源及重建增强链。"));render->addRow(stableViewport);
@@ -167,6 +188,18 @@ void PlayerWindow::showSettings() {
     auto *animeInfo=new QLabel(tr("仅作用于自动 Anime 预设；持续丢帧超过 5% 按列表顺序降载。开发者内置的六个手动版本固定档位，不自动切换。no CNN 使用梯度 / DoG 线条处理，不执行神经网络。"),&dialog);animeInfo->setWordWrap(true);render->addRow(animeInfo);
     auto *antiring=new QCheckBox(tr("Anti-ringing · relaxed(仅 Jinc，强度 0.5)"),&dialog);antiring->setChecked(settings_->value("render/antiring",true).toBool());render->addRow(antiring);
     auto *renderInfo=new QLabel(tr("VS：VPY 实时滤镜及原生 D3D11 呈现。\nmadVR：直接加载随附 madVR64.ax，处理设置交给 madVR；VS 预设不生效。\n默认放大/缩小采用 Jinc，同尺寸跳过缩放。\n抗振铃采用开放的局部范围约束，不宣称复刻 madVR 专有实现。"),&dialog);renderInfo->setWordWrap(true);render->addRow(renderInfo);
+#ifdef VSR_LITE_PLAYER
+    renderer->clear();renderer->addItem("D3D11");
+    core->setEnabled(false);audioCore->setEnabled(false);
+    decodeInfo->setText(tr("3FP 原生解码与显示，支持 D3D11 硬解和 FFmpeg 软解。"));
+    output->setItemText(0,tr("保持原生输出(默认)"));
+    render->labelForField(animeStage)->setVisible(false);animeStage->hide();
+    render->labelForField(interpolationStart)->setVisible(false);interpolationStart->hide();animeInfo->hide();
+    resizeFirst->hide();resizeExplanation->hide();frames->hide();performance->labelForField(frames)->hide();
+    limitInfo->setText(tr("原生解码器使用自身的有界缓冲队列。"));
+    renderInfo->setText(tr("Jinc / D3D11 两档；默认 D3D11 原生直通。"));
+    delete categories->takeItem(8);
+#endif
     auto *cache=page();auto *cacheMode=new QComboBox(&dialog);cacheMode->setObjectName("playerCacheMode");cacheMode->addItem(tr("软件目录(默认)"),"default");cacheMode->addItem(tr("自定义目录"),"custom");cacheMode->setCurrentIndex(settings_->value("cache/path").toString().isEmpty()?0:1);cache->addRow(tr("索引缓存位置"),cacheMode);
     auto *cachePath=new QLineEdit(playerCacheDirectory(*settings_),&dialog);cachePath->setObjectName("playerCachePath");cache->addRow(tr("存储路径"),cachePath);auto *browse=new QPushButton(tr("浏览…"),&dialog);cache->addRow(browse);connect(browse,&QPushButton::clicked,&dialog,[&]{const auto directory=QFileDialog::getExistingDirectory(&dialog,tr("选择索引缓存目录"),cachePath->text());if(!directory.isEmpty()){cachePath->setText(directory);cacheMode->setCurrentIndex(1);}});
     auto *cacheSize=new QLabel(&dialog);cacheSize->setObjectName("playerCacheSize");cache->addRow(tr("当前缓存大小"),cacheSize);
@@ -179,11 +212,19 @@ void PlayerWindow::showSettings() {
     auto *registerButton=new QPushButton(tr("注册所选格式到当前用户"),&dialog);registerButton->setObjectName("playerRegisterAssociations");associations->addRow(registerButton);connect(registerButton,&QPushButton::clicked,&dialog,[&]{QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();if(registerPlayerAssociations(extensions,QDir(QCoreApplication::applicationDirPath()).filePath("vs-player.exe"))){settings_->setValue("associations/extensions",extensions);setError(tr("格式已注册；请在 Windows 默认应用中选择 VS Player。"));}else setError(tr("文件关联注册失败。"));});
     auto *defaultsButton=new QPushButton(tr("打开 Windows 默认应用…"),&dialog);associations->addRow(defaultsButton);connect(defaultsButton,&QPushButton::clicked,&dialog,[]{QDesktopServices::openUrl(QUrl("ms-settings:defaultapps"));});
     auto *associationInfo=new QLabel(tr("注册到当前用户，无需管理员权限。Windows 最终默认程序由用户选择；取消选择会移除 VS Player 的打开方式入口，不改写其他程序的默认关联。"),&dialog);associationInfo->setWordWrap(true);associations->addRow(associationInfo);
+#ifndef VSR_LITE_PLAYER
     stack->addWidget(new ComponentDownloads(stack));
+#endif
     categories->setCurrentRow(0);
     auto *footer=new QHBoxLayout;auto *load=new QPushButton(tr("加载预设…"),&dialog);load->setObjectName("playerLoadSettings");auto *save=new QPushButton(tr("保存预设…"),&dialog);save->setObjectName("playerSaveSettings");footer->addWidget(load);footer->addWidget(save);footer->addStretch();
     auto *cancel=new QPushButton(tr("取消(&N)"),&dialog);cancel->setObjectName("playerCancelSettings");auto *ok=new QPushButton(tr("确定(&Y)"),&dialog);ok->setObjectName("playerConfirmSettings");ok->setDefault(true);auto *apply=new QPushButton(tr("应用(&A)"),&dialog);apply->setObjectName("playerApplySettings");footer->addWidget(cancel);footer->addWidget(ok);footer->addWidget(apply);outer->addLayout(footer);
-    const auto store=[&]{settings_->setValue("decode/softwarePreScaleHeight",preScale->currentData());settings_->setValue("screenshot/path",screenshotPath->text().trimmed());settings_->setValue("basic/language",language->currentData());settings_->setValue("basic/autoplay",autoplay->isChecked());settings_->setValue("theme/chineseFont",chineseFont->currentFont().family());settings_->setValue("theme/latinFont",latinFont->currentFont().family());settings_->setValue("theme/background",background->text());settings_->setValue("theme/opacity",opacity->value());settings_->setValue("theme/bottomTransparency",bottomTransparency->value());settings_->setValue("theme/playlistTransparency",playlistTransparency->value());settings_->setValue("playback/remember",remember->isChecked());settings_->setValue("playback/multithread",multithread->isChecked());settings_->setValue("playback/arrows",arrows->currentData());settings_->setValue("playback/ctrlSeconds",ctrl->value());settings_->setValue("playback/ctrlAltSeconds",ctrlAlt->value());settings_->setValue("cache/path",cacheMode->currentIndex()==0?QString():QFileInfo(cachePath->text()).absoluteFilePath());settings_->setValue("player/volume",volume->value());settings_->setValue("subtitle/visible",subtitles->isChecked());settings_->setValue("performance/predecode",predecode->isChecked());settings_->setValue("performance/frames",frames->value());settings_->setValue("performance/resizeBeforeEnhance",resizeFirst->isChecked());for(int n=0;n<4;++n)settings_->setValue("performance/"+keys[n],limits[n]->value());settings_->setValue("player/core",core->currentData());settings_->setValue("decode/video",core->currentData());settings_->setValue("decode/audio",audioCore->currentData());settings_->setValue("decode/mode",hardware->currentData());settings_->setValue("decode/output",output->currentData());settings_->setValue("player/renderer",renderer->currentText());settings_->setValue("render/antiring",antiring->isChecked());settings_->setValue("render/stableViewport",stableViewport->isChecked());settings_->setValue("player/animeStage",animeStage->currentIndex());settings_->setValue("player/interpolationStart",interpolationStart->currentIndex());QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();settings_->setValue("associations/extensions",extensions);};
+    const auto store=[&]{settings_->setValue("decode/softwarePreScaleHeight",preScale->currentData());settings_->setValue("screenshot/path",screenshotPath->text().trimmed());settings_->setValue("basic/language",language->currentData());settings_->setValue("basic/autoplay",autoplay->isChecked());settings_->setValue("theme/chineseFont",chineseFont->currentFont().family());settings_->setValue("theme/latinFont",latinFont->currentFont().family());settings_->setValue("theme/background",background->text());settings_->setValue("theme/opacity",opacity->value());settings_->setValue("theme/bottomTransparency",bottomTransparency->value());settings_->setValue("theme/playlistTransparency",playlistTransparency->value());settings_->setValue("playback/remember",remember->isChecked());settings_->setValue("playback/multithread",multithread->isChecked());settings_->setValue("playback/arrows",arrows->currentData());settings_->setValue("playback/ctrlSeconds",ctrl->value());settings_->setValue("playback/ctrlAltSeconds",ctrlAlt->value());settings_->setValue("cache/path",cacheMode->currentIndex()==0?QString():QFileInfo(cachePath->text()).absoluteFilePath());settings_->setValue("player/volume",volume->value());settings_->setValue("subtitle/visible",subtitles->isChecked());settings_->setValue("performance/predecode",predecode->isChecked());settings_->setValue("performance/frames",frames->value());settings_->setValue("performance/resizeBeforeEnhance",resizeFirst->isChecked());for(int n=0;n<4;++n)settings_->setValue("performance/"+keys[n],limits[n]->value());settings_->setValue("player/core",core->currentData());settings_->setValue("decode/video",core->currentData());settings_->setValue("decode/audio",audioCore->currentData());settings_->setValue("decode/mode",hardware->currentData());settings_->setValue("decode/output",output->currentData());settings_->setValue("player/renderer",
+#ifdef VSR_LITE_PLAYER
+        "VS"
+#else
+        renderer->currentText()
+#endif
+    );settings_->setValue("render/antiring",antiring->isChecked());settings_->setValue("render/stableViewport",stableViewport->isChecked());settings_->setValue("player/animeStage",animeStage->currentIndex());settings_->setValue("player/interpolationStart",interpolationStart->currentIndex());QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();settings_->setValue("associations/extensions",extensions);};
     connect(apply,&QPushButton::clicked,&dialog,[&]{store();applySettings(true);language_->updateWidgets(&dialog);});
     connect(save,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getSaveFileName(&dialog,tr("保存完整配置"),"vs-player.ini","INI (*.ini)");if(!file.isEmpty()){store();if(!saveConfiguration(file))setError(tr("配置保存失败。"));}});
     connect(load,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getOpenFileName(&dialog,tr("加载完整配置"),{},"INI (*.ini)");if(!file.isEmpty()){if(loadConfiguration(file))dialog.reject();else setError(tr("配置文件无效。"));}});

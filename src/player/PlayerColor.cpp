@@ -17,10 +17,17 @@
 #include <QTimer>
 
 namespace vsr {
+namespace {
+#ifdef VSR_LITE_PLAYER
+constexpr int defaultColorEngine=0;
+#else
+constexpr int defaultColorEngine=2;
+#endif
+}
 void PlayerWindow::applyColorSettings() {
     auto c=VsrColorDefaultSettings();
     const auto integer=[&](const char* key,uint32_t fallback,uint32_t maximum){return qBound(0,settings_->value(QString("color/")+key,fallback).toInt(),int(maximum));};
-    c.engine=integer("engine",0,1);c.output=integer("output",0,2);c.tone=integer("tone",0,5);
+    c.engine=integer("engine",defaultColorEngine,2);c.output=integer("output",0,2);c.tone=integer("tone",0,5);
     c.gamut=integer("gamut",0,4);c.quality=integer("quality",1,1);c.icc=integer("icc",1,2);
     c.peakDetect=settings_->value("color/peakDetect",true).toBool();c.dither=settings_->value("color/dither",true).toBool();
     c.inverseTone=settings_->value("color/inverseTone",false).toBool();
@@ -37,8 +44,13 @@ void PlayerWindow::showColorSettings() {
     QDialog dialog(this);dialog.setObjectName("playerColorSettings");dialog.setWindowTitle(tr("3FP 解码配置 · 色彩管理"));dialog.resize(720,650);
     auto *outer=new QVBoxLayout(&dialog);auto *scroll=new QScrollArea(&dialog);scroll->setWidgetResizable(true);auto *content=new QWidget(scroll);scroll->setWidget(content);outer->addWidget(scroll,1);auto *form=new QFormLayout(content);form->setVerticalSpacing(10);
     auto *engine=new QComboBox(&dialog);engine->setObjectName("colorEngine");
-    engine->addItems({tr("默认：3FP 原生(709 / 2020 简易模式)"),tr("自定义：libplacebo 高级色彩管理")});
-    engine->setCurrentIndex(settings_->value("color/engine",0).toInt()==1?1:0);form->addRow(tr("色彩引擎"),engine);
+    engine->addItem(tr("自动：HDR 映射 SDR 使用高级色彩管理"),2);
+    engine->addItem(tr("原始：3FP 原生(709 / 2020 简易模式)"),0);
+    engine->addItem(tr("自定义：libplacebo 高级色彩管理"),1);
+#ifdef VSR_LITE_PLAYER
+    engine->removeItem(2);engine->removeItem(0);settings_->setValue("color/engine",0);
+#endif
+    engine->setCurrentIndex(qMax(0,engine->findData(settings_->value("color/engine",defaultColorEngine).toInt())));form->addRow(tr("色彩引擎"),engine);
     auto *explanation=new QLabel(tr("高级模式只处理解码 / VS 输出后的显示色彩，不修改 VPY、滤镜顺序或 VS 输出。\n默认自动映射目标显示器，自动色域映射、动态峰值检测与末端抖动；失败继续使用原生输出。madVR 模式由 madVR 管理颜色。"),&dialog);
     explanation->setWordWrap(true);form->addRow(explanation);
     auto *advanced=new QWidget(&dialog);auto *a=new QFormLayout(advanced);a->setContentsMargins(0,0,0,0);a->setVerticalSpacing(10);form->addRow(advanced);
@@ -63,11 +75,12 @@ void PlayerWindow::showColorSettings() {
     auto *limits=new QLabel(tr("HDR scRGB 跳过 SDR ICC / .cube，按显示器 HDR 色域映射。Dolby Vision 仅在可用元数据支持的情况下重塑；FEL 不重建。HDR Vivid 当前只映射 PQ / HLG 底层，未执行其动态曲线。"),advanced);limits->setWordWrap(true);a->addRow(limits);
     auto *status=new QLabel(&dialog);status->setWordWrap(true);outer->addWidget(status);
     const auto refresh=[&]{const auto s=(direct_?clock_:output_)->colorStatus();status->setText(tr("当前引擎：%1\n%2").arg(QString::fromUtf8(s.engine),QString::fromUtf8(s.fallback)));};refresh();
-    advanced->setEnabled(engine->currentIndex()==1);connect(engine,&QComboBox::currentIndexChanged,advanced,[advanced](int value){advanced->setEnabled(value==1);});
+    advanced->setEnabled(engine->currentData().toInt()!=0);connect(engine,&QComboBox::currentIndexChanged,advanced,[advanced,engine]{advanced->setEnabled(engine->currentData().toInt()!=0);});
     auto *buttons=new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel|QDialogButtonBox::Apply,&dialog);outer->addWidget(buttons);
+    buttons->button(QDialogButtonBox::Ok)->setText(tr("确定"));buttons->button(QDialogButtonBox::Cancel)->setText(tr("取消"));buttons->button(QDialogButtonBox::Apply)->setText(tr("应用"));
     const auto store=[&]{
         const auto save=[&](const char* key,const QVariant& value){settings_->setValue(QString("color/")+key,value);};
-        save("engine",engine->currentIndex());save("output",output->currentIndex());save("tone",tone->currentIndex());save("gamut",gamut->currentIndex());save("quality",quality->currentIndex());
+        save("engine",engine->currentData());save("output",output->currentIndex());save("tone",tone->currentIndex());save("gamut",gamut->currentIndex());save("quality",quality->currentIndex());
         save("sdrPeak",sdr->value());save("displayPeak",peak->value());save("paperWhite",white->value());save("contrastRecovery",contrast->value());save("peakDetect",detect->isChecked());save("dither",dither->isChecked());save("inverseTone",inverse->isChecked());
         save("icc",icc->currentIndex());save("iccPath",iccPath->text());save("lutPath",lutPath->text());settings_->sync();applyColorSettings();refresh();QTimer::singleShot(100,&dialog,refresh);
     };

@@ -588,5 +588,19 @@
   "无法创建高精度图像交换目录。": "Unable to create the high-precision image exchange directory.",
   "无法启动 PhotoCraft 图像编辑器。": "Unable to launch the PhotoCraft image editor.",
   "正在准备高精度图像…": "Preparing the high-precision image…",
-  "高精度导出和格式转换": "High-precision export and format conversion"
+  "高精度导出和格式转换": "High-precision export and format conversion",
+  "自动：HDR 映射 SDR 使用高级色彩管理": "Auto: advanced color management for HDR to SDR",
+  "  实时帧率缺口：%1 fps · 视频落后时钟：%2 ms": "  Real-time frame rate deficit: %1 fps · Video clock lag: %2 ms",
+  "确定": "OK",
+  "3FP 原生解码与显示，支持 D3D11 硬解和 FFmpeg 软解。": "Native 3FP decoding and display, with D3D11 hardware and FFmpeg software decoding.",
+  "BD 原生节目菜单": "Native BD programme menu",
+  "D3D11 原生": "D3D11 native",
+  "Jinc / D3D11 两档；默认 D3D11 原生直通。": "Jinc / D3D11 modes; native D3D11 passthrough by default.",
+  "VS Player\n拖入视频，或按 Ctrl+O 打开\nJinc / D3D11 · Tab 视频信息": "VS Player\nDrop a video or press Ctrl+O to open\nJinc / D3D11 - Tab for video information",
+  "保持原生输出(默认)": "Keep native output (default)",
+  "原生解码器使用自身的有界缓冲队列。": "The native decoder uses its own bounded buffering queue.",
+  "原生输出(默认)": "Native output (default)",
+  "独立播放器支持 Jinc / D3D11 原生播放。": "The standalone player supports native Jinc / D3D11 playback.",
+  "缩放模式": "Scaling mode",
+  "原始：3FP 原生(709 / 2020 简易模式)": "Original: 3FP native (simple 709 / 2020)"
 }

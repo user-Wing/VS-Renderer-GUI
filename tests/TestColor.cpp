@@ -38,6 +38,31 @@ private slots:
         auto native=VsrColorDefaultSettings();QVERIFY(p.setColorSettings(native));QTRY_COMPARE(p.colorStatus().activeEngine,0u);
         QVERIFY(p.samplePixel(200,150,sample));QVERIFY(sample.red>.45 && sample.red<.60);
     }
+    void automaticHdrToSdr() {
+        QWidget surface;surface.resize(320,240);surface.show();QVERIFY(QTest::qWaitForWindowExposed(&surface));
+        ThreeFpApi api;QVERIFY2(api.available(),qPrintable(api.errorString()));ThreeFpPlayer p(api,&surface);
+        auto c=advanced();c.engine=2;QVERIFY(p.setColorSettings(c));
+        auto frame=yuv(1,1,1,128,128,128);QVERIFY(p.submitFrame(frame));QTRY_VERIFY(p.snapshot().swapChainPresents>0);
+        QCOMPARE(p.colorStatus().requestedEngine,2u);QCOMPARE(p.colorStatus().activeEngine,0u);
+        ThreeFpPixelProbe sdr{};QVERIFY(p.samplePixel(160,120,sdr));QVERIFY(sdr.red>.45 && sdr.red<.60);
+        for(const unsigned transfer:{16u,18u}) {
+            frame=yuv(9,transfer,9,40000,32768,32768,16);QVERIFY(p.submitFrame(frame));
+            QTRY_COMPARE_WITH_TIMEOUT(p.colorStatus().activeEngine,1u,20000);
+            QTRY_COMPARE(p.colorStatus().sourceTransfer,transfer);QCOMPARE(p.colorStatus().requestedEngine,2u);
+            QTest::qWait(100);ThreeFpPixelProbe mapped{};QVERIFY(p.samplePixel(160,120,mapped));
+            QVERIFY(std::isfinite(mapped.red));QVERIFY(mapped.red>0 && mapped.red<=1);QCOMPARE(p.colorStatus().outputHdr,0u);
+            c.engine=1;QVERIFY(p.setColorSettings(c));QTest::qWait(100);ThreeFpPixelProbe custom{};QVERIFY(p.samplePixel(160,120,custom));
+            QVERIFY(std::abs(mapped.red-custom.red)<.01f);
+            c.engine=2;QVERIFY(p.setColorSettings(c));
+        }
+        c=VsrColorDefaultSettings();c.engine=2;c.output=1;QVERIFY(p.setColorSettings(c));
+        frame=yuv(9,16,9,40000,32768,32768,16);QVERIFY(p.submitFrame(frame));
+        QTRY_COMPARE_WITH_TIMEOUT(p.colorStatus().activeEngine,1u,20000);QCOMPARE(p.colorStatus().outputHdr,0u);
+        ThreeFpPixelProbe defaults{};QVERIFY(p.samplePixel(160,120,defaults));
+        QVERIFY(std::isfinite(defaults.red));QVERIFY(defaults.red>0 && defaults.red<=1);
+        frame=yuv(1,1,1,128,128,128);QVERIFY(p.submitFrame(frame));QTRY_COMPARE(p.colorStatus().activeEngine,0u);
+        QVERIFY(p.samplePixel(160,120,sdr));QVERIFY(sdr.red>.45 && sdr.red<.60);
+    }
     void constantLuminanceAndHdr() {
         QWidget surface;surface.resize(320,240);surface.show();QVERIFY(QTest::qWaitForWindowExposed(&surface));
         ThreeFpApi api;ThreeFpPlayer p(api,&surface);QVERIFY(p.setColorSettings(advanced()));

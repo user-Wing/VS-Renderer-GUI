@@ -2,7 +2,9 @@
 
 本文件用于接手开发、定位模块和确认当前边界。用户操作见 [README.md](README.md)，版本变更见 [changelog.md](changelog.md)，逐轮测试与交付记录见 [专项文档](docs/) 和 [历史原文归档](docs/history/development-records-through-2026-10-03.md)。
 
-核对日期：2026-10-07。当前版本为 **1.0.8**；按维护者最新指示构建 Full / Lite 包并更新 GitHub 源码，正式 Release 和附件由维护者发布，保留维护者手动更新的 FFmpeg。`PlayerPlaylist::layoutInfoPanels` 按顶部标题和底栏实际高度约束 Tab 面板；`PlayerInfoPanel` 为透明度栏保留控件高度及约 5% 间距；音频详细面板可见时禁止鼠标自动弹出播放列表。窗口移动即时同步浮层，仅调整界面几何。验证见 [浮层修复记录](docs/player-overlay-layout-1.0.8.md)。
+核对日期：2026-10-10。当前版本为 **1.0.10**。先合并维护者提供的 1.0.9 源码，再完成 HDR→SDR 自动色彩路由、中文按钮、软解统计/线程/字幕优化和 VSCap 编辑条更新。本地新建 `dist/1.0.10-Full` 与 `dist/1.0.10-PlayerLite`，原 1.0.9 包和既有部署保留。源码推送 GitHub，Release 仅准备无附件草稿，由维护者上传及发布。验收、性能差距和构建入口见 [本轮记录](docs/validation-1.0.10.md)。
+
+Native 固定上游 `Lake1059/FFF_Project@20bcc001b24f6b6de4575bddf9b93ec452795b0d`，使用完整 `patches/3fp-api18-vsrenderer-1.0.10.patch` 与 `tools/build-native-api18.ps1`；不要混套 API 14 的旧补丁。Full 新配置的色彩引擎值 2 仅在 PQ/HLG→SDR 时路由 libplacebo，值 0/1 的已有选择保留。AV1 8K 420p10 使用 16 个工作线程和 16 个帧上下文，4K 444p12 保留 32；移除无音频 CPU 播放落后时重置时钟的分支，使丢帧和时间落后可见。字幕初始化避免重复探测已知轨道，静态字幕按裁剪像素和位置去重；源位深、分辨率与 VPY 不改变。
 
 1.0.8 图像编辑入口已切换到原生 Rust/egui PhotoCraft。`PhotoCraftEditor` 通过当前用户专用命名管道交接文件，独立编辑进程保留完整上游 UI；VSP 可继续播放，退出不会终止编辑器。普通/PSD/RAW 直接打开，视图变换及不支持的编码使用 RGBA16 PNG / float32 TIFF 交换。旧 Qt 编辑窗口不再链接进 VSPlayer，旧源码只保留独立回归与历史参考；`ImageDocument/ImagePsd/ImageHdr` 继续服务本地解码及高精度交换。固定上游提交、许可、≤45 MB 体积预算和实测见 [接入记录](docs/photocraft-editor-1.0.8.md)。
 

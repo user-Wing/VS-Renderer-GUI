@@ -107,11 +107,24 @@ PlayerWindow::PlayerWindow() {
     settings_ = std::make_unique<QSettings>(QDir(QCoreApplication::applicationDirPath()).filePath("player.ini"), QSettings::IniFormat);
     language_=std::make_unique<PlayerLanguage>(settings_->value("basic/language","zh_CN").toString());
     if (!settings_->contains("player/core")) settings_->setValue("player/core", QSettings().value("player/core", "3FP"));
+#ifdef VSR_LITE_PLAYER
+    if (!settings_->contains("player/animeStage")) settings_->setValue("player/animeStage",5);
+#endif
     if(settings_->value("theme/latinFont").toString()=="Segoe UI")settings_->setValue("theme/latinFont","Comic Sans MS");
     const QVariantMap defaults{{"basic/language","zh_CN"},{"basic/autoplay",true},{"theme/chineseFont","Microsoft YaHei UI"},{"theme/latinFont","Comic Sans MS"},{"theme/background","#202124"},{"theme/opacity",100},{"playback/remember",true},{"playback/multithread",true},{"playback/arrows","seconds"},{"playback/ctrlSeconds",10},{"playback/ctrlAltSeconds",60},{"cache/path",QString()},{"decode/video",settings_->value("player/core","3FP")},{"decode/audio",settings_->value("player/core","3FP")},{"player/renderer","VS"},{"player/animeStage",0},{"player/speed",1.0},{"player/volume",100},{"player/muted",false},{"performance/predecode",true},{"performance/cpu",100},{"performance/gpu",100},{"performance/ram",50},{"performance/vram",50},{"performance/frames",8},{"performance/resizeBeforeEnhance",false},{"player/wheel","volume"},{"decode/mode",2},{"decode/output",QString()},{"render/upscale",4},{"render/downscale",4},{"render/antiring",true},{"subtitle/visible",true},{"subtitle/style/font","Comic Sans MS"},{"subtitle/style/size",36},{"subtitle/style/color","#ffffff"},{"subtitle/style/outlineColor","#000000"},{"subtitle/style/shadowColor","#000000"},{"subtitle/style/outline",2},{"subtitle/style/shadow",2},{"subtitle/style/alignment",2},{"subtitle/style/margin",48},{"subtitle/style/left",40},{"subtitle/style/right",40},{"subtitle/style/scaleX",100},{"subtitle/style/scaleY",100},{"subtitle/style/spacing",0}};
     for(auto it=defaults.begin();it!=defaults.end();++it)if(!settings_->contains(it.key()))settings_->setValue(it.key(),it.value());
+#ifdef VSR_LITE_PLAYER
+    settings_->setValue("player/core","3FP");settings_->setValue("decode/video","3FP");settings_->setValue("decode/audio","3FP");
+    settings_->setValue("player/renderer","VS");settings_->setValue("player/interpolationAuto",false);settings_->setValue("color/engine",0);
+    settings_->setValue("player/animeStage",std::clamp(settings_->value("player/animeStage",5).toInt(),4,5));
+    settings_->setValue("player/preset",QDir(PresetStore::directory()).filePath(settings_->value("player/animeStage").toInt()==4?"builtin/Anime-4-Jinc.vpy":"builtin/Anime-5-D3D11.vpy"));
+#endif
     preset_=settings_->value("player/preset").toString();
+#ifdef VSR_LITE_PLAYER
+    qualityStage_=initialQualityStage();
+#else
     if (!QFileInfo::exists(preset_)) preset_.clear();
+#endif
     interpolationAuto_=interpolationStage()>=0 && settings_->value("player/interpolationAuto",false).toBool();
     subtitleVisible_=settings_->value("subtitle/visible",true).toBool();
     setWindowTitle("VS Player"); resize(1280, 760); setMinimumSize(1000, 500); setAcceptDrops(true);
@@ -229,7 +242,13 @@ bool PlayerWindow::openFile(const QString &input) {
     if(!remote && QStringList{"iso","img","vhd","vhdx"}.contains(suffix))return openBluRay(path);
     if(!remote && suffix=="bdmv")return openBluRay(QFileInfo(path).absolutePath());
     if (QStringList{"ass","ssa","srt","sup","mks"}.contains(suffix)) { attachSubtitle(path); return true; }
-    if (path.endsWith(".vpy", Qt::CaseInsensitive)) { loadPreset(path); return true; }
+    if (path.endsWith(".vpy", Qt::CaseInsensitive)) {
+#ifdef VSR_LITE_PLAYER
+        setError(tr("独立播放器支持 Jinc / D3D11 原生播放。"));return false;
+#else
+        loadPreset(path);return true;
+#endif
+    }
     const bool image=!remote && PlayerImage::supports(path);
     if(clock_->snapshot().state==ThreeFpState::Opening){pendingMediaOpen_=path;return true;}
     pendingMediaOpen_.clear();
@@ -307,7 +326,11 @@ void PlayerWindow::refreshScript() {
     bool high=false;for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()=="video")high=stream.value("width").toInt()>=3840 || stream.value("height").toInt()>=2160;}
     bool audioOnly=playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower());
     if(!audioMode_ && !media_.value("streams").toArray().isEmpty()){audioOnly=true;for(const auto &entry:media_.value("streams").toArray())if(entry.toObject().value("type").toString()=="video")audioOnly=false;}
-    const bool native=mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic" || (mode=="Anime" && ((high && fixedAnimeStage()<0) || qualityStage_>=4));
+    const bool native=
+#ifdef VSR_LITE_PLAYER
+        true ||
+#endif
+        mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic" || (mode=="Anime" && ((high && fixedAnimeStage()<0) || qualityStage_>=4));
     if(native && qualityStage_<4)qualityStage_=4;
     setDirectMode(native);
     applyScaling();
@@ -360,6 +383,11 @@ void PlayerWindow::savePosition() {
     settings_->setValue("positions/"+key,clock_->snapshot().state==ThreeFpState::Ended?0:position());
 }
 void PlayerWindow::loadPreset(const QString &path) {
+#ifdef VSR_LITE_PLAYER
+    const auto name=QFileInfo(path).fileName();
+    if(name!="Anime-4-Jinc.vpy" && name!="Anime-5-D3D11.vpy")return;
+    settings_->setValue("player/animeStage",name=="Anime-4-Jinc.vpy"?4:5);
+#endif
     if(madvrMode()) { const auto text=tr("工作在 madVR 模式下，VS 预设不生效。");setError(text);QToolTip::showText(pane_->mapToGlobal(QPoint(20,20)),text,pane_,QRect(),4000);return; }
     interpolationAuto_=false;settings_->setValue("player/interpolationAuto",false);
     profileFallback_=false;profileStartup_.invalidate();preset_ = path; qualityStage_=initialQualityStage();settings_->setValue("player/preset",path); if (!source_.isEmpty() && !imageMode_) refreshScript();
@@ -531,7 +559,9 @@ bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
         if(key->key()==Qt::Key_Escape && isFullScreen()) {toggleFullscreen();return true;}
         if (key->modifiers() & Qt::ControlModifier) {
             if (key->key() == Qt::Key_O) { chooseFiles(); return true; }
+#ifndef VSR_LITE_PLAYER
             if (key->key() == Qt::Key_P) { const auto file = QFileDialog::getOpenFileName(this, tr("加载 VPY"), PresetStore::directory(), "VapourSynth (*.vpy)"); if (!file.isEmpty()) loadPreset(file); return true; }
+#endif
         }
     }
     if(event->type()==QEvent::MouseButtonPress && object==speedButton_ && speedPopup_ && speedPopup_->isVisible()) {speedPopup_->close();return true;}

@@ -1,1 +1,2 @@
 assets/mpv-shaders/** -text -whitespace
+patches/3fp-api18-vsrenderer-1.0.*.patch text eol=lf -whitespace

@@ -31,6 +31,9 @@ int PlayerWindow::fixedAnimeStage() const {
     return names.indexOf(file.fileName());
 }
 int PlayerWindow::initialQualityStage() const {
+#ifdef VSR_LITE_PLAYER
+    return std::clamp(settings_->value("player/animeStage",5).toInt(),4,5);
+#endif
     if(interpolationStage()>=0)return 4;
     const int fixed=fixedAnimeStage();
     return fixed>=0?fixed:profile()=="Anime"?std::clamp(settings_->value("player/animeStage",0).toInt(),0,5):0;
@@ -57,6 +60,9 @@ QStringList PlayerWindow::interpolationNames() const {
     return {tr("RIFE 4.26 · 4queue"),tr("RIFE 4.26 · 4queue · 半宽高"),tr("MVTools · 最高质量"),tr("MVTools · 低质量"),tr("关闭")};
 }
 void PlayerWindow::setInterpolation(int stage,bool automatic,int renderer) {
+#ifdef VSR_LITE_PLAYER
+    return;
+#endif
     if(madvrMode() || imageMode_ || networkSource())return;
     const QStringList names{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};
     if(stage>=4){stage-=4;renderer=1;}
@@ -81,6 +87,10 @@ void PlayerWindow::showInterpolationWarning(bool visible) {
     interpolationWarning_->setVisible(visible);if(visible){interpolationWarning_->adjustSize();interpolationWarning_->raise();}
 }
 void PlayerWindow::ensureProfiles() {
+#ifdef VSR_LITE_PLAYER
+    // Only the two user-selected pass-through presets are shipped by Lite.
+    return;
+#endif
     const QDir shaders(QDir(QCoreApplication::applicationDirPath()).filePath("shaders"));QDir().mkpath(shaders.absolutePath());
     if(!QFileInfo::exists(shaders.filePath("anime4k-a-fast.glsl")))QFile::copy(":/filters/anime4k-a-fast.glsl",shaders.filePath("anime4k-a-fast.glsl"));
     if(!QFileInfo::exists(shaders.filePath("anime4k-no-cnn.glsl")))QFile::copy(":/filters/anime4k-no-cnn.glsl",shaders.filePath("anime4k-no-cnn.glsl"));

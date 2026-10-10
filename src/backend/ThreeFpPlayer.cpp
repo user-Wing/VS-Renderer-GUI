@@ -37,6 +37,10 @@ bool ThreeFpPlayer::createSession()
     configuration.hdrPeakNits = 0.0f;
     configuration.sdrPaperWhiteNits = 203.0f;
     configuration.videoScalingQuality = 1;
+    configuration.adaptiveDownscaleBeforeUpload = decodeMode_==1 &&
+        qEnvironmentVariable("VSR_ADAPTIVE_UPLOAD")=="1";
+    configuration.adaptiveDecoderThreads = decodeMode_==1 &&
+        qEnvironmentVariable("VSR_ADAPTIVE_THREADS")!="0";
     if(qEnvironmentVariableIsSet("VSR_3FP_ADAPTER"))configuration.preferredAdapterIndex=qEnvironmentVariableIntValue("VSR_3FP_ADAPTER");
 
     if (!check(api_.create(&configuration, &handle_), QStringLiteral("创建 3FP 会话")))
@@ -64,7 +68,7 @@ ThreeFpPlayer::~ThreeFpPlayer()
         api_.destroy(handle_);
     }
 }
-bool ThreeFpPlayer::setClockOnly(bool enabled) { clockOnly_=enabled;return handle_ && api_.setClockOnly(handle_,enabled)==ThreeFpResult::Success; }
+bool ThreeFpPlayer::setClockOnly(bool enabled) { clockOnly_=enabled;return !handle_ || api_.setClockOnly(handle_,enabled)==ThreeFpResult::Success; }
 bool ThreeFpPlayer::setSoftwarePreScale(int height) { if(height!=0 && height!=720 && height!=1080 && height!=2160)return false;softwarePreScaleHeight_=height;return !handle_ || api_.setSoftwarePreScale(handle_,height)==ThreeFpResult::Success; }
 
 bool ThreeFpPlayer::ready() const { return const_cast<ThreeFpPlayer *>(this)->createSession(); }
@@ -193,7 +197,7 @@ void ThreeFpPlayer::setView(float zoom, float panX, float panY)
 void ThreeFpPlayer::redraw() { if (handle_) api_.redraw(handle_); }
 bool ThreeFpPlayer::setColorSettings(const VsrColorSettings &settings) {
     colorSettings_ = settings; customColorSettings_ = true;
-    return handle_ && api_.setColorSettings(handle_, &settings) == ThreeFpResult::Success;
+    return !handle_ || api_.setColorSettings(handle_, &settings) == ThreeFpResult::Success;
 }
 VsrColorStatus ThreeFpPlayer::colorStatus() const {
     VsrColorStatus value{}; value.size = sizeof(value); value.version = 1;
@@ -209,8 +213,13 @@ void ThreeFpPlayer::setAntiRinging(bool enabled) { antiRinging_=enabled; setScal
 QImage ThreeFpPlayer::capture() const { const auto size=surface_->size()*surface_->devicePixelRatioF(); return handle_ ? api_.capture(handle_,size.width(),size.height()) : QImage(); }
 QImage ThreeFpPlayer::captureFloat() const { const auto size=surface_->size()*surface_->devicePixelRatioF(); return handle_ ? api_.captureFloat(handle_,size.width(),size.height()) : QImage(); }
 bool ThreeFpPlayer::setSubtitle(const QImage &image) {
-    TimedTextCommand command; command.width=image.width(); command.height=image.height(); command.bitmap=image.constBits(); command.bitmapWidth=image.width(); command.bitmapHeight=image.height(); command.bitmapStride=image.bytesPerLine(); command.bitmapBytes=static_cast<uint32_t>(image.sizeInBytes()); command.contentId=++subtitleSequence_;
-    TimedTextLayer layer; layer.width=image.width(); layer.height=image.height(); layer.count=image.isNull()?0:1; layer.sequence=subtitleSequence_; layer.commands=&command;
+    QRect area=image.rect();const auto region=image.text("vsrSubtitleRect").split(',');
+    if(region.size()==4)area=QRect(region[0].toInt(),region[1].toInt(),region[2].toInt(),region[3].toInt()).intersected(image.rect());
+    // The canvas defines placement, but transparent pixels need no CPU color
+    // conversion or bitmap upload. Keep HDR/subtitle math on the visible bitmap.
+    const auto bitmap=area.isEmpty()?QImage{}:area==image.rect()?image:image.copy(area);
+    TimedTextCommand command; command.x=area.x();command.y=area.y();command.width=area.width();command.height=area.height();command.bitmap=bitmap.constBits();command.bitmapWidth=bitmap.width();command.bitmapHeight=bitmap.height();command.bitmapStride=bitmap.bytesPerLine();command.bitmapBytes=static_cast<uint32_t>(bitmap.sizeInBytes());command.contentId=++subtitleSequence_;
+    TimedTextLayer layer; layer.width=qMax(1,image.width()); layer.height=qMax(1,image.height()); layer.count=bitmap.isNull()?0:1; layer.sequence=subtitleSequence_; layer.commands=&command;
     return handle_ && api_.setSubtitleLayer(handle_,&layer)==ThreeFpResult::Success;
 }
 
