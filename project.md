@@ -1,236 +1,146 @@
-# VS Renderer / VS Player 项目地图
+# VS Renderer / VS Player：项目开发地图
 
-2026-10-11 贴图尺寸与工具栏补充：移除 960×720 初始显示限制，按图片像素与屏幕物理像素 1:1 显示，超过鼠标所在屏幕可用区域才等比缩小；贴图“✓”隐藏工具栏，右键首项随工具栏状态切换显示 / 隐藏。窗口预留四边蓝色区域，避免边框被视图覆盖。工作流 12 项通过；本轮更新 1.0.10 本地目录、重制 Full / PlayerLite 压缩包并推送源码，Release 由维护者上传，见 [交互验收](docs/vscap-interaction-1.0.10.md)。
+> 本文面向接手开发的维护者与 AI，负责说明架构、模块入口、约束与当前状态，不记录逐日开发流水账。用户指南见 [README](README.md)，版本变更见 [changelog](changelog.md)，专项证据见 [docs](docs/)。核对基线：2026-10-10，工作区版本 1.0.10（不等于正式 Release 已发布）。
 
-2026-10-11 后续截图 / 贴图交互修复：VSCap 工具条鼠标、字号按钮、空文字框、拖动边框、Ctrl 正方形 / 圆形、虚线及数字笔宽已更新。`PinWindow` 通过 `PinView` / `QGraphicsProxyWidget` 复用 `CaptureOverlay` 的编辑逻辑，等比显示，滚轮最近邻缩放，右键提供工具栏、复制、PNG / AVIF 和销毁。工作流 11 项、原生截图 5 项通过，见 [交互验收](docs/vscap-interaction-1.0.10.md)。本轮仅推送源码，压缩包由维护者制作，Release Draft 不更新。
+## 1. 发心与边界
 
-2026-10-11 补充 VSCap 行内文字对象：`src/cap/main.cpp` 的 `CaptureTextBox` 在截图选区内直接编辑，虚线边缘可拖动，左侧参数提供系统字体自动补全、数字字号、加粗和斜体；导出时才合成文字。内容、位置、样式与绘图使用同一撤销历史。工作流测试入口为 `editableTextObjects` / `textAndDrawingUndo`，证据见 [1.0.10 验收](docs/validation-1.0.10.md)。
-
-本文件用于接手开发、定位模块和确认当前边界。用户操作见 [README.md](README.md)，版本变更见 [changelog.md](changelog.md)，逐轮测试与交付记录见 [专项文档](docs/) 和 [历史原文归档](docs/history/development-records-through-2026-10-03.md)。
-
-核对日期：2026-10-10。当前版本为 **1.0.10**。先合并维护者提供的 1.0.9 源码，再完成 HDR→SDR 自动色彩路由、中文按钮、软解统计/线程/字幕优化和 VSCap 编辑条更新。本地新建 `dist/1.0.10-Full` 与 `dist/1.0.10-PlayerLite`，原 1.0.9 包和既有部署保留。源码推送 GitHub，Release 仅准备无附件草稿，由维护者上传及发布。验收、性能差距和构建入口见 [本轮记录](docs/validation-1.0.10.md)。
-
-Native 固定上游 `Lake1059/FFF_Project@20bcc001b24f6b6de4575bddf9b93ec452795b0d`，使用完整 `patches/3fp-api18-vsrenderer-1.0.10.patch` 与 `tools/build-native-api18.ps1`；不要混套 API 14 的旧补丁。Full 新配置的色彩引擎值 2 仅在 PQ/HLG→SDR 时路由 libplacebo，值 0/1 的已有选择保留。AV1 8K 420p10 使用 16 个工作线程和 16 个帧上下文，4K 444p12 保留 32；移除无音频 CPU 播放落后时重置时钟的分支，使丢帧和时间落后可见。字幕初始化避免重复探测已知轨道，静态字幕按裁剪像素和位置去重；源位深、分辨率与 VPY 不改变。
-
-1.0.8 图像编辑入口已切换到原生 Rust/egui PhotoCraft。`PhotoCraftEditor` 通过当前用户专用命名管道交接文件，独立编辑进程保留完整上游 UI；VSP 可继续播放，退出不会终止编辑器。普通/PSD/RAW 直接打开，视图变换及不支持的编码使用 RGBA16 PNG / float32 TIFF 交换。旧 Qt 编辑窗口不再链接进 VSPlayer，旧源码只保留独立回归与历史参考；`ImageDocument/ImagePsd/ImageHdr` 继续服务本地解码及高精度交换。固定上游提交、许可、≤45 MB 体积预算和实测见 [接入记录](docs/photocraft-editor-1.0.8.md)。
-
-1.0.7 已制作 Full / Lite 压缩包、上传源码并准备无附件 Release Draft，二进制上传与正式发布由维护者操作。原生入口 `patches/3fp-software-decode-pipeline.patch` 将 HEVC / AV1 软解上限提升至 32 线程、软件帧预算提升至 512 MiB，并增加独立解码线程及有界交接；正常取帧提交、音频与快照继续由会话线程维护。字幕匹配在 `PlayerMediaMatching`，候选切换在 `PlayerMenus`。细节与验证见 [软件解码更新](docs/software-decode-subtitles-1.0.7.md) 与 [发行说明](docs/release-1.0.7.md)。
-
-1.0.8 的 `patches/3fp-silent-video-startup-clock.patch` 修复无音频输出时仍启用首帧音频门控、后续视频帧因此绕过 PTS 等待的问题；`tools/build-3fp.ps1` 在既有补丁之后应用它。真实启动、跳转和续播验收为 `TestPlayer::directStartupClock`，见 [启动时钟记录](docs/player-startup-clock-1.0.8.md)。
-1.0.8 的 `BlurayCatalog::playbackInput` 把生成的分段 `inpoint` 前移 1 ms：MPLS 的 PlayItem IN 常等于片段首个 IDR 的时间戳，而 FFmpeg 拼接解复用器按 `inpoint` 定位后会从该 IDR 之后的包继续，原生直通解码器因此没有参考帧，单集与整卷各段开头约 1 秒花屏。`outpoint` / `duration` 保持作者时间轴，段时长与音画同步不变。逐帧哈希与段帧数见 [拼接前置记录](docs/player-bd-concat-preroll-1.0.8.md)。
-
-2026-10-06 增加独立底部 / 播放列表透明度、全屏控制栏实际高度唤出及顶部标题覆盖层。`PlayerChromePanel` 负责原生视频上的透明合成；`PlayerInfoPanel` 将可滚动文字和底部透明度条分开。Tab 可选择右侧音频详细面板，输入电平扩展位于 `patches/3fp-audio-input-meters.patch`，由 `ThreeFpApi` / `ThreeFpPlayer` 读取并在 `PlayerInfo` 显示。记录见 [透明控制栏与音频信息](docs/player-transparent-audio-info-1.0.7.md)。
-
-1.0.7 精简包仅排除 LAV、madVR、MKVToolNix，并同步移除对应本地组件版本记录；BD 原盘菜单的 libVLC 保留。打包脚本为 `tools/package-portable.ps1`，使用 `-Edition Full` 或 `-Edition Lite`，清单包含隐藏文件并排除个人状态；发行语言文件来自最新源码，保留本地安装中的自定义语言文件。既有 1.0.6 已发布，历史说明见 [1.0.6](docs/release-1.0.6.md)。
-
-1.0.7 高精度截图入口位于 `PlayerMenus`，`PlayerPng::writeScreenshotPng` 写 RGBA16 PNG 和 HDR 浮点附件；`ThreeFpApi::captureFloat` 保留渲染表面精度，`PreviewPane::captureImage` 处理图片实画面。`patches/3fp-hdr-readback.patch` 修复 FP16 数值读回，并由 `tools/build-3fp.ps1` 在现有补丁之后应用。格式与验收见 [截图记录](docs/player-high-precision-screenshots-1.0.7.md)。
-
-默认截图目录通过 `screenshot/path` 保存，设置入口在基本设置；右键指定目录仅用于本次截取。HDR 同时保存 sRGB 色调映射预览、独立 HDR PNG 与未截断浮点附件。`PlayerProfiles::updateAlgorithmBadges` 更新底栏当前增强 / 补帧档位，保留加载提示和错误信息，隐藏空状态行。
-
-2026-10-05 HEVC 444p10 尖峰诊断复现本机 600 Mbps 无丢帧、800 Mbps 丢帧。隔离对照中仅扩至 512 MiB 仍丢，保持 128 MiB 并将软解上限从八线程改为十六线程，两轮零丢帧；解码等待与会话取帧提交共用线程是关键限制。仅补充诊断文档，未部署候选或改变默认参数，见 [尖峰诊断](docs/hevc444-peak-diagnosis-1.0.6.md)。
-
-本轮根因修复位于 PlayerWindow 的目标呈现确认、PlayerPlaylist 的章节稳定和 QDialog 模式布局，以及 `patches/3fp-concat-seek.patch` 的全局定位。Player、Renderer 与原生 DLL 重编译交付，真实鼠标及原盘六集回归见 [BD 与进度条验收](docs/player-bd-seek-acceptance-1.0.6.md)。原盘菜单字幕语言交接由 `BlurayCatalog::playbackInput` 从 CLPI 保留传输流 PID，解决拼接流 ID 为零导致回退日语；五种语言图像与独立原盘提取结果一致，见 [字幕语言验收](docs/bd-menu-subtitle-languages-1.0.6.md)。
-
-最新修复覆盖 BD 菜单节目接回滤镜、分段定位、底栏与停靠播放列表、歌词原生显示、目录图片循环，以及编辑器标尺/文字交互。真实 BD、kit A–P 和图像回归结果见 [修复验收记录](docs/player-bd-lyrics-editor-fixes-1.0.6.md)。
-
-1.0.6 音频封面/歌词入口位于 `PlayerAudioMetadata`、`PlayerAudio`；BD 完整节目和音频树位于 `PlayerPlaylist`，MKS 轨道和章节由 `PlayerMenus` 接入，Tab 布局位于 `PlayerInfoPanel`。真实文件测试、操作与边界见 [音频 / BD / MKS 记录](docs/audio-bd-mks-1.0.6.md)。
-
-1.0.6 后续 BD 原盘交互由 `PlayerDiscMenu` 动态加载 `runtime/vlc`，`BlurayCatalog` 准备菜单/短节目缓存；PGS 协议和时间零点修复由 `patches/3fp-bd-subtitles-probe.patch` 重建。稳定视频视口在 `PlayerPlaylist::layoutChrome`，默认开启。首次菜单入口显式激活 PreviewPane 视频层；PlayerDiscMenu 切换时后台释放旧播放器，并保留旧 HWND 到释放完成。底部菜单导航按钮已移除。真实 MyGO 菜单、鼠标操作、HW/SW 切换、字幕、短片以及 Tab/右键回归见 [本轮记录](docs/bd-menu-viewport-1.0.6.md)。
-
-最新输入修复位于 PlayerDiscMenu 的 Qt 逻辑坐标转发、PlayerPlaylist 的模式对话框/工具栏几何，以及 ChapterTimeline/PlayerControls 的点击直跳与预览去重；记录见 [输入与布局](docs/player-input-layout-1.0.6.md)。
-
-当前修复以返回的 1.0.5 源码为基线；2026-10-04 已重新编译并覆盖 `dist/VS-Renderer-GUI-windows-x64` 的 Renderer、Player、3FP 和版本清单，保留配置及预设。Jinc 8K 原生稳定段、大图启动与编辑操作的结果及未验收项集中于 [本机验收记录](docs/local-1.0.5-performance.md)。此次没有更新其它 PortableSoft 安装目录或发布线上版本。
-
-3FP 色彩管理新增可选 libplacebo D3D11 显示分支，默认保留原生路径。配置入口在 `PlayerColor`，独立 C ABI 在 `src/color/`，3FP 变更以 `patches/3fp-color-management.patch` 重建；高级显示处理位于解码 / VS 输出之后。依赖、专项验证和尚未实现的 HDR 扩展见 [色彩管理记录](docs/color-management-1.0.4.md)。
-
-1.0.5 后续交互更新集中在 `PlayerControls/Window/Info`、`PreviewPane` 和 `ImageEditorCanvas`；补帧八组合与双自动入口在 `PlayerProfiles/Menus`，Player VS 音频时钟专用接口由 `patches/3fp-vs-audio-clock.patch` 提供。2026-10-05 已与 BD 会话统一更新本地 dist，保留配置与预设。大图并行预测、缓存视图与实时性能的验收/未达标项见 [交互与调度记录](docs/player-interaction-performance-1.0.5.md)，不据短时稳态结果宣称所有补帧模式完成。
-
-旧 Qt 图像编辑器的图层交互记录仅作为 1.0.4 历史参考，当前生产入口使用 PhotoCraft，见 [接入记录](docs/photocraft-editor-1.0.8.md)。
-
-后续本轮补充平滑显示及视口缓存、滚轮平移、背景锁定、同窗口多文档与图层右键混合选项。混合参数和合并组接口在 `ImageDocument`，标准PSD混合参数在 `ImagePsd`，播放器入口复用窗口在 `PlayerImageTools`；行为、验证与精度边界见 [图像文档与混合选项](docs/image-editor-workflows-1.0.4.md)。
-
-## 1. 项目定位与成功标准
-
-2026-10-05 Full 组件页面在共享 `src/update/ComponentDownloads.*`，迁移 Player 设置中的本体更新入口；安装辅助脚本为 `tools/apply-components.ps1`，MKVToolNix 固定到 `runtime/mkvtoolnix`。Player BD 入口在 `PlayerPlaylist` 后台读取后直接播放，Renderer 保留 Remux GUI；信息面板自绘透明背景并随播放器激活状态避让设置窗口。验收与发布边界见 [本轮记录](docs/components-player-1.0.5.md)。
-
-2026-10-05 原生软件回退优化位于 `PlayerSession/VideoRenderer`，由两个独立补丁重建；保留 444/10-bit 精度及硬解路径。780M 8K48 软解尚未达标，本地硬解到 8K 短时回归通过。当前部署和实验边界见 [AV1 软件回退记录](docs/av1-software-decode-1.0.5.md)。硬解预取预算由 `patches/3fp-hardware-video-queue.patch` 在 PlayerSession 区分硬件表面 768 MiB 与软件帧 128 MiB，保留八帧队列上限与 150 ms 预取目标；构建脚本自动应用，测量工具增加队列计数。RX 6600 的 1.0.5 报告、原理及本机回归见 [8K 队列记录](docs/hardware-8k-queue-1.0.6.md)。
-
-2026-10-05 新增共享 `src/bluray/`：BD 元数据解析、节目/模板匹配、章节切片、反馈与 Remux GUI；Renderer 和 Player 复用。原生 `bluray:` 协议用 `patches/3fp-bluray-input.patch` 接入，下载桥接复用 ModelScope Manager。实现、路径和已验收/未验收范围见 [BD 记录](docs/bd-remux-1.0.5.md)。
-
-面向理解视频处理参数、希望用 GUI 组织滤镜而无需反复写脚本，并能快速比较效果的用户。Renderer 是处理与比较工作台；Player 是共享后端的独立视频、音频、图片查看器。
-
-核心流程：打开素材 → 选择模块、顺序和参数 → 生成可审阅的 VPY → 同步比较源与输出 → 保存预设或导出。Player 可直接复用 VPY，也提供原生直通、字幕、音频和图片工具。
-
-成功标准是处理链真正执行、两路结果与时间轴对应、错误能定位到具体后端或滤镜、便携包解压即可使用。GUI 保持紧凑清晰，避免控件遮挡和装饰性大卡片。
-
-非目标：任意 Python IDE、矩阵表达式可视化编辑器、完整 FFmpeg 参数设计器；尚未实现的 NGU 与完整 madVR 私有算法不能用近似实现冒名。
+- **VS Renderer**：为需要可视化组织视频滤镜的用户提供处理链、VapourSynth（VPY）生成、源/输出实时对比和编码导出。
+- **VS Player**：共用原生播放后端的独立视频、音频、图片查看器，支持原生直通或可选 VS 增强。
+- **VSCap**：截图、绘制、文字标注、贴图及 PNG/AVIF 输出的独立组件。
+- **成功标准**：实际滤镜与播放路径可验证，时间轴一致，便携包依赖齐全，故障可定位到模块，软件不因首次索引或后台操作失去响应。
+- **非目标**：通用 Python IDE、任意 FFmpeg 命令设计器、私有 madVR/NGU 算法仿制，以及未经验证的全部设备/格式兼容承诺。
 
 ## 2. 快速开始
 
-运行环境为 Windows 10 22H2+ x64、D3D11 显卡；Vulkan 滤镜 / RIFE 需对应驱动。当前增强版 FFmpeg 为 x86-64-v3，AWJ 图片转换后端需 AVX2，不能据基础 Windows 要求推断所有 CPU 都可执行全部功能。
+**平台**：Windows 10 22H2+ x64，D3D11；部分 GLSL、RIFE 需要合适的 GPU 驱动。完整便携包可运行 `VSRenderer.exe`、`vs-player.exe`；开发机还需 C++20、CMake、Ninja、Qt 6.8+、匹配 Qt 的 MinGW 和原生组件所用 MSVC 工具链。依赖准备见 [docs/dependencies.md](docs/dependencies.md)。
 
-便携开发目录：`dist/VS-Renderer-GUI-windows-x64/`，入口是 `VSRenderer.exe` 和 `vs-player.exe`。普通用户不需要另装 Qt、Python 或 VapourSynth。
+典型开发构建（按本机 Qt/MinGW 实际安装调整）：
 
-当前程序文件约596 MiB（625 MB），现有用户缓存另计约34 MiB。FFmpeg在根目录共享DLL，GLSL库按需读取压缩资源；轨道metadata与Default选择（无Default时均选同类首条）、部署和验证边界见 [轨道与体积](docs/tracks-size-1.0.4.md)。主目录 `Clean-Workspace.bat`供手动清理，`--preview`只盘点；保留当前Release/便携目录和配置。
-
-源码工具链：C++20、CMake 3.25+、Ninja、Qt 6.8+（本机 6.10.2 MinGW）；VS / 3FP 原生部分使用 Visual Studio 工具链。依赖准备见 [构建指南](docs/dependencies.md)，具体参数以当前 `tools/` 脚本为准，其中部分指南仍保留早期版本示例。
-
-已准备依赖后，在 PowerShell 设置 Qt 与配套 MinGW / Ninja 环境，例如：
-
-~~~powershell
+```powershell
 $env:QT_ROOT = "C:/Qt/6.10.2/mingw_64"
 $env:PATH = "C:/Qt/Tools/mingw1310_64/bin;C:/Qt/Tools/Ninja;" + $env:PATH
 cmake --preset windows-mingw-release
 cmake --build --preset windows-mingw-release
 ctest --preset windows-mingw-release
-~~~
+```
 
-三个常见坑：原生 DLL 与 FFmpeg major ABI 必须配套；只复制 EXE 不能替代完整运行时部署；冷启动 shader 编译和首次媒体索引耗时不同于稳态播放速度。
+注意：① `FFF.Native.dll` 与 FFmpeg shared major ABI、补丁和运行时文件必须匹配；② 只复制 EXE 不是便携部署，必须随附 Qt、VS/Python 及所选后端；③ 冷启动 shader 编译、索引耗时不能当作稳定播放帧率。当前 native API 18 构建入口见 `tools/build-native-api18.ps1`；不要混用 API 14 历史补丁。
 
-## 3. 架构与关键决策
+## 3. 架构决策
 
-| 决策 | 目的与适用边界 | 不采用的路径 / 重估条件 |
+| 决策 | 理由与适用范围 | 不选的方案 / 重估条件 |
 | --- | --- | --- |
-| Qt Widgets + C++20 | 紧凑桌面布局、原生 HWND 与 D3D11 表面 | 当前不需要 QML 场景图；高度动画化或跨端时再重估 |
-| 动态加载 3FP C ABI | MinGW GUI 调用 MSVC 构建的 FFF.Native.dll | 不绑定跨编译器 C++ ABI；必须与当前补丁和运行时配套 |
-| C++ catalog + 有序 FilterGraph | 参数和执行顺序可验证，VPY 保持透明 | 不先建立通用插件 DSL；外部作者无编译扩展时再重估 |
-| 工作线程调用 VSScript，帧送至 3FP | 实时预览支持随机帧、seek、合并最新目标 | vspipe/Y4M 用于离线导出，不作为实时预览桥 |
-| 源 / 音频时钟驱动 VS 输出帧 | 按时间与源/输出 FPS 映射，支持补帧 | 不直接使用 seek 后局部帧号；任意剪辑不会自动重建音频 |
-| GPU GLSL 通过 vs-placebo | 使用已有 mpv/libplacebo shader 并写入 VPY | 不将 shader 名称伪映射成普通 resize；仍有 CPU 平面读回与上传 |
-| 视频、图片分开解码和显示 | 图片不走视频时间轴、VS 或相邻图片预解码 | 图片离线 Anime4K 调整尺寸是独立例外，查看仍不建 VS 图 |
-| 比较滑块裁剪原生父窗口 | 各 pane 保持共同画布坐标，不重复解码或逐帧 CPU 拼图 | 比较导出使用独立离线合成，不能宣称与预览逐像素一致 |
+| Qt Widgets + C++20 | Windows 桌面控件与原生 HWND/D3D11 容易整合 | 当前不引入 QML；确有跨平台或复杂场景图需求再重估 |
+| MinGW GUI → 3FP 的动态 C ABI | 避免跨 MSVC/MinGW C++ ABI 耦合 | 不直接链接原生 C++ 对象；升级必须匹配 DLL/API 补丁 |
+| FilterGraph → VPY → VSScript 帧服务 → 3FP | 链顺序清晰、脚本可审查、可以异步预览和定位帧 | 不把 vspipe/Y4M 离线流当实时帧桥 |
+| Player 原生直通与 VS 路径分开 | D3D11/Jinc/网络媒体可不等待 VS 索引；增强链按需启动 | 不让普通播放无条件初始化全部 VS 依赖 |
+| 专用时间轴映射与请求代次 | seek、补帧与源/输出 FPS 必须保持同步 | 不以 seek 后的局部帧号直接映射源帧 |
+| 高清图像查看与编辑解耦 | 查看由 PlayerImage/PreviewPane；详细编辑由独立 PhotoCraft 原生进程 | 不再把旧 Qt 图片编辑器当当前产品入口；需兼容特殊格式时仍用本地解码/交换 |
+| 专项补丁重建原生组件 | 3FP 非完全上游镜像，需可复现补丁链 | 不覆盖式拼接不同 API 版本的 DLL |
 
-**处理路径：** Renderer 实时链为 GUI → FilterGraph → VPY → VSScript 帧服务 → 3FP 外部帧呈现，源路提供播放时钟。Player 本地视频可走 VS 链或 3FP 原生直通；HTTP/HTTPS 固定原生直通，madVR 使用 LAV/DirectShow，二者不执行 VPY。图片由 PlayerImage 解码后交 PreviewPane 绘制，另存工具调用重采样或 AWJ 后端。详细编辑由独立 PhotoCraft 原生进程接管，文件经私有命名管道打开；本地 ImageDocument/PSD/HDR 保留于解码、高精度交换与历史核心测试。PhotoCraft 的像素模型、ICC、图层、历史、PSD 和滤镜沿用上游。普通图片查看仍由 PreviewPane 负责，编辑界面与视频播放链互不调用。见 [PhotoCraft 接入](docs/photocraft-editor-1.0.8.md)。
+处理总览：Renderer UI → `src/graph` 滤镜图/VPY → `src/backend` VS 帧服务 → 3FP 呈现；Player 可走 VS、3FP 直通或专用第三方后端。高精度图片交换与 HDR 色彩路线详见 [PhotoCraft](docs/photocraft-editor-1.0.8.md)、[色彩管理](docs/color-management-1.0.4.md)。
 
 ## 4. 目录与改动入口
 
-Player 无预设原画、固定 Jinc / D3D11 为 3FP 原生路径，不建立 VS 源索引；字幕流由 `patches/3fp-streaming-text-subtitles.patch` 为 3FP 增加限量读取和 seek 支持，`PlayerSubtitles` 消费 MoreData 状态。构建补丁、机械硬盘素材与尚未完成的远端验证见 [直通加载说明](docs/player-direct-open-1.0.4.md)。
+```text
+src/app/       Renderer 主窗口、项目与预设协调
+src/graph/     滤镜定义、图、VPY 生成、预设存储
+src/backend/   VSScript 帧服务、原生 3FP 桥、导出/进程
+src/ui/        预览、比较、分析页、参数和导出窗口
+src/player/    Player 播放、设置、音频/字幕、图片工具
+src/cap/       VSCap 截图、标注和贴图交互
+src/bluray/    Blu-ray 目录、节目识别与 Remux 共用逻辑
+src/color/     颜色处理与 native ABI 接口
+src/image/     高精度图片文档/PSD/HDR 的本地实现
+src/update/    更新、组件下载与校验
+assets/        图标、语言、GLSL 等随包资源
+patches/       3FP、PhotoCraft 等上游集成补丁
+tools/         构建、部署、打包、性能测量与验证脚本
+tests/         分模块的程序和回归测试
+docs/          专题说明、验收及历史记录
+third_party/   第三方源码、许可资料
+.deps/         本地依赖/缓存；不是发布清单
+build/         构建产物与临时报告
+dist/          本地运行/打包结果（谨慎处理用户配置）
+```
 
-~~~text
-src/app/       Renderer 工作台、设置、预设入口与样式
-src/graph/     FilterCatalog、FilterGraph、VpyScriptBuilder、PresetStore
-src/backend/   3FP 动态接口、VS 帧服务、LAV/madVR、预热与导出进程
-src/ui/        PreviewPane、比较布局、分析页、参数、预设与导出窗口
-src/player/    独立播放器；控制/预设/图片/音频/字幕/网络/设置分模块
-src/image/     分块图层文档、高精度像素/蒙版/选区、局部历史与原生编辑工具
-src/update/    PortableUpdater 检查、下载和更新包验证
-assets/        Qt 资源、图标、语言、内置 helper、GLSL 与来源清单
-patches/       FFF Project 的外部帧、缩放、字幕、音频等原生补丁
-tools/         依赖构建、运行时部署、便携打包、更新安装与验证
-tests/         图脚本、参数 UI、原生帧桥、比较、导出、Player、更新测试
-third_party/   VapourSynth 源码及第三方许可/模型来源资料
-docs/          当前规格、专项验证、发布说明；history/ 保存原始记录
-.deps/         本机构建依赖、源码/二进制缓存，不是发布内容
-build/         构建、专项日志和审计；主要目录为 mingw-release/
-dist/          本地便携目录及按版本命名的归档
-~~~
-
-常见改动位置：新增滤镜同时检查 `FilterCatalog.cpp`、`VpyScriptBuilder.cpp` 和插件 staging；实时帧/seek 查 `VapourSynthFrameServer.cpp`、`FrameTimeline.h` 与对应窗口；图片操作查 `PlayerImageTools.cpp` / `PlayerImageResample.cpp`；更新查 `PortableUpdater.cpp` / `tools/apply-update.ps1`。
+**按任务找文件**：滤镜查 `FilterCatalog.cpp` / `FilterGraph` / `VpyScriptBuilder.cpp`；预览与 seek 查 `VapourSynthFrameServer.cpp` / `FrameTimeline.h`；播放控制查 `PlayerWindow.cpp`、`PlayerControls.cpp`、`PlayerSession`；字幕/菜单查 `PlayerSubtitles`、`PlayerMenus.cpp`；图片查 `PlayerImageTools.cpp`、`PlayerImageResample.cpp`；VSCap 当前主要实现于 `src/cap/main.cpp`；原生构建查 `tools/build-native-api18.ps1`；打包查 `tools/package-portable.ps1`。
 
 ## 5. UI 地图
 
-| 页面 / 窗口 | 当前职责 | 主要文件 |
+| 入口 | 职责与导航 | 文件定位 |
 | --- | --- | --- |
-| Renderer：VS 实时渲染 | 顶部源与预设；处理链、参数、视频三栏；源/处理后比较和共享播放控制 | `src/app/MainWindow.cpp`、`src/ui/ParameterEditor.cpp`、`CompareView.cpp` |
-| Renderer：图像分析比对 | 最多九路原生视频，源交换/卸载、独立时间偏移、并排/网格/滑块 | `src/ui/AnalysisPage.cpp`、`MultiCompareView.cpp` |
-| Renderer：设置 / 预设 / 导出 | 导航内嵌设置；独立预设管理；非模态导出设置、准备文件、编码队列 | `MainWindowPresets.cpp`、`PresetDialog.cpp`、`ExportWindow.cpp` |
-| Player 主窗口 | 播放表面、两排控制、悬停/停靠播放列表、信息面板和分级右键菜单 | `src/player/PlayerWindow.cpp`、`PlayerControls.cpp`、`PlayerPlaylist.cpp`、`PlayerMenus.cpp` |
-| Player 设置 / 图片工具 | INI 加载保存和取消/确定/应用；图片顶栏、尺寸、裁剪、转换 | `src/player/PlayerSettings.cpp`、`PlayerImageTools.cpp` |
-| 详细图像编辑 | PhotoCraft 原生完整 UI；多文档、图层、文字、滤镜、PSD、16/32 位及 ICC | `src/player/PhotoCraftEditor.*`、`.deps/photocraft`、`patches/photocraft-vsp-integration.patch`；构建 `tools/build-photocraft.ps1` |
+| Renderer / VS 实时渲染 | 导入源 → 处理链/参数 → 源与处理后预览 → 预设或导出 | `src/app/MainWindow.cpp`、`src/ui/ParameterEditor.cpp`、`CompareView.cpp` |
+| Renderer / 图像分析比对 | 多路源、时间偏移、并排/网格/滑块比较 | `AnalysisPage.cpp`、`MultiCompareView.cpp` |
+| Renderer / 导出与设置 | 保存项目/VPY，准备文件、编码队列、配置 | `MainWindowPresets.cpp`、`ExportWindow.cpp` |
+| Player | 媒体 → 播放/列表 → 字幕音频/渲染设置 → 图像工具 | `src/player/PlayerWindow.cpp`、`PlayerPlaylist.cpp`、`PlayerMenus.cpp`、`PlayerSettings.cpp` |
+| PhotoCraft | Player 图片工具打开独立图层编辑工作区 | `src/player/PhotoCraftEditor.*`、`tools/build-photocraft.ps1` |
+| VSCap | 框选截图 → 标注/复制/保存；贴图可再编辑和收起工具栏 | `src/cap/main.cpp`，详见 [交互验收](docs/vscap-interaction-1.0.10.md) |
 
-Renderer 默认窗口为1800×900逻辑像素，参数栏独立占用可用高度。基础设计见 [UI 规格](docs/ui-layout-spec.md)，其中1440×900与早期侧栏布局是旧基线；当前布局看 [三栏说明](docs/renderer-panels-1.0.3.md)。切 Renderer 页面会暂停离开的播放页；分析页按需初始化。全局空格用于播放/暂停，缩放后支持左键拖动。
+## 6. 外部依赖
 
-## 6. 外部依赖与部署边界
-
-| 依赖 | 当前来源 / 协议 | 准备与缺失行为 |
+| 依赖 | 版本 / 来源与调用 | 缺失行为 |
 | --- | --- | --- |
-| Qt | 6.8+，本机6.10.2；Core/Gui/Widgets/Network | 配置阶段需完整开发包，运行阶段需匹配 Qt DLL/plugins |
-| VapourSynth / Python | 官方源码当前 `5b2d556`（R80RC2），VS API4；便携 Python/VS | `tools/build-vapoursynth.ps1` 默认 Python3.15，staging 至 `runtime/python`；缺失时不能 VS 预览，原生/图片路径独立 |
-| 3FP / FFF.Native | 本地扩展 ABI16，动态 C ABI；选择兼容官方更新，保留本地 DV | `tools/build-3fp.ps1` 应用性能及 `3fp-jinc-upstream-1.0.5.patch` 等补丁；不是官方完整功能镜像 |
-| FFmpeg | 自编译增强版，2026-10-03，匹配 shared major ABI | 根目录供3FP；`runtime/ffmpeg` 为CLI，源插件/LAV自带解码库不自动更新；见 [运行时说明](docs/ffmpeg-enhanced-1.0.4.md) |
-| VS 插件 / RIFE 模型 | API4插件，vs-placebo2.0.4、MVTools29、NCNN param/bin | 安装与stage脚本固定来源；R80不加载旧API3，缺 namespace 时报告具体错误；PKL不能代替NCNN模型 |
-| GLSL 库 | 随包mpv着色器及上游许可/哈希 | `assets/mpv-shaders` 与便携 `shaders`；目录/搜索/分类入口见 [GLSL说明](docs/mpv-shaders-1.0.4.md) |
-| LAV / madVR | LAV0.83.0 x64，随包AX/DLL，由类工厂加载 | 不要求全局COM注册；缺失不能启用相应后端，madVR模式绕过VS |
-| 图片解码 / 转换 | libavif1.4.2、dav1d1.5.3、libjpeg-turbo3.2.0；独立AWJimage1.1.0 | CMake脚本准备固定依赖；AWJ只用于转换，AGPL许可/NOTICE/对应源码随包，缺失不影响基础图片查看 |
-| 更新工具 | aria2-next2.8.3、7-Zip | `tools/stage-update-tools.ps1` 校验后部署；缺失不能完成相应下载/安装步骤 |
+| Qt | 6.8+，本机记录 6.10.2；Widgets/Gui/Network | 编译或 GUI 无法启动 |
+| VapourSynth + Python | VS API4、便携运行时；`tools/build-vapoursynth.ps1` 与 stage 脚本 | VS 链不可用，原生直通可独立运行 |
+| 3FP / FFF.Native | native API 18 补丁链；`tools/build-native-api18.ps1` | 原生播放/呈现不可用；不得混搭旧 ABI |
+| FFmpeg | 匹配当前原生模块 shared ABI；CLI 在 `runtime/ffmpeg` | 相应解码、转换或导出功能失效 |
+| VS 插件、GLSL、RIFE | API4 插件；`assets/mpv-shaders`、NCNN 模型和驱动 | 仅相应滤镜/模型不可用，不能以旧 API3 或 PKL 代替 |
+| libVLC、LAV、madVR | Full 的可选后端/BD 菜单；各自运行时 | 对应模式不可用，正常基本播放不应被阻断 |
+| PhotoCraft | 固定上游及补丁，`tools/build-photocraft.ps1` | 详细编辑不可用，基础图片查看独立 |
+| 图片库、AWJ、aria2、7-Zip | `tools/*runtime*`、`stage-update-tools.ps1`；许可见 [声明](THIRD_PARTY_NOTICES.md) | 高级转换或下载更新降级，基础查看不应被阻断 |
 
-运行时依赖和许可必须整体交付，不能将本机绝对资源路径当作便携包已包含。详细来源见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+Full 与 PlayerLite 的依赖清单不同，实际发布以打包脚本、运行时清单和 [1.0.10 验收](docs/validation-1.0.10.md) 为准。
 
-## 7. 核心数据与兼容规则
+## 7. 核心数据与兼容性
 
-| 数据 | 位置与负责模块 | 规则 |
+| 数据 | 位置 / 负责方 | 兼容原则 |
 | --- | --- | --- |
-| 滤镜图 | 内存 `FilterGraph` / `FilterNode` | 节点含instanceId、definitionId、enabled、parameters；严格按列表顺序生成 |
-| Renderer 项目 | 用户选定 `*.vsr.json`，MainWindow读写 | schemaVersion=1、sourcePath/sourceFilter/nodes；QSaveFile提交 |
-| VPY 预设 | EXE旁 `vpy/`、`vpy/builtin/`，PresetStore | `# VSR_PRESET` 中Base64 JSON schema=1，保存节点/源/备注；外部VPY无元数据仍可直接运行 |
-| Player 配置与位置 | EXE旁 `player.ini`，PlayerSettings/PlayerWindow | INI导入导出；已知内置预设迁移留备份，用户脚本不整体重写 |
-| Renderer 设置 / 临时脚本 | QSettings默认存储；QStandardPaths缓存下 `preview.vpy` | Renderer设置不是player.ini；脚本缓存与播放器便携索引缓存分开 |
-| 索引、输出与更新记录 | 默认 `cache/indexes` 或自定义路径；用户输出路径；`release.json` | 索引按媒体身份复用；导出任务持有脚本/画布快照；更新manifest版本与构建一致 |
+| 滤镜图 | 内存 `FilterGraph/FilterNode` | 顺序决定执行，参数由 catalog 定义 |
+| Renderer 工程 | `*.vsr.json` / MainWindow | `schemaVersion=1`；未知滤镜/参数跳过，不保证未知节点无损往返 |
+| VPY 预设 | 便携目录 `vpy/` / `PresetStore` | `# VSR_PRESET` Base64 JSON；普通外部 VPY 可执行但不强加项目元数据 |
+| Player 设置 | `player.ini` / PlayerSettings | 尊重既有用户配置，不因默认值变化重置 |
+| Renderer 设置 | QSettings / Renderer | 与 Player INI 相互独立 |
+| 临时脚本/缓存 | QStandardPaths 下 `preview.vpy`、媒体索引目录 | 可再生数据，不作为用户工程文件；导出需冻结源、脚本和参数 |
+| 更新元数据 | `release.json`、版本与组件清单 | 版本、根目录、包内文件哈希与实际产物对应 |
 
-当前项目/预设图加载会**跳过未知滤镜ID、忽略未定义参数**，新增已知参数取catalog默认值；没有未知节点无损往返保证。加载VPY可覆盖输入源，时间剪辑和处理后音频需要用户明确管理。
+## 8. 分层与高风险代码
 
-## 8. 分层与高风险改动
+依赖方向：`graph` 不依赖 UI；`backend` 负责帧/原生与进程接口；`app/ui/player/cap` 负责呈现交互。新增算法不应直接塞入按钮处理函数。
 
-`graph` 不依赖 UI；`backend` 提供帧、播放和进程接口；`app/ui/player` 负责交互与协调。新逻辑先放入已有职责模块，避免把处理算法、原生协议或后台编码塞进窗口事件处理。
+按 2026-10-10 文件大小抽样：`src/image/ImageEditorWindow.cpp` 约 97 KB，`src/player/PlayerWindow.cpp` 约 60 KB，`src/image/ImageDocument.cpp` 约 58 KB，`src/app/MainWindow.cpp` 约 56 KB，`src/image/ImageEditorTools.cpp` 约 48 KB，`src/cap/main.cpp` 约 43 KB。这些是职责集中**审查信号**，不是强制按行数拆文件的理由。若确需拆，按交互/状态、媒体操作、数据持久化和独立算法边界拆，避免跨层循环依赖；旧 Qt 图片编辑部分不应误当现行 PhotoCraft UI。
 
-当前 `MainWindow.cpp` 约1100个非空行，是优先检查职责集中的位置；AnalysisPage、PlayerWindow、ExportWindow和VS帧服务各约400–460个非空行。行数仅作信号，后续若需拆分，可按工作台控件、源/帧协调、项目读写分开；本轮不实施重构。
+高风险：原生 DLL 与 FFmpeg ABI、HDR/PQ/HLG 到 SDR 映射、时间轴/seek、VSCap 原始像素精度、超大图内存/ICC/Alpha、导出停止与更新目录交换。GUI 测试通过不代表 D3D11/HDR 像素或高分辨率性能通过。
 
-高风险区：3FP ABI和成套DLL、源/输出时间映射、seek与失效请求取消、字幕生命周期、超大图片内存与Alpha/ICC、导出停止收尾、更新目录交换。改动应针对相应测试组验证；Qt控件截图不能证明D3D视频像素正确。
+## 9. 更新、测试、构建和发布
 
-## 9. 构建、验证、部署与文档维护
+1. 明确任务边界 → 修改最小模块 → 构建相关目标 → 跑相关 CTest/工作流 → 有媒体或像素要求时做真实输入验收；记录测试环境与未通过项。
+2. Native API 18 用 `tools/build-native-api18.ps1` 与对应 patch；GUI 用 CMake preset。旧 `tools/build-3fp.ps1` 及历史版本脚本并存，调用前核对版本和补丁。
+3. `tools/stage-portable.ps1` 用于本地部署；`tools/package-portable.ps1` 打包 Full/精简版，1.0.10 PlayerLite 以现行版专项发布脚本/说明核对。必须保留许可、包含正确运行时，排除个人 INI、缓存与日志。
+4. 验证完整解压、启动、依赖/哈希、版本清单后再推送/发布；源码推送、Release Draft、附件上传是**不同步骤**，不能互相视为已完成。
+5. **维护纪律**：架构/目录/关键决策发生变化，当天修改本文件对应节；具体实验和验收归 `docs/`，对外变更归 `changelog.md`，不要再向本文件顶部增加日期流水账。
 
-780M 原生直通性能后续在 NuxBox 本地开发；素材、mpv 对照、工具链和验收见 [远端性能交接](docs/nuxbox-performance-handoff.md)。`tools/package-dev-handoff.ps1` 制作独立干净源码/SDK快照，不删除当前工作区、不携带个人配置和整套运行时。远端 v143 可通过 `build-3fp.ps1 -PlatformToolset v143` 显式选择；未据用户丢帧报告宣称性能已修复。
+工作区清理脚本 `tools/clean-workspace*.ps1` 与 `tools/clean-build-followup-20261011.ps1` 涉及本机产物；执行前先预览、核对保留清单，不能凭脚本存在就认定清理完成。
 
-此设备本轮改为先升级 V145；Qt 6.10.2 MinGW、MinGW 13.1、CMake、Ninja 已安装，VSPlayer 与 Player 专项已构建并验证。`C:\BuildTools\2026` 的 MSVC 14.51 / v145 已完成原生 Release 构建；新增帧呈现等待补丁和异步阶段计时，独立 HWND 与 GUI 的重复测量及实测边界见 [2026-10-04 设备记录](docs/nuxbox-performance-session-2026-10-04.md)。
+## 10. 当前状态与下一步
 
-开发流程：明确行为与边界 → 改对应模块 → 构建目标和相关测试 → 验证所需原生呈现/真实输出 → 按任务范围部署。当前CTest包括图脚本、shader参数、VS帧桥、缩放平移、导出、比较、Player、语言包、更新；图片相关为核心、PSD、颜色/HDR、基础工具、高级工具和工作区布局六组。只按变更运行相关专项，测试组通过与子用例通过分开记录。
+- **基线**：工作区 1.0.10；Renderer、Player、VSCap、PhotoCraft 接入。Native API 18、HDR→SDR 自动色彩映射与 Full/PlayerLite 边界见 [1.0.10 验收](docs/validation-1.0.10.md) 和 [发布说明](docs/release-1.0.10.md)。
+- **近期成果**：VSCap 可编辑文字/绘图、原始尺寸贴图与工具栏切换；PhotoCraft 为独立图片编辑入口；3FP 直通和 VPY 链分别处理播放与增强。各项只按相应文档注明的实测范围认可。
+- **下一步优先**：基于真实素材复测 VSCap/Player HDR 像素与多屏缩放；核对 1.0.10 包与源代码一致性；继续确认大分辨率软解、780M 实时播放及专项未达标项，不将短时间稳定等同全场景通过。
+- **设计限制**：PlayerLite 不等于 Full；VS GPU 滤镜仍可能有 CPU 平面传输；不存在通用零丢帧、完整任意 PSD/HDR/字幕/蓝光场景保证；未实现 NGU 私有算法。发布状态以 GitHub Release 及真实附件为准，不从工作区版本推断。
 
-`tools/stage-portable.ps1` 更新本地便携目录；`tools/package-portable.ps1` 从已验证目录构造干净LZMA2归档；`-BuiltinDirectory` 可指定由当前构建生成的干净内置预设，不改动本机用户VPY。旧 `package-release.ps1` 仍存在，不应套用其中历史版本参数。归档使用版本根目录以兼容1.0.2更新器，本地目录保持固定名。包含必需运行时与许可，排除个人INI、用户VPY、缓存、日志和测试程序。
+## 11. 故障排查导航
 
-发布需另行确认源码推送、归档完整性/内部哈希、完整解压启动以及远端附件/更新源状态。更新流程见 [便携更新](docs/portable-updates.md)；历史包修正见 [兼容记录](docs/update-compatibility-1.0.3.md)。本次文档整理不代表打包或发布授权。
-
-维护分工：
-
-- `README.md`：安装与常用操作，不逐轮叠加更新。
-- `project.md`：结构、决策、数据、当前边界；变化时修改对应段落，不在顶部插入日期流水账。
-- `changelog.md`：按版本倒序，在已有版本的新增/修复/变更分类下合并条目。
-- `docs/`：专项实现、测量条件、测试日志和交付证据；历史原文只追加归档。
-
-## 10. 当前能力、下一步与限制
-
-1.0.4本地开发已包含：Renderer模块滤镜/VPY、源与输出同步预览、九路分析与受限画布导出；Player视频/音频/图片、字幕、原生/VS/madVR路径、自动/固定Anime与补帧；图片旋转/镜像/裁剪/调整尺寸/AWJ转换；GLSL分类与宽高联动、直通拖动预览、Lanczos4和增强FFmpeg。
-
-当前 1.0.5 交付范围为源码推送和本地完整便携压缩包，不创建 Release 或 Draft，不上传发行附件。原 1.0.4 发布资料保留，具体交付与测试查 [更新日志](changelog.md)。
-
-图片“详细编辑”入口已开放，使用Photoshop系列布局和B–D工具/颜色菜单；RGB PSD/PSB图层、组和蒙版可编辑、另存，提供浮点TIFF及HDR能力检测/SDR回退。真实520MiB、9层PSD专项和最终交付见 [本轮记录](docs/image-editor-round2-1.0.4.md)。后续方向仍包括按需求扩充VCB教程向catalog、完善插件部署与诊断、评估帧搬运性能及NGU独立后端；这些是方向，不是已实现能力。
-
-当前限制：
-
-- 外部帧桥支持常用整数平面格式，不支持VS float或GPU驻留帧直交；GPU滤镜仍有CPU平面拷贝，重shader/高分辨率不保证实时。
-- 自动降档与资源阈值是调度策略，不是整机资源硬上限；固定Anime档位不因负载自动降档。最低补帧档持续丢帧时保留播放并提示，由用户决定关闭。
-- 图片查看与常规重采样使用CPU；动图只显示首帧，无整图GPU解码/显存缓存。离线Anime4K尺寸输出受GPU纹理和显存限制，AWJ质量指标用GPU不代表编码使用GPU。
-- 图像编辑尚无DNG、Bezier/可回改文字/完整矢量对象、语义AI及完整PSD复杂对象保真；颜色管理为Qt RGB ICC。新建Float32 PSD缺少源Photoshop HDR色彩数据时拒绝保存，应选浮点TIFF。工具工作范围与原生HDR实测边界见本轮记录。
-- 单文件3FUI兼容导出仅MKV，使用源输入0和VS/Y4M输入1，拒绝 `filter_complex` / `lavfi`。画布导出仅AB滑块、ABC左右2+1、ABCD常规/滑块2×2，保持最大源尺寸；部分预览核无一致导出实现，会明确拒绝。
-- Super-XBR为开源单阶段移植，抗振铃不是madVR私有算法复刻；未实现NGU。任意VFR、真实HDR、多显示器DPI、九路4K长时间播放未获全面验证。
-- 工作区清理目前只有盘点与配置保留，未删除约7.79GiB候选文件；详情见 [清理记录](docs/workspace-cleanup.md)，不可写作已释放空间。
-
-## 11. 故障排查与专项入口
-
-| 症状 / 改动目标 | 首查位置与处理 |
+| 症状 | 首查 |
 | --- | --- |
-| CMake找不到Qt或生成器 | `QT_ROOT`、PATH、`CMakePresets.json`；Qt与MinGW版本配套 |
-| 预览诊断页 / 缺外部帧ABI | 检查匹配的FFF.Native与根目录FFmpeg；开发可用 `VSR_3FP_DLL`，按完整patch链重建 |
-| VS未加载 / 缺namespace | 检查完整 `runtime/python`、API4插件；开发可用 `VSR_VSSCRIPT_DLL`，不要让用户自行混装API3 |
-| 换模式、seek后右路无画面 | 帧服务代次、表面启用顺序、源/输出时间映射；见 [帧桥](docs/realtime-bridge.md) |
-| Anime/补帧负载、输入位深 | `PlayerProfiles.cpp`、`PlayerResources.cpp`；见 [六档边界](docs/player-six-stage-1.0.3.md) 和 [性能条件](docs/player-performance-1.0.2.md) |
-| GLSL尺寸或算法选择异常 | catalog/参数编辑器/VPY；见 [分类与尺寸](docs/mpv-shaders-1.0.4.md) |
-| 超大图片、裁剪或转换错误 | PlayerImage/Tools/Resample及AWJ输出；见 [图片工具](docs/player-image-tools-1.0.4.md) |
-| AVIF能解码但内容黑块/错色 | 先核对源编码内容，不能只凭可解码认定完整；见 [受控更正](docs/avif-large-yuv444-analysis.md) |
-| 文件图标或角标不更新 | Player注册分类与Windows默认应用；旧统一ProgID仍兼容打开，见 [图标接入](docs/icons-integration.md) |
-| 更新包拒绝 / 归档兼容 | 包根层级、唯一完整目录、SHA-256和内部版本；见 [便携更新](docs/portable-updates.md) |
+| Qt/CMake 配置失败 | `QT_ROOT`、工具链、`CMakePresets.json`、[依赖指南](docs/dependencies.md) |
+| 原生播放器黑屏或 ABI 错误 | `FFF.Native.dll`、FFmpeg DLL、API 18 补丁、`VSR_3FP_DLL`、[验收](docs/validation-1.0.10.md) |
+| VS 缺少 namespace、预览失败 | VS API4、`runtime/python`、插件 stage、`VSR_VSSCRIPT_DLL`、[帧桥](docs/realtime-bridge.md) |
+| seek 后画面、声音或帧号不同步 | `PlayerSession`、`FrameTimeline.h`、VS 帧请求代次及 [启动时钟](docs/player-startup-clock-1.0.8.md) |
+| HDR 色偏、截屏不准 | `src/color/`、HDR Readback patch、[色彩说明](docs/color-management-1.0.4.md)、[高精度截图](docs/player-high-precision-screenshots-1.0.7.md) |
+| VSCap 工具栏/文字/贴图尺寸异常 | `src/cap/main.cpp`、[VSCap 验收](docs/vscap-interaction-1.0.10.md) |
+| 图片编辑或超大图故障 | `PhotoCraftEditor.*`、`ImageDocument`、[接入说明](docs/photocraft-editor-1.0.8.md) |
+| BD 首帧花屏或菜单/字幕问题 | `src/bluray/`、[拼接前置](docs/player-bd-concat-preroll-1.0.8.md)、[BD 验收](docs/bd-menu-viewport-1.0.6.md) |
+| 安装包缺 DLL 或升级失败 | stage/package 脚本、包根目录、哈希、[便携更新](docs/portable-updates.md) |
 
-其它常查文档：[Renderer三栏](docs/renderer-panels-1.0.3.md)、[比较导出](docs/renderer-ui-export-1.0.3.md)、[图片与音频](docs/player-images-audio-1.0.3.md)、[手动Anime](docs/player-manual-presets-1.0.3.md)、[GLSL与补帧](docs/mpv-shaders-interpolation-1.0.3.md)、[滤镜覆盖](docs/filter-coverage.md)。专项文档中的旧日期和测试结论属于对应轮次，不自动成为当前全量回归结果。
-
-本轮图像编辑B–D/HDR已以40个相关专项验收（含520MiB、9层PSD真实鼠标编辑/撤销、原生完整查看、CICP P3/PQ AVIF、后台PSD保存快照及独立PSD读取）；记录与边界见 [第二轮交付](docs/image-editor-round2-1.0.4.md)。便携仅更新Player与文档，Renderer/native/配置受哈希保护；没有推送或发布压缩包。
-
-1.0.8 本轮：`ThreeFpApi/ThreeFpPlayer` 延迟加载和创建会话，`VapourSynthFrameServer` 显式按需初始化；MainWindow 不再强制预热双会话。`AnalysisPage` 和 MainWindow 对比默认 D3D11 直通，可切回高精度着色器。`PlayerImageTools::writeEditorImport` 与 PhotoCraft `vsp_image` 分带交换超大 RGBA8/16/float32 图像，复用旧 C++ 解码器；原生工作区和完整图层仍由 PhotoCraft 管理。`patches/3fp-experimental-cpu-prescale.patch` 增加默认关闭的软解预缩放接口和 NVDEC 状态名；CPU 性能暂未验收通过，留待专项更新。详见 [实测记录](docs/performance-large-images-1.0.8.md)。
+历史测试结论只代表当时环境；要更改当前行为，先复现、再修复、最后留可重跑的验收记录。
