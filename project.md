@@ -77,7 +77,7 @@ dist/          本地运行/打包结果（谨慎处理用户配置）
 | Renderer / 导出与设置 | 保存项目/VPY，准备文件、编码队列、配置 | `MainWindowPresets.cpp`、`ExportWindow.cpp` |
 | Player | 媒体 → 播放/列表 → 字幕音频/渲染设置 → 图像工具 | `src/player/PlayerWindow.cpp`、`PlayerPlaylist.cpp`、`PlayerMenus.cpp`、`PlayerSettings.cpp` |
 | PhotoCraft | Player 图片工具打开独立图层编辑工作区 | `src/player/PhotoCraftEditor.*`、`tools/build-photocraft.ps1` |
-| VSCap | 选区四角/四边缩放及移动 → 整图标注 → 最终裁切/复制/手动保存；HDR 原图提前保存，贴图可再编辑 | `src/cap/main.cpp`，详见 [交互验收](docs/vscap-interaction-1.0.10.md) |
+| VSCap | 选区缩放/移动 → 整图标注 → 裁切/复制/保存（取消保留窗口）；HDR 原图提前保存，剪贴板图像/复制的图片文件均可贴图 | `src/cap/main.cpp`，详见 [交互验收](docs/vscap-interaction-1.0.10.md) |
 
 ## 6. 外部依赖
 

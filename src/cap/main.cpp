@@ -136,9 +136,9 @@ class CaptureOverlay final : public QWidget {
     struct Edit { QRect area; QImage pixels; QPointer<CaptureTextBox> text; TextState before; bool created=false; };
     QList<Edit> history_;
     QWidget *bar_ = nullptr;
-    std::function<void(QImage, bool, bool, bool)> output_;
+    std::function<bool(QImage, bool, bool, bool)> output_;
 public:
-    CaptureOverlay(QScreen *screen, QImage shot, std::function<void(QImage,bool,bool,bool)> output, bool embedded=false)
+    CaptureOverlay(QScreen *screen, QImage shot, std::function<bool(QImage,bool,bool,bool)> output, bool embedded=false)
         : canvas_(std::move(shot)), embedded_(embedded), output_(std::move(output)) {
         setWindowFlags(embedded_?Qt::Widget:Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
         setAttribute(Qt::WA_DeleteOnClose,!embedded_);
@@ -241,7 +241,7 @@ private:
         if(tool_==Line){options_->addItems({QStringLiteral("直线"),QStringLiteral("箭头"),QStringLiteral("虚线")});options_->setCurrentIndex(lineMode_);}
         else{for(int width:{2,3,5,8})options_->addItem(QStringLiteral("%1 px").arg(width),width);if(options_->findData(penWidth_)<0)options_->addItem(QStringLiteral("%1 px").arg(penWidth_),penWidth_);options_->setCurrentIndex(options_->findData(penWidth_));}
         const QSignalBlocker width(penWidthInput_);penWidthInput_->setValue(penWidth_);
-        options_->setVisible(tool_!=Selection && tool_!=Text && tool_!=Pen);penWidthInput_->setVisible(tool_==Pen);fontOptions_->setVisible(tool_==Text);positionBar();
+        options_->setVisible(tool_!=Selection && tool_!=Text && tool_!=Pen);penWidthInput_->setVisible(tool_==Pen || tool_==Line);fontOptions_->setVisible(tool_==Text);positionBar();
     }
     void remember(const QRect &area){
         const auto pixels=pixelRect(area).intersected(canvas_.rect());if(pixels.isEmpty())return;
@@ -296,8 +296,8 @@ private:
         }
         const QImage crop = composite.copy(pixelRect(selection_.intersected(rect())));
         if(copy) copyImage(crop);
-        if(!embedded_ || !copy)output_(crop,pin,avif,copy);
-        if(!embedded_)close();
+        const bool accepted=embedded_ && copy?true:output_(crop,pin,avif,copy);
+        if(!embedded_ && accepted)close();
     }
 protected:
     bool eventFilter(QObject *object,QEvent *event) override {
@@ -461,7 +461,7 @@ class PinWindow final : public QWidget {
     QMenu *menu_ = nullptr;
     double zoom_ = 1;
 public:
-    explicit PinWindow(QImage image,std::function<void(QImage,bool,bool,bool)> output) {
+    explicit PinWindow(QImage image,std::function<bool(QImage,bool,bool,bool)> output) {
         setWindowFlags(Qt::Tool | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);setAttribute(Qt::WA_DeleteOnClose);
         setWindowTitle(QStringLiteral("VS Cap 贴图"));
         canvas_=new CaptureOverlay(qApp->primaryScreen(),std::move(image),std::move(output),true);
@@ -594,10 +594,10 @@ private:
     void storeDir(const QString &path) {
         settings_.setValue("save/lastDirectory",QFileInfo(path).absolutePath());settings_.sync();
     }
-    void startAvif(const QImage &image, const QString &path) {
+    bool startAvif(const QImage &image, const QString &path) {
         const QString tmp=QDir(QDir::tempPath()).filePath("vscap-"+QUuid::createUuid().toString(QUuid::WithoutBraces)+".png");
         QImageWriter writer(tmp,"png");
-        if(!writer.write(cap::pngPixels(image))){tray_.showMessage("VS Cap","PNG 临时文件写入失败");return;}
+        if(!writer.write(cap::pngPixels(image))){tray_.showMessage("VS Cap","PNG 临时文件写入失败");return false;}
         QString ffmpeg=QCoreApplication::applicationDirPath()+"/ffmpeg.exe";
         if(!QFile::exists(ffmpeg))ffmpeg="ffmpeg";
         auto *process=new QProcess(this);
@@ -615,18 +615,20 @@ private:
                     process->deleteLater();
                 });
         process->start(ffmpeg,avifArguments(image,tmp,path));
+        return true;
     }
-    void output(QImage image, bool pin, bool avif, bool copy) {
-        if(image.isNull())return;
-        if(pin) {auto *p=new PinWindow(image,[this](QImage shot,bool pin,bool avif,bool copy){output(std::move(shot),pin,avif,copy);});pins_.append(p);return;}
-        if(copy)return;
+    bool output(QImage image, bool pin, bool avif, bool copy) {
+        if(image.isNull())return false;
+        if(pin) {auto *p=new PinWindow(image,[this](QImage shot,bool pin,bool avif,bool copy){return output(std::move(shot),pin,avif,copy);});pins_.append(p);return true;}
+        if(copy)return true;
         const auto ext=avif?"avif":"png";
         const auto path=QFileDialog::getSaveFileName(nullptr,QStringLiteral("保存截图"),makePath(ext),
                          avif?"AVIF (*.avif)":"PNG (*.png)");
-        if(path.isEmpty())return;
+        if(path.isEmpty())return false;
         storeDir(path);
-        if(avif)startAvif(image,path);
-        else if(!savePng(image,path))tray_.showMessage("VS Cap",QStringLiteral("PNG 写入失败"),QSystemTrayIcon::Warning);
+        if(avif)return startAvif(image,path);
+        if(savePng(image,path))return true;
+        tray_.showMessage("VS Cap",QStringLiteral("PNG 写入失败"),QSystemTrayIcon::Warning);return false;
     }
     void capture() {
         QScreen *screen=QGuiApplication::screenAt(QCursor::pos());
@@ -637,7 +639,7 @@ private:
         if(shot.isNull()){tray_.showMessage("VS Cap",error,QSystemTrayIcon::Warning);return;}
         if(!saveHdrCapture(shot))tray_.showMessage("VS Cap",QStringLiteral("HDR 截图自动保存失败，请检查默认保存路径"),QSystemTrayIcon::Warning);
         new CaptureOverlay(screen,shot,[this](QImage shot,bool pin,bool avif,bool copy){
-            output(std::move(shot),pin,avif,copy);
+            return output(std::move(shot),pin,avif,copy);
         });
     }
     void pastePin() {
@@ -651,8 +653,12 @@ private:
                 pic.setColorSpace(QColorSpace::SRgbLinear);pic.setText("capHdr","scRGB-FP16");
             }
         }
-        if(pic.isNull()){tray_.showMessage("VS Cap",QStringLiteral("剪贴板中没有图像"));return;}
-        auto *p=new PinWindow(std::move(pic),[this](QImage shot,bool pin,bool avif,bool copy){output(std::move(shot),pin,avif,copy);});pins_.append(p);
+        if(pic.isNull())for(const auto &url:QApplication::clipboard()->mimeData()->urls()){
+            if(!url.isLocalFile())continue;
+            QImageReader reader(url.toLocalFile());reader.setAutoTransform(true);pic=reader.read();if(!pic.isNull())break;
+        }
+        if(pic.isNull()){tray_.showMessage("VS Cap",QStringLiteral("剪贴板中没有可读取的图片或图片文件"));return;}
+        auto *p=new PinWindow(std::move(pic),[this](QImage shot,bool pin,bool avif,bool copy){return output(std::move(shot),pin,avif,copy);});pins_.append(p);
     }
     void configure() {
         QDialog dialog;
