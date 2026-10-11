@@ -10,6 +10,7 @@
 - HDR 在进入截图界面之前自动保存原图的 PQ PNG、精确 `.scrgb-f32` 和 JSON 精度说明。通用剪贴板图像 / PNG 提供 SDR 预览并清除 HDR 标记；保留应用自定义 scRGB 数据用于内部高精度贴图。SDR 捕获和复制均不自动落盘，HDR 后续复制也不再次保存。
 - `build/cap-selection-save-workflow.txt`：14 passed，0 failed。`selectionHandlesAndFinalCrop` 核对八个调整位置的导出像素、选区移动时文字不动、选区外箭头 / 画笔 / 文字保留及最终裁切；`clipboardAndSaveDirectories` 在临时目录核对 SDR / 复制无文件、HDR 三个附件与浮点字节一致、两次手动保存均弹窗、设置字段及两个目录独立。既有贴图、文字撤销、最近邻和实际 AVIF 编码继续通过。
 - 本机是 SDR 桌面，自动 HDR 保存使用模拟 scRGB 图像验证，不作为真实 HDR 显示器的设备验收。最终可执行文件为 `build/mingw-release/vs-cap.exe`。
+- 维护者随后明确固定部署目录为 `dist/VS-GUI-Full`：编译后的 VSCap 已同步到该目录，原有配置保留，资源清单及文件大小同步更新，部署后的 PNG 自检与屏幕捕获检查通过。本地运行目录不含版本号，压缩包再按版本命名；本次不打包、不修改 Release 或版本。
 
 2026-10-11，1.0.10 的后续更新。首轮只推送源码；随后编译部署，并按维护者追加要求修复贴图尺寸与工具栏、重制 Full / PlayerLite 压缩包。GitHub Release Draft 保持原样，正式附件由维护者上传。
 

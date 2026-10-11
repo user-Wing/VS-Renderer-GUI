@@ -62,7 +62,7 @@ def closure(target, seeds, skip_ffmpeg=False):
     return seen
 
 # RIFE/ncnn's model loader uses narrow Windows paths. Keep the shipping path ASCII.
-for edition, folder in [('Full', f'{version}-Full'), ('Lite', f'{version}-PlayerLite')]:
+for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', f'{version}-PlayerLite')]:
     if a.edition not in (edition, 'Both'):
         continue
     target = dist / folder
