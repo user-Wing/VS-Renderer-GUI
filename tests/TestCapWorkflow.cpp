@@ -50,7 +50,7 @@ private slots:
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(50,50));
         QTest::mouseMove(overlay,QPoint(350,250));
         QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(350,250));
-        const auto buttons=overlay->findChildren<QPushButton*>();QCOMPARE(buttons.size(),11);
+        const auto buttons=overlay->findChildren<QPushButton*>();QCOMPARE(buttons.size(),12);
         QPushButton *rectangle=nullptr,*check=nullptr;
         for(auto *button:buttons){QVERIFY(button->isVisible());if(button->text()==QStringLiteral("矩形"))rectangle=button;if(button->text()==QStringLiteral("✓"))check=button;}
         QVERIFY(rectangle && check);rectangle->click();
@@ -66,7 +66,7 @@ private slots:
         }
         QVERIFY(ink && original);
         const auto png=QImage::fromData(QApplication::clipboard()->mimeData()->data("image/png"));
-        QCOMPARE(png.depth(),64);QCOMPARE(png.size(),delivered.size());
+        QCOMPARE(png.depth(),32);QCOMPARE(png.size(),delivered.size());QCOMPARE(png.pixelColor(10,10),cap::preview(delivered).pixelColor(10,10));QVERIFY(png.text("capHdr").isEmpty());
         QTRY_VERIFY(!overlay);
     }
     void selectedToolsLineAndUndo() {
@@ -86,6 +86,59 @@ private slots:
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(110,120));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(300,230));button(QStringLiteral("撤销"))->click();
         auto *copy=button(QStringLiteral("✓"));QVERIFY(copy);copy->click();QVERIFY(!delivered.isNull());
         for(int y=0;y<delivered.height();++y)for(int x=0;x<delivered.width();++x){const auto pixel=delivered.pixelColor(x,y);QVERIFY(std::abs(pixel.redF()-.4f)<1e-5);QVERIFY(std::abs(pixel.greenF()-.5f)<1e-5);QVERIFY(std::abs(pixel.blueF()-.6f)<1e-5);}
+    }
+    void selectionHandlesAndFinalCrop() {
+        QImage source(800,600,QImage::Format_RGB32);
+        for(int y=0;y<source.height();++y)for(int x=0;x<source.width();++x)source.setPixelColor(x,y,QColor(x%256,y%256,80));
+        struct Resize {QPoint from,to;QRect crop;};
+        for(const auto &resize:QList<Resize>{{{100,100},{80,80},{80,80,321,221}},{{250,100},{250,80},{100,80,301,221}},{{400,100},{420,80},{100,80,321,221}},{{400,200},{420,200},{100,100,321,201}},{{400,300},{420,320},{100,100,321,221}},{{250,300},{250,320},{100,100,301,221}},{{100,300},{80,320},{80,100,321,221}},{{100,200},{80,200},{80,100,321,201}}}){
+            QImage delivered;QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,bool,bool){delivered=image;});
+            const auto close=qScopeGuard([&]{if(overlay)overlay->close();});overlay->resize(source.size());QVERIFY(QTest::qWaitForWindowExposed(overlay));
+            QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(400,300));
+            QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,resize.from);QTest::mouseMove(overlay,resize.to);QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,resize.to);
+            overlay->exportImage(false,false,true);QCOMPARE(delivered,source.copy(resize.crop));
+        }
+        source.fill(Qt::white);QImage delivered;
+        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,bool,bool){delivered=image;});
+        const auto close=qScopeGuard([&]{if(overlay)overlay->close();});overlay->resize(source.size());QVERIFY(QTest::qWaitForWindowExposed(overlay));
+        QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(400,300));
+        const auto button=[&](const QString &name){for(auto *b:overlay->findChildren<QPushButton*>())if(b->text()==name)return b;return static_cast<QPushButton*>(nullptr);};
+        QVERIFY(button(QStringLiteral("选区"))->isChecked());button(QStringLiteral("线"))->click();overlay->findChild<QComboBox*>("capToolOptions")->setCurrentIndex(1);
+        QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(50,150));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(600,150));
+        button(QStringLiteral("画笔"))->click();QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(50,260));QTest::mouseMove(overlay,QPoint(600,260));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(600,260));
+        button(QStringLiteral("文字"))->click();QTest::mouseClick(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(430,200));
+        auto *box=static_cast<CaptureTextBox*>(overlay->findChild<QWidget*>("capTextBox"));QVERIFY(box);QTest::keyClicks(box->editor,"Outside");const auto textPosition=box->pos();
+        button(QStringLiteral("选区"))->click();QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(250,200));QTest::mouseMove(overlay,QPoint(570,200));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(570,200));
+        QCOMPARE(box->pos(),textPosition);QCOMPARE(box->editor->toPlainText(),QString("Outside"));
+        overlay->exportImage(false,false,true);QCOMPARE(delivered.size(),QSize(301,201));
+        QCOMPARE(delivered.pixelColor(100,50),QColor(Qt::red));QCOMPARE(delivered.pixelColor(100,160),QColor(Qt::red));QCOMPARE(delivered.pixelColor(250,50),QColor(Qt::white));
+        bool textInk=false;for(int y=106;y<145;++y)for(int x=16;x<120;++x)textInk|=delivered.pixelColor(x,y).green()<100;QVERIFY(textInk);
+    }
+    void clipboardAndSaveDirectories() {
+        const auto settingsPath=QCoreApplication::applicationDirPath()+"/vs-cap.ini";
+        QFile settingsFile(settingsPath);const bool existed=settingsFile.exists();QByteArray original;
+        if(existed){QVERIFY(settingsFile.open(QIODevice::ReadOnly));original=settingsFile.readAll();settingsFile.close();}
+        const auto restore=qScopeGuard([&]{if(existed){QFile file(settingsPath);if(file.open(QIODevice::WriteOnly|QIODevice::Truncate))file.write(original);}else QFile::remove(settingsPath);});
+        QTemporaryDir dir;const auto hdrDir=dir.filePath("hdr"),manualDir=dir.filePath("manual");QVERIFY(QDir().mkpath(manualDir));
+        {QSettings settings(settingsPath,QSettings::IniFormat);settings.clear();settings.setValue("hotkeys/capture","Ctrl+Alt+Shift+F11");settings.setValue("hotkeys/pin","Ctrl+Alt+Shift+F12");settings.setValue("save/defaultDirectory",hdrDir);settings.setValue("save/lastDirectory",manualDir);settings.sync();}
+        CapApp controller;QImage sdr(32,32,QImage::Format_RGBA8888);sdr.fill(Qt::white);
+        QVERIFY(controller.saveHdrCapture(sdr));controller.output(sdr,false,false,true);QVERIFY(!QFileInfo::exists(hdrDir));QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
+        QImage hdr(32,32,QImage::Format_RGBA32FPx4);hdr.fill(QColor::fromRgbF(.4,.5,1.5));hdr.setColorSpace(QColorSpace::SRgbLinear);hdr.setText("capHdr","scRGB-FP16");
+        QVERIFY(controller.saveHdrCapture(hdr));const auto files=QDir(hdrDir).entryList(QDir::Files);QCOMPARE(files.size(),3);
+        const auto pngs=QDir(hdrDir).entryList({"*.png"},QDir::Files);QCOMPARE(pngs.size(),1);QCOMPARE(QImageReader(QDir(hdrDir).filePath(pngs.first())).read().depth(),64);
+        QFile raw(QDir(hdrDir).filePath(pngs.first()+".scrgb-f32"));QVERIFY(raw.open(QIODevice::ReadOnly));QCOMPARE(raw.readAll(),QByteArray(reinterpret_cast<const char*>(hdr.constBits()),hdr.sizeInBytes()));
+        controller.output(hdr,false,false,true);QCOMPARE(QDir(hdrDir).entryList(QDir::Files),files);QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
+        QCOMPARE(controller.settings_.value("save/lastDirectory").toString(),manualDir);
+        const bool nativeDisabled=QCoreApplication::testAttribute(Qt::AA_DontUseNativeDialogs);QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs,true);
+        const auto restoreDialogs=qScopeGuard([&]{QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs,nativeDisabled);});
+        QTimer watchdog;watchdog.setSingleShot(true);connect(&watchdog,&QTimer::timeout,qApp,[]{if(auto *dialog=qApp->activeModalWidget())QMetaObject::invokeMethod(dialog,"reject");});
+        for(int i=0;i<2;++i){
+            const auto path=QDir(manualDir).filePath(QString("manual-%1.png").arg(i));bool dialogSeen=false;
+            QTimer::singleShot(50,qApp,[&]{auto *dialog=qobject_cast<QFileDialog*>(qApp->activeModalWidget());if(!dialog)return;dialogSeen=true;QCOMPARE(dialog->directory().absolutePath(),manualDir);auto *name=dialog->findChild<QLineEdit*>("fileNameEdit");QVERIFY(name);name->setText(path);QMetaObject::invokeMethod(dialog,"accept");});
+            watchdog.start(2000);controller.output(sdr,false,false,false);watchdog.stop();QVERIFY(dialogSeen);QVERIFY2(QFileInfo::exists(path),qPrintable(QDir(manualDir).entryList(QDir::Files).join(',')));
+        }
+        QTimer::singleShot(50,qApp,[&]{auto *dialog=qApp->activeModalWidget();QVERIFY(dialog);QVERIFY(dialog->findChild<QLineEdit*>("capDefaultSaveDirectory"));QCOMPARE(dialog->findChild<QLineEdit*>("capDefaultSaveDirectory")->text(),hdrDir);QMetaObject::invokeMethod(dialog,"reject");});
+        watchdog.start(2000);controller.configure();watchdog.stop();QCOMPARE(controller.settings_.value("save/defaultDirectory").toString(),hdrDir);QCOMPARE(controller.settings_.value("save/lastDirectory").toString(),manualDir);
     }
     void editableTextObjects() {
         QImage source(1000,700,QImage::Format_RGBA32FPx4);source.fill(QColor::fromRgbF(.4,.5,1.5));
@@ -122,7 +175,7 @@ private slots:
         first->editor->selectAll();first->editor->insertPlainText(QStringLiteral("Revised\n文字"));
         QTest::mouseClick(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(600,150));boxes=overlay->findChildren<QWidget*>("capTextBox");QCOMPARE(boxes.size(),2);
         auto *second=static_cast<CaptureTextBox*>(boxes.last());QTest::keyClicks(second->editor,"Other");size->setValue(14);QCOMPARE(second->editor->font().pointSize(),14);QCOMPARE(first->editor->font().pointSize(),32);
-        second->editor->setPlainText(QString(250,'W'));QVERIFY(QRect(QPoint(40,40),QPoint(900,500)).contains(second->geometry()));
+        second->editor->setPlainText(QString(250,'W'));QVERIFY(overlay->rect().contains(second->geometry()));
         QVERIFY(second->editor->document()->size().height()>QFontMetrics(second->editor->font()).height()*2);
         QTest::keyClick(second->editor,Qt::Key_Z,Qt::ControlModifier);QCOMPARE(second->editor->toPlainText(),QString("Other"));QCOMPARE(second->pos(),QPoint(600,150));
         QTest::mouseClick(first->editor->viewport(),Qt::LeftButton);QCOMPARE(size->value(),32);QVERIFY(bold->isChecked() && italic->isChecked());
@@ -159,7 +212,7 @@ private slots:
         QCOMPARE(overlay->findChild<QWidget*>("capToolBar")->cursor().shape(),Qt::ArrowCursor);
         QCOMPARE(button(QStringLiteral("✓"))->toolTip(),QStringLiteral("复制到剪贴板"));
         QVERIFY(button(QStringLiteral("矩形"))->toolTip().contains("Ctrl"));QVERIFY(button(QStringLiteral("圆形"))->toolTip().contains("Ctrl"));
-        auto *width=overlay->findChild<QSpinBox*>("capPenWidth");QVERIFY(width && width->isVisible());QCOMPARE(width->value(),3);QCOMPARE(width->suffix(),QString(" px"));
+        button(QStringLiteral("画笔"))->click();auto *width=overlay->findChild<QSpinBox*>("capPenWidth");QVERIFY(width && width->isVisible());QCOMPARE(width->value(),3);QCOMPARE(width->suffix(),QString(" px"));
         auto *number=width->findChild<QLineEdit*>();number->selectAll();QTest::keyClicks(number,"7");QTest::keyClick(number,Qt::Key_Enter);QCOMPARE(width->value(),7);
         const auto inkBounds=[&]{
             const auto image=overlay->grab().toImage().scaled(overlay->size(),Qt::IgnoreAspectRatio,Qt::FastTransformation);QRect bounds;
@@ -268,7 +321,7 @@ private slots:
         QVERIFY(mime->hasImage());QVERIFY(mime->hasFormat("image/png"));
         const auto png=QImage::fromData(mime->data("image/png"));QCOMPARE(png.size(),image.size());
         if(image.text("capHdr")=="scRGB-FP16"){
-            QCOMPARE(png.depth(),64);const auto raw=mime->data("application/x-vscap-scrgb");
+            QCOMPARE(png.depth(),32);const auto raw=mime->data("application/x-vscap-scrgb");
             QCOMPARE(raw.size(),8+image.width()*image.height()*16);
             QCOMPARE(raw.mid(8,image.width()*16),QByteArray(reinterpret_cast<const char*>(image.constScanLine(0)),image.width()*16));
         }

@@ -75,7 +75,7 @@ dist/          本地运行/打包结果（谨慎处理用户配置）
 | Renderer / 导出与设置 | 保存项目/VPY，准备文件、编码队列、配置 | `MainWindowPresets.cpp`、`ExportWindow.cpp` |
 | Player | 媒体 → 播放/列表 → 字幕音频/渲染设置 → 图像工具 | `src/player/PlayerWindow.cpp`、`PlayerPlaylist.cpp`、`PlayerMenus.cpp`、`PlayerSettings.cpp` |
 | PhotoCraft | Player 图片工具打开独立图层编辑工作区 | `src/player/PhotoCraftEditor.*`、`tools/build-photocraft.ps1` |
-| VSCap | 框选截图 → 标注/复制/保存；贴图可再编辑和收起工具栏 | `src/cap/main.cpp`，详见 [交互验收](docs/vscap-interaction-1.0.10.md) |
+| VSCap | 选区四角/四边缩放及移动 → 整图标注 → 最终裁切/复制/手动保存；HDR 原图提前保存，贴图可再编辑 | `src/cap/main.cpp`，详见 [交互验收](docs/vscap-interaction-1.0.10.md) |
 
 ## 6. 外部依赖
 
@@ -125,7 +125,7 @@ Full 与 PlayerLite 的依赖清单不同，实际发布以打包脚本、运行
 ## 10. 当前状态与下一步
 
 - **基线**：工作区 1.0.10；Renderer、Player、VSCap、PhotoCraft 接入。Native API 18、HDR→SDR 自动色彩映射与 Full/PlayerLite 边界见 [1.0.10 验收](docs/validation-1.0.10.md) 和 [发布说明](docs/release-1.0.10.md)。
-- **近期成果**：VSCap 可编辑文字/绘图、原始尺寸贴图与工具栏切换；PhotoCraft 为独立图片编辑入口；3FP 直通和 VPY 链分别处理播放与增强。各项只按相应文档注明的实测范围认可。
+- **近期成果**：VSCap 可编辑文字/绘图、原始尺寸贴图与工具栏切换；选区可缩放/移动，标注在整图上保留，最终导出才裁切。复制不落盘，HDR 默认目录与手动保存上次目录分开记录；工作流 14 项通过。PhotoCraft 为独立图片编辑入口；3FP 直通和 VPY 链分别处理播放与增强。各项只按相应文档注明的实测范围认可。
 - **下一步优先**：基于真实素材复测 VSCap/Player HDR 像素与多屏缩放；核对 1.0.10 包与源代码一致性；继续确认大分辨率软解、780M 实时播放及专项未达标项，不将短时间稳定等同全场景通过。
 - **设计限制**：PlayerLite 不等于 Full；VS GPU 滤镜仍可能有 CPU 平面传输；不存在通用零丢帧、完整任意 PSD/HDR/字幕/蓝光场景保证；未实现 NGU 私有算法。发布状态以 GitHub Release 及真实附件为准，不从工作区版本推断。
 

@@ -27,9 +27,9 @@ static void copyImage(const QImage &image, unsigned attempt=0, unsigned request=
     if(!attempt)request=++latest;
     if(request!=latest)return;
     auto *mime=new QMimeData;
-    mime->setImageData(cap::preview(image));
+    auto preview=cap::preview(image);if(image.text("capHdr")=="scRGB-FP16")preview.setText("capHdr",{});mime->setImageData(preview);
     QByteArray png;QBuffer buffer(&png);buffer.open(QIODevice::WriteOnly);
-    cap::pngPixels(image).save(&buffer,"PNG");mime->setData("image/png",png);
+    preview.save(&buffer,"PNG");mime->setData("image/png",png);
     if(image.text("capHdr")=="scRGB-FP16") {
         QByteArray raw;QDataStream stream(&raw,QIODevice::WriteOnly);
         stream<<qint32(image.width())<<qint32(image.height());
@@ -112,7 +112,10 @@ class CaptureOverlay final : public QWidget {
     QRect selection_;
     QPoint origin_, last_;
     bool selecting_ = true, dragging_ = false;
-    enum Tool { Pen, Rect, Ellipse, Text, Line } tool_ = Pen;
+    bool movingSelection_ = false;
+    int resizeEdges_ = 0;
+    QRect startSelection_;
+    enum Tool { Selection, Pen, Rect, Ellipse, Text, Line } tool_ = Selection;
     QColor color_ = Qt::red;
     int lineMode_ = 0;
     int penWidth_ = 3;
@@ -142,7 +145,7 @@ public:
         setAttribute(Qt::WA_OpaquePaintEvent);
         setMouseTracking(true);
         setCursor(Qt::CrossCursor);
-        if(embedded_){resize(canvas_.size());selecting_=false;selection_=rect();}
+        if(embedded_){resize(canvas_.size());selecting_=false;selection_=rect();tool_=Pen;}
         else setGeometry(screen->geometry());
         bar_ = new QWidget(this);bar_->setObjectName("capToolBar");bar_->setCursor(Qt::ArrowCursor);
         qApp->installEventFilter(this);
@@ -180,6 +183,7 @@ public:
             auto *button=add(name,[this,value]{typingText_=nullptr;tool_=value;updateOptions();});
             button->setCheckable(true);button->setChecked(value==tool_);tools_->addButton(button,value);
         };
+        if(!embedded_)tool(QStringLiteral("选区"),Selection);
         tool(QStringLiteral("画笔"),Pen);tool(QStringLiteral("矩形"),Rect);
         tool(QStringLiteral("圆形"),Ellipse);tool(QStringLiteral("线"),Line);tool(QStringLiteral("文字"),Text);
         tools_->button(Rect)->setToolTip(QStringLiteral("按住 Ctrl 画正方形"));tools_->button(Ellipse)->setToolTip(QStringLiteral("按住 Ctrl 画圆形"));
@@ -221,7 +225,7 @@ private:
         textStates_[activeText_]=textState(activeText_);
     }
     void addText(const QPoint &point) {
-        auto *box=new CaptureTextBox(this,selection_,textFont_,color_);box->moveWithin(point);texts_.append(box);textStates_[box]=textState(box);
+        auto *box=new CaptureTextBox(this,rect(),textFont_,color_);box->moveWithin(point);texts_.append(box);textStates_[box]=textState(box);
         box->selected=[this,box]{selectText(box);};box->undo=[this]{undo();};
         box->cancel=[this]{if(embedded_)bar_->hide();else close();};
         box->changed=[this,box]{rememberText(box,true);textStates_[box]=textState(box);};
@@ -232,11 +236,12 @@ private:
     }
     void updateColor(){colorButton_->setStyleSheet(QString("border-bottom:3px solid %1;").arg(color_.name()));}
     void updateOptions(){
+        for(auto *box:texts_)box->setAttribute(Qt::WA_TransparentForMouseEvents,tool_==Selection);
         const QSignalBlocker block(options_);options_->clear();
         if(tool_==Line){options_->addItems({QStringLiteral("直线"),QStringLiteral("箭头"),QStringLiteral("虚线")});options_->setCurrentIndex(lineMode_);}
         else{for(int width:{2,3,5,8})options_->addItem(QStringLiteral("%1 px").arg(width),width);if(options_->findData(penWidth_)<0)options_->addItem(QStringLiteral("%1 px").arg(penWidth_),penWidth_);options_->setCurrentIndex(options_->findData(penWidth_));}
         const QSignalBlocker width(penWidthInput_);penWidthInput_->setValue(penWidth_);
-        options_->setVisible(tool_!=Text && tool_!=Pen);penWidthInput_->setVisible(tool_==Pen);fontOptions_->setVisible(tool_==Text);positionBar();
+        options_->setVisible(tool_!=Selection && tool_!=Text && tool_!=Pen);penWidthInput_->setVisible(tool_==Pen);fontOptions_->setVisible(tool_==Text);positionBar();
     }
     void remember(const QRect &area){
         const auto pixels=pixelRect(area).intersected(canvas_.rect());if(pixels.isEmpty())return;
@@ -259,7 +264,7 @@ private:
         undoButton_->setEnabled(!history_.isEmpty());update();
     }
     QRect shapeRect() const {
-        QPoint to(qBound(selection_.left(),last_.x(),selection_.right()),qBound(selection_.top(),last_.y(),selection_.bottom()));
+        QPoint to=last_;
         if(constrainShape_ && (tool_==Rect || tool_==Ellipse)){
             const auto delta=to-origin_;const int size=qMin(qAbs(delta.x()),qAbs(delta.y()));
             to=origin_+QPoint(delta.x()<0?-size:size,delta.y()<0?-size:size);
@@ -282,7 +287,7 @@ private:
         if(selection_.isEmpty()) return;
         QImage composite=canvas_;
         if(!texts_.isEmpty()){
-            QPainter painter(&composite);painter.scale(double(canvas_.width())/width(),double(canvas_.height())/height());painter.setClipRect(selection_);
+            QPainter painter(&composite);painter.scale(double(canvas_.width())/width(),double(canvas_.height())/height());
             for(auto *box:texts_){
                 painter.save();painter.translate(box->pos()+QPoint(6,6));painter.setClipRect(box->editor->viewport()->rect(),Qt::IntersectClip);
                 QAbstractTextDocumentLayout::PaintContext context;context.palette.setColor(QPalette::Text,annotationInk(box->ink));
@@ -322,6 +327,28 @@ protected:
         p.scale(double(canvas_.width())/width(),double(canvas_.height())/height());
         p.setPen(QPen(annotationInk(color_),penWidth_,tool_==Line && lineMode_==2?Qt::DashLine:Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
     }
+    int selectionEdges(const QPoint &point) const {
+        if(embedded_ || selecting_ || selection_.isEmpty() || !selection_.adjusted(-6,-6,6,6).contains(point))return 0;
+        int edges=0;
+        if(qAbs(point.x()-selection_.left())<=6)edges|=1;
+        else if(qAbs(point.x()-selection_.right())<=6)edges|=2;
+        if(qAbs(point.y()-selection_.top())<=6)edges|=4;
+        else if(qAbs(point.y()-selection_.bottom())<=6)edges|=8;
+        return edges;
+    }
+    void adjustSelection(const QPoint &point) {
+        if(movingSelection_){
+            const auto delta=point-origin_;
+            selection_=startSelection_.translated(qBound(-startSelection_.left(),delta.x(),width()-1-startSelection_.right()),qBound(-startSelection_.top(),delta.y(),height()-1-startSelection_.bottom()));
+        }else{
+            selection_=startSelection_;
+            if(resizeEdges_&1)selection_.setLeft(qBound(0,point.x(),startSelection_.right()-3));
+            if(resizeEdges_&2)selection_.setRight(qBound(startSelection_.left()+3,point.x(),width()-1));
+            if(resizeEdges_&4)selection_.setTop(qBound(0,point.y(),startSelection_.bottom()-3));
+            if(resizeEdges_&8)selection_.setBottom(qBound(startSelection_.top()+3,point.y(),height()-1));
+        }
+        positionBar();update();
+    }
     void paintEvent(QPaintEvent *) override {
         QPainter p(this);
         if(displayDirty_){display_=cap::preview(canvas_);displayDirty_=false;}
@@ -331,11 +358,14 @@ protected:
             p.drawImage(selection_, display_, pixelRect(selection_));
             p.setPen(QPen(Qt::white,1,Qt::DashLine));
             p.drawRect(selection_);
+            p.setPen(QColor(70,135,200));p.setBrush(Qt::white);
+            for(const auto point:{selection_.topLeft(),QPoint(selection_.center().x(),selection_.top()),selection_.topRight(),QPoint(selection_.right(),selection_.center().y()),selection_.bottomRight(),QPoint(selection_.center().x(),selection_.bottom()),selection_.bottomLeft(),QPoint(selection_.left(),selection_.center().y())})p.drawRect(QRect(point-QPoint(3,3),QSize(7,7)));
+            p.setBrush(Qt::NoBrush);
         }
         p.setPen(QPen(Qt::white,2,Qt::DashLine));
         for(auto *box:texts_)p.drawRect(box->geometry().adjusted(2,2,-3,-3));
-        if (dragging_ && !selecting_ && (tool_==Rect || tool_==Ellipse || tool_==Line)) {
-            p.setClipRect(selection_);p.setPen(QPen(color_,penWidth_,tool_==Line && lineMode_==2?Qt::DashLine:Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+        if (dragging_ && !selecting_ && !resizeEdges_ && !movingSelection_ && (tool_==Rect || tool_==Ellipse || tool_==Line)) {
+            p.setPen(QPen(color_,penWidth_,tool_==Line && lineMode_==2?Qt::DashLine:Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
             const QRect drawRect=shapeRect();
             if(tool_==Rect)p.drawRect(drawRect);else if(tool_==Ellipse)p.drawEllipse(drawRect);else drawLine(p,origin_,last_);
         }
@@ -343,23 +373,30 @@ protected:
     void mousePressEvent(QMouseEvent *e) override {
         if(e->button()==Qt::RightButton){if(!embedded_)close();return;}
         if(e->button()!=Qt::LeftButton) return;
-        if(!selecting_ && !selection_.contains(e->pos()))return;
         origin_=last_=e->pos();constrainShape_=e->modifiers().testFlag(Qt::ControlModifier);
+        resizeEdges_=selectionEdges(e->pos());movingSelection_=!selecting_ && tool_==Selection && selection_.contains(e->pos()) && !resizeEdges_;
+        if(resizeEdges_ || movingSelection_){startSelection_=selection_;dragging_=true;return;}
+        if(!selecting_ && tool_==Selection)return;
         dragging_=true;
         if(selecting_) {selection_=QRect(origin_,QSize(1,1));bar_->hide();}
-        else if(tool_==Text && selection_.contains(e->pos())) {
+        else if(tool_==Text) {
             dragging_=false;
             addText(e->pos());
         }else if(!selecting_ && tool_==Pen){
-            remember(selection_);
+            remember(rect());
         }
     }
     void mouseMoveEvent(QMouseEvent *e) override {
-        if(!dragging_)return;
+        if(!dragging_){
+            const int edges=selectionEdges(e->pos());
+            setCursor((edges==5 || edges==10)?Qt::SizeFDiagCursor:(edges==6 || edges==9)?Qt::SizeBDiagCursor:(edges&3)?Qt::SizeHorCursor:(edges&12)?Qt::SizeVerCursor:(!selecting_ && tool_==Selection && selection_.contains(e->pos()))?Qt::SizeAllCursor:Qt::CrossCursor);
+            return;
+        }
         last_=e->pos();constrainShape_=e->modifiers().testFlag(Qt::ControlModifier);
+        if(resizeEdges_ || movingSelection_){adjustSelection(last_);return;}
         if(selecting_) selection_=QRect(origin_,last_).normalized();
-        else if(tool_==Pen && selection_.contains(last_)){
-            QPainter p(&canvas_);annotationPainter(p);p.setClipRect(selection_);
+        else if(tool_==Pen){
+            QPainter p(&canvas_);annotationPainter(p);
             p.drawLine(origin_,last_);origin_=last_;displayDirty_=true;
         }
         update();
@@ -367,13 +404,14 @@ protected:
     void mouseReleaseEvent(QMouseEvent *e) override {
         if(e->button()!=Qt::LeftButton || !dragging_)return;
         dragging_=false;last_=e->pos();constrainShape_=e->modifiers().testFlag(Qt::ControlModifier);
+        if(resizeEdges_ || movingSelection_){adjustSelection(last_);resizeEdges_=0;movingSelection_=false;return;}
         if(selecting_){
             selection_=QRect(origin_,last_).normalized().intersected(rect());
             if(selection_.width()<4 || selection_.height()<4){selection_={};update();return;}
             selecting_=false; positionBar();bar_->show();bar_->raise();
         }else if(tool_==Rect || tool_==Ellipse || tool_==Line){
-            const int margin=qMax(40,penWidth_*5+2);remember(shapeRect().adjusted(-margin,-margin,margin,margin).intersected(selection_));
-            QPainter p(&canvas_);annotationPainter(p);p.setClipRect(selection_);
+            const int margin=qMax(40,penWidth_*5+2);remember(shapeRect().adjusted(-margin,-margin,margin,margin).intersected(rect()));
+            QPainter p(&canvas_);annotationPainter(p);
             const QRect r=shapeRect();
             if(tool_==Rect)p.drawRect(r);else if(tool_==Ellipse)p.drawEllipse(r);else drawLine(p,origin_,last_);displayDirty_=true;
         }
@@ -477,6 +515,7 @@ static QStringList avifArguments(const QImage &image,const QString &input,const 
 }
 
 class CapApp final : public QObject, public QAbstractNativeEventFilter {
+    friend class TestCapWorkflow;
     QSettings settings_;
     QSystemTrayIcon tray_;
     QList<QPointer<PinWindow>> pins_;
@@ -543,10 +582,14 @@ private:
         }
         hotA_=1001;hotT_=1002;return true;
     }
-    QString makePath(const QString &ext) {
-        const auto dir=settings_.value("save/lastDirectory",defaultDirectory()).toString();
-        QDir().mkpath(dir);
+    QString makePath(const QString &ext,bool automatic=false) {
+        const auto dir=settings_.value(automatic?"save/defaultDirectory":"save/lastDirectory",defaultDirectory()).toString();
         return QDir(dir).filePath(QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz")+"."+ext);
+    }
+    bool saveHdrCapture(const QImage &image) {
+        if(image.text("capHdr")!="scRGB-FP16")return true;
+        const auto path=makePath("png",true);
+        return QDir().mkpath(QFileInfo(path).absolutePath()) && savePng(image,path);
     }
     void storeDir(const QString &path) {
         settings_.setValue("save/lastDirectory",QFileInfo(path).absolutePath());settings_.sync();
@@ -576,12 +619,7 @@ private:
     void output(QImage image, bool pin, bool avif, bool copy) {
         if(image.isNull())return;
         if(pin) {auto *p=new PinWindow(image,[this](QImage shot,bool pin,bool avif,bool copy){output(std::move(shot),pin,avif,copy);});pins_.append(p);return;}
-        if(copy){
-            const auto path=makePath("png");
-            if(savePng(image,path))storeDir(path);
-            else tray_.showMessage("VS Cap",QStringLiteral("PNG 写入失败"),QSystemTrayIcon::Warning);
-            return;
-        }
+        if(copy)return;
         const auto ext=avif?"avif":"png";
         const auto path=QFileDialog::getSaveFileName(nullptr,QStringLiteral("保存截图"),makePath(ext),
                          avif?"AVIF (*.avif)":"PNG (*.png)");
@@ -597,6 +635,7 @@ private:
         QString error;
         const QImage shot=cap::captureScreen(screen,&error);
         if(shot.isNull()){tray_.showMessage("VS Cap",error,QSystemTrayIcon::Warning);return;}
+        if(!saveHdrCapture(shot))tray_.showMessage("VS Cap",QStringLiteral("HDR 截图自动保存失败，请检查默认保存路径"),QSystemTrayIcon::Warning);
         new CaptureOverlay(screen,shot,[this](QImage shot,bool pin,bool avif,bool copy){
             output(std::move(shot),pin,avif,copy);
         });
@@ -623,12 +662,17 @@ private:
         QKeySequenceEdit pin(QKeySequence(settings_.value("hotkeys/pin","Alt+T").toString()));
         QCheckBox autostart(QStringLiteral("开机自启"));
         QCheckBox trayMode(QStringLiteral("启动时最小化到托盘"));
+        QWidget saveLocation;QHBoxLayout saveLayout(&saveLocation);saveLayout.setContentsMargins(0,0,0,0);
+        QLineEdit saveDirectory(settings_.value("save/defaultDirectory",defaultDirectory()).toString());saveDirectory.setObjectName("capDefaultSaveDirectory");
+        QPushButton browse(QStringLiteral("浏览…"));saveLayout.addWidget(&saveDirectory);saveLayout.addWidget(&browse);
+        connect(&browse,&QPushButton::clicked,&dialog,[&]{const auto path=QFileDialog::getExistingDirectory(&dialog,QStringLiteral("截图默认保存路径"),saveDirectory.text());if(!path.isEmpty())saveDirectory.setText(path);});
         autostart.setChecked(settings_.value("general/autostart",false).toBool());
         trayMode.setChecked(settings_.value("general/minimizeToTray",true).toBool());
         layout.addRow(QStringLiteral("截图快捷键"),&screenshot);
         layout.addRow(QStringLiteral("贴图快捷键"),&pin);
+        layout.addRow(QStringLiteral("截图默认保存路径"),&saveLocation);
         layout.addRow(&autostart);layout.addRow(&trayMode);
-        QLabel note(QStringLiteral("截取后可绘制、添加文字、复制、保存 PNG/AVIF 或贴图。"));
+        QLabel note(QStringLiteral("HDR 原始截图自动保存到默认路径。打勾只复制到剪贴板；手动保存 PNG/AVIF 每次选择路径，并记住上次目录。"));
         note.setWordWrap(true);layout.addRow(&note);
         QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
         layout.addRow(&buttons);
@@ -645,6 +689,7 @@ private:
         }
         settings_.setValue("hotkeys/capture",a);
         settings_.setValue("hotkeys/pin",b);
+        settings_.setValue("save/defaultDirectory",saveDirectory.text().trimmed().isEmpty()?defaultDirectory():QDir::cleanPath(saveDirectory.text().trimmed()));
         settings_.setValue("general/autostart",autostart.isChecked());
         settings_.setValue("general/minimizeToTray",trayMode.isChecked());
         settings_.sync();
