@@ -1,6 +1,14 @@
 # VSCap 截图与贴图交互修复
 
-2026-10-11，1.0.10 的后续源码更新。本轮只提交、推送代码，不更新 GitHub Release Draft，不制作压缩包。
+2026-10-11，1.0.10 的后续更新。首轮只推送源码；随后编译部署，并按维护者追加要求修复贴图尺寸与工具栏、重制 Full / PlayerLite 压缩包。GitHub Release Draft 保持原样，正式附件由维护者上传。
+
+## 贴图尺寸与工具栏补充
+
+- 移除初始 960×720 显示限制，默认图片像素与屏幕物理像素 1:1；计入 Windows DPI 缩放，仅超过鼠标所在屏幕可用区域时缩小，窗口初始位置限制在该区域内。滚轮仍使用等比最近邻缩放，导出尺寸保持原样。
+- 贴图工具栏“✓”只隐藏工具栏；右键首项按可见状态显示“显示工具栏”或“隐藏工具栏”，两种状态均可切换。独立复制菜单保留，截图“✓”仍复制到剪贴板。
+- 四边预留 2 个逻辑像素的蓝色区域，图片视图放在边框内；避免边缘笔画裁切或覆盖。
+- 最终工作流 `build/cap-pin-final-workflow.txt`：12 passed，0 failed。更新原始尺寸和滚轮检查，增加工具栏切换与剪贴板不变检查；`pinScreenFitAndBorders` 验证小图 1:1、超屏大图适配、初始窗口在屏幕内、移动前后四边每个外沿像素为蓝色、导出原图像素一致。测试在本机 150% 桌面缩放下执行；棋盘截图已查看，四边完整。
+- 部署保留本地配置；两个压缩包按资源清单收集文件，排除本机新增配置。包完整性与解压后 SHA-256 检查保存在 `build/package-cap-pin-1.0.10/package-audit.json`。PlayerLite 不包含 VSCap，本轮只同步说明和重新打包。
 
 ## 修改内容
 
@@ -19,4 +27,4 @@ Qt 6.10.2 / MinGW 13.1，Windows 11，150% 桌面缩放；本机实际桌面为 
 - `vsr_cap_tests`：设置 `VSR_CAP_DEVICE_TEST=1` 后 5 passed，含实际桌面捕获、SDR PNG 与模拟 HDR 精度 / 亮度；未把模拟浮点图像视为实际 HDR 显示器验收。既有工作流继续验证浮点文字导出、绘图撤销、16-bit 剪贴板和真实 AVIF 编码。
 - 本地日志：`build/cap-interaction-workflow.txt`、`build/cap-interaction-native.txt`。截图在 `build/acceptance-cap-interaction/`，文字框四边及工具条外观已查看。
 
-构建命令为 `cmake --build build/mingw-release --target VSCap vsr_cap_workflow_tests`；本地测试程序为 `build/mingw-release/vs-cap.exe`。本轮未改发布目录、运行配置或已有压缩包，也未重复视频解码性能测试。
+构建命令为 `cmake --build build/mingw-release --target VSCap vsr_cap_workflow_tests`；本地测试程序为 `build/mingw-release/vs-cap.exe`。首次交互修复未改发布目录或压缩包；后续部署及贴图补充更新了 1.0.10 目录和压缩包，运行配置保留，未重复视频解码性能测试。

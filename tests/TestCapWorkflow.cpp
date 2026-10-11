@@ -204,9 +204,10 @@ private slots:
         QImage delivered;bool avif=false;
         QPointer<PinWindow> pin=new PinWindow(source,[&](QImage image,bool,bool isAvif,bool){delivered=image;avif=isAvif;});
         const auto close=qScopeGuard([&]{if(pin)pin->close();});QVERIFY(QTest::qWaitForWindowExposed(pin));
-        auto *view=pin->findChild<QGraphicsView*>("capPinView");QVERIFY(view);QCOMPARE(view->size(),QSize(960,240));QCOMPARE(view->transform().m11(),view->transform().m22());
+        auto *view=pin->findChild<QGraphicsView*>("capPinView");QVERIFY(view);const double originalZoom=1.0/pin->screen()->devicePixelRatio();
+        QCOMPARE(view->size(),QSize(qRound(1600*originalZoom),qRound(400*originalZoom)));QCOMPARE(view->transform().m11(),originalZoom);QCOMPARE(view->transform().m11(),view->transform().m22());
         QWheelEvent wheel(QPointF(view->viewport()->rect().center()),QPointF(view->viewport()->mapToGlobal(view->viewport()->rect().center())),QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
-        QApplication::sendEvent(view->viewport(),&wheel);QTest::qWait(20);QCOMPARE(view->size(),QSize(1152,288));QCOMPARE(view->transform().m11(),view->transform().m22());
+        QApplication::sendEvent(view->viewport(),&wheel);QTest::qWait(20);QCOMPARE(view->size(),QSize(qRound(1920*originalZoom),qRound(480*originalZoom)));QCOMPARE(view->transform().m11(),view->transform().m22());
         QVERIFY(!view->renderHints().testFlag(QPainter::SmoothPixmapTransform));
         const auto pixels=view->viewport()->grab().toImage();int black=0,white=0;
         for(int y=3;y<pixels.height()-3;++y)for(int x=3;x<pixels.width()-3;++x){const auto pixel=pixels.pixelColor(x,y);QVERIFY(pixel==QColor(Qt::black) || pixel==QColor(Qt::white));black+=pixel==QColor(Qt::black);white+=pixel==QColor(Qt::white);}
@@ -218,6 +219,12 @@ private slots:
         actions[0]->trigger();auto *bar=pin->findChild<QWidget*>("capToolBar");QVERIFY(bar && bar->isVisible());QCOMPARE(bar->cursor().shape(),Qt::ArrowCursor);
         const auto button=[&](const QString &name){for(auto *b:pin->findChildren<QPushButton*>())if(b->text()==name)return b;return static_cast<QPushButton*>(nullptr);};
         for(const auto &name:{QStringLiteral("画笔"),QStringLiteral("矩形"),QStringLiteral("圆形"),QStringLiteral("线"),QStringLiteral("文字"),QStringLiteral("撤销"),QStringLiteral("PNG"),QStringLiteral("AVIF"),QStringLiteral("✓")})QVERIFY(button(name) && button(name)->isVisible());
+        QCOMPARE(button(QStringLiteral("✓"))->toolTip(),QStringLiteral("隐藏工具栏"));
+        menu->popup(pin->mapToGlobal(QPoint(10,10)));QTRY_VERIFY(menu->isVisible());QCOMPARE(actions[0]->text(),QStringLiteral("隐藏工具栏"));menu->hide();
+        actions[0]->trigger();QVERIFY(!bar->isVisible());actions[0]->trigger();QVERIFY(bar->isVisible());
+        const auto clipboardBefore=QApplication::clipboard()->mimeData()->data("image/png");
+        button(QStringLiteral("✓"))->click();QVERIFY(!bar->isVisible());QVERIFY(pin->isVisible());QCOMPARE(QApplication::clipboard()->mimeData()->data("image/png"),clipboardBefore);
+        menu->popup(pin->mapToGlobal(QPoint(10,10)));QTRY_VERIFY(menu->isVisible());QCOMPARE(actions[0]->text(),QStringLiteral("显示工具栏"));menu->hide();actions[0]->trigger();
         auto *proxy=qgraphicsitem_cast<QGraphicsProxyWidget*>(view->scene()->items().first());QVERIFY(proxy);
         auto *canvas=static_cast<CaptureOverlay*>(proxy->widget());QVERIFY(canvas);button(QStringLiteral("文字"))->click();
         QTest::mouseClick(canvas,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));auto *editor=canvas->findChild<QTextEdit*>("capTextEditor");QVERIFY(editor);QTest::keyClicks(editor,"Pinned text");
@@ -230,6 +237,26 @@ private slots:
         bar->activateWindow();QVERIFY(QTest::qWaitForWindowActive(bar));QTest::keyClick(bar,Qt::Key_Z,Qt::ControlModifier);actions[2]->trigger();QCOMPARE(delivered,source);
         QDir().mkpath("build/acceptance-cap-interaction");pin->grab().save("build/acceptance-cap-interaction/pin-nearest.png");bar->grab().save("build/acceptance-cap-interaction/pin-toolbar.png");
         actions[4]->trigger();QTRY_VERIFY(!pin);
+    }
+    void pinScreenFitAndBorders() {
+        auto *screen=QGuiApplication::screenAt(QCursor::pos());if(!screen)screen=qApp->primaryScreen();
+        const auto available=screen->availableGeometry();
+        const auto checkBorder=[](PinWindow *pin){
+            const auto image=pin->grab().toImage();const QColor blue(70,135,200);
+            for(int x=0;x<image.width();++x){QCOMPARE(image.pixelColor(x,0),blue);QCOMPARE(image.pixelColor(x,image.height()-1),blue);}
+            for(int y=0;y<image.height();++y){QCOMPARE(image.pixelColor(0,y),blue);QCOMPARE(image.pixelColor(image.width()-1,y),blue);}
+        };
+        for(const auto size:{QSize(320,180),QSize(qRound(available.width()*screen->devicePixelRatio()*2),qRound(available.height()*screen->devicePixelRatio()*2))}){
+            QImage source(size,QImage::Format_RGBA8888);source.fill(Qt::white);QImage delivered;
+            QPointer<PinWindow> pin=new PinWindow(source,[&](QImage image,bool,bool,bool){delivered=image;});
+            const auto close=qScopeGuard([&]{if(pin)pin->close();});QVERIFY(QTest::qWaitForWindowExposed(pin));
+            auto *view=pin->findChild<QGraphicsView*>("capPinView");QVERIFY(view);
+            QVERIFY(available.contains(pin->geometry()));QCOMPARE(view->transform().m11(),view->transform().m22());
+            if(size.width()==320)QCOMPARE(view->transform().m11(),1.0/screen->devicePixelRatio());
+            else{QVERIFY(view->transform().m11()<1.0/screen->devicePixelRatio());QVERIFY(pin->width()==available.width() || pin->height()==available.height());}
+            checkBorder(pin);pin->move(pin->pos()+QPoint(10,10));QTest::qWait(20);checkBorder(pin);
+            pin->findChild<QMenu*>("capPinMenu")->actions()[2]->trigger();QCOMPARE(delivered,source);
+        }
     }
     void hdrClipboardAndPin() {
         QString error;const auto desktop=cap::captureScreen(qApp->primaryScreen(),&error);

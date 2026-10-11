@@ -189,7 +189,7 @@ public:
         add(QStringLiteral("PNG"), [this] {deliver(false,false);});
         add(QStringLiteral("AVIF"), [this] {deliver(false,true);});
         add(QStringLiteral("贴图"), [this] {deliver(true,false);});
-        add(QStringLiteral("✓"), [this] {deliver(false,false,true);})->setToolTip(QStringLiteral("复制到剪贴板"));
+        add(QStringLiteral("✓"), [this] {if(embedded_)bar_->hide();else deliver(false,false,true);})->setToolTip(embedded_?QStringLiteral("隐藏工具栏"):QStringLiteral("复制到剪贴板"));
         bar_->setStyleSheet("QWidget{background:#252831;} QPushButton,QComboBox,QToolButton{color:white;background:#3b414e;padding:5px;border:1px solid transparent;} QPushButton:checked,QToolButton:checked{border:2px solid #78baff;background:#24496a;} QPushButton:disabled{color:#858585;} QSpinBox{color:white;background:#3b414e;padding:4px 24px 4px 5px;border:1px solid transparent;min-height:24px;} QSpinBox::up-button{subcontrol-origin:border;subcontrol-position:top right;width:20px;height:16px;} QSpinBox::down-button{subcontrol-origin:border;subcontrol-position:bottom right;width:20px;height:16px;}");
         updateColor();updateOptions();
         bar_->adjustSize();
@@ -416,6 +416,7 @@ protected:
 };
 
 class PinWindow final : public QWidget {
+    static constexpr int borderWidth_ = 2;
     CaptureOverlay *canvas_;
     PinView *view_;
     QWidget *bar_ = nullptr;
@@ -434,13 +435,18 @@ public:
         view_->editing=[this]{return bar_->isVisible();};view_->zoom=[this](int delta){if(delta)setZoom(zoom_*std::pow(1.2,delta/120.0));};
         view_->menu=[this](const QPoint &point){menu_->exec(point);};
         menu_=new QMenu(this);menu_->setObjectName("capPinMenu");
-        menu_->addAction(QStringLiteral("显示工具栏"),this,[this]{showToolBar();});
+        menu_->addAction(QStringLiteral("显示工具栏"),this,[this]{if(bar_->isVisible())bar_->hide();else showToolBar();});
+        connect(menu_,&QMenu::aboutToShow,this,[this]{menu_->actions().first()->setText(bar_->isVisible()?QStringLiteral("隐藏工具栏"):QStringLiteral("显示工具栏"));});
         menu_->addAction(QStringLiteral("复制"),this,[this]{canvas_->exportImage(false,false,true);});
         menu_->addAction(QStringLiteral("保存为PNG"),this,[this]{canvas_->exportImage(false,false);});
         menu_->addAction(QStringLiteral("保存为AVIF"),this,[this]{canvas_->exportImage(false,true);});
         menu_->addAction(QStringLiteral("销毁"),this,&QWidget::close);
-        setZoom(qMin(1.0,qMin(960.0/canvas_->width(),720.0/canvas_->height())));
-        move(QCursor::pos()-QPoint(width()/2,height()/2));show();
+        auto *targetScreen=QGuiApplication::screenAt(QCursor::pos());if(!targetScreen)targetScreen=qApp->primaryScreen();
+        const auto available=targetScreen->availableGeometry();
+        // Match image pixels to physical screen pixels even with desktop DPI scaling.
+        setZoom(qMin(1.0/targetScreen->devicePixelRatio(),qMin(double(available.width()-2*borderWidth_)/canvas_->width(),double(available.height()-2*borderWidth_)/canvas_->height())));
+        const auto position=QCursor::pos()-QPoint(width()/2,height()/2);
+        move(qBound(available.left(),position.x(),available.right()-width()+1),qBound(available.top(),position.y(),available.bottom()-height()+1));show();
     }
     void showToolBar(){positionBar();bar_->show();bar_->raise();}
 private:
@@ -454,11 +460,11 @@ private:
     void setZoom(double value){
         const auto center=geometry().center();zoom_=qBound(.01,value,8.0);
         view_->setTransform(QTransform::fromScale(zoom_,zoom_));
-        resize(qMax(1,qRound(canvas_->width()*zoom_))+2,qMax(1,qRound(canvas_->height()*zoom_))+2);
-        view_->setGeometry(rect().adjusted(1,1,-1,-1));move(center-QPoint(width()/2,height()/2));positionBar();
+        resize(qMax(1,qRound(canvas_->width()*zoom_))+2*borderWidth_,qMax(1,qRound(canvas_->height()*zoom_))+2*borderWidth_);
+        view_->setGeometry(rect().adjusted(borderWidth_,borderWidth_,-borderWidth_,-borderWidth_));move(center-QPoint(width()/2,height()/2));positionBar();
     }
 protected:
-    void paintEvent(QPaintEvent *) override {QPainter painter(this);painter.fillRect(rect(),QColor(20,20,20));painter.setPen(QColor(70,135,200));painter.drawRect(rect().adjusted(0,0,-1,-1));}
+    void paintEvent(QPaintEvent *) override {QPainter painter(this);painter.fillRect(rect(),QColor(70,135,200));}
     void moveEvent(QMoveEvent *event) override {positionBar();QWidget::moveEvent(event);}
     void contextMenuEvent(QContextMenuEvent *event) override {menu_->exec(event->globalPos());}
 };
