@@ -150,6 +150,87 @@ private slots:
         QTest::keyClick(box,Qt::Key_Z,Qt::ControlModifier);QTRY_VERIFY(overlay->findChildren<QTextEdit*>("capTextEditor").isEmpty());
         QVERIFY(!button(QStringLiteral("撤销"))->isEnabled());button(QStringLiteral("PNG"))->click();QCOMPARE(delivered,source.copy(QRect(QPoint(20,20),QPoint(700,400))));
     }
+    void toolbarShapesAndTextFrames() {
+        QImage source(1000,700,QImage::Format_RGBA8888);source.fill(QColor(70,80,90));
+        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[](QImage,bool,bool,bool){});overlay->resize(source.size());
+        const auto close=qScopeGuard([&]{if(overlay)overlay->close();});QVERIFY(QTest::qWaitForWindowExposed(overlay));
+        QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(40,40));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(900,500));
+        const auto button=[&](const QString &name){for(auto *b:overlay->findChildren<QPushButton*>())if(b->text()==name)return b;return static_cast<QPushButton*>(nullptr);};
+        QCOMPARE(overlay->findChild<QWidget*>("capToolBar")->cursor().shape(),Qt::ArrowCursor);
+        QCOMPARE(button(QStringLiteral("✓"))->toolTip(),QStringLiteral("复制到剪贴板"));
+        QVERIFY(button(QStringLiteral("矩形"))->toolTip().contains("Ctrl"));QVERIFY(button(QStringLiteral("圆形"))->toolTip().contains("Ctrl"));
+        auto *width=overlay->findChild<QSpinBox*>("capPenWidth");QVERIFY(width && width->isVisible());QCOMPARE(width->value(),3);QCOMPARE(width->suffix(),QString(" px"));
+        auto *number=width->findChild<QLineEdit*>();number->selectAll();QTest::keyClicks(number,"7");QTest::keyClick(number,Qt::Key_Enter);QCOMPARE(width->value(),7);
+        const auto inkBounds=[&]{
+            const auto image=overlay->grab().toImage().scaled(overlay->size(),Qt::IgnoreAspectRatio,Qt::FastTransformation);QRect bounds;
+            for(int y=50;y<490;++y)for(int x=50;x<890;++x){const auto pixel=image.pixelColor(x,y);if(pixel.red()>230 && pixel.green()<60)bounds=bounds.united(QRect(x,y,1,1));}
+            return bounds;
+        };
+        for(const auto &tool:{QStringLiteral("矩形"),QStringLiteral("圆形")}){
+            button(tool)->click();QCOMPARE(overlay->findChild<QComboBox*>("capToolOptions")->currentText(),QString("7 px"));QTest::mousePress(overlay,Qt::LeftButton,Qt::ControlModifier,QPoint(100,100));
+            QTest::mouseRelease(overlay,Qt::LeftButton,Qt::ControlModifier,QPoint(300,200));const auto ink=inkBounds();
+            QVERIFY(!ink.isEmpty());QVERIFY(qAbs(ink.width()-ink.height())<=1);QVERIFY(ink.width()<120);button(QStringLiteral("撤销"))->click();
+        }
+        button(QStringLiteral("线"))->click();auto *options=overlay->findChild<QComboBox*>("capToolOptions");QCOMPARE(options->count(),3);options->setCurrentText(QStringLiteral("虚线"));
+        QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(400,100));
+        auto image=overlay->grab().toImage().scaled(overlay->size(),Qt::IgnoreAspectRatio,Qt::FastTransformation);int transitions=0;bool previous=false;
+        for(int x=100;x<=400;++x){const auto pixel=image.pixelColor(x,100);const bool ink=pixel.red()>230 && pixel.green()<60;if(ink!=previous)++transitions;previous=ink;}
+        QVERIFY(transitions>6);button(QStringLiteral("撤销"))->click();
+        button(QStringLiteral("文字"))->click();auto *size=overlay->findChild<QSpinBox*>("capFontSize");
+        QStyleOptionSpinBox option;option.initFrom(size);option.buttonSymbols=QAbstractSpinBox::UpDownArrows;option.stepEnabled=QAbstractSpinBox::StepUpEnabled | QAbstractSpinBox::StepDownEnabled;
+        const auto up=size->style()->subControlRect(QStyle::CC_SpinBox,&option,QStyle::SC_SpinBoxUp,size),down=size->style()->subControlRect(QStyle::CC_SpinBox,&option,QStyle::SC_SpinBoxDown,size);
+        QVERIFY(!up.isEmpty() && !down.isEmpty() && !up.intersects(down));QTest::mouseClick(size,Qt::LeftButton,Qt::NoModifier,up.center());QCOMPARE(size->value(),19);
+        QTest::mouseClick(size,Qt::LeftButton,Qt::NoModifier,down.center());QCOMPARE(size->value(),18);
+        QTest::mouseClick(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(100,120));QTest::mouseClick(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(300,120));
+        QTRY_COMPARE(overlay->findChildren<QWidget*>("capTextBox").size(),1);auto *box=static_cast<CaptureTextBox*>(overlay->findChild<QWidget*>("capTextBox"));QCOMPARE(box->pos(),QPoint(300,120));
+        QTest::keyClicks(box->editor,"Frame");QTest::mouseClick(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(600,120));QTest::mouseClick(button(QStringLiteral("画笔")),Qt::LeftButton);
+        QTRY_COMPARE(overlay->findChildren<QWidget*>("capTextBox").size(),1);QCOMPARE(box->editor->toPlainText(),QString("Frame"));
+        const auto globalStart=box->mapToGlobal(QPoint(3,3));QTest::mousePress(box,Qt::LeftButton,Qt::NoModifier,QPoint(3,3));
+        for(int step=1;step<=6;++step){
+            const auto global=globalStart-QPoint(step*10,step*5);
+            QMouseEvent event(QEvent::MouseMove,QPointF(box->mapFromGlobal(global)),QPointF(global),Qt::NoButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(box,&event);QTest::qWait(10);
+            image=overlay->grab().toImage().scaled(overlay->size(),Qt::IgnoreAspectRatio,Qt::FastTransformation).copy(box->geometry());
+            const auto white=[&](int x,int y){const auto pixel=image.pixelColor(x,y);return pixel.red()>230 && pixel.green()>230 && pixel.blue()>230;};
+            int top=0,bottom=0,left=0,right=0;
+            for(int x=2;x<image.width()-2;++x){top+=white(x,2);bottom+=white(x,image.height()-3);}
+            for(int y=2;y<image.height()-2;++y){left+=white(2,y);right+=white(image.width()-3,y);}
+            QVERIFY2(top>2 && bottom>2 && left>2 && right>2,qPrintable(QString("frame %1: top %2 bottom %3 left %4 right %5").arg(step).arg(top).arg(bottom).arg(left).arg(right)));
+        }
+        QTest::mouseRelease(box,Qt::LeftButton,Qt::NoModifier,QPoint(3,3));QDir().mkpath("build/acceptance-cap-interaction");overlay->grab().save("build/acceptance-cap-interaction/text-frame.png");
+    }
+    void pinAspectZoomAndEditing() {
+        QImage source(1600,400,QImage::Format_RGBA8888);source.fill(Qt::white);
+        {QPainter painter(&source);for(int y=0;y<400;y+=10)for(int x=0;x<1600;x+=10)if((x/10+y/10)%2)painter.fillRect(x,y,10,10,Qt::black);}
+        QImage delivered;bool avif=false;
+        QPointer<PinWindow> pin=new PinWindow(source,[&](QImage image,bool,bool isAvif,bool){delivered=image;avif=isAvif;});
+        const auto close=qScopeGuard([&]{if(pin)pin->close();});QVERIFY(QTest::qWaitForWindowExposed(pin));
+        auto *view=pin->findChild<QGraphicsView*>("capPinView");QVERIFY(view);QCOMPARE(view->size(),QSize(960,240));QCOMPARE(view->transform().m11(),view->transform().m22());
+        QWheelEvent wheel(QPointF(view->viewport()->rect().center()),QPointF(view->viewport()->mapToGlobal(view->viewport()->rect().center())),QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+        QApplication::sendEvent(view->viewport(),&wheel);QTest::qWait(20);QCOMPARE(view->size(),QSize(1152,288));QCOMPARE(view->transform().m11(),view->transform().m22());
+        QVERIFY(!view->renderHints().testFlag(QPainter::SmoothPixmapTransform));
+        const auto pixels=view->viewport()->grab().toImage();int black=0,white=0;
+        for(int y=3;y<pixels.height()-3;++y)for(int x=3;x<pixels.width()-3;++x){const auto pixel=pixels.pixelColor(x,y);QVERIFY(pixel==QColor(Qt::black) || pixel==QColor(Qt::white));black+=pixel==QColor(Qt::black);white+=pixel==QColor(Qt::white);}
+        QVERIFY(black>100 && white>100);
+        auto *menu=pin->findChild<QMenu*>("capPinMenu");QVERIFY(menu);const auto actions=menu->actions();QCOMPARE(actions.size(),5);
+        QCOMPARE(actions[0]->text(),QStringLiteral("显示工具栏"));QCOMPARE(actions[1]->text(),QStringLiteral("复制"));QCOMPARE(actions[2]->text(),QStringLiteral("保存为PNG"));QCOMPARE(actions[3]->text(),QStringLiteral("保存为AVIF"));QCOMPARE(actions[4]->text(),QStringLiteral("销毁"));
+        actions[2]->trigger();QCOMPARE(delivered,source);QVERIFY(!avif);actions[3]->trigger();QCOMPARE(delivered,source);QVERIFY(avif);
+        actions[1]->trigger();QTRY_COMPARE(QImage::fromData(QApplication::clipboard()->mimeData()->data("image/png")).size(),source.size());QVERIFY(pin->isVisible());
+        actions[0]->trigger();auto *bar=pin->findChild<QWidget*>("capToolBar");QVERIFY(bar && bar->isVisible());QCOMPARE(bar->cursor().shape(),Qt::ArrowCursor);
+        const auto button=[&](const QString &name){for(auto *b:pin->findChildren<QPushButton*>())if(b->text()==name)return b;return static_cast<QPushButton*>(nullptr);};
+        for(const auto &name:{QStringLiteral("画笔"),QStringLiteral("矩形"),QStringLiteral("圆形"),QStringLiteral("线"),QStringLiteral("文字"),QStringLiteral("撤销"),QStringLiteral("PNG"),QStringLiteral("AVIF"),QStringLiteral("✓")})QVERIFY(button(name) && button(name)->isVisible());
+        auto *proxy=qgraphicsitem_cast<QGraphicsProxyWidget*>(view->scene()->items().first());QVERIFY(proxy);
+        auto *canvas=static_cast<CaptureOverlay*>(proxy->widget());QVERIFY(canvas);button(QStringLiteral("文字"))->click();
+        QTest::mouseClick(canvas,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));auto *editor=canvas->findChild<QTextEdit*>("capTextEditor");QVERIFY(editor);QTest::keyClicks(editor,"Pinned text");
+        actions[2]->trigger();QCOMPARE(delivered.size(),source.size());QVERIFY(delivered!=source);QVERIFY(pin->isVisible());
+        QTest::keyClick(editor,Qt::Key_Escape);QVERIFY(!bar->isVisible());QVERIFY(canvas->isVisible());actions[0]->trigger();
+        button(QStringLiteral("撤销"))->click();button(QStringLiteral("撤销"))->click();actions[2]->trigger();QCOMPARE(delivered,source);
+        button(QStringLiteral("矩形"))->click();QTest::mousePress(canvas,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));QTest::mouseRelease(canvas,Qt::LeftButton,Qt::NoModifier,QPoint(250,200));actions[2]->trigger();QVERIFY(delivered!=source);
+        pin->activateWindow();QVERIFY(QTest::qWaitForWindowActive(pin));view->setFocus();QTest::keyClick(view,Qt::Key_Z,Qt::ControlModifier);actions[2]->trigger();QCOMPARE(delivered,source);
+        QTest::mousePress(canvas,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));QTest::mouseRelease(canvas,Qt::LeftButton,Qt::NoModifier,QPoint(250,200));
+        bar->activateWindow();QVERIFY(QTest::qWaitForWindowActive(bar));QTest::keyClick(bar,Qt::Key_Z,Qt::ControlModifier);actions[2]->trigger();QCOMPARE(delivered,source);
+        QDir().mkpath("build/acceptance-cap-interaction");pin->grab().save("build/acceptance-cap-interaction/pin-nearest.png");bar->grab().save("build/acceptance-cap-interaction/pin-toolbar.png");
+        actions[4]->trigger();QTRY_VERIFY(!pin);
+    }
     void hdrClipboardAndPin() {
         QString error;const auto desktop=cap::captureScreen(qApp->primaryScreen(),&error);
         QVERIFY2(!desktop.isNull(),qPrintable(error));
@@ -164,8 +245,8 @@ private slots:
             QCOMPARE(raw.size(),8+image.width()*image.height()*16);
             QCOMPARE(raw.mid(8,image.width()*16),QByteArray(reinterpret_cast<const char*>(image.constScanLine(0)),image.width()*16));
         }
-        auto *pin=new PinWindow(image);QVERIFY(pin->windowFlags().testFlag(Qt::WindowStaysOnTopHint));
-        pin->showToolBar();QCOMPARE(pin->findChildren<QPushButton*>().size(),3);pin->close();
+        auto *pin=new PinWindow(image,[](QImage,bool,bool,bool){});QVERIFY(pin->windowFlags().testFlag(Qt::WindowStaysOnTopHint));
+        pin->showToolBar();QCOMPARE(pin->findChildren<QPushButton*>().size(),11);pin->close();
     }
     void realHdrAvif() {
         QString error;const auto desktop=cap::captureScreen(qApp->primaryScreen(),&error);QVERIFY2(!desktop.isNull(),qPrintable(error));
