@@ -91,7 +91,8 @@ protected:
         for (const auto &value : chapters) {
             const auto chapter = value.toObject();
             const int x = groove.left() + static_cast<int>(chapter.value("start100ns").toDouble() / duration * groove.width());
-            painter.drawLine(x, groove.center().y() - 4, x, groove.center().y() + 4);
+            painter.setBrush(QColor("#8ab7ff"));
+            painter.drawPolygon(QPolygon{QPoint(x-4,groove.center().y()-5),QPoint(x+4,groove.center().y()-5),QPoint(x,groove.center().y()+2)});
         }
     }
     void mouseMoveEvent(QMouseEvent *event) override {
@@ -104,20 +105,44 @@ protected:
     }
 };
 PlayerWindow::PlayerWindow() {
-    settings_ = std::make_unique<QSettings>(QDir(QCoreApplication::applicationDirPath()).filePath("player.ini"), QSettings::IniFormat);
+    const QString configPath = qEnvironmentVariable("VSR_PLAYER_CONFIG", QDir(QCoreApplication::applicationDirPath()).filePath("player.ini"));
+#ifdef VSR_LITE_PLAYER
+    const bool newConfiguration = qEnvironmentVariableIntValue("VSR_PLAYER_NEW_CONFIG") == 1 || !QFileInfo::exists(configPath);
+#endif
+    settings_ = std::make_unique<QSettings>(configPath, QSettings::IniFormat);
     language_=std::make_unique<PlayerLanguage>(settings_->value("basic/language","zh_CN").toString());
-    if (!settings_->contains("player/core")) settings_->setValue("player/core", QSettings().value("player/core", "3FP"));
+    if (!settings_->contains("player/core")) settings_->setValue("player/core",
+#ifdef VSR_LITE_PLAYER
+        "3FP"
+#else
+        QSettings().value("player/core", "3FP")
+#endif
+    );
 #ifdef VSR_LITE_PLAYER
     if (!settings_->contains("player/animeStage")) settings_->setValue("player/animeStage",5);
 #endif
+#ifndef VSR_LITE_PLAYER
     if(settings_->value("theme/latinFont").toString()=="Segoe UI")settings_->setValue("theme/latinFont","Comic Sans MS");
+#endif
     const QVariantMap defaults{{"basic/language","zh_CN"},{"basic/autoplay",true},{"theme/chineseFont","Microsoft YaHei UI"},{"theme/latinFont","Comic Sans MS"},{"theme/background","#202124"},{"theme/opacity",100},{"playback/remember",true},{"playback/multithread",true},{"playback/arrows","seconds"},{"playback/ctrlSeconds",10},{"playback/ctrlAltSeconds",60},{"cache/path",QString()},{"decode/video",settings_->value("player/core","3FP")},{"decode/audio",settings_->value("player/core","3FP")},{"player/renderer","VS"},{"player/animeStage",0},{"player/speed",1.0},{"player/volume",100},{"player/muted",false},{"performance/predecode",true},{"performance/cpu",100},{"performance/gpu",100},{"performance/ram",50},{"performance/vram",50},{"performance/frames",8},{"performance/resizeBeforeEnhance",false},{"player/wheel","volume"},{"decode/mode",2},{"decode/output",QString()},{"render/upscale",4},{"render/downscale",4},{"render/antiring",true},{"subtitle/visible",true},{"subtitle/style/font","Comic Sans MS"},{"subtitle/style/size",36},{"subtitle/style/color","#ffffff"},{"subtitle/style/outlineColor","#000000"},{"subtitle/style/shadowColor","#000000"},{"subtitle/style/outline",2},{"subtitle/style/shadow",2},{"subtitle/style/alignment",2},{"subtitle/style/margin",48},{"subtitle/style/left",40},{"subtitle/style/right",40},{"subtitle/style/scaleX",100},{"subtitle/style/scaleY",100},{"subtitle/style/spacing",0}};
     for(auto it=defaults.begin();it!=defaults.end();++it)if(!settings_->contains(it.key()))settings_->setValue(it.key(),it.value());
 #ifdef VSR_LITE_PLAYER
-    settings_->setValue("player/core","3FP");settings_->setValue("decode/video","3FP");settings_->setValue("decode/audio","3FP");
-    settings_->setValue("player/renderer","VS");settings_->setValue("player/interpolationAuto",false);settings_->setValue("color/engine",0);
-    settings_->setValue("player/animeStage",std::clamp(settings_->value("player/animeStage",5).toInt(),4,5));
-    settings_->setValue("player/preset",QDir(PresetStore::directory()).filePath(settings_->value("player/animeStage").toInt()==4?"builtin/Anime-4-Jinc.vpy":"builtin/Anime-5-D3D11.vpy"));
+    if (newConfiguration) {
+        settings_->setValue("player/core","3FP");settings_->setValue("decode/video","3FP");settings_->setValue("decode/audio","3FP");
+        settings_->setValue("player/renderer","VS");settings_->setValue("player/interpolationAuto",false);settings_->setValue("color/engine",0);
+        settings_->setValue("player/animeStage",std::clamp(settings_->value("player/animeStage",5).toInt(),4,5));
+        settings_->setValue("player/preset",QDir(PresetStore::directory()).filePath(settings_->value("player/animeStage").toInt()==4?"builtin/Anime-4-Jinc.vpy":"builtin/Anime-5-D3D11.vpy"));
+    } else {
+        if (settings_->value("player/core").toString() != "3FP") settings_->setValue("player/core","3FP");
+        if (settings_->value("decode/video").toString() != "3FP") settings_->setValue("decode/video","3FP");
+        if (settings_->value("decode/audio").toString() != "3FP") settings_->setValue("decode/audio","3FP");
+        if (settings_->value("player/renderer").toString() != "VS") settings_->setValue("player/renderer","VS");
+        if (settings_->value("color/engine").toInt() != 0) settings_->setValue("color/engine",0);
+        if (settings_->value("player/interpolationAuto").toBool()) settings_->setValue("player/interpolationAuto",false);
+        const int stage=settings_->value("player/animeStage",5).toInt();
+        if (stage < 4 || stage > 5) settings_->setValue("player/animeStage",5);
+    }
+    settings_->sync();
 #endif
     preset_=settings_->value("player/preset").toString();
 #ifdef VSR_LITE_PLAYER
@@ -477,7 +502,12 @@ void PlayerWindow::setError(const QString &message) { message_->setText(message)
 void PlayerWindow::updateState() {
     if(!pendingMediaOpen_.isEmpty() && clock_->snapshot().state!=ThreeFpState::Opening){const auto path=pendingMediaOpen_;pendingMediaOpen_.clear();openFile(path);return;}
     if(discMenu_ && discMenu_->active()){
-        if(handoffDiscProgramme())return;
+        const auto programme=discMenu_->programme();if(handoffDiscProgramme(programme))return;
+        QJsonArray chapters;for(const auto &entry:programme.value("chapters").toArray()){
+            if(entry.isObject())chapters.append(entry);
+            else chapters.append(QJsonObject{{"start100ns",entry},{"title",tr("章节 %1").arg(chapters.size()+1)}});
+        }
+        timeline_->setProperty("chapters",chapters);
         discSurface_->setGeometry(pane_->surface()->rect());const auto state=discMenu_->state();if(state==7){setError(tr("BD 播放失败：%1").arg(discMenu_->error()));playing_=false;play_->setText("▶");}
         if(!timelineDragging_){QSignalBlocker blocker(timeline_);const auto length=discMenu_->duration(),at=discMenu_->position();timeline_->setProperty("duration",length);timeline_->setValue(length>0?int(double(at)/length*100000):0);time_->setText(timeText(at));duration_->setText("/ "+timeText(length));}
         discMenu_->volume(volume_->value(),mute_->isChecked());if(infoVisible_ && ++infoTick_>=50){infoTick_=0;updateInfo();}return;
@@ -536,6 +566,14 @@ void PlayerWindow::updateState() {
     if(!positionTimer_.isValid() || positionTimer_.elapsed()>=5000){positionTimer_.restart();savePosition();}
 }
 bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
+    if(object==discSurface_ && discMenu_ && discMenu_->active() &&
+       (event->type()==QEvent::MouseMove || event->type()==QEvent::MouseButtonRelease)){
+        auto *mouse=static_cast<QMouseEvent *>(event);
+        if(event->type()==QEvent::MouseMove || mouse->button()==Qt::LeftButton){
+            discMenu_->pointer(mouse->position().toPoint(),discSurface_->size(),event->type()==QEvent::MouseButtonRelease);
+            return true;
+        }
+    }
     if(event->type()==QEvent::MouseButtonPress)if(auto *widget=qobject_cast<QWidget *>(object);widget && (widget==controls_ || controls_->isAncestorOf(widget)))chromeIdle_.restart();
     if(event->type()==QEvent::MouseButtonPress && frameEditPending_ && isActiveWindow() && object!=frame_)commitFrameEdit();
     if(event->type()==QEvent::Wheel)if(auto *widget=qobject_cast<QWidget *>(object);widget && (widget==pane_ || pane_->isAncestorOf(widget)) && widget!=info_ && !info_->isAncestorOf(widget) && !imageMode_ && settings_->value("player/wheel","volume").toString()=="volume") {const int delta=static_cast<QWheelEvent *>(event)->angleDelta().y();if(delta)volume_->setValue(std::clamp(volume_->value()+(delta>0?5:-5),0,100));return true;}

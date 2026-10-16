@@ -1,18 +1,21 @@
 #include <QtWidgets>
+#include <QtGui/qscreen_platform.h>
 #include <QAbstractNativeEventFilter>
 #include <QProcess>
 #include <QSettings>
-#include <QImageWriter>
 #include <QImageReader>
 #include <QStandardPaths>
 #include <QPointer>
 #include <QDateTime>
+#include <QSaveFile>
 #include <QAbstractTextDocumentLayout>
 #include <windows.h>
+#include <dwmapi.h>
 #include <functional>
 #include <cmath>
 #include <cstring>
 #include "DesktopCapture.h"
+#include "UiAccess.h"
 
 static QString defaultDirectory()
 {
@@ -109,18 +112,21 @@ class CaptureOverlay final : public QWidget {
     QImage canvas_, display_;
     bool displayDirty_ = true, embedded_ = false, constrainShape_ = false;
     std::function<void()> positionExternalBar_;
-    QRect selection_;
+    QRect selection_, hoveredWindow_, pressedWindow_;
+    QList<QRect> windows_;
     QPoint origin_, last_;
     bool selecting_ = true, dragging_ = false;
     bool movingSelection_ = false;
     int resizeEdges_ = 0;
     QRect startSelection_;
-    enum Tool { Selection, Pen, Rect, Ellipse, Text, Line } tool_ = Selection;
+    enum Tool { Selection, Pen, Rect, Ellipse, Text, Line, Pan } tool_ = Selection;
     QColor color_ = Qt::red;
     int lineMode_ = 0;
     int penWidth_ = 3;
+    bool filled_ = false;
     QComboBox *options_ = nullptr;
     QSpinBox *penWidthInput_ = nullptr;
+    QToolButton *strokeButton_ = nullptr, *fillButton_ = nullptr;
     QFontComboBox *fontFamily_ = nullptr;
     QSpinBox *fontSize_ = nullptr;
     QToolButton *bold_ = nullptr, *italic_ = nullptr;
@@ -146,7 +152,29 @@ public:
         setMouseTracking(true);
         setCursor(Qt::CrossCursor);
         if(embedded_){resize(canvas_.size());selecting_=false;selection_=rect();tool_=Pen;}
-        else setGeometry(screen->geometry());
+        else {
+            setGeometry(screen->geometry());
+            MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);
+            if(const auto *native=screen->nativeInterface<QNativeInterface::QWindowsScreen>())GetMonitorInfoW(native->handle(),&monitor);
+            struct Scan { CaptureOverlay *self; QScreen *screen; RECT monitor; } scan{this,screen,monitor.rcMonitor};
+            EnumWindows([](HWND hwnd,LPARAM param)->BOOL {
+                auto *data=reinterpret_cast<Scan*>(param);
+                if(!IsWindowVisible(hwnd) || IsIconic(hwnd))return TRUE;
+                BOOL cloaked=FALSE;
+                if(SUCCEEDED(DwmGetWindowAttribute(hwnd,DWMWA_CLOAKED,&cloaked,sizeof(cloaked))) && cloaked)return TRUE;
+                RECT native{};
+                if(FAILED(DwmGetWindowAttribute(hwnd,DWMWA_EXTENDED_FRAME_BOUNDS,&native,sizeof(native))))
+                    if(!GetWindowRect(hwnd,&native))return TRUE;
+                const double dpr=data->screen->devicePixelRatio();
+                QRect window(qRound((native.left-data->monitor.left)/dpr),qRound((native.top-data->monitor.top)/dpr),
+                             qRound((native.right-native.left)/dpr),qRound((native.bottom-native.top)/dpr));
+                window=window.intersected(data->self->rect());
+                if(window.width()>24 && window.height()>24 && window!=data->self->rect())data->self->windows_.append(window);
+                return TRUE;
+            },reinterpret_cast<LPARAM>(&scan));
+            const auto pos=QCursor::pos()-geometry().topLeft();
+            for(const auto &window:windows_)if(window.contains(pos)){hoveredWindow_=window;break;}
+        }
         bar_ = new QWidget(this);bar_->setObjectName("capToolBar");bar_->setCursor(Qt::ArrowCursor);
         qApp->installEventFilter(this);
         auto *layout = new QHBoxLayout(bar_);
@@ -184,12 +212,21 @@ public:
             button->setCheckable(true);button->setChecked(value==tool_);tools_->addButton(button,value);
         };
         if(!embedded_)tool(QStringLiteral("选区"),Selection);
-        tool(QStringLiteral("画笔"),Pen);tool(QStringLiteral("矩形"),Rect);
+        if(embedded_)tool(QStringLiteral("拖动"),Pan);
+        tool(QStringLiteral("画笔"),Pen);
+        strokeButton_=new QToolButton(bar_);strokeButton_->setObjectName("capShapeWidth");strokeButton_->setText(QStringLiteral("●"));strokeButton_->setToolTip(QStringLiteral("滚轮调节矩形/圆形线条粗细"));strokeButton_->installEventFilter(this);layout->addWidget(strokeButton_);
+        fillButton_=new QToolButton(bar_);fillButton_->setObjectName("capShapeFill");fillButton_->setText(QStringLiteral("■"));fillButton_->setToolTip(QStringLiteral("纯色填充"));fillButton_->setCheckable(true);layout->addWidget(fillButton_);
+        connect(fillButton_,&QToolButton::toggled,this,[this](bool enabled){filled_=enabled;});
+        tool(QStringLiteral("矩形"),Rect);
         tool(QStringLiteral("圆形"),Ellipse);tool(QStringLiteral("线"),Line);tool(QStringLiteral("文字"),Text);
         tools_->button(Rect)->setToolTip(QStringLiteral("按住 Ctrl 画正方形"));tools_->button(Ellipse)->setToolTip(QStringLiteral("按住 Ctrl 画圆形"));
         connect(options_,&QComboBox::currentIndexChanged,this,[this](int index){if(tool_==Line)lineMode_=index;else penWidth_=options_->currentData().toInt();});
         undoButton_=add(QStringLiteral("撤销"),[this]{undo();});undoButton_->setEnabled(false);
         if(!embedded_){auto *undoShortcut=new QShortcut(QKeySequence::Undo,this);connect(undoShortcut,&QShortcut::activated,this,[this]{undo();});}
+        add(QStringLiteral("保存"), [this] {
+            QSettings preferences(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);
+            deliver(false,preferences.value("save/format","png").toString()=="avif");
+        })->setToolTip(QStringLiteral("使用设置中的默认格式保存"));
         add(QStringLiteral("PNG"), [this] {deliver(false,false);});
         add(QStringLiteral("AVIF"), [this] {deliver(false,true);});
         add(QStringLiteral("贴图"), [this] {deliver(true,false);});
@@ -205,6 +242,7 @@ public:
     }
     void exportImage(bool pin,bool avif,bool copy=false){deliver(pin,avif,copy);}
     void undoEdit(){undo();}
+    bool isPanTool() const { return tool_==Pan; }
 private:
     TextState textState(CaptureTextBox *box) const {return {box->editor->toPlainText(),box->editor->font(),box->ink,box->pos()};}
     void selectText(CaptureTextBox *box) {
@@ -236,12 +274,13 @@ private:
     }
     void updateColor(){colorButton_->setStyleSheet(QString("border-bottom:3px solid %1;").arg(color_.name()));}
     void updateOptions(){
-        for(auto *box:texts_)box->setAttribute(Qt::WA_TransparentForMouseEvents,tool_==Selection);
+        for(auto *box:texts_)box->setAttribute(Qt::WA_TransparentForMouseEvents,tool_==Selection || tool_==Pan);
         const QSignalBlocker block(options_);options_->clear();
         if(tool_==Line){options_->addItems({QStringLiteral("直线"),QStringLiteral("箭头"),QStringLiteral("虚线")});options_->setCurrentIndex(lineMode_);}
         else{for(int width:{2,3,5,8})options_->addItem(QStringLiteral("%1 px").arg(width),width);if(options_->findData(penWidth_)<0)options_->addItem(QStringLiteral("%1 px").arg(penWidth_),penWidth_);options_->setCurrentIndex(options_->findData(penWidth_));}
         const QSignalBlocker width(penWidthInput_);penWidthInput_->setValue(penWidth_);
-        options_->setVisible(tool_!=Selection && tool_!=Text && tool_!=Pen);penWidthInput_->setVisible(tool_==Pen || tool_==Line);fontOptions_->setVisible(tool_==Text);positionBar();
+        options_->setVisible(tool_!=Selection && tool_!=Text && tool_!=Pen && tool_!=Pan);penWidthInput_->setVisible(tool_==Pen || tool_==Line);fontOptions_->setVisible(tool_==Text);
+        strokeButton_->setVisible(tool_==Rect || tool_==Ellipse);fillButton_->setVisible(tool_==Rect || tool_==Ellipse);positionBar();
     }
     void remember(const QRect &area){
         const auto pixels=pixelRect(area).intersected(canvas_.rect());if(pixels.isEmpty())return;
@@ -302,6 +341,10 @@ private:
 protected:
     bool eventFilter(QObject *object,QEvent *event) override {
         auto *widget=qobject_cast<QWidget*>(object);
+        if(object==strokeButton_ && event->type()==QEvent::Wheel){
+            const auto steps=static_cast<QWheelEvent*>(event)->angleDelta().y()/120;
+            penWidth_=qBound(1,penWidth_+steps,512);penWidthInput_->setValue(penWidth_);updateOptions();event->accept();return true;
+        }
         if(event->type()==QEvent::MouseButtonPress && widget && (widget==this || isAncestorOf(widget) || widget==bar_ || bar_->isAncestorOf(widget))){
             const auto boxes=texts_;
             for(auto *box:boxes)if(box->editor->toPlainText().isEmpty() && widget!=box && !box->isAncestorOf(widget)){
@@ -326,6 +369,7 @@ protected:
     void annotationPainter(QPainter &p) {
         p.scale(double(canvas_.width())/width(),double(canvas_.height())/height());
         p.setPen(QPen(annotationInk(color_),penWidth_,tool_==Line && lineMode_==2?Qt::DashLine:Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+        p.setBrush(filled_ && (tool_==Rect || tool_==Ellipse)?QBrush(annotationInk(color_)):Qt::NoBrush);
     }
     int selectionEdges(const QPoint &point) const {
         if(embedded_ || selecting_ || selection_.isEmpty() || !selection_.adjusted(-6,-6,6,6).contains(point))return 0;
@@ -354,6 +398,10 @@ protected:
         if(displayDirty_){display_=cap::preview(canvas_);displayDirty_=false;}
         p.drawImage(rect(), display_);
         if(!embedded_)p.fillRect(rect(), QColor(0,0,0,105));
+        if(!embedded_ && selecting_ && !dragging_ && !hoveredWindow_.isEmpty()){
+            p.drawImage(hoveredWindow_,display_,pixelRect(hoveredWindow_));
+            p.setPen(QPen(QColor(110,190,255),2));p.setBrush(Qt::NoBrush);p.drawRect(hoveredWindow_.adjusted(1,1,-1,-1));
+        }
         if (!embedded_ && !selection_.isEmpty()) {
             p.drawImage(selection_, display_, pixelRect(selection_));
             p.setPen(QPen(Qt::white,1,Qt::DashLine));
@@ -366,6 +414,7 @@ protected:
         for(auto *box:texts_)p.drawRect(box->geometry().adjusted(2,2,-3,-3));
         if (dragging_ && !selecting_ && !resizeEdges_ && !movingSelection_ && (tool_==Rect || tool_==Ellipse || tool_==Line)) {
             p.setPen(QPen(color_,penWidth_,tool_==Line && lineMode_==2?Qt::DashLine:Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+            p.setBrush(filled_ && (tool_==Rect || tool_==Ellipse)?QBrush(color_):Qt::NoBrush);
             const QRect drawRect=shapeRect();
             if(tool_==Rect)p.drawRect(drawRect);else if(tool_==Ellipse)p.drawEllipse(drawRect);else drawLine(p,origin_,last_);
         }
@@ -373,7 +422,7 @@ protected:
     void mousePressEvent(QMouseEvent *e) override {
         if(e->button()==Qt::RightButton){if(!embedded_)close();return;}
         if(e->button()!=Qt::LeftButton) return;
-        origin_=last_=e->pos();constrainShape_=e->modifiers().testFlag(Qt::ControlModifier);
+        origin_=last_=e->pos();pressedWindow_=hoveredWindow_;constrainShape_=e->modifiers().testFlag(Qt::ControlModifier);
         resizeEdges_=selectionEdges(e->pos());movingSelection_=!selecting_ && tool_==Selection && selection_.contains(e->pos()) && !resizeEdges_;
         if(resizeEdges_ || movingSelection_){startSelection_=selection_;dragging_=true;return;}
         if(!selecting_ && tool_==Selection)return;
@@ -388,6 +437,7 @@ protected:
     }
     void mouseMoveEvent(QMouseEvent *e) override {
         if(!dragging_){
+            if(selecting_ && !embedded_){hoveredWindow_={};for(const auto &window:windows_)if(window.contains(e->pos())){hoveredWindow_=window;break;}update();}
             const int edges=selectionEdges(e->pos());
             setCursor((edges==5 || edges==10)?Qt::SizeFDiagCursor:(edges==6 || edges==9)?Qt::SizeBDiagCursor:(edges&3)?Qt::SizeHorCursor:(edges&12)?Qt::SizeVerCursor:(!selecting_ && tool_==Selection && selection_.contains(e->pos()))?Qt::SizeAllCursor:Qt::CrossCursor);
             return;
@@ -407,7 +457,9 @@ protected:
         if(resizeEdges_ || movingSelection_){adjustSelection(last_);resizeEdges_=0;movingSelection_=false;return;}
         if(selecting_){
             selection_=QRect(origin_,last_).normalized().intersected(rect());
-            if(selection_.width()<4 || selection_.height()<4){selection_={};update();return;}
+            if(selection_.width()<4 || selection_.height()<4){
+                selection_=pressedWindow_;if(selection_.isEmpty()){update();return;}
+            }
             selecting_=false; positionBar();bar_->show();bar_->raise();
         }else if(tool_==Rect || tool_==Ellipse || tool_==Line){
             const int margin=qMax(40,penWidth_*5+2);remember(shapeRect().adjusted(-margin,-margin,margin,margin).intersected(rect()));
@@ -470,7 +522,7 @@ public:
         view_=new PinView(this);view_->setObjectName("capPinView");auto *scene=new QGraphicsScene(view_);view_->setScene(scene);
         scene->addWidget(canvas_);scene->setSceneRect(canvas_->rect());
         bar_=canvas_->takeToolBar(this,[this]{positionBar();});
-        view_->editing=[this]{return bar_->isVisible();};view_->zoom=[this](int delta){if(delta)setZoom(zoom_*std::pow(1.2,delta/120.0));};
+        view_->editing=[this]{return bar_->isVisible() && !canvas_->isPanTool();};view_->zoom=[this](int delta){if(delta)setZoom(zoom_*std::pow(1.2,delta/120.0));};
         view_->menu=[this](const QPoint &point){menu_->exec(point);};
         menu_=new QMenu(this);menu_->setObjectName("capPinMenu");
         menu_->addAction(QStringLiteral("显示工具栏"),this,[this]{if(bar_->isVisible())bar_->hide();else showToolBar();});
@@ -507,12 +559,6 @@ protected:
     void contextMenuEvent(QContextMenuEvent *event) override {menu_->exec(event->globalPos());}
 };
 
-static QStringList avifArguments(const QImage &image,const QString &input,const QString &output) {
-    QStringList args{"-hide_banner","-y","-i",input,"-frames:v","1"};
-    if(image.text("capHdr")=="scRGB-FP16")args<<"-vf"<<"scale=in_color_matrix=bt2020:out_color_matrix=bt2020:in_range=full:out_range=full,setparams=range=full:color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc"<<"-color_primaries"<<"bt2020"<<"-color_trc"<<"smpte2084"<<"-colorspace"<<"bt2020nc"<<"-color_range"<<"pc";
-    if(image.text("capHdr")=="scRGB-FP16")args<<"-bsf:v"<<"av1_metadata=color_primaries=9:transfer_characteristics=16:matrix_coefficients=9:color_range=1";
-    args<<"-c:v"<<"libaom-av1"<<"-crf"<<"18"<<"-b:v"<<"0"<<"-pix_fmt"<<"yuv444p10le"<<output;return args;
-}
 
 class CapApp final : public QObject, public QAbstractNativeEventFilter {
     friend class TestCapWorkflow;
@@ -532,7 +578,7 @@ public:
         menu->addAction(QStringLiteral("退出"),qApp,&QApplication::quit);
         tray_.setContextMenu(menu);
         connect(&tray_,&QSystemTrayIcon::activated,this,[this](QSystemTrayIcon::ActivationReason why) {
-            if(why==QSystemTrayIcon::DoubleClick)capture();
+            if(why==QSystemTrayIcon::Trigger)capture();
         });
         tray_.show();
         QApplication::instance()->installNativeEventFilter(this);
@@ -552,6 +598,15 @@ public:
         return false;
     }
 private:
+    void applyTopPriority(QWidget *widget) {
+        if(!settings_.value("general/uiAccess",false).toBool())return;
+        if(!cap::hasUiAccess()){
+            tray_.showMessage("VS Cap",QStringLiteral("UIAccess 未启用：重启截图工具并确认 Windows 管理员授权后生效。"),QSystemTrayIcon::Information);
+            return;
+        }
+        SetWindowPos(reinterpret_cast<HWND>(widget->winId()),HWND_TOPMOST,0,0,0,0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
     static bool sequence(const QString &value, UINT &mod, UINT &key) {
         QKeySequence seq=QKeySequence::fromString(value,QKeySequence::PortableText);
         if(seq.isEmpty() || seq.count()!=1)return false;
@@ -582,44 +637,97 @@ private:
         }
         hotA_=1001;hotT_=1002;return true;
     }
+    void addPin(QImage image) {
+        pins_.removeIf([](const QPointer<PinWindow> &pin){return pin.isNull();});
+        auto *pin=new PinWindow(std::move(image),[this](QImage shot,bool paste,bool avif,bool copy){return output(std::move(shot),paste,avif,copy);});
+        const int index=pins_.size();
+        if(index) {
+            const auto area=pin->screen()->availableGeometry();
+            const int shift=index%8*26;
+            pin->move(qBound(area.left(),pin->x()+shift,qMax(area.left(),area.right()-pin->width()+1)),
+                      qBound(area.top(),pin->y()+shift,qMax(area.top(),area.bottom()-pin->height()+1)));
+        }
+        pins_.append(pin);
+        applyTopPriority(pin);
+    }
     QString makePath(const QString &ext,bool automatic=false) {
         const auto dir=settings_.value(automatic?"save/defaultDirectory":"save/lastDirectory",defaultDirectory()).toString();
         return QDir(dir).filePath(QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz")+"."+ext);
     }
+    bool saveCapturePng(const QImage &image,const QString &path) {
+        if(!savePng(image,path))return false;
+        if(image.text("capHdr")!="scRGB-FP16")return true;
+        const auto info=QFileInfo(path);
+        const auto sdrPath=QDir(info.absolutePath()).filePath(info.completeBaseName()+"_SDR.png");
+        return savePng(cap::preview(image),sdrPath);
+    }
     bool saveHdrCapture(const QImage &image) {
         if(image.text("capHdr")!="scRGB-FP16")return true;
         const auto path=makePath("png",true);
-        return QDir().mkpath(QFileInfo(path).absolutePath()) && savePng(image,path);
+        return QDir().mkpath(QFileInfo(path).absolutePath()) && saveCapturePng(image,path);
     }
     void storeDir(const QString &path) {
         settings_.setValue("save/lastDirectory",QFileInfo(path).absolutePath());settings_.sync();
     }
     bool startAvif(const QImage &image, const QString &path) {
-        const QString tmp=QDir(QDir::tempPath()).filePath("vscap-"+QUuid::createUuid().toString(QUuid::WithoutBraces)+".png");
-        QImageWriter writer(tmp,"png");
-        if(!writer.write(cap::pngPixels(image))){tray_.showMessage("VS Cap","PNG 临时文件写入失败");return false;}
-        QString ffmpeg=QCoreApplication::applicationDirPath()+"/ffmpeg.exe";
-        if(!QFile::exists(ffmpeg))ffmpeg="ffmpeg";
-        auto *process=new QProcess(this);
+        const QString work=QDir(QDir::tempPath()).filePath("vscap-"+QUuid::createUuid().toString(QUuid::WithoutBraces));
+        if(!QDir().mkpath(work))return false;
+        const QString input=QDir(work).filePath("input.png"),encoded=QDir(work).filePath("result.avif");
+        if(!savePng(cap::pngPixels(image),input)){
+            QDir(work).removeRecursively();tray_.showMessage("VS Cap",QStringLiteral("AVIF 输入图像写入失败"));return false;
+        }
+        const QString app=QCoreApplication::applicationDirPath();
+        QString encoder=QDir(app).filePath("runtime/awj/AWJ.exe");
+        if(!QFileInfo::exists(encoder))encoder=QDir(app).filePath("AWJ.exe");
+        if(!QFileInfo::exists(encoder)){
+            // Source-tree builds use the same pinned AWJimage 1.1.0 as Player.
+            encoder=QDir(app).filePath("../../.deps/awj/1.1.0/AWJ.exe");
+        }
+        if(!QFileInfo::exists(encoder)){
+            QDir(work).removeRecursively();tray_.showMessage("VS Cap",QStringLiteral("未找到 AWJ.exe（runtime/awj）"));return false;
+        }
+        const bool hdr=image.text("capHdr")=="scRGB-FP16";
+        QStringList args{"-i",input,"-o",work,"--format","avif","--template","result",
+            "--quality",QString::number(settings_.value("avif/quality",70).toInt()),
+            "--avif-encoder","aom","--avif-color-representation","yuv",
+            "--chroma",(image.width()%2 || image.height()%2)?"444":"420",
+            "--bit-depth",hdr?"12":"10","--speed","6",
+            "--alpha","auto","--image-size-limit","none","--keep-metadata","--no-summary","--no-log"};
+        if(hdr)args<< "--color-primaries"<<"9"<<"--transfer-characteristics"<<"16"
+                    <<"--matrix-coefficients"<<"9"<<"--color-range"<<"1";
+        auto *process=new QProcess(this);process->setWorkingDirectory(work);
         process->setProcessChannelMode(QProcess::MergedChannels);
-        connect(process,&QProcess::errorOccurred,this,[this,process,tmp](QProcess::ProcessError error){
+        connect(process,&QProcess::errorOccurred,this,[this,process,work](QProcess::ProcessError error){
             if(error!=QProcess::FailedToStart)return;
-            QFile::remove(tmp);tray_.showMessage("VS Cap",QStringLiteral("无法启动 FFmpeg：")+process->errorString());process->deleteLater();
+            QDir(work).removeRecursively();
+            tray_.showMessage("VS Cap",QStringLiteral("无法启动 AWJ：")+process->errorString());
+            process->deleteLater();
         });
         connect(process,QOverload<int,QProcess::ExitStatus>::of(&QProcess::finished),this,
-                [this,process,tmp,path](int code,QProcess::ExitStatus status){
-                    QFile::remove(tmp);
-                    const bool ok=code==0&&status==QProcess::NormalExit&&QFileInfo::exists(path);
-                    tray_.showMessage("VS Cap", ok?QStringLiteral("AVIF 已保存：")+path:
-                        QStringLiteral("AVIF 编码失败：")+process->readAll().right(400));
+                [this,process,work,encoded,path](int code,QProcess::ExitStatus status){
+                    bool ok=code==0 && status==QProcess::NormalExit && QFileInfo::exists(encoded);
+                    if(ok){
+                        QFile source(encoded);QSaveFile destination(path);
+                        ok=source.open(QIODevice::ReadOnly) && destination.open(QIODevice::WriteOnly);
+                        while(ok && !source.atEnd()){
+                            const auto bytes=source.read(4*1024*1024);
+                            ok=!bytes.isEmpty() && destination.write(bytes)==bytes.size();
+                        }
+                        if(ok)ok=destination.commit();
+                        else destination.cancelWriting();
+                    }
+                    const auto message=QString::fromUtf8(process->readAll().right(400));
+                    QDir(work).removeRecursively();
+                    tray_.showMessage("VS Cap",ok?QStringLiteral("AWJ AVIF 已保存：")+path:
+                        QStringLiteral("AWJ AVIF 编码失败：")+message,QSystemTrayIcon::Information);
                     process->deleteLater();
                 });
-        process->start(ffmpeg,avifArguments(image,tmp,path));
+        process->start(encoder,args);
         return true;
     }
     bool output(QImage image, bool pin, bool avif, bool copy) {
         if(image.isNull())return false;
-        if(pin) {auto *p=new PinWindow(image,[this](QImage shot,bool pin,bool avif,bool copy){return output(std::move(shot),pin,avif,copy);});pins_.append(p);return true;}
+        if(pin) {addPin(std::move(image));return true;}
         if(copy)return true;
         const auto ext=avif?"avif":"png";
         const auto path=QFileDialog::getSaveFileName(nullptr,QStringLiteral("保存截图"),makePath(ext),
@@ -627,7 +735,7 @@ private:
         if(path.isEmpty())return false;
         storeDir(path);
         if(avif)return startAvif(image,path);
-        if(savePng(image,path))return true;
+        if(saveCapturePng(image,path))return true;
         tray_.showMessage("VS Cap",QStringLiteral("PNG 写入失败"),QSystemTrayIcon::Warning);return false;
     }
     void capture() {
@@ -638,9 +746,10 @@ private:
         const QImage shot=cap::captureScreen(screen,&error);
         if(shot.isNull()){tray_.showMessage("VS Cap",error,QSystemTrayIcon::Warning);return;}
         if(!saveHdrCapture(shot))tray_.showMessage("VS Cap",QStringLiteral("HDR 截图自动保存失败，请检查默认保存路径"),QSystemTrayIcon::Warning);
-        new CaptureOverlay(screen,shot,[this](QImage shot,bool pin,bool avif,bool copy){
+        auto *overlay=new CaptureOverlay(screen,shot,[this](QImage shot,bool pin,bool avif,bool copy){
             return output(std::move(shot),pin,avif,copy);
         });
+        applyTopPriority(overlay);
     }
     void pastePin() {
         QImage pic=QApplication::clipboard()->image();
@@ -653,12 +762,16 @@ private:
                 pic.setColorSpace(QColorSpace::SRgbLinear);pic.setText("capHdr","scRGB-FP16");
             }
         }
-        if(pic.isNull())for(const auto &url:QApplication::clipboard()->mimeData()->urls()){
+        const bool hadImage=!pic.isNull();
+        if(hadImage)addPin(std::move(pic));
+        int added=0;
+        for(const auto &url:QApplication::clipboard()->mimeData()->urls()){
             if(!url.isLocalFile())continue;
-            QImageReader reader(url.toLocalFile());reader.setAutoTransform(true);pic=reader.read();if(!pic.isNull())break;
+            QImageReader reader(url.toLocalFile());reader.setAutoTransform(true);
+            const auto next=reader.read();if(next.isNull())continue;
+            addPin(next);++added;
         }
-        if(pic.isNull()){tray_.showMessage("VS Cap",QStringLiteral("剪贴板中没有可读取的图片或图片文件"));return;}
-        auto *p=new PinWindow(std::move(pic),[this](QImage shot,bool pin,bool avif,bool copy){return output(std::move(shot),pin,avif,copy);});pins_.append(p);
+        if(!hadImage && !added)tray_.showMessage("VS Cap",QStringLiteral("剪贴板中没有可读取的图片或图片文件"));
     }
     void configure() {
         QDialog dialog;
@@ -668,6 +781,11 @@ private:
         QKeySequenceEdit pin(QKeySequence(settings_.value("hotkeys/pin","Alt+T").toString()));
         QCheckBox autostart(QStringLiteral("开机自启"));
         QCheckBox trayMode(QStringLiteral("启动时最小化到托盘"));
+        QCheckBox uiAccess(QStringLiteral("UIAccess 高优先级置顶（重启后生效，需要管理员授权）"));
+        uiAccess.setObjectName("capUiAccess");uiAccess.setChecked(settings_.value("general/uiAccess",false).toBool());
+        QComboBox format;format.setObjectName("capDefaultFormat");format.addItem("PNG","png");format.addItem("AVIF · AWJ","avif");
+        format.setCurrentIndex(qMax(0,format.findData(settings_.value("save/format","png").toString())));
+        QSpinBox quality;quality.setObjectName("capAvifQuality");quality.setRange(1,100);quality.setValue(settings_.value("avif/quality",70).toInt());quality.setSuffix(QStringLiteral("（推荐 70）"));
         QWidget saveLocation;QHBoxLayout saveLayout(&saveLocation);saveLayout.setContentsMargins(0,0,0,0);
         QLineEdit saveDirectory(settings_.value("save/defaultDirectory",defaultDirectory()).toString());saveDirectory.setObjectName("capDefaultSaveDirectory");
         QPushButton browse(QStringLiteral("浏览…"));saveLayout.addWidget(&saveDirectory);saveLayout.addWidget(&browse);
@@ -677,8 +795,11 @@ private:
         layout.addRow(QStringLiteral("截图快捷键"),&screenshot);
         layout.addRow(QStringLiteral("贴图快捷键"),&pin);
         layout.addRow(QStringLiteral("截图默认保存路径"),&saveLocation);
+        layout.addRow(QStringLiteral("默认保存格式"),&format);
+        layout.addRow(QStringLiteral("AWJ AVIF 质量"),&quality);
+        layout.addRow(&uiAccess);
         layout.addRow(&autostart);layout.addRow(&trayMode);
-        QLabel note(QStringLiteral("HDR 原始截图自动保存到默认路径。打勾只复制到剪贴板；手动保存 PNG/AVIF 每次选择路径，并记住上次目录。"));
+        QLabel note(QStringLiteral("PNG 总是 16bit×4 通道；HDR PNG 同时生成 SDR 预览。AWJ 使用 AOM、默认质量 70。UIAccess 默认关闭，启用后下次启动会请求 Windows 管理员授权，无需驱动或安装证书。"));
         note.setWordWrap(true);layout.addRow(&note);
         QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
         layout.addRow(&buttons);
@@ -698,6 +819,9 @@ private:
         settings_.setValue("save/defaultDirectory",saveDirectory.text().trimmed().isEmpty()?defaultDirectory():QDir::cleanPath(saveDirectory.text().trimmed()));
         settings_.setValue("general/autostart",autostart.isChecked());
         settings_.setValue("general/minimizeToTray",trayMode.isChecked());
+        settings_.setValue("save/format",format.currentData().toString());
+        settings_.setValue("avif/quality",quality.value());
+        settings_.setValue("general/uiAccess",uiAccess.isChecked());
         settings_.sync();
         QSettings startup("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",QSettings::NativeFormat);
         if(autostart.isChecked())startup.setValue("VS Cap",QDir::toNativeSeparators("\""+QCoreApplication::applicationFilePath()+"\""));
@@ -725,6 +849,14 @@ int main(int argc,char **argv) {
     }
     app.setQuitOnLastWindowClosed(false);
     app.setApplicationName("VS Cap");
+    const int waitArgument=app.arguments().indexOf("--wait-parent");
+    if(waitArgument>=0){const auto parent=OpenProcess(SYNCHRONIZE,FALSE,app.arguments().value(waitArgument+1).toULong());if(parent){WaitForSingleObject(parent,10000);CloseHandle(parent);}}
+    if(const auto running=OpenMutexW(SYNCHRONIZE,FALSE,L"Local\\VSRenderer-VSCap")){CloseHandle(running);return 0;}
+    QSettings preferences(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);
+    if((preferences.value("general/uiAccess",false).toBool() || app.arguments().contains("--uiaccess-launch")) && !cap::hasUiAccess()){
+        QString error;if(cap::restartWithUiAccess(&error))return 0;
+        QMessageBox::warning(nullptr,"VS Cap",QStringLiteral("UIAccess 启动失败，继续使用普通置顶。\n")+error);
+    }
     HANDLE instance=CreateMutexW(nullptr,FALSE,L"Local\\VSRenderer-VSCap");
     if(GetLastError()==ERROR_ALREADY_EXISTS){if(instance)CloseHandle(instance);return 0;}
     CapApp controller;

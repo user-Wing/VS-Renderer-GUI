@@ -9,6 +9,8 @@
 #include <QProcess>
 #include <QFile>
 #include <QColorSpace>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTransform>
 #include <QScopeGuard>
 #include <avif/avif.h>
@@ -151,6 +153,18 @@ void PlayerImage::open(const QString &path) {
             }
         }
         if(generation!=generation_)return;
+        if(suffix=="png" && !image.isNull()) {
+            // A VSCap/VSPlayer companion JSON restores PQ when a PNG decoder
+            // ignores the high-dynamic-range ICC transfer characteristic.
+            QFile sidecar(path+".json");
+            if(sidecar.open(QIODevice::ReadOnly)) {
+                const auto meta=QJsonDocument::fromJson(sidecar.read(16384)).object();
+                const int transfer=meta.value("pngTransfer").toInt();
+                if(transfer==16 || meta.value("pngColorSpace").toString()=="BT.2100-PQ")
+                    image.setColorSpace(QColorSpace::Bt2100Pq);
+                else if(transfer==18)image.setColorSpace(QColorSpace(QColorSpace::Primaries::Bt2020,QColorSpace::TransferFunction::Hlg));
+            }
+        }
         image.setText("decodeMilliseconds",QString::number(elapsed.elapsed()));
         image.setText("decoder",suffix=="avif"?QString("libavif / dav1d"):decoderName.isEmpty()?QString("Qt / FFmpeg"):decoderName);
         QMetaObject::invokeMethod(this,[this,generation,image,error] {

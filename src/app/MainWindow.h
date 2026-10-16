@@ -3,6 +3,7 @@
 #include "backend/ThreeFpApi.h"
 #include "graph/FilterGraph.h"
 #include "graph/VpyScriptBuilder.h"
+#include "player/PlayerResources.h"
 
 #include <QMainWindow>
 
@@ -21,6 +22,8 @@ class QSlider;
 class QTimer;
 class QStackedWidget;
 class QToolButton;
+class QSplitter;
+class QSpinBox;
 
 namespace vsr {
 
@@ -50,6 +53,11 @@ private:
     QWidget *buildSettingsPage();
     QWidget *buildWorkspace();
     QWidget *buildTransport();
+    QWidget *buildTimeGroups();
+    void refreshTimeGroups(int selected);
+    QList<FilterTimeGroup> currentTimeGroups() const;
+    void replaceTimeGroups(const QList<FilterTimeGroup> &groups);
+    void showCommunity();
     void buildToolbar();
     void selectPage(int index);
     void showSettings();
@@ -70,7 +78,7 @@ private:
     void saveProject();
     void openProject();
     void showPresets();
-    void loadPreset(const QString &path);
+    void loadPreset(const QString &path, bool currentGroup = false);
     ScriptBuildResult currentScript(const QString &source = {}) const;
     QString activePreset_;
     void updatePlaybackState();
@@ -89,6 +97,18 @@ private:
     QList<QAction *> vsActions_;
     QList<QToolButton *> navigationButtons_;
     FilterGraph graph_;
+    QList<FilterTimeGroup> timeGroups_{{QStringLiteral("全片"),0,{}}};
+    FilterGraph copiedFilters_;
+    bool hasCopiedFilters_ = false;
+    int timeGroupIndex_ = 0;
+    QListWidget *timeGroupList_ = nullptr;
+    QSpinBox *groupStart_ = nullptr;
+    QLineEdit *groupName_ = nullptr;
+    QSplitter *content_ = nullptr;
+    QWidget *featureOne_ = nullptr, *featureTwo_ = nullptr, *pipelinePanel_ = nullptr, *fileInput_ = nullptr;
+    QList<int> featureWidths_{290,310};
+    PlayerResources resources_;
+    QLabel *sourceMonitor_ = nullptr, *processedMonitor_ = nullptr;
 
     QLineEdit *sourcePath_ = nullptr;
     QComboBox *sourceFilter_ = nullptr;

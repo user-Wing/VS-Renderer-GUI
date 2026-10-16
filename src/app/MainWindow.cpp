@@ -20,6 +20,7 @@
 #include "ui/CollapsibleSection.h"
 #include "ui/CompareView.h"
 #include "ui/ParameterEditor.h"
+#include "ui/PresetCommunityDialog.h"
 #include "ui/PreviewPane.h"
 
 #include <QAction>
@@ -120,10 +121,10 @@ MainWindow::MainWindow(QWidget *parent)
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
 
-    auto *content = new QSplitter(Qt::Horizontal, root);
+    auto *content = content_ = new QSplitter(Qt::Horizontal, root);
     content->setHandleWidth(1);
-    content->addWidget(buildSidebar());
-    content->addWidget(buildParameterPanel());
+    content->addWidget(featureOne_ = buildSidebar());
+    content->addWidget(featureTwo_ = buildParameterPanel());
     content->addWidget(buildWorkspace());
     content->setSizes({280, 320, 1156});
     content->setStretchFactor(0, 0);
@@ -383,7 +384,12 @@ QWidget *MainWindow::buildSettingsPage()
     auto *apply = new QPushButton(QStringLiteral("应用"), page);
     apply->setObjectName(QStringLiteral("rendererApplySettings"));
     layout->addWidget(apply);
-    connect(apply, &QPushButton::clicked, this, [this, source] {
+    layout->addWidget(new QLabel(QStringLiteral("预设下载源（ModelScope 目录 API 或 JSON 清单）"),page));
+    auto *communitySource=new QLineEdit(page);communitySource->setMinimumWidth(650);communitySource->setObjectName("rendererCommunitySource");
+    communitySource->setText(QSettings().value("community/sourceUrl",PresetCommunityDialog::defaultSource()).toString());layout->addWidget(communitySource);
+    connect(apply, &QPushButton::clicked, this, [this, source,communitySource] {
+        const QUrl url(communitySource->text().trimmed());if(!url.isValid() || (url.scheme()!="http" && url.scheme()!="https")){setStatus(QStringLiteral("预设源必须是有效 HTTP / HTTPS 地址。"),true);return;}
+        QSettings().setValue("community/sourceUrl",url.toString());
         sourceFilter_->setCurrentIndex(source->currentIndex());
         QSettings().setValue(QStringLiteral("sourceFilter"), source->currentIndex());
         setStatus(QStringLiteral("设置已保存，重新生成并验证脚本后生效。"));
@@ -417,7 +423,19 @@ void MainWindow::buildToolbar()
     auto *saveProjectAction = bar->addAction(QStringLiteral("保存项目"));
     auto *presetsAction = bar->addAction(QStringLiteral("预设管理"));
     presetsAction->setObjectName("presetManagement");
-    auto *loadVpyAction = bar->addAction(QStringLiteral("加载 VPY"));
+    auto *communityAction=bar->addAction(QStringLiteral("预设社区"));connect(communityAction,&QAction::triggered,this,&MainWindow::showCommunity);
+    for(int index=0;index<2;++index){
+        auto *toggle=bar->addAction(QStringLiteral("隐藏功能区%1").arg(index+1));toggle->setCheckable(true);toggle->setChecked(true);toggle->setObjectName(QString("rendererToggleArea%1").arg(index+1));
+        connect(toggle,&QAction::triggered,this,[this,toggle,index](bool visible){
+            auto *area=index==0?featureOne_:featureTwo_;auto sizes=content_->sizes();if(!visible)featureWidths_[index]=sizes[index];
+            area->setVisible(visible);sizes[index]=visible?featureWidths_[index]:0;
+            sizes[2]=qMax(200,content_->width()-sizes[0]-sizes[1]);content_->setSizes(sizes);
+            toggle->setText(QStringLiteral("%1功能区%2").arg(visible?QStringLiteral("隐藏"):QStringLiteral("显示")).arg(index+1));
+        });
+    }
+    auto *loadVpyAction = bar->addAction(QStringLiteral("导入所有时间组"));
+    auto *loadGroupAction = bar->addAction(QStringLiteral("导入当前时间组"));
+    connect(loadGroupAction,&QAction::triggered,this,[this]{const auto path=QFileDialog::getOpenFileName(this,QStringLiteral("导入当前时间组"),PresetStore::directory(),"VapourSynth (*.vpy)");if(!path.isEmpty())loadPreset(path,true);});
     connect(presetsAction, &QAction::triggered, this, &MainWindow::showPresets);
     connect(loadVpyAction, &QAction::triggered, this, [this] {
         const auto path = QFileDialog::getOpenFileName(this, QStringLiteral("加载 VPY"), PresetStore::directory(), "VapourSynth (*.vpy)");
@@ -450,14 +468,14 @@ QWidget *MainWindow::buildSidebar()
 {
     auto *sidebar = new QWidget(this);
     sidebar->setMinimumWidth(250);
-    sidebar->setMaximumWidth(360);
+
     sidebar->setObjectName(QStringLiteral("processingSidebar"));
     sidebar->setStyleSheet(QStringLiteral("#processingSidebar{background:#ffffff;border-right:1px solid #d1d1d1;}"));
     auto *layout = new QVBoxLayout(sidebar);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(1);
 
-    auto *input = new QWidget(sidebar);
+    auto *input = fileInput_ = new QWidget(this);
     auto *inputLayout = new QVBoxLayout(input);
     inputLayout->setContentsMargins(8, 8, 8, 8);
     inputLayout->setSpacing(4);
@@ -505,9 +523,10 @@ QWidget *MainWindow::buildSidebar()
     filtersLayout->addWidget(catalogSearch_);
     filtersLayout->addWidget(catalogList_, 3);
     filtersLayout->addWidget(add);
-    filtersLayout->addWidget(new QLabel(QStringLiteral("处理链(自上而下执行)"), filters));
-    filtersLayout->addWidget(pipelineList_, 1);
-    filtersLayout->addLayout(nodeButtons);
+    pipelinePanel_=new QWidget(this);pipelinePanel_->setObjectName("rendererPipelinePanel");
+    auto *chainLayout=new QVBoxLayout(pipelinePanel_);chainLayout->setContentsMargins(8,8,8,8);
+    chainLayout->addWidget(new QLabel(QStringLiteral("当前时间组已导入的滤镜"),pipelinePanel_));
+    pipelineList_->setObjectName("rendererPipeline");chainLayout->addWidget(pipelineList_,1);chainLayout->addLayout(nodeButtons);
 
     connect(catalogSearch_, &QLineEdit::textChanged, this, [this](const QString &text) {
         for (int i = 0; i < catalogList_->count(); ++i)
@@ -545,17 +564,8 @@ QWidget *MainWindow::buildSidebar()
         if (graph_.remove(row)) refreshPipeline(std::min(row, static_cast<int>(graph_.nodes().size()) - 1));
     });
 
-    auto *inputSection = new CollapsibleSection(QStringLiteral("输入与环境"), input, sidebar);
-    auto *filterSection = new CollapsibleSection(QStringLiteral("滤镜库与处理链"), filters, sidebar);
-    layout->addWidget(inputSection);
-    layout->addWidget(filterSection, 1);
-
-    const auto keepOneOpen = [inputSection, filterSection](bool) {
-        if (!inputSection->isExpanded() && !filterSection->isExpanded())
-            filterSection->setExpanded(true);
-    };
-    connect(inputSection, &CollapsibleSection::expandedChanged, sidebar, keepOneOpen);
-    connect(filterSection, &CollapsibleSection::expandedChanged, sidebar, keepOneOpen);
+    auto *split=new QSplitter(Qt::Vertical,sidebar);split->setObjectName("rendererLeftColumn");
+    split->addWidget(filters);split->addWidget(buildTimeGroups());split->setSizes({400,400});layout->addWidget(split,1);
     return sidebar;
 }
 
@@ -568,7 +578,7 @@ QWidget *MainWindow::buildParameterPanel()
     auto *parameterLayout = new QVBoxLayout(parameters);
     parameterLayout->setContentsMargins(0, 0, 0, 0);
     parameterLayout->setSpacing(0);
-    auto *header = new QLabel(QStringLiteral("参数与脚本"), parameters);
+    auto *header = new QLabel(QStringLiteral("高级参数"), parameters);
     header->setFixedHeight(32);
     header->setStyleSheet(QStringLiteral("background:#eaeaea;font-weight:600;padding:0 8px;"));
     parameterLayout->addWidget(header);
@@ -590,7 +600,9 @@ QWidget *MainWindow::buildParameterPanel()
             setStatus(QStringLiteral("参数已更新，VPY 待验证。"));
     });
 
-    return parameters;
+    auto *column=new QSplitter(Qt::Vertical,this);column->setObjectName("rendererRightColumn");
+    column->addWidget(parameters);column->addWidget(pipelinePanel_);column->setSizes({400,400});
+    return column;
 }
 
 QWidget *MainWindow::buildWorkspace()
@@ -630,6 +642,21 @@ QWidget *MainWindow::buildWorkspace()
 
     layout->addWidget(compareBar);
     layout->addWidget(compareView_, 1);
+    auto *monitorRow=new QWidget(workspace);monitorRow->setStyleSheet("background:#17191c;color:#c6d3e1;font-family:Consolas;padding:5px;");
+    auto *monitors=new QHBoxLayout(monitorRow);monitors->setContentsMargins(4,0,4,0);
+    sourceMonitor_=new QLabel(QStringLiteral("源视频 · CPU --  GPU --  内存 --  丢帧 --"),monitorRow);
+    processedMonitor_=new QLabel(QStringLiteral("处理后 · CPU --  GPU --  内存 --  丢帧 --"),monitorRow);
+    sourceMonitor_->setObjectName("rendererSourceMonitor");processedMonitor_->setObjectName("rendererProcessedMonitor");
+    monitors->addWidget(sourceMonitor_,1);monitors->addWidget(processedMonitor_,1);layout->addWidget(monitorRow);
+    auto *monitorTimer=new QTimer(this);monitorTimer->setInterval(1000);
+    connect(monitorTimer,&QTimer::timeout,this,[this]{
+        if(!isVisible() || !sourcePlayer_ || !processedPlayer_)return;
+        const auto usage=resources_.sample();
+        const auto percent=[](double value){return value<0?QString("--"):QString::number(value,'f',1)+"%";};
+        const auto update=[&](QLabel *label,ThreeFpPlayer *player,const QString &name){const auto snap=player->snapshot();const auto total=snap.presentedVideoFrames+snap.droppedVideoFrames;
+            label->setText(QStringLiteral("%1 · CPU %2  GPU %3  内存 %4 MiB\n丢帧 %5 / %6 (%7%)").arg(name,percent(usage.cpu),percent(usage.gpu)).arg(usage.memoryMiB).arg(snap.droppedVideoFrames).arg(total).arg(total?100.0*snap.droppedVideoFrames/total:0,0,'f',2));};
+        update(sourceMonitor_,sourcePlayer_.get(),QStringLiteral("源视频"));update(processedMonitor_,processedPlayer_.get(),QStringLiteral("处理后"));
+    });monitorTimer->start();
     layout->addWidget(buildTransport());
     return workspace;
 }
@@ -638,7 +665,7 @@ QWidget *MainWindow::buildTransport()
 {
     auto *transport = new QWidget(this);
     transport->setObjectName(QStringLiteral("rendererTransport"));
-    transport->setFixedHeight(76);
+    transport->setMinimumHeight(112);
     transport->setStyleSheet(QStringLiteral("background:#f9f9f9;border-top:1px solid #d1d1d1;"));
     auto *layout = new QVBoxLayout(transport);
     layout->setContentsMargins(8, 2, 8, 2);
@@ -692,6 +719,7 @@ QWidget *MainWindow::buildTransport()
     layout->addWidget(timeline_);
     layout->addLayout(timelineRow);
     layout->addLayout(controlRow);
+    layout->addWidget(fileInput_);
 
     connect(mode, &QComboBox::currentIndexChanged, this, [this](int index) {
         compareView_->setMode(index == 1 ? CompareMode::Slider : CompareMode::SideBySide);
@@ -1048,15 +1076,8 @@ void MainWindow::saveProject()
     root.insert(QStringLiteral("schemaVersion"), 1);
     root.insert(QStringLiteral("sourcePath"), sourcePath_->text());
     root.insert(QStringLiteral("sourceFilter"), sourceFilter_->currentData().toInt());
-    QJsonArray nodes;
-    for (const auto &node : graph_.nodes()) {
-        QJsonObject object;
-        object.insert(QStringLiteral("id"), node.definitionId);
-        object.insert(QStringLiteral("enabled"), node.enabled);
-        object.insert(QStringLiteral("parameters"), QJsonObject::fromVariantMap(node.parameters));
-        nodes.append(object);
-    }
-    root.insert(QStringLiteral("nodes"), nodes);
+    const auto data=PresetStore::metadata(currentTimeGroups(),static_cast<SourceFilter>(sourceFilter_->currentData().toInt()),sourcePath_->text(),{});
+    root.insert("nodes",data.value("nodes"));root.insert("timeGroups",data.value("timeGroups"));
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0 || !file.commit()) {
         setStatus(QStringLiteral("项目保存失败：%1").arg(file.errorString()), true);
@@ -1083,19 +1104,8 @@ void MainWindow::openProject()
         return;
     }
     const auto root = document.object();
-    FilterGraph loaded;
-    for (const auto value : root.value(QStringLiteral("nodes")).toArray()) {
-        const auto object = value.toObject();
-        const int row = loaded.add(object.value(QStringLiteral("id")).toString());
-        if (row < 0)
-            continue;
-        loaded.setEnabled(row, object.value(QStringLiteral("enabled")).toBool(true));
-        const auto parameters = object.value(QStringLiteral("parameters")).toObject().toVariantMap();
-        for (auto it = parameters.cbegin(); it != parameters.cend(); ++it)
-            loaded.setParameter(row, it.key(), it.value());
-    }
     activePreset_.clear();
-    graph_ = std::move(loaded);
+    replaceTimeGroups(PresetStore::timeGroups(root));
     sourceFilter_->setCurrentIndex(sourceFilter_->findData(root.value(QStringLiteral("sourceFilter")).toInt()));
     refreshPipeline(graph_.nodes().isEmpty() ? -1 : 0);
     const QString source = root.value(QStringLiteral("sourcePath")).toString();

@@ -12,9 +12,9 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent)
 
 # VS Cap is an independent tray application: no 3FP/VS or media runtime dependency.
-qt_add_executable(VSCap WIN32 src/cap/main.cpp src/cap/DesktopCapture.cpp src/cap/DesktopCapture.h)
+qt_add_executable(VSCap WIN32 src/cap/main.cpp src/cap/DesktopCapture.cpp src/cap/DesktopCapture.h src/cap/UiAccess.cpp src/cap/UiAccess.h)
 set_target_properties(VSCap PROPERTIES OUTPUT_NAME "vs-cap")
-target_link_libraries(VSCap PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets user32 d3d11 dxgi)
+target_link_libraries(VSCap PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets user32 advapi32 shell32 dwmapi d3d11 dxgi)
 target_compile_definitions(VSCap PRIVATE VSR_VERSION="${PROJECT_VERSION}")
 qt_add_library(vsr_bluray STATIC src/bluray/BlurayCatalog.cpp src/bluray/BlurayCatalog.h
     src/bluray/BlurayWidget.cpp src/bluray/BlurayWidget.h)
@@ -65,8 +65,12 @@ qt_add_executable(VSRenderer WIN32
     src/ui/AnalysisPage.h
     src/graph/PresetStore.cpp
     src/ui/PresetDialog.cpp
+    src/ui/PresetCommunityDialog.cpp
+    src/ui/PresetCommunityDialog.h
     src/main.cpp
     src/app/MainWindowPresets.cpp
+    src/app/MainWindowTimeGroups.cpp
+    src/player/PlayerResources.cpp
     src/app/MainWindow.cpp
     src/app/MainWindow.h
     src/app/Style.cpp
@@ -101,7 +105,7 @@ qt_add_executable(VSRenderer WIN32
 )
 
 target_include_directories(VSRenderer PRIVATE src third_party/vapoursynth/include)
-target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network vsr_bluray)
+target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network vsr_bluray pdh psapi dxgi)
 target_compile_definitions(VSRenderer PRIVATE VSR_VERSION="${PROJECT_VERSION}")
 
 if(WIN32)
@@ -215,9 +219,9 @@ if(BUILD_TESTING)
     target_include_directories(vsr_cap_tests PRIVATE src)
     target_link_libraries(vsr_cap_tests PRIVATE Qt6::Widgets Qt6::Test d3d11 dxgi)
     add_test(NAME cap-precision COMMAND vsr_cap_tests)
-    qt_add_executable(vsr_cap_workflow_tests tests/TestCapWorkflow.cpp src/cap/DesktopCapture.cpp)
+    qt_add_executable(vsr_cap_workflow_tests tests/TestCapWorkflow.cpp src/cap/DesktopCapture.cpp src/cap/UiAccess.cpp)
     target_include_directories(vsr_cap_workflow_tests PRIVATE src)
-    target_link_libraries(vsr_cap_workflow_tests PRIVATE Qt6::Widgets Qt6::Test d3d11 dxgi user32)
+    target_link_libraries(vsr_cap_workflow_tests PRIVATE Qt6::Widgets Qt6::Test d3d11 dxgi dwmapi advapi32 shell32 user32)
     add_test(NAME cap-workflow COMMAND vsr_cap_workflow_tests)
     qt_add_executable(vsr_bluray_tests tests/TestBluray.cpp)
     set_target_properties(vsr_bluray_tests PROPERTIES OUTPUT_NAME "vsr-bluray-tests")
@@ -334,7 +338,7 @@ if(BUILD_TESTING)
     list(FILTER analysis_test_sources EXCLUDE REGEX "src/main.cpp|VSRenderer_autogen")
     qt_add_executable(vsr_analysis_tests tests/TestAnalysis.cpp ${analysis_test_sources})
     target_include_directories(vsr_analysis_tests PRIVATE src third_party/vapoursynth/include)
-    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_bluray vsr_components)
+    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_bluray vsr_components pdh psapi dxgi)
     target_compile_definitions(vsr_analysis_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME direct-video-comparison COMMAND vsr_analysis_tests -o analysis-test-results.txt,txt)
 

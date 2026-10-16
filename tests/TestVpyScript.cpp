@@ -10,6 +10,14 @@ using namespace vsr;
 class TestVpyScript final : public QObject {
     Q_OBJECT
 private slots:
+    void timeGroupBoundaries(){
+        FilterGraph first,second;first.add("transpose");second.add("resize");
+        const auto result=VpyScriptBuilder::buildGroups("input.mkv",SourceFilter::Ffms2,{{"Opening",0,first},{"Main",12,second}});
+        QVERIFY(result.errors.isEmpty());QVERIFY(result.script.contains("def _vsr_group_0"));QVERIFY(result.script.contains("def _vsr_group_1"));
+        QVERIFY(result.script.contains("12 * src.fps_num"));QVERIFY(result.script.contains("core.std.Splice"));
+        QVERIFY(!VpyScriptBuilder::buildGroups("x",SourceFilter::Ffms2,{{"a",2,{}}}).errors.isEmpty());
+        QVERIFY(!VpyScriptBuilder::buildGroups("x",SourceFilter::Ffms2,{{"a",0,{}},{"b",0,{}}}).errors.isEmpty());
+    }
     void shaderCategoriesAndHardware() {
         QCOMPARE(FilterCatalog::shaderCategory("NVScaler.glsl"),QString("超分"));
         QCOMPARE(FilterCatalog::shaderCategory("NVSharpen.glsl"),QString("基础锐化"));

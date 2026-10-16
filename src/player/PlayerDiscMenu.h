@@ -3,6 +3,8 @@
 #include <QVector>
 #include <QPair>
 #include <QJsonObject>
+#include <QPoint>
+#include <QSize>
 #include <memory>
 class QWidget;
 namespace vsr {
@@ -17,6 +19,7 @@ public:
     QString error() const;
     int state() const;
     void navigate(unsigned command);
+    void pointer(const QPoint &position,const QSize &surface,bool activate);
     void topMenu();
     void pause(bool paused);
     void seek(qint64 ticks);

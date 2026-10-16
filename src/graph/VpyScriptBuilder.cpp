@@ -399,6 +399,42 @@ def _vsr_rife(c, model, factor, gpu, threads, scene, scale):
     return result;
 }
 
+ScriptBuildResult VpyScriptBuilder::buildGroups(const QString &sourcePath, SourceFilter sourceFilter,
+                                               const QList<FilterTimeGroup> &groups) {
+    if(groups.size()==1 && groups.first().startSeconds==0)return build(sourcePath,sourceFilter,groups.first().graph);
+    ScriptBuildResult result=build(sourcePath,sourceFilter,FilterGraph());
+    if(!result.errors.isEmpty())return result;
+    if(groups.isEmpty() || groups.first().startSeconds!=0){result.errors<<QStringLiteral("第一个时间组必须从 0 秒开始。");return result;}
+    result.script.remove("src.set_output(1)\n");result.script.remove("clip.set_output(0)\n");
+    result.script+="\n_vsr_parts = []\n";
+    for(int i=0;i<groups.size();++i){
+        if(groups[i].startSeconds<0 || (i && groups[i].startSeconds<=groups[i-1].startSeconds)){
+            result.errors<<QStringLiteral("时间组起点必须按秒递增，不能重叠。");return result;
+        }
+        auto part=build(sourcePath,sourceFilter,groups[i].graph);result.errors+=part.errors;
+        for(const auto &ns:part.requiredNamespaces)if(!result.requiredNamespaces.contains(ns))result.requiredNamespaces<<ns;
+        auto lines=part.script.split('\n');
+        result.script+=QString("\ndef _vsr_group_%1(_vsr_segment):\n").arg(i);
+        for(auto line:lines){
+            if(line.startsWith("src = "))line="src = _vsr_segment";
+            if(line=="src.set_output(1)")continue;
+            if(line=="clip.set_output(0)")line="return clip";
+            result.script+="    "+line+'\n';
+        }
+        const auto begin=QString("(%1 * src.fps_num + src.fps_den - 1) // src.fps_den").arg(groups[i].startSeconds);
+        const auto end=i+1<groups.size()?QString("min(src.num_frames, (%1 * src.fps_num + src.fps_den - 1) // src.fps_den)").arg(groups[i+1].startSeconds):QString("src.num_frames");
+        result.script+=QString("_vsr_begin, _vsr_end = %1, %2\nif _vsr_begin < _vsr_end:\n    _vsr_parts.append(_vsr_group_%3(src[_vsr_begin:_vsr_end]))\n").arg(begin,end).arg(i);
+    }
+    result.script+=QStringLiteral(
+        "if not _vsr_parts:\n    raise ValueError('No frames in time groups')\n"
+        "_vsr_first = _vsr_parts[0]\n"
+        "for _vsr_part in _vsr_parts[1:]:\n"
+        "    if (_vsr_part.width, _vsr_part.height, _vsr_part.format, _vsr_part.fps) != (_vsr_first.width, _vsr_first.height, _vsr_first.format, _vsr_first.fps):\n"
+        "        raise ValueError('Time groups must produce the same resolution, pixel format and FPS')\n"
+        "clip = core.std.Splice(_vsr_parts, mismatch=False)\nsrc.set_output(1)\nclip.set_output(0)\n");
+    return result;
+}
+
 QString VpyScriptBuilder::upgradeSharpen(const QString &script,const FilterGraph &graph) {
     QString result=script;
     for(const auto &node:graph.nodes()) if(node.enabled && (node.definitionId=="sharpen_edges" || node.definitionId=="crispen_edges" || node.definitionId=="enhance_detail")) {

@@ -26,14 +26,25 @@ private slots:
         QFile file(path+".scrgb-f32");QVERIFY(file.open(QIODevice::ReadOnly));
         QCOMPARE(file.readAll(),QByteArray(reinterpret_cast<const char*>(values),sizeof(values)));
         QVERIFY(QFile::exists(path+".json"));
-        const auto preview=cap::preview(raw);QCOMPARE(preview.depth(),32);
+        const auto preview=cap::preview(raw);QCOMPARE(preview.depth(),64);
     }
     void sdrCompatiblePng() {
         QTemporaryDir dir;QImage raw(8,8,QImage::Format_RGBA8888);raw.fill(QColor(23,47,91));
         raw.setText("capHdr","SDR");const auto path=dir.filePath("sdr.png");
         QVERIFY(cap::savePng(raw,path));const auto image=QImageReader(path).read();
+        QCOMPARE(image.depth(),64);
         QCOMPARE(image.pixelColor(0,0),raw.pixelColor(0,0));
         QVERIFY(!QFile::exists(path+".scrgb-f32"));
+    }
+    void hdrSdrCompanionUsesIntegerPixels() {
+        QTemporaryDir dir;QImage raw(3,2,QImage::Format_RGBA32FPx4);
+        raw.fill(Qt::white);raw.setColorSpace(QColorSpace::SRgbLinear);raw.setText("capHdr","scRGB-FP16");
+        const auto preview=cap::preview(raw);QCOMPARE(preview.depth(),64);QVERIFY(preview.text("capHdr").isEmpty());
+        const auto path=dir.filePath("capture_SDR.png");QVERIFY(cap::savePng(preview,path));
+        const auto saved=QImageReader(path).read();QCOMPARE(saved.depth(),64);
+        QCOMPARE(saved.pixelColor(2,1),preview.pixelColor(2,1));
+        QCOMPARE(saved.colorSpace(),QColorSpace(QColorSpace::SRgb));
+        QVERIFY(!QFile::exists(path+".scrgb-f32"));QVERIFY(!QFile::exists(path+".json"));
     }
     void desktopCapture() {
         if(!qEnvironmentVariableIsSet("VSR_CAP_DEVICE_TEST"))QSKIP("Set VSR_CAP_DEVICE_TEST for a live display capture.");

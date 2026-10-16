@@ -1,6 +1,6 @@
 # VS Renderer / VS Player：项目开发地图
 
-> 本文面向接手开发的维护者与 AI，负责说明架构、模块入口、约束与当前状态，不记录逐日开发流水账。用户指南见 [README](README.md)，版本变更见 [changelog](changelog.md)，专项证据见 [docs](docs/)。核对基线：2026-10-10，工作区版本 1.0.10（不等于正式 Release 已发布）。
+> 本文面向接手开发的维护者与 AI，负责说明架构、模块入口、约束与当前状态，不记录逐日开发流水账。用户指南见 [README](README.md)，版本变更见 [changelog](changelog.md)，专项证据见 [docs](docs/)。核对基线：2026-10-16，工作区版本 1.0.10（不等于正式 Release 已发布）。
 
 ## 1. 发心与边界
 
@@ -24,7 +24,7 @@ cmake --build --preset windows-mingw-release
 ctest --preset windows-mingw-release
 ```
 
-注意：① `FFF.Native.dll` 与 FFmpeg shared major ABI、补丁和运行时文件必须匹配；② 只复制 EXE 不是便携部署，必须随附 Qt、VS/Python 及所选后端；③ 冷启动 shader 编译、索引耗时不能当作稳定播放帧率。当前 native API 18 构建入口见 `tools/build-native-api18.ps1`；不要混用 API 14 历史补丁。
+注意：① `FFF.Native.dll` 与 FFmpeg shared major ABI、补丁和运行时文件必须匹配；② 只复制 EXE 不是便携部署，必须随附 Qt、VS/Python 及所选后端；③ 冷启动 shader 编译、索引耗时不能当作稳定播放帧率。当前 native API20（PR22）构建入口见 `tools/build-native-api20.ps1` 和 [固定依赖说明](docs/native-api20-build.md)；不要混用 API 14 历史补丁。
 
 **本地部署约定**：Full 的固定运行目录为 `dist/VS-GUI-Full`，目录名不含版本号。编译完成后将本轮更新的产物部署到该目录，保留配置与用户数据，同步 `release.json` / `resource-manifest.json`；不能只更新 `build/` 就报告交付完成。版本号用于内部版本记录和最终压缩包名称（例如 `1.0.10.7z`），不重命名本地运行目录。`tools/stage-editions-1.0.9.py` 的 Full 输出使用此固定名称，仍拒绝覆盖非空目录；已有运行目录使用增量部署。
 
@@ -66,7 +66,7 @@ build/         构建产物与临时报告
 dist/          本地运行/打包结果（谨慎处理用户配置）
 ```
 
-**按任务找文件**：滤镜查 `FilterCatalog.cpp` / `FilterGraph` / `VpyScriptBuilder.cpp`；预览与 seek 查 `VapourSynthFrameServer.cpp` / `FrameTimeline.h`；播放控制查 `PlayerWindow.cpp`、`PlayerControls.cpp`、`PlayerSession`；字幕/菜单查 `PlayerSubtitles`、`PlayerMenus.cpp`；图片查 `PlayerImageTools.cpp`、`PlayerImageResample.cpp`；VSCap 当前主要实现于 `src/cap/main.cpp`；原生构建查 `tools/build-native-api18.ps1`；打包查 `tools/package-portable.ps1`。
+**按任务找文件**：滤镜查 `FilterCatalog.cpp` / `FilterGraph` / `VpyScriptBuilder.cpp`；预览与 seek 查 `VapourSynthFrameServer.cpp` / `FrameTimeline.h`；播放控制查 `PlayerWindow.cpp`、`PlayerControls.cpp`、`PlayerSession`；字幕/菜单查 `PlayerSubtitles`、`PlayerMenus.cpp`；图片查 `PlayerImageTools.cpp`、`PlayerImageResample.cpp`；VSCap 当前主要实现于 `src/cap/main.cpp`；原生构建查 `tools/build-native-api20.ps1`；打包查 `tools/package-portable.ps1`。
 
 ## 5. UI 地图
 
@@ -85,7 +85,7 @@ dist/          本地运行/打包结果（谨慎处理用户配置）
 | --- | --- | --- |
 | Qt | 6.8+，本机记录 6.10.2；Widgets/Gui/Network | 编译或 GUI 无法启动 |
 | VapourSynth + Python | VS API4、便携运行时；`tools/build-vapoursynth.ps1` 与 stage 脚本 | VS 链不可用，原生直通可独立运行 |
-| 3FP / FFF.Native | native API 18 补丁链；`tools/build-native-api18.ps1` | 原生播放/呈现不可用；不得混搭旧 ABI |
+| 3FP / FFF.Native | API20 + PR22 补丁；`tools/build-native-api20.ps1` | 原生播放/呈现不可用；不得混搭旧 ABI |
 | FFmpeg | 匹配当前原生模块 shared ABI；CLI 在 `runtime/ffmpeg` | 相应解码、转换或导出功能失效 |
 | VS 插件、GLSL、RIFE | API4 插件；`assets/mpv-shaders`、NCNN 模型和驱动 | 仅相应滤镜/模型不可用，不能以旧 API3 或 PKL 代替 |
 | libVLC、LAV、madVR | Full 的可选后端/BD 菜单；各自运行时 | 对应模式不可用，正常基本播放不应被阻断 |
@@ -117,7 +117,7 @@ Full 与 PlayerLite 的依赖清单不同，实际发布以打包脚本、运行
 ## 9. 更新、测试、构建和发布
 
 1. 明确任务边界 → 修改最小模块 → 构建相关目标 → 跑相关 CTest/工作流 → 有媒体或像素要求时做真实输入验收；记录测试环境与未通过项。
-2. Native API 18 用 `tools/build-native-api18.ps1` 与对应 patch；GUI 用 CMake preset。旧 `tools/build-3fp.ps1` 及历史版本脚本并存，调用前核对版本和补丁。
+2. Native API20 用 `tools/build-native-api20.ps1` 与对应 patch；GUI 用 CMake preset。旧 `tools/build-3fp.ps1` 及历史版本脚本并存，调用前核对版本和补丁。
 3. `tools/stage-portable.ps1` 用于本地部署；`tools/package-portable.ps1` 打包 Full/精简版，1.0.10 PlayerLite 以现行版专项发布脚本/说明核对。必须保留许可、包含正确运行时，排除个人 INI、缓存与日志。
 4. 验证完整解压、启动、依赖/哈希、版本清单后再推送/发布；源码推送、Release Draft、附件上传是**不同步骤**，不能互相视为已完成。
 5. **维护纪律**：架构/目录/关键决策发生变化，当天修改本文件对应节；具体实验和验收归 `docs/`，对外变更归 `changelog.md`，不要再向本文件顶部增加日期流水账。
@@ -126,7 +126,7 @@ Full 与 PlayerLite 的依赖清单不同，实际发布以打包脚本、运行
 
 ## 10. 当前状态与下一步
 
-- **基线**：工作区 1.0.10；Renderer、Player、VSCap、PhotoCraft 接入。Native API 18、HDR→SDR 自动色彩映射与 Full/PlayerLite 边界见 [1.0.10 验收](docs/validation-1.0.10.md) 和 [发布说明](docs/release-1.0.10.md)。
+- **基线**：工作区 1.0.10；Renderer、Player、VSCap、PhotoCraft 接入。Native API20 + PR22、HDR→SDR 自动色彩映射与 Full/PlayerLite 边界见 [1.0.10 验收](docs/validation-1.0.10.md) 和 [发布说明](docs/release-1.0.10.md)。
 - **近期成果**：VSCap 可编辑文字/绘图、原始尺寸贴图与工具栏切换；选区可缩放/移动，标注在整图上保留，最终导出才裁切。复制不落盘，HDR 默认目录与手动保存上次目录分开记录；工作流 14 项通过。PhotoCraft 为独立图片编辑入口；3FP 直通和 VPY 链分别处理播放与增强。各项只按相应文档注明的实测范围认可。
 - **下一步优先**：基于真实素材复测 VSCap/Player HDR 像素与多屏缩放；核对 1.0.10 包与源代码一致性；继续确认大分辨率软解、780M 实时播放及专项未达标项，不将短时间稳定等同全场景通过。
 - **设计限制**：PlayerLite 不等于 Full；VS GPU 滤镜仍可能有 CPU 平面传输；不存在通用零丢帧、完整任意 PSD/HDR/字幕/蓝光场景保证；未实现 NGU 私有算法。发布状态以 GitHub Release 及真实附件为准，不从工作区版本推断。
@@ -136,7 +136,7 @@ Full 与 PlayerLite 的依赖清单不同，实际发布以打包脚本、运行
 | 症状 | 首查 |
 | --- | --- |
 | Qt/CMake 配置失败 | `QT_ROOT`、工具链、`CMakePresets.json`、[依赖指南](docs/dependencies.md) |
-| 原生播放器黑屏或 ABI 错误 | `FFF.Native.dll`、FFmpeg DLL、API 18 补丁、`VSR_3FP_DLL`、[验收](docs/validation-1.0.10.md) |
+| 原生播放器黑屏或 ABI 错误 | `FFF.Native.dll`、FFmpeg DLL、API20 补丁、`VSR_3FP_DLL`、[验收](docs/validation-1.0.10.md) |
 | VS 缺少 namespace、预览失败 | VS API4、`runtime/python`、插件 stage、`VSR_VSSCRIPT_DLL`、[帧桥](docs/realtime-bridge.md) |
 | seek 后画面、声音或帧号不同步 | `PlayerSession`、`FrameTimeline.h`、VS 帧请求代次及 [启动时钟](docs/player-startup-clock-1.0.8.md) |
 | HDR 色偏、截屏不准 | `src/color/`、HDR Readback patch、[色彩说明](docs/color-management-1.0.4.md)、[高精度截图](docs/player-high-precision-screenshots-1.0.7.md) |
@@ -146,3 +146,13 @@ Full 与 PlayerLite 的依赖清单不同，实际发布以打包脚本、运行
 | 安装包缺 DLL 或升级失败 | stage/package 脚本、包根目录、哈希、[便携更新](docs/portable-updates.md) |
 
 历史测试结论只代表当时环境；要更改当前行为，先复现、再修复、最后留可重跑的验收记录。
+
+## 2026-10-16 当前交接
+
+- Renderer 使用四区工作台与 `FilterTimeGroup`，按整秒起点划分全片，各组保存独立 `FilterGraph`；`VpyScriptBuilder::buildGroups` 自动分段/拼接，`PresetStore` schema2保存时间组并兼容旧单链。所有组输出规格须一致。UI入口 `MainWindowTimeGroups.cpp`。
+- `PresetCommunityDialog` 移植3FUI插件的ModelScope目录/校验/三路下载协议，设置键 `community/sourceUrl`。暂用3FUI v6源验证下载及查看，不转成VS滤镜，正式源由维护者提供。
+- 复用 `PlayerResources`，预览下方显示CPU/GPU/内存及两路丢帧。文件入口移到进度条下方；两列功能区可以分别隐藏。
+- API20最终固定上游 `0fe651ddab8a2bb6ddb729f314f9f4c5117fb565`（PR22），完整IAMF/OBR编译。用户要求新PR先不做测试；不要用此前API20测试冒充PR22验收。
+- VSCap多贴图、AWJ质量70、窗口识别、HDR双PNG及UIAccess启动实现纳入；已修复伴随SDR图残留浮点标记。PNG仍标准DEFLATE。UIAccess真实权限、HDR/多DPI需人工验收。
+- BD FirstPlay、菜单鼠标、章节三角、遮罩列表和快速暂停恢复已有修复；长光盘跨段拖动仍有未通过记录。详见 [本轮记录](docs/update-20261016.md)。
+- `tools/deploy-local-runtime.py` 原子更新现存 Full / 目录式 Lite，保留并核对 INI/VPY/ICC/LUT 哈希；清单和备份同步。旧 `*-next.exe` 不作为本轮激活源。不重打包、不改版本/Release。

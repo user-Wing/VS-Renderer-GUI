@@ -1,11 +1,14 @@
 #include "player/PlayerWindow.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/VapourSynthFrameServer.h"
+#include "player/PlayerDiscMenu.h"
 #include <QApplication>
 #include <QComboBox>
 #include <QDialog>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
@@ -17,6 +20,31 @@ class TestPlayer final : public QObject {
     QByteArray previous_;bool existed_=false;
     QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
 private slots:
+    void nativeDiscFirstPlay(){
+        const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");
+        QWidget surface;surface.resize(960,540);surface.show();PlayerDiscMenu menu;
+        QVERIFY2(menu.open(root,reinterpret_cast<void*>(surface.winId())),qPrintable(menu.error()));
+        QTRY_VERIFY2_WITH_TIMEOUT((menu.state(),menu.presentedFrames()>0),qPrintable(menu.error()),20000);
+        qInfo()<<"authored FirstPlay"<<menu.programme()<<menu.position();
+        QTRY_VERIFY2_WITH_TIMEOUT((menu.state(),menu.programme().value("menu").toBool()),qPrintable(QString("state=%1 position=%2 status=%3 error=%4").arg(menu.state()).arg(menu.position()).arg(QString::fromUtf8(QJsonDocument(menu.programme()).toJson(QJsonDocument::Compact))).arg(menu.error())),10000);
+        const auto chapters=menu.programme().value("chapters").toArray();QVERIFY(!chapters.isEmpty());
+        const int soak=qEnvironmentVariableIntValue("VSR_BD_SOAK_SECONDS");
+        for(int second=0;second<soak;++second){QTest::qWait(1000);QCOMPARE(menu.state(),3);QVERIFY2(menu.error().isEmpty(),qPrintable(menu.error()));if(second%30==0)qInfo()<<"menu soak seconds"<<second<<"presents"<<menu.presentedFrames();}
+        menu.pointer(QPoint(575,99),surface.size(),true);
+        QTRY_VERIFY2_WITH_TIMEOUT((menu.state(),!menu.programme().value("menu").toBool()),qPrintable(menu.error()),10000);
+        QTRY_VERIFY_WITH_TIMEOUT(menu.position()>10000000,10000);
+        qint64 previous=-1;for(const auto &chapter:menu.programme().value("chapters").toArray()){
+            const auto start=qint64(chapter.toDouble());QVERIFY(start>=previous && start<=menu.duration());previous=start;
+        }
+    }
+    void nativeMenuRapidResume(){
+        QTemporaryDir directory;const auto file=directory.filePath("sample.mkv");QVERIFY(QFile::copy(":/startup/warmup.mkv",file));
+        QWidget surface;surface.resize(640,360);surface.show();PlayerDiscMenu menu;
+        QVERIFY(menu.open(file,reinterpret_cast<void*>(surface.winId())));QTRY_COMPARE_WITH_TIMEOUT(menu.state(),3,15000);
+        menu.pause(true);menu.pause(false);QTest::qWait(100);QTRY_COMPARE_WITH_TIMEOUT(menu.state(),3,5000);
+        const auto target=menu.duration()/2;QVERIFY(target>0);menu.seek(target);
+        QTRY_VERIFY_WITH_TIMEOUT(menu.position()>=target,5000);QTRY_VERIFY(menu.presentedFrames()>0);
+    }
     void initTestCase(){QCoreApplication::setOrganizationName("VSRendererLiteTests");QCoreApplication::setApplicationName("VSPlayerLiteTests");QFile file(config());existed_=file.exists();if(file.open(QIODevice::ReadOnly))previous_=file.readAll();}
     void init(){QSettings settings(config(),QSettings::IniFormat);settings.clear();settings.setValue("playback/remember",false);settings.setValue("basic/autoplay",true);settings.sync();}
     void allowedModes(){

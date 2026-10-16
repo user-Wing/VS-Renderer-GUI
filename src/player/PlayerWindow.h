@@ -87,7 +87,7 @@ private:
     QHash<QString, QString> blurayLabels_;
     QJsonObject blurayMetadata_;
     QHash<QString,QJsonObject> blurayProgrammes_;
-    bool handoffDiscProgramme();
+    bool handoffDiscProgramme(const QJsonObject &programme);
     void applyBlurayMetadata();
     void chooseLink();
     void updateState();

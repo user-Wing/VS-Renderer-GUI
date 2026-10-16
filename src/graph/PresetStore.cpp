@@ -28,6 +28,21 @@ QJsonObject PresetStore::metadata(const QString &script)
             return QJsonDocument::fromJson(QByteArray::fromBase64(line.mid(13).toLatin1())).object();
     return {};
 }
+QJsonObject PresetStore::metadata(const QList<FilterTimeGroup> &groups,SourceFilter filter,const QString &source,const QString &note) {
+    auto data=metadata(groups.isEmpty()?FilterGraph():groups.first().graph,filter,source,note);
+    QJsonArray entries;for(const auto &group:groups){auto entry=metadata(group.graph,filter,{},{});entry.insert("name",group.name);entry.insert("startSeconds",group.startSeconds);entries<<entry;}
+    data.insert("schema",2);data.insert("timeGroups",entries);return data;
+}
+QString PresetStore::create(const QList<FilterTimeGroup> &groups,SourceFilter filter,const QString &source,const QString &note) {
+    const auto data=QJsonDocument(metadata(groups,filter,source,note)).toJson(QJsonDocument::Compact).toBase64();
+    return "# VSR_PRESET "+QString::fromLatin1(data)+"\n"+VpyScriptBuilder::buildGroups(source.isEmpty()?QString("__VSR_INPUT__"):source,filter,groups).script;
+}
+QList<FilterTimeGroup> PresetStore::timeGroups(const QJsonObject &data) {
+    QList<FilterTimeGroup> groups;
+    for(const auto &entry:data.value("timeGroups").toArray()){const auto item=entry.toObject();groups.append({item.value("name").toString(),qint64(item.value("startSeconds").toDouble()),graph(item)});}
+    if(groups.isEmpty())groups.append({QStringLiteral("全片"),0,graph(data)});
+    return groups;
+}
 FilterGraph PresetStore::graph(const QJsonObject &data)
 {
     FilterGraph graph;

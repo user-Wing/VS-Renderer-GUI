@@ -99,13 +99,19 @@ ThreeFpResult ThreeFpApi::setPresentConfig(void *h, bool e) const { return avail
 ThreeFpResult ThreeFpApi::setPacingConfig(void *h, bool e) const { return available() && setPacingConfig_ ? setPacingConfig_(h, e ? 1u : 0u) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setViewTransform(void *h, float z, float x, float y) const { return available() ? setViewTransform_(h, z, x, y) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setScalingAlgorithms(void *h, ThreeFpScalingAlgorithm u, ThreeFpScalingAlgorithm d) const { return available() ? setScalingAlgorithms_(h, u, d) : ThreeFpResult::NativeFailure; }
-ThreeFpResult ThreeFpApi::snapshot(void *h, ThreeFpSnapshot *s) const { return available() ? snapshot_(h, s) : ThreeFpResult::NativeFailure; }
+ThreeFpResult ThreeFpApi::snapshot(void *h, ThreeFpSnapshot *s) const { if(!available())return ThreeFpResult::NativeFailure;s->version=apiVersion()>=20?20:8;return snapshot_(h,s); }
 ThreeFpResult ThreeFpApi::setColorSettings(void *h, const VsrColorSettings *s) const { return setColorSettings_ ? setColorSettings_(h,s) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::colorStatus(void *h, VsrColorStatus *s) const { return colorStatus_ ? colorStatus_(h,s) : ThreeFpResult::NotSupported; }
-ThreeFpResult ThreeFpApi::readPixel(void *h, ThreeFpPixelProbe *p) const { return available() ? readPixel_(h, p) : ThreeFpResult::NativeFailure; }
+ThreeFpResult ThreeFpApi::readPixel(void *h, ThreeFpPixelProbe *p) const { if(!available())return ThreeFpResult::NativeFailure;p->version=apiVersion()>=20?20:1;return readPixel_(h,p); }
 ThreeFpResult ThreeFpApi::submitExternalVideoFrame(void *h, const ThreeFpExternalVideoFrame *f) const { return available() ? submitExternalVideoFrame_(h, f) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setExternalOutputFormat(void *h, const char *f) const { return setExternalOutputFormat_ ? setExternalOutputFormat_(h,f) : ThreeFpResult::NotSupported; }
-ThreeFpResult ThreeFpApi::setSubtitleLayer(void *h, const TimedTextLayer *layer) const { return setSubtitleLayer_ ? setSubtitleLayer_(h,layer) : ThreeFpResult::NotSupported; }
+ThreeFpResult ThreeFpApi::setSubtitleLayer(void *h, const TimedTextLayer *layer) const {
+    if(!setSubtitleLayer_)return ThreeFpResult::NotSupported;
+    if(apiVersion()<20)return setSubtitleLayer_(h,layer);
+    auto adapted=*layer;adapted.version=20;std::vector<TimedTextCommand> commands;
+    if(layer->count){commands.assign(layer->commands,layer->commands+layer->count);for(auto &command:commands)command.version=20;adapted.commands=commands.data();}
+    return setSubtitleLayer_(h,&adapted);
+}
 QImage ThreeFpApi::captureFloat(void *h, int width, int height) const {
     if(available() && apiVersion()>=18) {
         using CopyFrame=ThreeFpResult(*)(void*,void*,uint32_t,uint32_t*,uint32_t*,uint32_t,uint32_t);
@@ -144,6 +150,7 @@ ThreeFpResult ThreeFpApi::audioLevels(void *h,ThreeFpAudioLevels *levels,bool in
     if(!levels || !h || !available())return ThreeFpResult::InvalidArgument;
     if(apiVersion()>=18 && outputLevels_) {
         struct NativeLevels {uint32_t size=sizeof(NativeLevels),version=2,channels=0,inputChannels=0;float values[8]{},inputs[8]{};} native;
+        if(apiVersion()>=20)native.version=20;
         const auto result=outputLevels_(h,reinterpret_cast<ThreeFpAudioLevels*>(&native));
         levels->channels=input?native.inputChannels:native.channels;
         std::copy_n(input?native.inputs:native.values,8,levels->values);return result;

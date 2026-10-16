@@ -41,8 +41,10 @@ struct PlayerSubtitles::Impl {
     struct Track { void *handle=nullptr; bool bitmap=false,srt=false,hasNext=false,eof=false; SubtitleBitmap frame,next; QImage image,nextImage; qint64 last=-1; }; std::array<Track,2> tracks; QSize emptyCanvas;
     qint64 renderedTime=-1; QSize renderedCanvas,renderedVideo; bool renderedVisible=false; QImage renderedImage;
     std::array<QImage,2> renderedTracks;std::array<QRect,2> renderedAreas;
-    bool initialized=false;
+    bool initialized=false;uint32_t bitmapVersion=1;
     void initialize() { if(initialized)return;initialized=true;library.setLoadHints(QLibrary::PreventUnloadHint); library.load();
+        using ApiVersion=uint32_t(*)();const auto apiVersion=reinterpret_cast<ApiVersion>(library.resolve("FFF3FP_GetApiVersion"));
+        if(apiVersion && apiVersion()>=20)bitmapVersion=20;
         openAss=reinterpret_cast<OpenAss>(library.resolve("FFF3FP_OpenAssSubtitle"));renderAss=reinterpret_cast<RenderAss>(library.resolve("FFF3FP_RenderAssSubtitle"));copyAss=reinterpret_cast<Copy>(library.resolve("FFF3FP_CopyAssSubtitlePixels"));destroyAss=reinterpret_cast<Destroy>(library.resolve("FFF3FP_DestroyAssSubtitle"));
         openBitmap=reinterpret_cast<OpenBitmap>(library.resolve("FFF3FP_OpenBitmapSubtitle"));readBitmap=reinterpret_cast<ReadBitmap>(library.resolve("FFF3FP_ReadBitmapSubtitle"));copyBitmap=reinterpret_cast<Copy>(library.resolve("FFF3FP_CopyBitmapSubtitlePixels"));seekBitmap=reinterpret_cast<SeekBitmap>(library.resolve("FFF3FP_SeekBitmapSubtitle"));destroyBitmap=reinterpret_cast<Destroy>(library.resolve("FFF3FP_DestroyBitmapSubtitle"));
     }
@@ -85,12 +87,12 @@ void PlayerSubtitles::render(qint64 time,const QSize &canvas,const QSize &video,
         std::array<QImage,2> tracks;std::array<QRect,2> areas;
         QRect bounds;
         if(visible) for(int slot=0;slot<2;++slot) { auto &t=impl_->tracks[slot]; if(!t.handle) continue;
-            if(!t.bitmap) { t.frame={}; if(!impl_->renderAss || impl_->renderAss(t.handle,time,fitted.width(),fitted.height(),&t.frame)!=0) continue; if(t.frame.flags&8)impl_->renderedTime=-1; if(!(t.frame.flags&16) || t.image.isNull())t.image=impl_->pixels(t); }
+            if(!t.bitmap) { t.frame={};t.frame.version=impl_->bitmapVersion; if(!impl_->renderAss || impl_->renderAss(t.handle,time,fitted.width(),fitted.height(),&t.frame)!=0) continue; if(t.frame.flags&8)impl_->renderedTime=-1; if(!(t.frame.flags&16) || t.image.isNull())t.image=impl_->pixels(t); }
             else {
                 if(t.last>=0 && (time<t.last || time>t.last+50000000)) { impl_->seekBitmap(t.handle,qMax<qint64>(0,time-300000000)); t.frame={}; t.image={};t.nextImage={};t.hasNext=t.eof=false; }
                 for(int n=0;n<128;++n) {
                     if(!t.hasNext) {
-                        if(t.eof)break;SubtitleBitmap next;
+                        if(t.eof)break;SubtitleBitmap next;next.version=impl_->bitmapVersion;
                         if(impl_->readBitmap(t.handle,&next)!=0)break;
                         if(next.flags&2){t.eof=true;break;}if(next.flags&8)continue;
                         const auto previous=t.frame;t.frame=next;t.nextImage=impl_->pixels(t);t.frame=previous;

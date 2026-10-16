@@ -142,6 +142,9 @@ struct ThreeFpSnapshot {
     std::int32_t iamfSoundSystem;
     std::uint64_t videoUpload100ns;
     std::uint32_t iamfContentChannels;
+    std::uint32_t iamfBinaural;
+    std::uint32_t audioBinaural;
+    std::int64_t audioDelay100ns;
 };
 
 struct ThreeFpPixelProbe {

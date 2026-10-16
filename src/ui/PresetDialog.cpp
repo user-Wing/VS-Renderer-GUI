@@ -23,7 +23,8 @@
 
 namespace vsr {
 PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, std::function<void(const QString &)> load,
-                           std::function<void()> reset, QWidget *parent) : QDialog(parent)
+                           std::function<void()> reset, QWidget *parent,
+                           std::function<void(const QString &)> loadCurrentGroup) : QDialog(parent)
 {
     setWindowTitle(QStringLiteral("预设管理 · VPY")); resize(980, 640);
     auto *layout = new QVBoxLayout(this);
@@ -98,7 +99,8 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
         const auto text = saveCurrent(note->text()); if (text.isEmpty()) { error(QStringLiteral("无法读取当前脚本。")); return; }
         QString message; if (!PresetStore::write(path, text, &message)) error(message); else { refresh(); selectPath(path); }
     });
-    button(QStringLiteral("读取"), [=] { if (!selected().isEmpty()) load(selected()); });
+    button(loadCurrentGroup?QStringLiteral("导入所有时间组"):QStringLiteral("读取"), [=] { if (!selected().isEmpty()) load(selected()); });
+    if(loadCurrentGroup)button(QStringLiteral("导入当前时间组"),[=]{if(!selected().isEmpty())loadCurrentGroup(selected());});
     connect(list, &QListWidget::itemDoubleClicked, this, [=] { load(selected()); });
     button(QStringLiteral("导入"), [=] {
         const auto files = QFileDialog::getOpenFileNames(this, QStringLiteral("导入 VPY"), {}, "VapourSynth (*.vpy)");

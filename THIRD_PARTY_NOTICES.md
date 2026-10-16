@@ -67,3 +67,9 @@ Hyllian, Copyright (c) 2015. MIT License. Adapted from the pass-0 diagonal kerne
 - 完整许可证见随包 `IMAGE-LICENSE.txt`（源文件 `assets/image-runtime-LICENSE.txt`）。libavif 的内置 libyuv 通用转换代码许可也包含于其中。
 
 - 图片 JPEG 直解路径静态链接 libjpeg-turbo 3.2.0（官方源码 SHA256 `980dd81f425082aa6d7c9e47fef27554ce7a9ffc8e2f6e863b97d263c5c50858`，使用当前 MinGW 和 NASM 2.16.03 编译）；BSD/IJG/zlib 许可全文随 `image-runtime-LICENSE.txt` 分发。使用精确 IDCT 和正常色度上采样，不启用 FASTDCT/FASTUPSAMPLE。
+
+## API20 静态音频组件
+
+FFF.Native 的 IAMF / OBR 构建静态链接 libiamf、OAR/OBR、Abseil、Eigen、PFFFT、FLAC、Opus、FDK-AAC。固定源与构建见 [构建说明](docs/native-api20-build.md)；许可全文保留在 `third_party/native-api20/`（发布目录 `licenses/native-api20/`）。IAMF/OAR 采用其上游许可，OAR 同时附 PATENTS；Abseil 为 Apache-2.0，Eigen 使用 MPL2 覆盖的路径，PFFFT 为其 FFTPACK 许可，FLAC/Opus/FDK-AAC 各依自身许可。FDK-AAC 不包含专利授权，重新分发须保留其完整通知。未静态链接 GoogleTest。
+
+预设社区下载协议与策略参考 MIT 许可的 3fui-preset-community / VideoEnhancer，Qt 实现位于 `src/ui/PresetCommunityDialog.cpp`；原始许可保留在 `third_party/preset-community-LICENSE.txt`。

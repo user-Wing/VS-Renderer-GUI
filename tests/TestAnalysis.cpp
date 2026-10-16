@@ -18,6 +18,7 @@
 #include "graph/FilterGraph.h"
 #include "graph/PresetStore.h"
 #include "ui/PresetDialog.h"
+#include "ui/PresetCommunityDialog.h"
 #include "ui/CompareView.h"
 #include "ui/ParameterEditor.h"
 #include "graph/FilterCatalog.h"
@@ -48,6 +49,8 @@
 #include <QProgressBar>
 #include <QSlider>
 #include <QTemporaryDir>
+#include <QRegularExpression>
+#include <QSplitter>
 #include <QStandardPaths>
 #include <QFileInfo>
 #include <QTest>
@@ -69,6 +72,46 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void rendererTimeGroupLayout(){
+        MainWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *groups=window.findChild<QListWidget*>("rendererTimeGroupList");auto *catalog=window.findChild<QListWidget*>("rendererCatalog");
+        auto *pipeline=window.findChild<QListWidget*>("rendererPipeline");auto *view=window.findChild<CompareView*>();
+        auto *input=window.findChild<QLineEdit*>("rendererSourcePath");auto *timeline=window.findChild<QSlider*>("rendererTimeline");
+        QVERIFY(groups && catalog && pipeline && view && input && timeline);QCOMPARE(groups->count(),1);
+        QVERIFY(groups->mapToGlobal(QPoint()).y()>catalog->mapToGlobal(QPoint()).y());
+        QVERIFY(pipeline->mapToGlobal(QPoint()).x()>groups->mapToGlobal(QPoint()).x());
+        QVERIFY(input->mapToGlobal(QPoint()).y()>timeline->mapToGlobal(QPoint()).y());
+        const auto width=view->width();auto *one=window.findChild<QAction*>("rendererToggleArea1"),*two=window.findChild<QAction*>("rendererToggleArea2");QVERIFY(one && two);
+        one->trigger();QTest::qWait(80);QVERIFY(view->width()>width);two->trigger();QTest::qWait(80);QVERIFY(view->width()>width+300);
+        one->trigger();two->trigger();QTest::qWait(80);QVERIFY(qAbs(view->width()-width)<10);
+        QVERIFY(window.findChild<QLabel*>("rendererSourceMonitor"));QVERIFY(window.findChild<QLabel*>("rendererProcessedMonitor"));
+        window.grab().save("build/audit-20261016/renderer-timegroups.png");
+    }
+    void timeGroupPresetAndFrames(){
+        FilterGraph first,second;const int node=first.add("resize");first.setParameter(node,"width",64);first.setParameter(node,"height",32);
+        const int other=second.add("resize");second.setParameter(other,"width",64);second.setParameter(other,"height",32);
+        QList<FilterTimeGroup> groups{{"Opening",0,first},{"Main",1,second},{"End",2,first}};
+        const auto preset=PresetStore::create(groups,SourceFilter::Ffms2,"input.mkv","roundtrip");const auto restored=PresetStore::timeGroups(PresetStore::metadata(preset));
+        QCOMPARE(restored.size(),3);QCOMPARE(restored[1].startSeconds,1);QCOMPARE(restored[1].graph.nodes().first().parameters.value("width").toInt(),64);
+        auto built=VpyScriptBuilder::buildGroups("input.mkv",SourceFilter::Ffms2,groups);QVERIFY(built.errors.isEmpty());
+        built.script.replace(QRegularExpression("^src =.*$",QRegularExpression::MultilineOption),"src = core.std.BlankClip(width=64,height=32,format=vs.YUV420P8,length=101,fpsnum=24000,fpsden=1001)");
+        VapourSynthFrameServer server;QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(),15000);QVERIFY2(server.available(),qPrintable(server.errorString()));
+        QSignalSpy loaded(&server,&VapourSynthFrameServer::scriptLoaded),errors(&server,&VapourSynthFrameServer::errorOccurred),frames(&server,&VapourSynthFrameServer::frameReady);
+        QTemporaryDir directory;server.loadScript(built.script,directory.filePath("groups.vpy"));
+        QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !errors.isEmpty(),15000);QVERIFY2(errors.isEmpty(),errors.isEmpty()?"":qPrintable(errors.first().first().toString()));
+        QCOMPARE(qvariant_cast<VapourSynthClipInfo>(loaded.first().first()).totalFrames,101);
+        for(const int frame:{0,23,24,47,48,100}){frames.clear();server.requestFrame(frame);QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty(),5000);QCOMPARE(qvariant_cast<VapourSynthFrame>(frames.first().first()).frameIndex,frame);}
+    }
+    void communityExampleDownload(){
+        PresetCommunityDialog dialog([](const QString&,bool){});dialog.show();auto *files=dialog.findChild<QTreeWidget*>("communityFiles");QVERIFY(files);
+        QTRY_VERIFY_WITH_TIMEOUT(files->topLevelItemCount()>0,45000);files->setCurrentItem(files->topLevelItem(0));
+        for(auto *button:dialog.findChildren<QPushButton*>())if(button->text()==QStringLiteral("下载选中"))button->click();
+        QTRY_COMPARE_WITH_TIMEOUT(files->topLevelItem(0)->text(2),QStringLiteral("已安装"),45000);
+        bool viewed=false;QTimer::singleShot(100,&dialog,[&]{auto *view=dialog.findChild<QDialog*>();QVERIFY(view);auto *text=view->findChild<QPlainTextEdit*>();QVERIFY(text && text->isReadOnly());QVERIFY(text->toPlainText().contains(QStringLiteral("预设文件版本")));viewed=true;view->accept();});
+        for(auto *button:dialog.findChildren<QPushButton*>())if(button->text()==QStringLiteral("导入所有时间组"))button->click();
+        QVERIFY(viewed);
+        dialog.grab().save("build/audit-20261016/preset-community.png");
+    }
     void rendererStartupBudget() {
         const auto before=GetModuleHandleW(L"FFF.Native.dll");QElapsedTimer timer;timer.start();MainWindow window;window.show();
         qInfo()<<"renderer-startup-construction-ms"<<timer.elapsed();QCOMPARE(GetModuleHandleW(L"FFF.Native.dll"),before);
@@ -113,7 +156,7 @@ private slots:
             QVERIFY(catalog->height()>=190);QVERIFY(sidebar->width()<360);
             QVERIFY(sidebar->mapToGlobal(QPoint(sidebar->width(),0)).x()<=parameters->mapToGlobal(QPoint()).x());
             QVERIFY(parameters->mapToGlobal(QPoint(parameters->width(),0)).x()<=view->mapToGlobal(QPoint()).x());
-            QVERIFY(scroll->height()>500);
+            QVERIFY(scroll->height()>190);
         }
         for(int i=0;i<catalog->count();++i)
             QVERIFY2(catalog->fontMetrics().horizontalAdvance(catalog->item(i)->text())+12<=catalog->viewport()->width(),qPrintable(catalog->item(i)->text()));

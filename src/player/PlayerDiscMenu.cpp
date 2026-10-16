@@ -39,7 +39,7 @@ void routeDiscInput(HWND parent,QHash<DWORD,HHOOK> &hooks){
 }
 struct PlayerDiscMenu::Impl {
     QTimer inputTimer;HWND window=nullptr;QHash<DWORD,HHOOK> inputHooks;QVector<QFuture<void>> retiring;
-    int lastVolume=-1,lastMute=-1;QLibrary core,library;void *instance=nullptr,*player=nullptr,*media=nullptr;QString failure;QMutex mutex;
+    int lastVolume=-1,lastMute=-1;bool firstPlaySeen=false,menuRequested=false;QLibrary core,library;void *instance=nullptr,*player=nullptr,*media=nullptr;QString failure;QMutex mutex;
     struct Stats {int readBytes;float inputBitrate;int demuxBytes;float demuxBitrate;int corrupted,discontinuities,decodedVideo,decodedAudio,presented,lostVideo,playedAudio,lostAudio,sentPackets,sentBytes;float sendBitrate;};
     struct Description {int id;char *name;Description *next;};
     struct Chapter {qint64 offset,duration;char *name;};
@@ -58,6 +58,7 @@ struct PlayerDiscMenu::Impl {
     VLC_FUNCTION(void,libvlc_media_player_navigate,(void*,unsigned))
     VLC_FUNCTION(void,libvlc_media_player_set_title,(void*,int))
     VLC_FUNCTION(int,libvlc_media_player_get_title,(void*))
+    VLC_FUNCTION(int,libvlc_media_player_get_title_count,(void*))
     VLC_FUNCTION(int,libvlc_media_player_get_chapter,(void*))
     VLC_FUNCTION(int,libvlc_video_take_snapshot,(void*,unsigned,const char*,unsigned,unsigned))
     VLC_FUNCTION(int,libvlc_media_player_get_full_chapter_descriptions,(void*,int,Chapter***))
@@ -97,6 +98,7 @@ struct PlayerDiscMenu::Impl {
         VLC_LOAD(libvlc_media_player_stop) VLC_LOAD(libvlc_media_player_set_pause) VLC_LOAD(libvlc_media_player_navigate)
         VLC_LOAD(libvlc_media_player_set_title)
         VLC_LOAD(libvlc_media_player_get_title) VLC_LOAD(libvlc_media_player_get_full_chapter_descriptions) VLC_LOAD(libvlc_chapter_descriptions_release)
+        VLC_LOAD(libvlc_media_player_get_title_count)
         VLC_LOAD(libvlc_media_player_get_chapter) VLC_LOAD(libvlc_video_take_snapshot)
         VLC_LOAD(libvlc_video_get_size) VLC_LOAD(libvlc_media_player_get_fps) VLC_LOAD(libvlc_audio_get_track) VLC_LOAD(libvlc_video_get_spu)
         VLC_LOAD(libvlc_media_player_get_state) VLC_LOAD(libvlc_media_player_get_time) VLC_LOAD(libvlc_media_player_get_length)
@@ -114,6 +116,7 @@ struct PlayerDiscMenu::Impl {
 PlayerDiscMenu::PlayerDiscMenu():impl_(std::make_unique<Impl>()){}
 PlayerDiscMenu::~PlayerDiscMenu(){close();if(impl_->instance)impl_->libvlc_release(impl_->instance);}
 bool PlayerDiscMenu::open(const QString &root,void *window){
+    impl_->firstPlaySeen=impl_->menuRequested=false;
     if(impl_->player || impl_->media)close();impl_->lastVolume=impl_->lastMute=-1;if(!impl_->load())return false;{QMutexLocker lock(&impl_->mutex);impl_->failure.clear();}
     const auto location=("bluray:///"+QDir::fromNativeSeparators(root)).toUtf8();auto *media=impl_->libvlc_media_new_location(impl_->instance,location.constData());if(!media)return false;
     impl_->libvlc_media_add_option(media,":bluray-menu");
@@ -142,6 +145,19 @@ QString PlayerDiscMenu::error()const{QMutexLocker lock(&impl_->mutex);return imp
 int PlayerDiscMenu::state()const{return active()?impl_->libvlc_media_player_get_state(impl_->player):0;}
 void PlayerDiscMenu::navigate(unsigned command){if(active())impl_->libvlc_media_player_navigate(impl_->player,command);}
 void PlayerDiscMenu::topMenu(){if(active())impl_->libvlc_media_player_set_title(impl_->player,0);}
+void PlayerDiscMenu::pointer(const QPoint &position,const QSize &,bool activate){
+    if(!active() || !impl_->window)return;
+    auto *widget=QWidget::find(reinterpret_cast<WId>(impl_->window));if(!widget)return;
+    POINT point{qRound(position.x()*widget->devicePixelRatioF()),qRound(position.y()*widget->devicePixelRatioF())};
+    HWND parent=impl_->window,child=nullptr;
+    while((child=ChildWindowFromPointEx(parent,point,CWP_SKIPINVISIBLE|CWP_SKIPDISABLED|CWP_SKIPTRANSPARENT)) && child!=parent){
+        MapWindowPoints(parent,child,&point,1);parent=child;
+    }
+    if(parent==impl_->window)return;
+    const auto location=MAKELPARAM(point.x,point.y);
+    PostMessageW(parent,WM_MOUSEMOVE,0,location);
+    if(activate){PostMessageW(parent,WM_LBUTTONDOWN,MK_LBUTTON,location);PostMessageW(parent,WM_LBUTTONUP,0,location);}
+}
 void PlayerDiscMenu::pause(bool paused){if(active())impl_->libvlc_media_player_set_pause(impl_->player,paused);}
 void PlayerDiscMenu::seek(qint64 ticks){if(active())impl_->libvlc_media_player_set_time(impl_->player,ticks/10000);}
 void PlayerDiscMenu::rate(float value){if(active())impl_->libvlc_media_player_set_rate(impl_->player,value);}
@@ -153,10 +169,16 @@ void PlayerDiscMenu::selectTrack(bool audio,int id){if(active()){if(audio)impl_-
 quint64 PlayerDiscMenu::presentedFrames()const{Impl::Stats stats{};return active() && impl_->libvlc_media_get_stats(impl_->media,&stats)?qMax(0,stats.presented):0;}
 QJsonObject PlayerDiscMenu::programme()const {
     if(!active())return {};const int title=impl_->libvlc_media_player_get_title(impl_->player);Impl::Chapter **chapters=nullptr;
+    const bool firstPlay=title==impl_->libvlc_media_player_get_title_count(impl_->player)-1;
+    if(firstPlay)impl_->firstPlaySeen=true;
+    if(title==0)impl_->firstPlaySeen=false;
+    if(impl_->firstPlaySeen && !firstPlay && title>0 && !impl_->menuRequested){
+        impl_->menuRequested=true;impl_->libvlc_media_player_set_title(impl_->player,0);
+    }
     const int count=impl_->libvlc_media_player_get_full_chapter_descriptions(impl_->player,title,&chapters);QJsonArray starts;
     for(int i=0;i<count;++i)starts<<double(chapters[i]->offset*10000);if(chapters)impl_->libvlc_chapter_descriptions_release(chapters,qMax(0,count));
     unsigned width=0,height=0;impl_->libvlc_video_get_size(impl_->player,0,&width,&height);
-    return {{"title",title},{"chapter",impl_->libvlc_media_player_get_chapter(impl_->player)},{"duration100ns",double(duration())},{"chapters",starts},{"width",int(width)},{"height",int(height)},{"fps",impl_->libvlc_media_player_get_fps(impl_->player)},{"audio",impl_->libvlc_audio_get_track(impl_->player)},{"subtitle",impl_->libvlc_video_get_spu(impl_->player)}};
+    return {{"title",title},{"firstPlay",firstPlay || (impl_->firstPlaySeen && impl_->menuRequested)},{"chapter",impl_->libvlc_media_player_get_chapter(impl_->player)},{"duration100ns",double(duration())},{"chapters",starts},{"width",int(width)},{"height",int(height)},{"fps",impl_->libvlc_media_player_get_fps(impl_->player)},{"audio",impl_->libvlc_audio_get_track(impl_->player)},{"subtitle",impl_->libvlc_video_get_spu(impl_->player)}};
 }
 bool PlayerDiscMenu::snapshot(const QString &path)const {return active() && impl_->libvlc_video_take_snapshot(impl_->player,0,path.toUtf8().constData(),0,0)==0;}
 }

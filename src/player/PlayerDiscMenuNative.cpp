@@ -3,11 +3,16 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QWidget>
+#include <QEventLoop>
+#include <QFutureWatcher>
+#include <QtConcurrentRun>
 
 namespace vsr {
 struct PlayerDiscMenu::Impl {
     ThreeFpApi api;
     void *handle=nullptr;
+    bool pausePending=false,resumeRequested=false;
+    QVector<QFuture<void>> retiring;
     QString failure;
     using Navigate=ThreeFpResult(*)(void*,int,int,int);
     using Status=ThreeFpResult(*)(void*,char*,uint32_t,uint32_t*);
@@ -36,13 +41,24 @@ bool PlayerDiscMenu::open(const QString &root,void *window) {
     return true;
 }
 void PlayerDiscMenu::close(QWidget *retiredSurface) {
-    if(impl_->handle){impl_->api.stop(impl_->handle);impl_->api.destroy(impl_->handle);impl_->handle=nullptr;}
-    if(retiredSurface)retiredSurface->deleteLater();
+    impl_->pausePending=impl_->resumeRequested=false;
+    auto *handle=impl_->handle;impl_->handle=nullptr;
+    for(int i=impl_->retiring.size()-1;i>=0;--i)if(impl_->retiring[i].isFinished())impl_->retiring.removeAt(i);
+    if(handle){
+        const auto stopped=QtConcurrent::run([this,handle]{impl_->api.stop(handle);impl_->api.destroy(handle);});impl_->retiring.append(stopped);
+        if(retiredSurface){retiredSurface->hide();auto *watcher=new QFutureWatcher<void>(retiredSurface);QObject::connect(watcher,&QFutureWatcher<void>::finished,retiredSurface,&QObject::deleteLater);watcher->setFuture(stopped);return;}
+    }else if(retiredSurface)retiredSurface->deleteLater();
+    for(const auto &stopped:impl_->retiring){if(stopped.isFinished())continue;QFutureWatcher<void> watcher;QEventLoop wait;QObject::connect(&watcher,&QFutureWatcher<void>::finished,&wait,&QEventLoop::quit);watcher.setFuture(stopped);if(!watcher.isFinished())wait.exec(QEventLoop::ExcludeUserInputEvents);}impl_->retiring.clear();
 }
 bool PlayerDiscMenu::active() const { return impl_->handle!=nullptr; }
 QString PlayerDiscMenu::error() const { const auto text=impl_->api.sessionError(impl_->handle);return text.isEmpty()?impl_->failure:text; }
 int PlayerDiscMenu::state() const {
     auto s=impl_->snapshot();
+    if(impl_->pausePending && s.state!=ThreeFpState::Playing)impl_->pausePending=false;
+    if(impl_->resumeRequested && !impl_->pausePending){
+        if(s.state==ThreeFpState::Playing)impl_->resumeRequested=false;
+        else if((s.state==ThreeFpState::Ready || s.state==ThreeFpState::Paused || s.state==ThreeFpState::Ended) && impl_->api.play(impl_->handle)==ThreeFpResult::Success)impl_->resumeRequested=false;
+    }
     if(s.state==ThreeFpState::Ready){impl_->api.play(impl_->handle);return 1;}
     if(s.state==ThreeFpState::Failed)return 7;
     if(s.state==ThreeFpState::Ended)return 6;
@@ -54,7 +70,16 @@ void PlayerDiscMenu::navigate(unsigned command) {
     if(active() && command<6)impl_->navigate(impl_->handle,commands[command],0,0);
 }
 void PlayerDiscMenu::topMenu() { if(active())impl_->navigate(impl_->handle,5,0,0); }
-void PlayerDiscMenu::pause(bool paused) { if(active()){if(paused)impl_->api.pause(impl_->handle);else impl_->api.play(impl_->handle);} }
+void PlayerDiscMenu::pointer(const QPoint &position,const QSize &surface,bool activate) {
+    if(!active() || surface.isEmpty())return;
+    const auto s=impl_->snapshot();const QSize video(s.videoWidth,s.videoHeight);if(video.isEmpty())return;
+    const auto fitted=video.scaled(surface,Qt::KeepAspectRatio);
+    const QRect area(QPoint((surface.width()-fitted.width())/2,(surface.height()-fitted.height())/2),fitted);
+    if(!area.contains(position))return;
+    const auto point=position-area.topLeft();
+    impl_->navigate(impl_->handle,activate?9:8,point.x()*video.width()/fitted.width(),point.y()*video.height()/fitted.height());
+}
+void PlayerDiscMenu::pause(bool paused) { if(active()){if(paused){impl_->resumeRequested=false;impl_->pausePending=impl_->api.pause(impl_->handle)==ThreeFpResult::Success;}else{impl_->resumeRequested=true;state();}} }
 void PlayerDiscMenu::seek(qint64 ticks) { if(active())impl_->api.seek(impl_->handle,ticks); }
 void PlayerDiscMenu::volume(int value,bool muted) { if(active())impl_->api.setVolume(impl_->handle,value/100.f,muted); }
 void PlayerDiscMenu::rate(float value) { if(active())impl_->api.setPlaybackRate(impl_->handle,value); }
@@ -75,7 +100,8 @@ void PlayerDiscMenu::selectTrack(bool audio,int id) { if(active())impl_->navigat
 QJsonObject PlayerDiscMenu::programme() const {
     if(!active())return {};QByteArray text(65536,'\0');uint32_t size=0;
     if(impl_->status(impl_->handle,text.data(),uint32_t(text.size()),&size)!=ThreeFpResult::Success)return {};
-    auto result=QJsonDocument::fromJson(text.constData()).object();result.insert("duration100ns",double(duration()));return result;
+    auto result=QJsonDocument::fromJson(text.constData()).object();result.insert("duration100ns",double(duration()));
+    result.insert("chapters",result.value("chapterStarts100ns"));result.insert("nativeDisc",true);return result;
 }
 bool PlayerDiscMenu::snapshot(const QString &path) const {
     if(!active())return false;uint32_t w=0,h=0;

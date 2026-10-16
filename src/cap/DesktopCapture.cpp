@@ -116,7 +116,11 @@ static double pq(double linear)
 
 QImage pngPixels(const QImage &image)
 {
-    if (image.text("capHdr")!="scRGB-FP16") return image;
+    if (image.text("capHdr")!="scRGB-FP16") {
+        auto output=image.convertToFormat(QImage::Format_RGBA64);
+        if(!output.colorSpace().isValid())output.setColorSpace(QColorSpace::SRgb);
+        return output;
+    }
     QImage output(image.size(),QImage::Format_RGBA64);
     for (int y=0;y<image.height();++y) {
         const auto *src=reinterpret_cast<const float*>(image.constScanLine(y));
@@ -146,7 +150,9 @@ QImage preview(const QImage &image)
             for (int c=0;c<3;++c) row[x*4+c]=std::max(0.0f,row[x*4+c]*scale);
         }
     }
-    return output.convertedToColorSpace(QColorSpace::SRgb,QImage::Format_RGBA8888);
+    output=output.convertedToColorSpace(QColorSpace::SRgb,QImage::Format_RGBA64);
+    output.setText("capHdr",{});
+    return output;
 }
 
 bool savePng(const QImage &image,const QString &path)

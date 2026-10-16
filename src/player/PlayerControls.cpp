@@ -2,18 +2,15 @@
 #include "player/PlayerDiscMenu.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/LavPlayback.h"
-#include "graph/PresetStore.h"
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMenu>
 #include <QPushButton>
 #include <QSettings>
 #include <QSlider>
@@ -70,7 +67,7 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
         timelinePreview_->stop();timelineDragging_=false;timelineTarget_=-1;timelineWaiting_=false;
         const auto target=(discMenu_ && discMenu_->active()?discMenu_->duration():clock_->snapshot().duration100ns) * slider->sliderPosition() / 100000;
         if(target!=timelineSeekTarget_)seekTime(target);timelineSeekTarget_=-1;
-        if(timelineResume_ && !playing_)autoPlay_=true;timelineResume_=false;
+        if(timelineResume_ && !playing_){if(discMenu_ && discMenu_->active())togglePlayback();else autoPlay_=true;}timelineResume_=false;
     });
     auto *row = new QHBoxLayout; row->setContentsMargins(8, 0, 8, 0); row->setSpacing(4); layout->addLayout(row);
     const auto button = [this, row](const QString &text, const QString &tooltip, auto action) {
@@ -110,15 +107,6 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     decoderBadge_ = new QPushButton("3FP-HW", this); decoderBadge_->setObjectName("playerDecoder"); decoderBadge_->setToolTip(tr("切换 3FP 硬件 / 软件解码")); row->addWidget(decoderBadge_);
     connect(decoderBadge_, &QPushButton::clicked, this, [this] { if (lavVideo_) { showSettings(); return; } const auto current=source_.isEmpty()?settings_->value("decode/mode",2).toUInt():clock_->snapshot().decodeMode;const auto mode = current == 2 ? 1u : 2u; if (clock_->setDecodeMode(mode)) {settings_->setValue("decode/mode",mode);if(!source_.isEmpty())openFile(source_);} });
     hdrBadge_ = badge("SDR"); rendererBadge_ = badge("VS");algorithmBadge_=badge("Jinc");algorithmBadge_->setObjectName("playerAlgorithm");algorithmBadge_->setToolTip(tr("算法"));interpolationBadge_=badge({});interpolationBadge_->setObjectName("playerInterpolationAlgorithm");interpolationBadge_->setToolTip(tr("补帧算法"));interpolationBadge_->hide();row->addStretch();
-    auto *menuButton = button("☰", tr("打开、预设与设置"), [] {});
-    auto *menu = new QMenu(menuButton);
-    menu->addAction(tr("打开视频…"), this, &PlayerWindow::chooseFiles);
-    menu->addAction(tr("打开文件夹…"), this, &PlayerWindow::chooseFolder);
-    menu->addAction(tr("打开链接…"), this, &PlayerWindow::chooseLink);
-    menu->addAction(tr("加载 VPY…"), this, [this] { const auto path = QFileDialog::getOpenFileName(this, tr("加载 VPY"), PresetStore::directory(), "VapourSynth (*.vpy)"); if (!path.isEmpty()) loadPreset(path); });
-    menu->addAction(tr("停用预设 · 原画播放"), this, [this] { loadPreset({}); });
-    menu->addAction(tr("设置…"), this, &PlayerWindow::showSettings);
-    menuButton->setMenu(menu);
 }
 void PlayerWindow::showSpeedPopup() {
     if(speedPopup_ && speedPopup_->isVisible()) {speedPopup_->close();return;}

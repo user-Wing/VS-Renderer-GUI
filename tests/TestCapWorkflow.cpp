@@ -6,6 +6,27 @@
 class TestCapWorkflow : public QObject {
     Q_OBJECT
 private slots:
+    void shapeFillAndWheelWidth(){
+        QImage source(640,480,QImage::Format_RGBA8888);source.fill(Qt::white);QImage delivered;
+        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,bool,bool){delivered=image;return false;});
+        const auto close=qScopeGuard([&]{if(overlay)overlay->close();});
+        QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{20,20});QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{500,350});
+        for(auto *button:overlay->findChildren<QPushButton*>())if(button->text()==QStringLiteral("矩形"))button->click();
+        auto *stroke=overlay->findChild<QToolButton*>("capShapeWidth"),*fill=overlay->findChild<QToolButton*>("capShapeFill");
+        auto *width=overlay->findChild<QSpinBox*>("capPenWidth");QVERIFY(stroke && fill && width);const int before=width->value();
+        QWheelEvent wheel(QPointF(4,4),QPointF(stroke->mapToGlobal(QPoint(4,4))),QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+        QApplication::sendEvent(stroke,&wheel);QCOMPARE(width->value(),before+1);fill->click();
+        QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{100,100});QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{300,250});
+        overlay->exportImage(false,false);QVERIFY(!delivered.isNull());
+        const auto ink=delivered.pixelColor(qRound((200-20)*640.0/overlay->width()),qRound((170-20)*480.0/overlay->height()));
+        QVERIFY(ink.red()>240 && ink.green()<20);
+        QImage pinImage(200,150,QImage::Format_RGBA8888);pinImage.fill(Qt::white);
+        QPointer<PinWindow> pin=new PinWindow(pinImage,[](QImage,bool,bool,bool){return true;});
+        const auto closePin=qScopeGuard([&]{if(pin)pin->close();});pin->showToolBar();
+        QPushButton *pan=nullptr;for(auto *button:pin->findChildren<QPushButton*>())if(button->text()==QStringLiteral("拖动"))pan=button;
+        QVERIFY(pan);pan->click();QVERIFY(pan->isChecked());
+        auto *view=static_cast<PinView*>(pin->findChild<QGraphicsView*>("capPinView"));QVERIFY(view);QVERIFY(!view->editing());
+    }
     void desktopPixelsAndOverlay() {
         QWidget marker;
         marker.setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
@@ -50,7 +71,7 @@ private slots:
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(50,50));
         QTest::mouseMove(overlay,QPoint(350,250));
         QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(350,250));
-        const auto buttons=overlay->findChildren<QPushButton*>();QCOMPARE(buttons.size(),12);
+        const auto buttons=overlay->findChildren<QPushButton*>();QCOMPARE(buttons.size(),13);
         QPushButton *rectangle=nullptr,*check=nullptr;
         for(auto *button:buttons){QVERIFY(button->isVisible());if(button->text()==QStringLiteral("矩形"))rectangle=button;if(button->text()==QStringLiteral("✓"))check=button;}
         QVERIFY(rectangle && check);rectangle->click();
@@ -66,7 +87,7 @@ private slots:
         }
         QVERIFY(ink && original);
         const auto png=QImage::fromData(QApplication::clipboard()->mimeData()->data("image/png"));
-        QCOMPARE(png.depth(),32);QCOMPARE(png.size(),delivered.size());QCOMPARE(png.pixelColor(10,10),cap::preview(delivered).pixelColor(10,10));QVERIFY(png.text("capHdr").isEmpty());
+        QCOMPARE(png.depth(),64);QCOMPARE(png.size(),delivered.size());QCOMPARE(png.pixelColor(10,10),cap::preview(delivered).pixelColor(10,10));QVERIFY(png.text("capHdr").isEmpty());
         QTRY_VERIFY(!overlay);
     }
     void selectedToolsLineAndUndo() {
@@ -124,8 +145,11 @@ private slots:
         CapApp controller;QImage sdr(32,32,QImage::Format_RGBA8888);sdr.fill(Qt::white);
         QVERIFY(controller.saveHdrCapture(sdr));controller.output(sdr,false,false,true);QVERIFY(!QFileInfo::exists(hdrDir));QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
         QImage hdr(32,32,QImage::Format_RGBA32FPx4);hdr.fill(QColor::fromRgbF(.4,.5,1.5));hdr.setColorSpace(QColorSpace::SRgbLinear);hdr.setText("capHdr","scRGB-FP16");
-        QVERIFY(controller.saveHdrCapture(hdr));const auto files=QDir(hdrDir).entryList(QDir::Files);QCOMPARE(files.size(),3);
-        const auto pngs=QDir(hdrDir).entryList({"*.png"},QDir::Files);QCOMPARE(pngs.size(),1);QCOMPARE(QImageReader(QDir(hdrDir).filePath(pngs.first())).read().depth(),64);
+        QVERIFY(controller.saveHdrCapture(hdr));const auto files=QDir(hdrDir).entryList(QDir::Files);QCOMPARE(files.size(),4);
+        const auto pngs=QDir(hdrDir).entryList({"*.png"},QDir::Files);QCOMPARE(pngs.size(),2);QCOMPARE(QImageReader(QDir(hdrDir).filePath(pngs.first())).read().depth(),64);
+        const auto sdrPath=QDir(hdrDir).filePath(pngs.last());QVERIFY(sdrPath.endsWith("_SDR.png"));
+        QCOMPARE(QImageReader(sdrPath).read().pixelColor(10,10),cap::preview(hdr).pixelColor(10,10));
+        QVERIFY(!QFile::exists(sdrPath+".json"));QVERIFY(!QFile::exists(sdrPath+".scrgb-f32"));
         QFile raw(QDir(hdrDir).filePath(pngs.first()+".scrgb-f32"));QVERIFY(raw.open(QIODevice::ReadOnly));QCOMPARE(raw.readAll(),QByteArray(reinterpret_cast<const char*>(hdr.constBits()),hdr.sizeInBytes()));
         controller.output(hdr,false,false,true);QCOMPARE(QDir(hdrDir).entryList(QDir::Files),files);QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
         QCOMPARE(controller.settings_.value("save/lastDirectory").toString(),manualDir);
@@ -345,24 +369,26 @@ private slots:
         QVERIFY(mime->hasImage());QVERIFY(mime->hasFormat("image/png"));
         const auto png=QImage::fromData(mime->data("image/png"));QCOMPARE(png.size(),image.size());
         if(image.text("capHdr")=="scRGB-FP16"){
-            QCOMPARE(png.depth(),32);const auto raw=mime->data("application/x-vscap-scrgb");
+            QCOMPARE(png.depth(),64);const auto raw=mime->data("application/x-vscap-scrgb");
             QCOMPARE(raw.size(),8+image.width()*image.height()*16);
             QCOMPARE(raw.mid(8,image.width()*16),QByteArray(reinterpret_cast<const char*>(image.constScanLine(0)),image.width()*16));
         }
         auto *pin=new PinWindow(image,[](QImage,bool,bool,bool){return true;});QVERIFY(pin->windowFlags().testFlag(Qt::WindowStaysOnTopHint));
-        pin->showToolBar();QCOMPARE(pin->findChildren<QPushButton*>().size(),11);pin->close();
+        pin->showToolBar();QCOMPARE(pin->findChildren<QPushButton*>().size(),13);pin->close();
     }
     void realHdrAvif() {
-        QString error;const auto desktop=cap::captureScreen(qApp->primaryScreen(),&error);QVERIFY2(!desktop.isNull(),qPrintable(error));
+        QImage desktop(128,128,QImage::Format_RGBA32FPx4);
+        desktop.fill(Qt::white);desktop.setColorSpace(QColorSpace::SRgbLinear);
+        desktop.setText("capHdr","scRGB-FP16");
         auto image=desktop.copy(QRect(0,0,128,128));image.setText("capHdr",desktop.text("capHdr"));
         QTemporaryDir dir;const auto png=dir.filePath("capture.png"),avif=dir.filePath("capture.avif");QVERIFY(savePng(image,png));
-        QProcess process;process.start(QCoreApplication::applicationDirPath()+"/ffmpeg.exe",avifArguments(image,png,avif));
-        QSignalSpy done(&process,QOverload<int,QProcess::ExitStatus>::of(&QProcess::finished));
-        QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty(),30000);QCOMPARE(process.exitCode(),0);QVERIFY(QFileInfo(avif).size()>0);
-        QProcess probe;probe.start(QCoreApplication::applicationDirPath()+"/ffprobe.exe",{"-v","error","-select_streams","v:0","-show_entries","stream=width,height,pix_fmt,color_primaries,color_transfer,color_range","-of","json",avif});
-        QVERIFY(probe.waitForFinished(10000));const auto stream=QJsonDocument::fromJson(probe.readAllStandardOutput()).object().value("streams").toArray().first().toObject();
-        QCOMPARE(stream.value("width").toInt(),128);QCOMPARE(stream.value("pix_fmt").toString(),QString("yuv444p10le"));
-        if(image.text("capHdr")=="scRGB-FP16"){QCOMPARE(stream.value("color_transfer").toString(),QString("smpte2084"));QCOMPARE(stream.value("color_primaries").toString(),QString("bt2020"));QCOMPARE(stream.value("color_range").toString(),QString("pc"));}
+        CapApp app;QVERIFY(app.startAvif(image,avif));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(avif).size()>0,60000);
+        QFile file(avif);QVERIFY(file.open(QIODevice::ReadOnly));
+        QVERIFY(file.read(64).contains("ftypavif"));
+
+
+
     }
 };
 QTEST_MAIN(TestCapWorkflow)

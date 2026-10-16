@@ -75,7 +75,7 @@ bool PlayerWindow::openBluRay(const QString &path, bool menus) {
     message_->setText(tr("正在读取 BD 播放列表…"));auto *scan=new QFutureWatcher<DiscList>(this);
     connect(scan,&QFutureWatcher<DiscList>::finished,this,[this,scan,menus]{const auto list=scan->result();scan->deleteLater();if(!list.error.isEmpty()){setError(list.error);return;}
         playlistDirectory_.clear();files_=list.paths;blurayLabels_=list.labels;blurayGroups_=list.groups;blurayProgrammes_=list.programmes;discRoot_=list.root;
-        if(menus?openDiscMenu(discRoot_):openFile(files_.first())){setPlaylistPinned(true);updatePlaylist();}
+        if(menus?openDiscMenu(discRoot_):openFile(files_.first())){setPlaylistPinned(false);updatePlaylist();}
     });scan->setFuture(QtConcurrent::run([path]{
         DiscList list;const auto result=BlurayCatalog::scan(path);QVector<BlurayTitle> titles;for(const auto &title:result.titles)if(title.suggested && title.warning.isEmpty())titles<<title;
         for(const auto &title:result.titles)if(!title.suggested && title.warning.isEmpty())titles<<title;
@@ -101,15 +101,16 @@ bool PlayerWindow::openDiscMenu(const QString &root, bool menus) {
     if(!discMenu_)discMenu_=std::make_unique<PlayerDiscMenu>();
     if(!discSurface_){discSurface_=new QWidget(pane_->surface());discSurface_->setObjectName("playerDiscSurface");discSurface_->setAttribute(Qt::WA_NativeWindow);discSurface_->setFocusPolicy(Qt::StrongFocus);}
     imageMode_=audioMode_=false;imageTools_->hide();lyricLabel_->hide();audioSubtitle_->hide();info_->hide();infoVisible_=false;autoPlay_=false;pending_=false;profileStartup_.invalidate();
-    discSurface_->setGeometry(pane_->surface()->rect());discSurface_->show();discSurface_->raise();
+    discSurface_->setMouseTracking(true);discSurface_->setGeometry(pane_->surface()->rect());discSurface_->show();discSurface_->raise();
     if(!discMenu_->open(input,reinterpret_cast<void *>(discSurface_->winId()))){discSurface_->hide();setError(discMenu_->error());return false;}
     discMenuNavigation_=menus;discMenu_->volume(volume_->value(),mute_->isChecked());discMenu_->rate(speed_);
     if(menus){source_=root;fileIndex_=-1;}ready_=playing_=true;play_->setText("Ⅱ");rendererBadge_->setText("libVLC");decoderBadge_->setText("BD-Auto");decoderBadge_->setEnabled(false);decoderBadge_->setToolTip(tr("BD 菜单/短节目自动解码 (libVLC)"));message_->setText(menus?tr("BD 菜单交互 · 鼠标点击或方向键选择，Enter 确认；节目列表可切回 3FP"):tr("BD 短节目 · libVLC (保留 MPLS 顺序和裁切边界)"));discSurface_->setFocus();return true;
 }
 
-bool PlayerWindow::handoffDiscProgramme() {
+bool PlayerWindow::handoffDiscProgramme(const QJsonObject &programme) {
     if(!discMenuNavigation_ || !discMenu_ || !discMenu_->active())return false;
-    const auto programme=discMenu_->programme();const qint64 length=programme.value("duration100ns").toDouble();
+    if(programme.value("firstPlay").toBool() || programme.value("nativeDisc").toBool())return false;
+    const qint64 length=programme.value("duration100ns").toDouble();
     if(programme.value("title").toInt()<=0 || length<=0 || discMenu_->state()!=3)return false;
     const auto chapters=programme.value("chapters").toArray();QString match;
     const auto key=QString("%1/%2/%3").arg(programme.value("title").toInt()).arg(programme.value("chapter").toInt()).arg(length);

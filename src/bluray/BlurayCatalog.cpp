@@ -280,9 +280,7 @@ QString BlurayCatalog::prepareMenu(const QString &source, QString *error) {
     if(index.size()<16 || index.left(4)!="INDX"){if(error)*error=QStringLiteral("BD index.bdmv 无效，无法读取主菜单");return {};}
     const auto offset=u32(index,8);if(offset>quint32(index.size()-28)){if(error)*error=QStringLiteral("BD 主菜单描述截断");return {};}
     const auto menu=index.mid(int(offset)+16,12);if((static_cast<unsigned char>(menu[0])>>6)==1 && u16(menu,6)==0xffff){if(error)*error=QStringLiteral("这张 BD 没有主菜单，请使用节目列表模式");return {};}
-    // Start at the authored TopMenu object. Its VM/IG assets and all playlists
-    // stay intact; only the cached FirstPlay entry bypasses the disc intro.
-    index.replace(int(offset)+4,12,menu);
+    // Preserve authored FirstPlay, including mandatory clips before the menu.
     const auto key=QCryptographicHash::hash(source.toUtf8()+index+objects,QCryptographicHash::Sha256).toHex();
     const QDir root(QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).filePath("bluray-menu/"+QString::fromLatin1(key)));const auto bdmv=root.filePath("BDMV");QDir().mkpath(bdmv);
     for(const auto &dir:QStringList{"STREAM","CLIPINF","PLAYLIST","AUXDATA","META","BDJO","JAR"})if(QFileInfo(disc+"/"+dir).isDir() && !linkDirectory(bdmv+"/"+dir,disc+"/"+dir)){if(error)*error=QStringLiteral("BD 菜单素材无法建立本地引用，请先下载完整光盘");return {};}

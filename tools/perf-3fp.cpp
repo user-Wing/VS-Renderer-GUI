@@ -68,7 +68,7 @@ int wmain(int argc, wchar_t** argv) {
             std::fprintf(stderr, "Output window changed: %ldx%ld, expected %dx%d. Discard this trial.\n",
                 rect.right, rect.bottom, width, height); failed = true; break;
         }
-        FFF3FPSnapshot s{}; s.size = sizeof(s); s.version = 8;
+        FFF3FPSnapshot s{}; s.size = sizeof(s); s.version = GetApiVersion()>=20?20:8;
         if (GetSnapshot(player, &s) != FFFResult::Success) return 6;
         const auto now = std::chrono::steady_clock::now();
         const double elapsed = std::chrono::duration<double>(now - start).count();
@@ -92,7 +92,7 @@ int wmain(int argc, wchar_t** argv) {
             const double cpuSeconds = (double(kernel.dwHighDateTime) * 4294967296.0 +
                 kernel.dwLowDateTime + double(user.dwHighDateTime) * 4294967296.0 +
                 user.dwLowDateTime) / 1e7;
-            FFF3FPRenderTargetInfo t{}; t.size = sizeof(t); t.version = 1;
+            FFF3FPRenderTargetInfo t{}; t.size = sizeof(t); t.version = GetApiVersion()>=20?20:1;
             GetRenderTargetInfo(player, &t);
             std::printf("%.6f,%.6f,%llu,%llu,%llu,%llu,%llu,%.4f,%.4f,%.4f,%.4f,%u,%u,%u,%u,%u,%u,%u,%llu,%.6f,%.6f,%u\n",
                 wall, s.position100ns / 1e7, s.decodedVideoFrames, s.presentedVideoFrames,
