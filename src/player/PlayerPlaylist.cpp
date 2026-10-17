@@ -75,7 +75,7 @@ bool PlayerWindow::openBluRay(const QString &path, bool menus) {
     message_->setText(tr("正在读取 BD 播放列表…"));auto *scan=new QFutureWatcher<DiscList>(this);
     connect(scan,&QFutureWatcher<DiscList>::finished,this,[this,scan,menus]{const auto list=scan->result();scan->deleteLater();if(!list.error.isEmpty()){setError(list.error);return;}
         playlistDirectory_.clear();files_=list.paths;blurayLabels_=list.labels;blurayGroups_=list.groups;blurayProgrammes_=list.programmes;discRoot_=list.root;
-        if(menus?openDiscMenu(discRoot_):openFile(files_.first())){setPlaylistPinned(false);updatePlaylist();}
+        if(menus?openDiscMenu(discRoot_,true,true):openFile(files_.first())){setPlaylistPinned(false);updatePlaylist();}
     });scan->setFuture(QtConcurrent::run([path]{
         DiscList list;const auto result=BlurayCatalog::scan(path);QVector<BlurayTitle> titles;for(const auto &title:result.titles)if(title.suggested && title.warning.isEmpty())titles<<title;
         for(const auto &title:result.titles)if(!title.suggested && title.warning.isEmpty())titles<<title;

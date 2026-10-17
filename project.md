@@ -1,10 +1,10 @@
 # VS Renderer / VS Player：项目开发地图
 
-> 本文面向接手开发的维护者与 AI，负责说明架构、模块入口、约束与当前状态，不记录逐日开发流水账。用户指南见 [README](README.md)，版本变更见 [changelog](changelog.md)，专项证据见 [docs](docs/)。核对基线：2026-10-17，版本 1.0.11 已发布，本轮 SDR 白位与 JXL 续修同步至源码及现有发布说明；二进制附件由维护者替换。
+> 本文面向接手开发的维护者与 AI，负责说明架构、模块入口、约束与当前状态，不记录逐日开发流水账。用户指南见 [README](README.md)，版本变更见 [changelog](changelog.md)，专项证据见 [docs](docs/)。核对基线：2026-10-17，本地版本 1.0.12；BD 拖动只在松开时提交最终定位，光盘菜单模式直接进入选集页。压缩包由维护者制作，验证见 [1.0.12记录](docs/update-1.0.12.md)。
 
 本地清理约定：旧截图/播放器 `*-next.exe` 暂存构建清除后同步资源清单；`aria2-next.exe` 是有效运行依赖，不按后缀误删。
 
-当前部署：`dist/VS-GUI-Full` / `dist/1.0.11-PlayerLite`，源码与现有 1.0.11 发布说明同步维护，Full 由维护者自行打包上传；追加交付独立单文件 `dist/VS-Player.exe`（启动器嵌入 Player 图标，运行时缓存展开，同目录自动创建并保留 `player.ini`，内置 Qt，FFmpeg shared x64 从 EXE 同目录 / PATH 解析，缺失先提示）。VapourSynth 后端固定 R81，BM3D 11.0、BM3Dvk2 1.0、BestSource 22；原有插件保留，使用 `tools/update-vapoursynth-runtime.py` 维护锁定版本和哈希。社区配置使用公开页面链接，目录遍历/下载使用内部解析地址。脚本型内置预设的处理脚本随时间组序列化；章节统一由 ThreeFpPlayer 适配 `startTime100ns`。详细修改、证据及性能未通过项见 [1.0.11记录](docs/update-1.0.11.md)。
+当前部署：`dist/VS-GUI-Full` / `dist/1.0.12-PlayerLite`，1.0.12 源码上传 GitHub，Full 由维护者自行打包上传；追加交付独立单文件 `dist/VS-Player.exe`（启动器嵌入 Player 图标，运行时缓存展开，同目录自动创建并保留 `player.ini`，内置 Qt，FFmpeg shared x64 从 EXE 同目录 / PATH 解析，缺失先提示）。VapourSynth 后端固定 R81，BM3D 11.0、BM3Dvk2 1.0、BestSource 22；原有插件保留，使用 `tools/update-vapoursynth-runtime.py` 维护锁定版本和哈希。社区配置使用公开页面链接，目录遍历/下载使用内部解析地址。脚本型内置预设的处理脚本随时间组序列化；章节统一由 ThreeFpPlayer 适配 `startTime100ns`。详细修改、证据及性能未通过项见 [1.0.11记录](docs/update-1.0.11.md)。
 
 窗口模式播放器为底栏保留独立高度，视频区域不与底栏重叠；全屏继续浮层。VSCap 在已有模态窗口时打开截图层，会将截图层设为当前模态窗口，保存对话框随当前模态窗口建立父子关系，防止设置阻断置顶截图层输入。矩形/圆形的边框与填充按钮互斥，边框按钮保留滚轮调粗；填充图标单独绘制，按钮高度与相邻工具一致。
 
@@ -126,7 +126,7 @@ Full 与 PlayerLite 的依赖清单不同，实际发布以打包脚本、运行
 
 1. 明确任务边界 → 修改最小模块 → 构建相关目标 → 跑相关 CTest/工作流 → 有媒体或像素要求时做真实输入验收；记录测试环境与未通过项。
 2. Native API20 用 `tools/build-native-api20.ps1` 与对应 patch；GUI 用 CMake preset。旧 `tools/build-3fp.ps1` 及历史版本脚本并存，调用前核对版本和补丁。
-3. `tools/stage-portable.ps1` 用于本地部署；`tools/package-portable.ps1` 打包 Full/精简版，1.0.11 PlayerLite 以现行版专项发布脚本/说明核对。必须保留许可、包含正确运行时，排除个人 INI、缓存与日志。
+3. `tools/stage-portable.ps1` 用于本地部署；`tools/package-portable.ps1` 打包 Full/精简版，1.0.12 PlayerLite 以现行版专项发布脚本/说明核对。必须保留许可、包含正确运行时，排除个人 INI、缓存与日志。
 4. 验证完整解压、启动、依赖/哈希、版本清单后再推送/发布；源码推送、Release Draft、附件上传是**不同步骤**，不能互相视为已完成。
 5. **维护纪律**：架构/目录/关键决策发生变化，当天修改本文件对应节；具体实验和验收归 `docs/`，对外变更归 `changelog.md`，不要再向本文件顶部增加日期流水账。
 
@@ -134,7 +134,7 @@ Full 与 PlayerLite 的依赖清单不同，实际发布以打包脚本、运行
 
 ## 10. 当前状态与下一步
 
-- **基线**：工作区 1.0.11；Renderer、Player、VSCap、PhotoCraft 接入。Native API20 + PR22、HDR→SDR 自动色彩映射与 Full/PlayerLite 边界见 [1.0.10 验收](docs/validation-1.0.10.md) 和 [发布说明](docs/release-1.0.10.md)。
+- **基线**：工作区 1.0.12；Renderer、Player、VSCap、PhotoCraft 接入。Native API20 + PR22、HDR→SDR 自动色彩映射与 Full/PlayerLite 边界见 [1.0.10 验收](docs/validation-1.0.10.md) 和 [发布说明](docs/release-1.0.10.md)。
 - **近期成果**：VSCap 可编辑文字/绘图、原始尺寸贴图与工具栏切换；选区可缩放/移动，标注在整图上保留，最终导出才裁切。复制不落盘，HDR 默认目录与手动保存上次目录分开记录；工作流 14 项通过。PhotoCraft 为独立图片编辑入口；3FP 直通和 VPY 链分别处理播放与增强。各项只按相应文档注明的实测范围认可。
 - **下一步优先**：基于真实素材复测 VSCap/Player HDR 像素与多屏缩放；核对 1.0.11 本地构建与源代码一致性；继续确认大分辨率软解、780M 实时播放及专项未达标项，不将短时间稳定等同全场景通过。
 - **设计限制**：PlayerLite 不等于 Full；VS GPU 滤镜仍可能有 CPU 平面传输；不存在通用零丢帧、完整任意 PSD/HDR/字幕/蓝光场景保证；未实现 NGU 私有算法。发布状态以 GitHub Release 及真实附件为准，不从工作区版本推断。

@@ -4,7 +4,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-if (-not $SourceDirectory) { $SourceDirectory = Join-Path $root 'dist\1.0.11-PlayerLite' }
+if (-not $SourceDirectory) { $SourceDirectory = Join-Path $root 'dist\1.0.12-PlayerLite' }
 if (-not $OutputFile) { $OutputFile = Join-Path $root 'dist\VS-Player.exe' }
 $built = Join-Path $root 'build\mingw-release\lite\vs-player.exe'
 if (!(Test-Path -LiteralPath $built)) { throw "Rebuild VSPlayerLite first: $built" }

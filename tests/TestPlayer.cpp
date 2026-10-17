@@ -359,6 +359,19 @@ private slots:
     void bluRayModeDialogWidth() {
         PlayerWindow player;player.show();bool checked=false;QTimer::singleShot(100,&player,[&]{auto *dialog=player.findChild<QDialog *>("playerBluRayMode");QVERIFY(dialog);QVERIFY(dialog->isVisible());QVERIFY(dialog->width()>=560);dialog->grab().save("build/bd-mode-width.png");checked=true;dialog->reject();});player.chooseBluRayMode("unused");QVERIFY(checked);
     }
+    void bdDragCommitsFinalPosition_data(){QTest::addColumn<bool>("resume");QTest::newRow("paused")<<false;QTest::newRow("playing")<<true;}
+    void bdDragCommitsFinalPosition(){
+        QFETCH(bool,resume);const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");
+        QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("player/preset",QString());settings.setValue("decode/mode",1);settings.setValue("basic/autoplay",true);settings.setValue("playback/remember",false);settings.sync();
+        PlayerWindow player;player.show();QVERIFY(player.openBluRay(root,false));QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.snapshot().presentedVideoFrames>2,15000);
+        if(!resume){player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);}
+        auto *slider=player.timeline_;const auto generation=player.snapshot().timelineGeneration;slider->setSliderDown(true);QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
+        for(int value:{75000,15000,90000,30000}){slider->setValue(value);QTest::qWait(100);}
+        QCOMPARE(player.snapshot().timelineGeneration,generation);QVERIFY(!player.seekPending_);QVERIFY(player.queuedSeek_<0);
+        const auto target=player.snapshot().duration100ns*slider->value()/100000;QElapsedTimer elapsed;elapsed.start();slider->setSliderDown(false);
+        QTRY_VERIFY2_WITH_TIMEOUT(!player.seekPending_ && player.queuedSeek_<0 && qAbs(player.position()-target)<1500000,qPrintable(QString("position=%1 target=%2 pending=%3").arg(player.position()).arg(target).arg(player.seekPending_)),5000);
+        QCOMPARE(player.snapshot().timelineGeneration,generation+1);QTRY_COMPARE(player.snapshot().state,resume?ThreeFpState::Playing:ThreeFpState::Paused);qInfo()<<"BD final drag seek ms"<<elapsed.elapsed()<<"target seconds"<<target/1e7;
+    }
     void mouseSeekRendering_data(){QTest::addColumn<uint>("mode");QTest::addColumn<bool>("disc");QTest::addColumn<bool>("resume");for(bool disc:{false,true})for(uint mode:{1u,2u})for(bool resume:{false,true})QTest::newRow(qPrintable(QString("%1-%2-%3").arg(disc?"BD":"video",mode==1?"SW":"HW",resume?"playing":"paused")))<<mode<<disc<<resume;}
     void mouseSeekRendering(){
         QFETCH(uint,mode);QFETCH(bool,disc);QFETCH(bool,resume);QTemporaryDir dir;QString path;
@@ -371,10 +384,11 @@ private slots:
             const auto before=player.snapshot();QElapsedTimer elapsed;elapsed.start();QTest::mouseClick(slider,Qt::LeftButton,Qt::NoModifier,QPoint(qRound(slider->width()*fraction),slider->height()/2));const int value=slider->value();const qint64 target=before.duration100ns*value/100000;bool rebound=false;QTimer watch;connect(&watch,&QTimer::timeout,&player,[&]{if(player.seekUiTarget_>=0 && qAbs(slider->value()-value)>10)rebound=true;});watch.start(1);
             QTRY_VERIFY2_WITH_TIMEOUT(!player.seekPending_ && player.snapshot().presentedVideoFrames>before.presentedVideoFrames && qAbs(player.position()-target)<tolerance,qPrintable(QString("pending=%1 actual=%2 target=%3 presents=%4 state=%5 error=%6").arg(player.seekPending_).arg(player.position()).arg(target).arg(player.snapshot().presentedVideoFrames-before.presentedVideoFrames).arg(int(player.snapshot().state)).arg(player.message_->text())),3000);watch.stop();QVERIFY(!rebound);qInfo()<<"Mouse click"<<disc<<mode<<resume<<target/1e7<<"ms"<<elapsed.elapsed()<<"PTS"<<player.snapshot().framePts;QVERIFY(elapsed.elapsed()<1000);QTRY_COMPARE(player.snapshot().state,resume?ThreeFpState::Playing:ThreeFpState::Paused);
         }
-        const auto dragPresented=player.outputSnapshot().presentedVideoFrames;
+        const auto dragPresented=player.outputSnapshot().presentedVideoFrames;const auto dragGeneration=player.snapshot().timelineGeneration;
         QTest::mousePress(slider,Qt::LeftButton,Qt::NoModifier,QPoint(slider->width()/10,slider->height()/2));
-        QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>dragPresented && qAbs(player.position()-player.snapshot().duration100ns*slider->value()/100000)<500000,1000);QVERIFY(slider->isSliderDown());
+        if(!disc)QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>dragPresented && qAbs(player.position()-player.snapshot().duration100ns*slider->value()/100000)<500000,1000);QVERIFY(slider->isSliderDown());
         for(const double fraction:{.2,.8,.25,.85,.3,.9}){const QPoint point(qRound(slider->width()*fraction),slider->height()/2);QMouseEvent move(QEvent::MouseMove,point,slider->mapToGlobal(point),Qt::NoButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(slider,&move);QTest::qWait(25);QVERIFY(qAbs(slider->value()-int(fraction*100000))<1000);}
+        if(disc){QCOMPARE(player.snapshot().timelineGeneration,dragGeneration);QVERIFY(!player.seekPending_);QVERIFY(player.queuedSeek_<0);}
         const auto target=player.snapshot().duration100ns*slider->value()/100000;QElapsedTimer release;release.start();QTest::mouseRelease(slider,Qt::LeftButton,Qt::NoModifier,QPoint(qRound(slider->width()*.9),slider->height()/2));QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.queuedSeek_<0 && qAbs(player.position()-target)<tolerance,3000);qInfo()<<"Mouse drag release"<<disc<<mode<<resume<<release.elapsed();QVERIFY(release.elapsed()<1000);QTRY_COMPARE(player.snapshot().state,resume?ThreeFpState::Playing:ThreeFpState::Paused);
     }
     void fileChapterPositions(){
@@ -388,8 +402,8 @@ private slots:
     void bdReturnToTopMenu(){
         const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");
         PlayerWindow player;player.show();QVERIFY(player.openBluRay(root,true));QTRY_VERIFY_WITH_TIMEOUT(player.discMenu_ && player.discMenu_->presentedFrames()>0,15000);
-        // Explicit menu request boots the menu entry, without replaying copyright clips.
-        player.findChild<QPushButton*>("playerOpenDiscMenu")->click();QTRY_VERIFY_WITH_TIMEOUT(player.discMenu_->presentedFrames()>0 && !player.discMenu_->programme().value("firstPlay").toBool(),5000);QTest::qWait(1500);
+        QVERIFY(!player.discMenu_->programme().value("firstPlay").toBool());QTest::qWait(1500);
+        const auto initialMenu=QDir::current().filePath("build/bd-1.0.12-initial-menu.png");QFile::remove(initialMenu);QVERIFY(player.discMenu_->snapshot(initialMenu));QTRY_VERIFY_WITH_TIMEOUT(!QImage(initialMenu).isNull(),3000);
         const auto size=player.discSurface_->size(),video=QSize(1920,1080).scaled(size,Qt::KeepAspectRatio);
         const QPoint point((size.width()-video.width())/2+qRound(1150.*video.width()/1920),(size.height()-video.height())/2+qRound(260.*video.height()/1080));
         QTest::mouseClick(player.discSurface_,Qt::LeftButton,Qt::NoModifier,point);QTRY_VERIFY_WITH_TIMEOUT(!player.discMenu_->active(),15000);QTRY_VERIFY_WITH_TIMEOUT(player.position()>14210000000LL,15000);
@@ -418,7 +432,7 @@ private slots:
     void bdMenuEpisodeSelection_data(){QTest::addColumn<int>("episode");for(int i=0;i<6;++i)QTest::newRow(qPrintable(QString::number(i+8)))<<i;}
     void bdMenuEpisodeSelection(){
         QFETCH(int,episode);
-        const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");PlayerWindow player;player.show();QVERIFY(player.openBluRay(root,true));QTRY_VERIFY2_WITH_TIMEOUT(player.discMenu_ && player.discMenu_->presentedFrames()>0,qPrintable(player.message_->text()+" / "+(player.discMenu_?player.discMenu_->error():QString("no disc session"))),15000);QTRY_COMPARE_WITH_TIMEOUT(player.discMenu_->programme().value("title").toInt(),0,20000);QTest::qWait(1500);
+        const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");PlayerWindow player;player.show();QVERIFY(player.openBluRay(root,true));QTRY_VERIFY2_WITH_TIMEOUT(player.discMenu_ && player.discMenu_->presentedFrames()>0,qPrintable(player.message_->text()+" / "+(player.discMenu_?player.discMenu_->error():QString("no disc session"))),15000);QTRY_VERIFY_WITH_TIMEOUT(!player.discMenu_->programme().value("firstPlay").toBool(),3000);QTest::qWait(1500);
         const auto size=player.discSurface_->size(),video=QSize(1920,1080).scaled(size,Qt::KeepAspectRatio);
         const QPoint point((size.width()-video.width())/2+qRound(1150.*video.width()/1920),(size.height()-video.height())/2+qRound((198+episode*62.)*video.height()/1080));
         QTest::mouseClick(player.discSurface_,Qt::LeftButton,Qt::NoModifier,point);

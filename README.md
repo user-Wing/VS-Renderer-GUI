@@ -8,7 +8,9 @@ Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜�
 
 开发机 Full 固定部署到 `dist/VS-GUI-Full`，编译更新直接同步该目录并保留配置。目录名不带版本号，最终压缩包再按版本命名（压缩包名称由发布版本决定）。
 
-当前本地版本 **1.0.11**：修复 BD 右键与播放列表显式返回主菜单入口及文件章节位置，Renderer 时间与进度条同排、文件/播放/缩放控件同排，预设携带时间组并支持全片单组导入当前组。预设管理与社区递归显示目录树，默认源是 [VS-GUI 公开预设社区](https://www.modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI/PresetCommunity)。
+当前本地版本 **1.0.12**：BD 拖动进度条在松开时只定位最终目标；光盘菜单模式直接进入选集页，跳过版权首播片。见 [1.0.12 记录](docs/update-1.0.12.md)。
+
+1.0.11 更新：修复 BD 右键与播放列表显式返回主菜单入口及文件章节位置，Renderer 时间与进度条同排、文件/播放/缩放控件同排，预设携带时间组并支持全片单组导入当前组。预设管理与社区递归显示目录树，默认源是 [VS-GUI 公开预设社区](https://www.modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI/PresetCommunity)。
 
 本轮 SDR 白位修复与 JXL 截图更新继续沿用 1.0.11，详情见 [发布说明](https://github.com/user-Wing/VS-Renderer-GUI/releases/tag/v1.0.11)。
 
@@ -46,7 +48,7 @@ VSP“视频 → 图像截取”支持 **PNG / AVIF / JXL**，分别可截取源
 
 主题设置可分别调整底部控制栏和右侧播放列表的透明度。全屏控制栏约 1 秒无操作自动隐藏，鼠标进入其实际高度范围即可唤出；顶部可唤出标题和退出全屏按钮。Tab 优先列出当前使用的文件，透明度条独立置于文字下方，并可开启右侧音频详细信息，显示真实输入 / 输出声道峰值电平 (dBFS)。使用和验证见 [透明控制栏与音频信息](docs/player-transparent-audio-info-1.0.7.md)。
 
-1.0.11 PlayerLite 是独立播放器组件，只保留 3FP、D3D11/Jinc、音视频字幕及图片查看；不包含 Renderer、VapourSynth、RIFE、PhotoCraft、libVLC、LAV、madVR 和高级色彩运行时。Full 保留完整功能与依赖。既有 1.0.6 已由维护者发布，历史说明见 [1.0.6 发行说明](docs/release-1.0.6.md)。
+1.0.12 PlayerLite 是独立播放器组件，只保留 3FP、D3D11/Jinc、音视频字幕及图片查看；不包含 Renderer、VapourSynth、RIFE、PhotoCraft、libVLC、LAV、madVR 和高级色彩运行时。Full 保留完整功能与依赖。既有 1.0.6 已由维护者发布，历史说明见 [1.0.6 发行说明](docs/release-1.0.6.md)。
 
 ## 简要更新说明
 

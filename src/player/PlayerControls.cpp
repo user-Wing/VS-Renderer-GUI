@@ -60,7 +60,11 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     });
     connect(slider, &QSlider::valueChanged, this, [this, slider](int value) {
         const auto target=(discMenu_ && discMenu_->active()?discMenu_->duration():clock_->snapshot().duration100ns) * value / 100000;
-        if(slider->isSliderDown() && timelineDragging_){timelineTarget_=target;if(!timelinePreview_->isActive())timelinePreview_->start();}
+        if(slider->isSliderDown() && timelineDragging_){
+            // Disc seeks can cross many clips; commit only the final drag position.
+            if((discMenu_ && discMenu_->active()) || !blurayMetadata_.isEmpty() || blurayGroups_.contains(source_))return;
+            timelineTarget_=target;if(!timelinePreview_->isActive())timelinePreview_->start();
+        }
         else if(!slider->isSliderDown())seekTime(target);
     });
     connect(slider, &QSlider::sliderReleased, this, [this, slider] {
