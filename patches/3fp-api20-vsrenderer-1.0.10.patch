@@ -614,26 +614,37 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (disc_) {
          if (!disc_->Seek(position)) { ReportError(FFFResult::NotSupported, "This disc position cannot be seeked.", "seek"); return FFFResult::NotSupported; }
          if (ReopenDiscDemux() && state_.load() != FFF3FPState::Playing && videoStream_ >= 0)
-@@ -4554,13 +4764,12 @@
+@@ -4553,18 +4763,20 @@
+     // Still-image seek is a no-op: single-image demuxers have no seekable timeline.
      if (staticImage_) { PublishSnapshot(); return FFFResult::Success; }
      auto decodeStartPosition = position;
-     const auto referenceStream = videoStream_ >= 0 ? videoStream_ : audioStream_;
+-    const auto referenceStream = videoStream_ >= 0 ? videoStream_ : audioStream_;
 -    // 时间戳定位对"没有 read_seek 的解容器"会退到去找一对时间戳——那要把输入一路读下去。
 -    // 找不到时它返回失败，可输入指针已经停在末尾：裸 Annex-B 就是这个形状，Seek 返回 -5
 -    // 之后会话读到 EOF、pending 已空，FlushAtEnd 直接判 Ended（实测解码 0 帧，而同一个
 -    // 文件不 seek 能正常播 88 帧）。所以"定位失败＝没有副作用"不能只写在注释里，必须
 -    // 真的把读位置还原；avformat_flush 是文档规定的配套调用（绕过解容器去 seek AVIO 之后）。
++    // Concat output streams are matched by PID and need not share the child
++    // demuxer's indices. Seek its global timeline instead of a child stream.
++    const bool concat = std::strcmp(format_->iformat->name, "concat") == 0;
++    const auto referenceStream = concat ? -1 : (videoStream_ >= 0 ? videoStream_ : audioStream_);
      const auto byteOffsetBeforeSeek = format_->pb != nullptr ? avio_tell(format_->pb) : -1;
 -    auto timestamp = av_rescale_q(position + TimelineOrigin100ns(format_),
 +    // MPEG-TS seeks within a concat segment can land past the requested PTS.
 +    // Decode a short preroll so an exact paused seek can still reach its target.
-+    const auto seekPosition = exact && std::strcmp(format_->iformat->name, "concat") == 0
++    const auto seekPosition = exact && concat
 +        ? std::max<std::int64_t>(0, position - 2 * TicksPerSecond) : position;
 +    auto timestamp = av_rescale_q(seekPosition + TimelineOrigin100ns(format_),
          AVRational{1, static_cast<int>(TicksPerSecond)},
-         format_->streams[referenceStream]->time_base);
+-        format_->streams[referenceStream]->time_base);
++        referenceStream >= 0 ? format_->streams[referenceStream]->time_base : AV_TIME_BASE_Q);
      auto seekResult = av_seek_frame(format_, referenceStream, timestamp, AVSEEK_FLAG_BACKWARD);
-@@ -4611,6 +4820,7 @@
+-    if (seekResult < 0 && format_->pb != nullptr &&
++    if (seekResult < 0 && !concat && format_->pb != nullptr &&
+         (format_->pb->seekable & AVIO_SEEKABLE_NORMAL) != 0) {
+         const auto fileSize = avio_size(format_->pb);
+         const auto timelineExtent = snapshot_.duration100ns > 0
+@@ -4611,6 +4823,7 @@
      }
      ClearVideoQueue();
      ResetBitRateTracking();
@@ -641,7 +652,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (videoDecoder_) avcodec_flush_buffers(videoDecoder_);
      if (audioDecoder_) avcodec_flush_buffers(audioDecoder_);
      internalAudioDecodeErrorCount_ = 0;
-@@ -4701,6 +4911,7 @@
+@@ -4701,6 +4914,7 @@
      }
      if (result != FFFResult::Success) { ReportError(result, "Could not open the selected media stream.", "select-stream"); return; }
      if (video) {
@@ -649,7 +660,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          if (videoDecoder_) avcodec_free_context(&videoDecoder_);
          videoDecoder_ = replacement; videoStream_ = index;
          snapshot_.selectedVideoStream = index;
-@@ -4768,6 +4979,7 @@
+@@ -4768,6 +4982,7 @@
  }
  
  void PlayerSession::DoClose(const FFF3FPState finalState, const bool preserveVideoOutput) noexcept {
@@ -657,7 +668,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (audioRenderer_) { audioRenderer_->Stop(); audioRenderer_.reset(); }
      // SetTimedTextLayer is intentionally callable outside the session command
      // queue. Gate renderer teardown with its content lock so a final timer tick
-@@ -4776,6 +4988,7 @@
+@@ -4776,6 +4991,7 @@
      if (preserveVideoOutput) videoRenderer_.ResetMedia();
      else videoRenderer_.Close();
      if (externalAudioDecoder_) avcodec_free_context(&externalAudioDecoder_); CloseFormat(&externalFormat_, externalFormatIo_);
@@ -665,7 +676,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (videoDecoder_) avcodec_free_context(&videoDecoder_);
      if (audioDecoder_) avcodec_free_context(&audioDecoder_);
      ReleaseIamfDecoder();
-@@ -4903,6 +5116,8 @@
+@@ -4903,6 +5119,8 @@
  
  void PlayerSession::RebuildMediaInfo() noexcept {
      if (!format_) return;
@@ -674,7 +685,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      // Publish the per-media frame-rate ceiling on every media-info rebuild. This runs
      // from every path that can change the media identity (open, select-stream, disc
      // title change) as well as the idempotent re-rebuilds (device recovery, hardware
-@@ -4933,6 +5148,9 @@
+@@ -4933,6 +5151,9 @@
          << ",\"fileSize\":" << std::max<std::int64_t>(0, format_->pb ? avio_size(format_->pb) : 0)
          << ",\"probeScore\":" << format_->probe_score
          << ",\"staticImage\":" << (staticImage_ ? "true" : "false")
@@ -684,7 +695,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          << ",\"metadata\":";
      AppendDictionaryJson(json, format_->metadata);
      json << ",\"chapters\":[";
-@@ -5067,6 +5285,9 @@
+@@ -5067,6 +5288,9 @@
                  const auto decoderBitDepth = PixelFormatBitDepth(
                      decoderSurfaceFormat != AV_PIX_FMT_NONE ? decoderSurfaceFormat : decoderFormat);
                  if (decoderBitDepth > 0) json << ",\"decoderBitDepth\":" << decoderBitDepth;
@@ -694,7 +705,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
                  const auto acceleration = HardwareAccelerationName(videoDecoder_);
                  if (!acceleration.empty())
                      json << ",\"hardwareAcceleration\":\"" << EscapeJson(acceleration) << "\"";
-@@ -5217,13 +5438,13 @@
+@@ -5217,13 +5441,13 @@
          return position;
      }
      if (!audioClockFinished_ && audioRenderer_ && (audioStream_ >= 0 || externalAudioStream_ >= 0)) {
@@ -711,7 +722,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      PublishPlaybackClock(position, snapshot_.duration100ns > 0
          ? snapshot_.duration100ns : (std::numeric_limits<std::int64_t>::max)());
      return position;
-@@ -5273,3 +5494,238 @@
+@@ -5273,3 +5497,238 @@
          normalized = ToUtf8(full.data()); return !normalized.empty();
      } catch (...) { error = "The local path could not be normalized."; return false; }
  }
