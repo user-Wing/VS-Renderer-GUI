@@ -6,8 +6,10 @@
 #include <QJsonObject>
 #include <memory>
 #include <QPointer>
+#include <QSet>
 #include <QElapsedTimer>
 #include "player/PlayerResources.h"
+class QProcess;
 class QSlider;
 class QSettings;
 class QLineEdit;
@@ -94,6 +96,12 @@ private:
     void updateState();
     void requestFrame(int frame);
     void refreshScript();
+    void stopDiscIndexing();
+    void preindexDisc();
+    struct DiscIndexPart { QString path, index; qint64 end; bool lsmas; };
+    QList<DiscIndexPart> discIndexParts_;
+    QSet<QString> discIndexAttempted_;
+    QProcess *discIndexer_=nullptr;
     bool openMedia();
     bool networkSource() const;
     void savePosition();

@@ -203,7 +203,7 @@ void PlayerWindow::setDirectMode(bool enabled) {
     auto *visible=direct_?clock_.get():output_.get();
     applyScaling();
     visible->setView(pane_->zoom(),pane_->pan().x(),pane_->pan().y());
-    if(opened){clock_->openFile(mediaInput_);rateApplied_=false;resumeAt_=at;}
+    if(opened){clock_->openFile(mediaInput_);rateApplied_=false;if(resumeAt_<0)resumeAt_=at;}
 }
 void PlayerWindow::updateProfile() {
     if((interpolationStage()>=0 && !interpolationAuto_ && interpolationStage()!=3) || (fixedAnimeStage()>=0 && !profileFallback_) || madvrMode() || (profile().isEmpty() && !networkSource()) || qualityStage_>=5 || !ready_ || !playing_ || seekPending_ || profileResize_->isActive() || !qualitySettling_.isValid() || qualitySettling_.elapsed()<2000) {qualityTimer_.invalidate();return;}

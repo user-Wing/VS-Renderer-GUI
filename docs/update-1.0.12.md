@@ -38,3 +38,13 @@ Blu-ray 解析 / 缓存测试 8 passed、3 skipped（对应环境变量未设）
 Jinc 偏暗与无音轨 Anime4K 时钟续修见 [色彩与 VS 记录](player-color-vs-1.0.12.md)。
 
 VS 预取调度、手动 Anime 大文件冷索引与半透明样式续修见 [Anime 播放记录](player-anime-performance-1.0.12.md)。
+
+## BD VS 按段索引与菜单续播（2026-10-17）
+
+原先整卷 VS 脚本在首帧前同步创建全部 M2TS 的 Source，首次播放需要扫描整卷。现改为保留完整时间轴，按目标位置延迟创建片段节点；首帧只索引当前所选片段。首帧提交后启动独立、低 CPU 优先级的 Python 进程，顺序预建后续片段索引。后台索引成功后才从临时文件提升为正式缓存，跳转、切换影片和关闭时停止后台任务，目标片段优先。先前片段不会为播放后面的集数而扫描；跳到尚未索引的片段仍需等待该片段的首次索引。
+
+同时修复菜单直接选择 CNN / CNN+ 时，创建 VS 时钟以零覆盖所选集续播位置，以及时钟尚未就绪就清空续播位置的问题。统一在时钟 Ready / Paused / Playing 后通过完整 seek 状态机定位。
+
+验证记录：`build/bd-vs-paths-before.txt` 复现菜单预选 CNN、菜单内切 CNN、预选 CNN+ 三项失败；菜单交接后切 CNN 可播。`build/bd-vs-clock-after.txt` 四路径均通过。原全卷冷索引首帧约 21.6 秒；按段冷索引 CNN 约 5 秒，输出 2560×1440、整卷 204720 帧、所选集位置约 1421.5 秒。冷缓存用独立临时目录；检查前一集索引未创建、后台下一集索引落盘、继续播放和远距离跳转。最终结果见 `build/bd-lazy-final.txt`。版本仍为 1.0.12。
+
+加强后的交界验证 `build/bd-lazy-boundary-final.txt`：四种菜单路径 6 passed、0 failed（含 init/cleanup）。每条路径使用全新索引目录，等待 VS 目标画面呈现并恢复播放后，验证整卷后段定位及第二 / 第三片段之间自然连续播放。冷索引首帧 5.54～5.68 秒。Lite 全套 `build/bd-lazy-lite.txt` 为 8 passed、0 failed；Blu-ray 解析 / 缓存测试为 8 passed、0 failed、3 skipped（未设置该套件的实盘环境变量）。其余 BD 拖动 / 返回菜单 / VPY、手动 Anime、预取与指定无音轨 Anime 四档回归通过。未运行全量 Full 播放器套件。

@@ -1,5 +1,7 @@
 # VS Renderer / VS Player：项目开发地图
 
+BD 整卷 VS 播放优先索引当前 M2TS，首帧后后台顺序准备后续片段；菜单选集续播位置保留。跳到未索引片段时仅等待目标片段，详见 [1.0.12 记录](docs/update-1.0.12.md)。
+
 > 本文面向接手开发的维护者与 AI，负责说明架构、模块入口、约束与当前状态，不记录逐日开发流水账。用户指南见 [README](README.md)，版本变更见 [changelog](changelog.md)，专项证据见 [docs](docs/)。核对基线：2026-10-17，本地版本 1.0.12；BD 拖动只在松开时提交最终定位，原生 concat 使用全局时间定位以恢复整卷跨段点击 / 拖动；光盘菜单模式直接进入选集页。压缩包由维护者制作，验证见 [1.0.12记录](docs/update-1.0.12.md)。
 
 Jinc 权重使用 GPU t5，与色彩变换 LUT t4 分离；修改 HLSL 后必须重生通用与 SDR 专用字节码。无音轨 VS clock-only 以墙钟推进，不等待视频队列、不提前读到 EOF。指定 SDR 与 Anime4K 验证见 [色彩与 VS 记录](docs/player-color-vs-1.0.12.md)。

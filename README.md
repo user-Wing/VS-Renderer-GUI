@@ -1,5 +1,7 @@
 # VS Renderer / VS Player
 
+BD 整卷 VS 播放优先索引当前 M2TS，首帧后后台顺序准备后续片段；菜单选集续播位置保留。跳到未索引片段时仅等待目标片段，详见 [1.0.12 记录](docs/update-1.0.12.md)。
+
 Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜链生成 VapourSynth 脚本、预览和导出；**VS Player** 独立播放视频、音频与图片，并可加载 VPY 实时滤镜。
 
 ## 下载与启动

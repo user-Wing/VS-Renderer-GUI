@@ -13,6 +13,10 @@
 #include <QtConcurrentRun>
 #include <QtConcurrentMap>
 #include <QProcess>
+#include <QFile>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QComboBox>
@@ -42,6 +46,36 @@
 
 namespace vsr {
 namespace { struct DiscList {QStringList paths;QHash<QString,QString> labels,groups;QHash<QString,QJsonObject> programmes;QString root,error;}; }
+void PlayerWindow::stopDiscIndexing() {
+    if(!discIndexer_)return;
+    auto *job=discIndexer_;discIndexer_=nullptr;job->disconnect(this);job->kill();job->waitForFinished(1000);
+    discIndexAttempted_.remove(job->property("finalIndex").toString());
+    QFile::remove(job->property("pendingIndex").toString());job->deleteLater();
+}
+void PlayerWindow::preindexDisc() {
+    if(discIndexer_ || direct_ || !ready_)return;
+    const auto at=position();qint64 start=0;
+    for(const auto &part:discIndexParts_){
+        const auto from=start;start=part.end;
+        if(from<=at || part.index.isEmpty() || QFileInfo::exists(part.index) || discIndexAttempted_.contains(part.index))continue;
+        const auto python=QDir(QCoreApplication::applicationDirPath()).filePath("runtime/python/python.exe");
+        if(!QFileInfo::exists(python))return;
+        discIndexAttempted_.insert(part.index);
+        auto *job=new QProcess(this);discIndexer_=job;
+        const auto pending=part.index+".pending-"+QString::number(QCoreApplication::applicationPid());
+        job->setProperty("pendingIndex",pending);job->setProperty("finalIndex",part.index);
+        connect(job,&QProcess::finished,this,[this,job,pending,index=part.index](int code,QProcess::ExitStatus status){
+            if(status==QProcess::NormalExit && code==0 && !QFileInfo::exists(index))QFile::rename(pending,index);
+            QFile::remove(pending);discIndexer_=nullptr;job->deleteLater();preindexDisc();
+        });
+        connect(job,&QProcess::errorOccurred,this,[this,job,pending](QProcess::ProcessError error){if(error==QProcess::FailedToStart){QFile::remove(pending);discIndexer_=nullptr;job->deleteLater();}});
+#ifdef Q_OS_WIN
+        job->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args){args->flags|=BELOW_NORMAL_PRIORITY_CLASS;});
+#endif
+        const auto code=part.lsmas?"import sys, vapoursynth as vs; vs.core.lsmas.LWLibavSource(sys.argv[1],cachefile=sys.argv[2]).get_frame(0)":"import sys, vapoursynth as vs; vs.core.ffms2.Index(source=sys.argv[1],cachefile=sys.argv[2])";
+        job->start(python,{"-c",code,part.path,pending});return;
+    }
+}
 void PlayerWindow::chooseFiles() {
     const auto paths=QFileDialog::getOpenFileNames(this,tr("打开视频或图片"));
     if(paths.isEmpty())return;playlistDirectory_.clear();files_=paths;openFile(paths.first());
@@ -99,6 +133,7 @@ void PlayerWindow::returnToDiscMenu() {
 }
 bool PlayerWindow::openDiscMenu(const QString &root, bool menus, bool topMenu) {
     QString error;const auto input=menus?BlurayCatalog::prepareMenu(root,&error,topMenu):root;if(input.isEmpty()){setError(error);return false;}
+    stopDiscIndexing();discIndexParts_.clear();
     pendingMediaOpen_.clear();
     discProgrammeKey_.clear();discProgrammeSettling_.invalidate();seekUiTarget_=queuedSeek_=-1;seekPending_=false;
     savePosition();if(discMenu_ && discMenu_->active()){discMenu_->close(discSurface_);discSurface_=nullptr;}clock_->stop();output_->stop();server_->unloadScript();lav_.reset();subtitles_->load(0,{},-1,{},{});subtitles_->load(1,{},-1,{},{});

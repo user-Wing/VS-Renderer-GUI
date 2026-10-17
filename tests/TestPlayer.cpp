@@ -413,6 +413,36 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(player.discMenu_->active() && player.discMenu_->presentedFrames()>0 && !player.discMenu_->programme().value("firstPlay").toBool(),5000);QTest::qWait(1500);
         QTest::mouseClick(player.discSurface_,Qt::LeftButton,Qt::NoModifier,point);QTRY_VERIFY_WITH_TIMEOUT(!player.discMenu_->active(),10000);QTRY_VERIFY_WITH_TIMEOUT(player.position()>14210000000LL,10000);
     }
+    void bdMenuContinuousVs_data(){QTest::addColumn<int>("selection");QTest::addColumn<int>("stage");QTest::newRow("CNN-before-menu")<<0<<1;QTest::newRow("CNN-in-menu")<<1<<1;QTest::newRow("CNN-after-handoff")<<2<<1;QTest::newRow("CNNplus-before-menu")<<0<<0;}
+    void bdMenuContinuousVs(){
+        QFETCH(int,selection);QFETCH(int,stage);
+        const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");
+        QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("playback/remember",false);settings.setValue("basic/autoplay",true);settings.sync();
+        QTemporaryDir cache;QVERIFY(cache.isValid());settings.setValue("cache/path",cache.path());settings.sync();
+        const auto preset=QDir(PresetStore::directory()).filePath(stage==0?"builtin/Anime-0-CNN-Enhanced.vpy":"builtin/Anime-1-CNN.vpy");
+        PlayerWindow player;player.show();player.pane_->surface()->setFixedSize(qRound(2560/player.devicePixelRatioF()),qRound(1440/player.devicePixelRatioF()));player.loadPreset(selection==0?preset:QDir(PresetStore::directory()).filePath("builtin/Anime-4-Jinc.vpy"));QSignalSpy failures(player.server_.get(),&VapourSynthFrameServer::errorOccurred);
+        QVERIFY(player.openBluRay(root,true));QTRY_VERIFY_WITH_TIMEOUT(player.discMenu_ && player.discMenu_->presentedFrames()>0,15000);QTest::qWait(1500);
+        if(selection==1)player.loadPreset(preset);
+        const auto size=player.discSurface_->size(),video=QSize(1920,1080).scaled(size,Qt::KeepAspectRatio);const QPoint point((size.width()-video.width())/2+qRound(1150.*video.width()/1920),(size.height()-video.height())/2+qRound(260.*video.height()/1080));
+        QTest::mouseClick(player.discSurface_,Qt::LeftButton,Qt::NoModifier,point);QTRY_VERIFY_WITH_TIMEOUT(!player.discMenu_->active(),15000);
+        qInfo()<<"BD handoff"<<player.source_<<player.mediaInput_<<player.snapshot().duration100ns/1e7;
+        QElapsedTimer startup;startup.start();if(selection==2){QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0 && player.position()>14210000000LL,15000);player.loadPreset(preset);}
+        QTRY_VERIFY2_WITH_TIMEOUT(!failures.isEmpty() || (player.ready_ && !player.direct_ && player.playing_ && player.lastFrame_>=0 && player.outputSnapshot().presentedVideoFrames>2),qPrintable(player.message_->text()),120000);
+        QVERIFY2(failures.isEmpty(),qPrintable(failures.isEmpty()?player.message_->text():failures.first().first().toString()));QCOMPARE(player.qualityStage(),stage);QVERIFY(!player.direct_);QVERIFY(player.position()>14210000000LL);qInfo()<<"BD VS startup ms"<<startup.elapsed()<<player.clip_.width<<player.clip_.height<<player.clip_.totalFrames<<player.position()/1e7;
+        const auto first=player.outputSnapshot().presentedVideoFrames;QTest::qWait(3000);QVERIFY(player.outputSnapshot().presentedVideoFrames>first+30);QVERIFY(player.playing_);
+        QVERIFY(player.discIndexParts_.size()>2);
+        QVERIFY(!QFileInfo::exists(player.discIndexParts_.first().index));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(player.discIndexParts_[2].index),30000);
+        qInfo()<<"BD indexes"<<QDir(cache.path()).entryList({"*.ffindex"},QDir::Files);
+        player.seekTime(71080000000LL);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.seekUiTarget_<0 && player.playing_ && player.position()>71070000000LL && player.outputSnapshot().presentedVideoFrames>first+80,30000);
+        QVERIFY(failures.isEmpty());QVERIFY(!QFileInfo::exists(player.discIndexParts_.first().index));
+        const auto boundary=player.discIndexParts_[1].end;player.seekTime(boundary-5000000);
+        QTRY_VERIFY2_WITH_TIMEOUT(!player.seekPending_ && player.seekUiTarget_<0 && player.playing_ && qAbs(player.position()-boundary)<10000000,qPrintable(QString("position=%1 boundary=%2 pending=%3 ui=%4 playing=%5 error=%6").arg(player.position()).arg(boundary).arg(player.seekPending_).arg(player.seekUiTarget_).arg(player.playing_).arg(player.message_->text())),30000);
+        const auto crossing=player.outputSnapshot().presentedVideoFrames;QTest::qWait(2000);
+        QVERIFY(player.position()>boundary);QVERIFY(player.outputSnapshot().presentedVideoFrames>crossing+20);QVERIFY(failures.isEmpty());
+
+
+    }
     void software8kPlaybackMeasurement(){
         const auto source=qEnvironmentVariable("VSR_PERF_SOURCE");if(source.isEmpty())QSKIP("Set VSR_PERF_SOURCE");
         QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",true);settings.setValue("playback/remember",false);settings.setValue("decode/mode",1);settings.setValue("player/preset",QString());settings.setValue("subtitle/visible",qEnvironmentVariableIntValue("VSR_PERF_SUBTITLES")!=0);settings.sync();

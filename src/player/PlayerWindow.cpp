@@ -226,7 +226,7 @@ PlayerWindow::PlayerWindow() {
     connect(server_.get(), &VapourSynthFrameServer::errorOccurred, this, [this](const QString &error) { if(imageMode_ || madvrMode() || direct_) return; if(advanceInterpolation())return; ready_ = pending_ = false; autoPlay_ = false; clock_->pause(); if (lav_) lav_->pause(); playing_ = false; setError(error); });
     connect(server_.get(), &VapourSynthFrameServer::scriptLoaded, this, [this](const VapourSynthClipInfo &clip, const VapourSynthClipInfo &) {
         if(imageMode_ || madvrMode() || direct_) return;
-        clip_ = clip; if(resumeAt_>=0){clock_->seek(resumeAt_);resumeAt_=-1;} ready_ = true; pending_ = false; requested_ = lastFrame_ = -1; pane_->setVideoSize(QSize(clip.width, clip.height)); pane_->setSurfaceActive(true); requestFrame(frameAtPosition100ns(position(), clip.totalFrames, clip.fpsNumerator, clip.fpsDenominator));
+        clip_ = clip; ready_ = true; pending_ = false; requested_ = lastFrame_ = -1; pane_->setVideoSize(QSize(clip.width, clip.height)); pane_->setSurfaceActive(true); if(resumeAt_<0)requestFrame(frameAtPosition100ns(position(), clip.totalFrames, clip.fpsNumerator, clip.fpsDenominator));
     });
     connect(server_.get(), &VapourSynthFrameServer::frameReady, this, [this](const VapourSynthFrame &frame) {
         pending_ = false;
@@ -238,6 +238,7 @@ PlayerWindow::PlayerWindow() {
         ++submittedFrames_; displayedFrame_=frame;
         if (!output_->submitFrame(frame)) { setError(output_->lastError()); return; }
         lastFrame_ = static_cast<int>(frame.frameIndex);
+        preindexDisc();
         message_->clear();
         if (autoPlay_ && seekUiTarget_<0 && (lav_ || clock_->snapshot().state == ThreeFpState::Ready || clock_->snapshot().state == ThreeFpState::Paused)) { togglePlayback(); if (playing_) autoPlay_ = false; }
         const int target=frameAtPosition100ns(position(),clip_.totalFrames,clip_.fpsNumerator,clip_.fpsDenominator);
@@ -254,7 +255,7 @@ PlayerWindow::PlayerWindow() {
     qApp->installEventFilter(this);
     timer_ = new QTimer(this); timer_->setTimerType(Qt::PreciseTimer);timer_->setInterval(interpolationStage()>=0?4:10); connect(timer_, &QTimer::timeout, this, &PlayerWindow::updateState); timer_->start();
 }
-PlayerWindow::~PlayerWindow() { qApp->removeEventFilter(this); timer_->stop();timelinePreview_->stop();savePosition(); settings_->sync(); network_->cancel(); discMenu_.reset(); subtitles_.reset(); lav_.reset(); clock_->stop(); server_.reset(); network_.reset(); output_.reset(); clock_.reset(); }
+PlayerWindow::~PlayerWindow() { qApp->removeEventFilter(this); timer_->stop();stopDiscIndexing();timelinePreview_->stop();savePosition(); settings_->sync(); network_->cancel(); discMenu_.reset(); subtitles_.reset(); lav_.reset(); clock_->stop(); server_.reset(); network_.reset(); output_.reset(); clock_.reset(); }
 void PlayerWindow::moveEvent(QMoveEvent *event){QMainWindow::moveEvent(event);if(chromeTimer_){layoutChrome();layoutInfoPanels();}}
 bool PlayerWindow::openFile(const QString &input) {
     if(discMenu_ && discMenu_->active()){discMenu_->close(discSurface_);discSurface_=nullptr;}
@@ -281,6 +282,7 @@ bool PlayerWindow::openFile(const QString &input) {
     timelinePreview_->stop();timelineTarget_=timelineSeekTarget_=-1;timelineDragging_=timelineResume_=timelineWaiting_=false;
     seekUiTarget_=queuedSeek_=-1;
     if (suffix!="mpls" && !playerAudioExtensions().contains(suffix) && !image && !remote && !madvrMode() && !preset_.isEmpty() && profile()!="Realistic" && fixedAnimeStage()<4 && server_->initializing()) { deferred_ = path; deferredSubtitle_.clear();deferredAudio_.clear(); message_->setText(tr("正在初始化 VS，完成后自动打开。")); return true; }
+    stopDiscIndexing();discIndexParts_.clear();
     savePosition(); imageLoader_->cancel();deferred_.clear();deferredAudio_.clear();network_->cancel(); server_->unloadScript();
     imageMode_=image;audioMode_=!image && playerAudioExtensions().contains(suffix);audioMetadataLoaded_=false;audioMetadata_={};setProperty("audioOnly",audioMode_);setProperty("lyricCount",0);lyricLabel_->clear();lyricLabel_->hide();pane_->setImage({});pane_->adoptView(1,0,0);resetZoom_->hide();
     imageTools_->setSource(image?QFileInfo(path).absoluteFilePath():QString());
@@ -344,6 +346,7 @@ bool PlayerWindow::openMedia() {
 }
 void PlayerWindow::refreshScript() {
     if ((discMenu_ && discMenu_->active()) || imageMode_ || audioMode_ || source_.isEmpty() || mediaInput_.isEmpty() || (madvrMode() && !networkSource())) return;
+    stopDiscIndexing();discIndexParts_.clear();discIndexAttempted_.clear();
     const bool resume=autoPlay_ || playing_;
     if(resumeAt_<0 && ready_)resumeAt_=position();
     resetStatistics();
@@ -375,7 +378,8 @@ void PlayerWindow::refreshScript() {
     if(vsSource.endsWith(".ffconcat") && source_.endsWith(".mpls")){
         QFile file(source_);BlurayPlaylist playlist;QString error;
         if(!file.open(QIODevice::ReadOnly) || !BlurayCatalog::parse(file.readAll(),&playlist,&error)){setError(error);return;}
-        QString parts;QHash<QString,double> starts;
+        QString parts;QHash<QString,double> starts;qint64 end=0;
+        const bool lsmas=result.script.contains("_vsr_player_lsmas(");
         const auto bdmv=QFileInfo(QFileInfo(source_).absolutePath()).absolutePath();
         for(const auto &part:playlist.parts){
             const auto path=QDir(bdmv).filePath("STREAM/"+part.clip+".m2ts");
@@ -384,10 +388,14 @@ void PlayerWindow::refreshScript() {
                 for(const auto &entry:probe.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("codec_type").toString()=="video"){starts.insert(path,stream.value("start_time").toString().toDouble());found=true;break;}}
                 if(!found){setError(tr("无法读取 BD 片段视频时间：%1").arg(path));return;}
             }
+            end+=qRound64((part.out-part.in)/45000.*10000000.);
+            discIndexParts_.append({path,playerIndexPath(*settings_,path,lsmas?"lwi":"ffindex"),end,lsmas});
             parts+=QString("(%1, %2, %3, %4, %5),\n").arg(literal(path),QString::number(part.in/45000.-starts.value(path),'f',9),QString::number((part.out-part.in)/45000.,'f',9),literal(playerIndexPath(*settings_,path,"ffindex")),literal(playerIndexPath(*settings_,path,"lwi")));
         }
         result.script.replace("_vsr_player_ffms(","_vsr_bd_ffms(");result.script.replace("_vsr_player_lsmas(","_vsr_bd_lsmas(");
-        result.script.prepend(QString("def _vsr_bd_source(loader, args, options, lsmas):\n    source = args[0] if args else options.get('source')\n    if source != %1: return loader(*args, **options)\n    options = dict(options)\n    options.pop('source', None)\n    options.pop('cachedir', None)\n    clips = []\n    for path, start, duration, ffindex, lwi in [%2]:\n        opts = dict(options)\n        index = lwi if lsmas else ffindex\n        opts['cache'] = int(bool(index))\n        opts['cachefile'] = index\n        opts.setdefault('threads', %3)\n        clip = loader(path, *args[1:], **opts)\n        first = max(0, round(start * clip.fps_num / clip.fps_den))\n        count = round(duration * clip.fps_num / clip.fps_den)\n        clips.append(clip[first:first + count])\n    return _vsr_vs.core.std.Splice(clips)\ndef _vsr_bd_ffms(*args, **options):\n    return _vsr_bd_source(_vsr_vs.core.ffms2.Source, args, options, False)\ndef _vsr_bd_lsmas(*args, **options):\n    return _vsr_bd_source(_vsr_vs.core.lsmas.LWLibavSource, args, options, True)\n").arg(literal(vsSource),parts,settings_->value("playback/multithread",true).toBool()?"0":"1"));
+        result.script.replace("_props = src.get_frame(0).props","_props = _vsr_bd_reference_frame.props");
+        QFile helper(":/filters/player-bd-source.py");if(!helper.open(QIODevice::ReadOnly)){setError(helper.errorString());return;}
+        result.script.prepend(QString("_vsr_bd_input = %1\n_vsr_bd_parts = [%2]\n_vsr_bd_resume = %3\n_vsr_bd_threads = %4\n").arg(literal(vsSource),parts,QString::number(qMax<qint64>(0,resumeAt_>=0?resumeAt_:position())/10000000.,'f',9),settings_->value("playback/multithread",true).toBool()?"0":"1")+QString::fromUtf8(helper.readAll())+"\n");
     }
     result.script.prepend(QString("import vapoursynth as _vsr_vs\ndef _vsr_player_ffms(*args, **options):\n    options['cache'] = %1\n    options['cachefile'] = %2\n    options.setdefault('threads', %5)\n    try:\n        return _vsr_vs.core.ffms2.Source(*args, **options)\n    except _vsr_vs.Error as error:\n        if 'Source: No video track found' not in str(error): raise\n        if 'track' in options: options['stream_index'] = options.pop('track')\n        return _vsr_player_lsmas(*args, **options)\ndef _vsr_player_lsmas(*args, **options):\n    options.pop('cachedir', None)\n    options['cache'] = %3\n    options['cachefile'] = %4\n    options.setdefault('threads', %5)\n    return _vsr_vs.core.lsmas.LWLibavSource(*args, **options)\n")
         .arg(ffindex.isEmpty()?"False":"True",literal(ffindex),lwi.isEmpty()?"0":"1",literal(lwi),settings_->value("playback/multithread",true).toBool()?"0":"1"));
@@ -430,6 +438,7 @@ void PlayerWindow::seekTime(qint64 time) {
     if(imageMode_)return;
     frameJumpTarget_=-1;
     if(!direct_ && !lav_ && playing_){togglePlayback();autoPlay_=true;}
+    stopDiscIndexing();
     manualFrame_ = -1;resumeAt_=-1;suspendQualityCheck();
     lastFrame_=-1;
     const auto snap = clock_->snapshot(); time = std::clamp<qint64>(time, 0, std::max<qint64>(0, snap.duration100ns));
@@ -527,7 +536,6 @@ void PlayerWindow::updateState() {
             if(settingsPosition_>=0){resumeAt_=settingsPosition_;settingsPosition_=-1;}
             else if(settings_->value("playback/remember",true).toBool()) {const auto key=QString::fromLatin1(QCryptographicHash::hash(source_.toUtf8(),QCryptographicHash::Sha256).toHex());const auto stored=settings_->value("positions/"+key,0).toLongLong();if(stored>0 && stored<snap.duration100ns-10000000)resumeAt_=stored;}
         }
-        if(resumeAt_>=0 && ready_ && !direct_ && profile().isEmpty()){const auto stored=resumeAt_;resumeAt_=-1;seekTime(stored);}
         if(!audioMode_ && !madvrMode() && (!profile().isEmpty() || networkSource()))refreshScript();
         else if(!media_.value("streams").toArray().isEmpty()) {bool video=false;for(const auto &entry:media_.value("streams").toArray())video|=entry.toObject().value("type").toString()=="video";if(!video){setDirectMode(true);ready_=true;server_->unloadScript();}}
         const auto streams=media_.value("streams").toArray();int audio=playerDefaultTrack(streams,"audio"),subtitle=playerDefaultTrack(streams,"subtitle");
@@ -538,6 +546,7 @@ void PlayerWindow::updateState() {
         matchExternalTracks();
         if(externalSubtitle_.isEmpty())selectSubtitle(0,subtitle);
     }
+    if(resumeAt_>=0 && ready_ && !direct_ && !seekPending_ && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)){const auto stored=resumeAt_;resumeAt_=-1;seekTime(stored);}
     if (autoPlay_ && !seekPending_ && seekUiTarget_<0 && (madvrMode() || direct_ || lastFrame_ >= 0) && (lav_ || snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused)) { togglePlayback(); if (playing_) autoPlay_ = false; }
     if (seekPending_ && snap.timelineGeneration != generation_ && (!direct_ || snap.selectedVideoStream<0 || (snap.presentedVideoFrames>seekPresented_ && snap.frameIndex>=0))) { seekPending_ = false; requested_ = lastFrame_ = -1;
         if(queuedSeek_>=0){const auto next=queuedSeek_;queuedSeek_=-1;seekTime(next);return;}
