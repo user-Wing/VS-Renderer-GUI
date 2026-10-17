@@ -1542,6 +1542,54 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         action->trigger();QVERIFY(applied);settings.sync();QCOMPARE(settings.value("theme/chineseFont").toString(),chinese);QCOMPARE(settings.value("theme/latinFont").toString(),latin);
         PlayerWindow reopened;reopened.show();QCOMPARE(QFontInfo(reopened.findChild<QLabel *>("playerStatus")->font()).family(),latin);
     }
+    void requestedSdrJinc(){
+        const auto source=qEnvironmentVariable("VSR_JINC_COLOR_SOURCE");if(source.isEmpty())QSKIP("Set VSR_JINC_COLOR_SOURCE");QVector<double> luma;
+        for(const auto &preset:QStringList{"Anime-5-D3D11.vpy","Anime-4-Jinc.vpy"}){
+            QSettings settings(configPath(),QSettings::IniFormat);settings.clear();settings.setValue("basic/autoplay",false);settings.setValue("playback/remember",false);settings.setValue("decode/mode",2);settings.sync();
+            PlayerWindow player;player.resize(960,640);player.show();player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/"+preset));QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.outputSnapshot().presentedVideoFrames>0,20000);QVERIFY(player.direct_);
+            player.seekTime(100000000);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && qAbs(player.position()-100000000)<500000,20000);
+            double sum=0;const auto size=player.pane_->surface()->size()*player.devicePixelRatioF();
+            for(int y=2;y<=8;++y)for(int x=2;x<=8;++x){ThreeFpPixelProbe pixel{};QVERIFY(player.clock_->samplePixel(size.width()*x/10,size.height()*y/10,pixel));sum+=.2126*pixel.red+.7152*pixel.green+.0722*pixel.blue;}
+            luma<<sum/49;const auto color=player.clock_->colorStatus();qInfo()<<"requested-SDR"<<preset<<"luma"<<luma.last()<<"mode"<<player.snapshot().actualColorMode<<"source"<<color.sourceTransfer<<color.sourceMatrix<<color.sourceRange;
+            QCOMPARE(player.snapshot().actualColorMode,0u);QCOMPARE(player.media_.value("streams").toArray().first().toObject().value("colorTransfer").toInt(),1);
+        }
+        QVERIFY(luma[0]>.02);QVERIFY2(luma[1]/luma[0]>.9 && luma[1]/luma[0]<1.1,qPrintable(QString("Jinc/D3D11 luma ratio=%1").arg(luma[1]/luma[0])));
+    }
+    void silentVsClockFollowsWallTime(){
+        const auto source=qEnvironmentVariable("VSR_ANIME_COLOR_SOURCE");if(source.isEmpty())QSKIP("Set VSR_ANIME_COLOR_SOURCE");QWidget surface;surface.resize(320,180);surface.show();ThreeFpApi api;ThreeFpPlayer clock(api,&surface);QVERIFY(clock.setClockOnly(true));QVERIFY(clock.openFile(source));QTRY_COMPARE_WITH_TIMEOUT(clock.snapshot().state,ThreeFpState::Ready,10000);QVERIFY(clock.play());QTRY_COMPARE(clock.snapshot().state,ThreeFpState::Playing);const auto start=clock.snapshot().position100ns;QTest::qWait(1000);const auto delta=clock.snapshot().position100ns-start;qInfo()<<"silent-clock wall 1s media"<<delta/1e7;QVERIFY(delta>8000000 && delta<15000000);QVERIFY(clock.pause());QTRY_COMPARE(clock.snapshot().state,ThreeFpState::Paused);const auto generation=clock.snapshot().timelineGeneration;QVERIFY(clock.seek(80000000));QTRY_VERIFY(clock.snapshot().timelineGeneration>generation);QCOMPARE(clock.snapshot().position100ns,80000000);QVERIFY(clock.play());QTest::qWait(1000);QVERIFY(clock.snapshot().position100ns>88000000 && clock.snapshot().position100ns<95000000);
+    }
+    void requestedAnimeNoAudio_data(){QTest::addColumn<int>("stage");for(int stage=0;stage<4;++stage)QTest::newRow(qPrintable(QString::number(stage)))<<stage;}
+    void requestedAnimeNoAudio(){
+        QFETCH(int,stage);const auto source=qEnvironmentVariable("VSR_ANIME_COLOR_SOURCE");if(source.isEmpty())QSKIP("Set VSR_ANIME_COLOR_SOURCE");
+        QSettings settings(configPath(),QSettings::IniFormat);settings.clear();settings.setValue("basic/autoplay",true);settings.setValue("playback/remember",false);settings.setValue("performance/cpu",100);settings.setValue("performance/gpu",100);settings.setValue("performance/ram",100);settings.setValue("performance/vram",100);settings.sync();
+        PlayerWindow player;player.resize(960,640);player.show();const QStringList presets{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy"};player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/"+presets[stage]));QVERIFY(player.openFile(source));
+        QTRY_VERIFY2_WITH_TIMEOUT(player.ready_ && !player.direct_ && player.outputSnapshot().presentedVideoFrames>0,qPrintable(player.message_->text()+player.server_->errorString()),30000);QCOMPARE(player.qualityStage(),stage);
+        QVERIFY(player.displayedFrame_.colorTransfer!=16u && player.displayedFrame_.colorTransfer!=18u);const auto before=player.outputSnapshot().presentedVideoFrames;if(!player.playing_)player.togglePlayback();QTRY_VERIFY2_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>before+2,qPrintable(QString("before=%1 now=%2 clock=%3 state=%4 pending=%5 requested=%6 last=%7 ready=%8 error=%9").arg(before).arg(player.outputSnapshot().presentedVideoFrames).arg(player.position()).arg(int(player.snapshot().state)).arg(player.pending_).arg(player.requested_).arg(player.lastFrame_).arg(player.ready_).arg(player.message_->text())),10000);
+        qInfo()<<"requested-Anime"<<stage<<"clock"<<player.position()/1e7<<"duration"<<player.snapshot().duration100ns/1e7<<"state"<<int(player.snapshot().state)<<"frames"<<player.outputSnapshot().presentedVideoFrames-before<<"props"<<player.displayedFrame_.colorTransfer<<player.displayedFrame_.colorPrimaries<<player.displayedFrame_.colorMatrix<<player.displayedFrame_.colorRange;
+        QCOMPARE(player.snapshot().state,ThreeFpState::Playing);QVERIFY(player.position()>0 && player.position()<140000000);QVERIFY(player.outputSnapshot().presentedVideoFrames>before);
+        player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);player.seekTime(80000000);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && qAbs(player.position()-80000000)<500000,10000);QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().frameIndex>=180 && player.outputSnapshot().frameIndex<=200,15000);
+        ThreeFpPixelProbe pixel{};const auto size=player.pane_->surface()->size()*player.devicePixelRatioF();QVERIFY(player.output_->samplePixel(size.width()/2,size.height()/2,pixel));qInfo()<<"requested-Anime rendered RGB"<<stage<<pixel.red<<pixel.green<<pixel.blue;QVERIFY(pixel.red+pixel.green+pixel.blue>.01);
+    }
+    void jincColorMatchesNative(){
+        double maximum=0;bool levels=true;
+        for(bool planar16:{false,true})for(uint transfer:{1u,16u,18u})for(uint output:{0u,1u})for(uint engine:{0u,2u}){
+            QVector<ThreeFpPixelProbe> samples;
+            for(uint algorithm:{7u,4u}){
+                QWidget surface;surface.resize(192,144);surface.show();QVERIFY(QTest::qWaitForWindowExposed(&surface));
+                ThreeFpApi api;QVERIFY(api.available());ThreeFpPlayer player(api,&surface);
+                auto color=VsrColorDefaultSettings();color.engine=engine;color.output=output;color.icc=0;QVERIFY(player.setColorSettings(color));
+                QVERIFY(player.setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(algorithm),static_cast<ThreeFpScalingAlgorithm>(algorithm)));
+                VapourSynthFrame frame;frame.width=64;frame.height=48;frame.totalFrames=1;frame.duration100ns=400000;frame.format=planar16?ThreeFpExternalPixelFormat::Yuv444P16:ThreeFpExternalPixelFormat::Yuv420P8;
+                frame.colorRange=2;frame.colorMatrix=transfer==1?1:9;frame.colorPrimaries=transfer==1?1:9;frame.colorTransfer=transfer;frame.chromaLocation=1;
+                for(int plane=0;plane<3;++plane){const int width=plane && !planar16?32:64,height=plane && !planar16?24:48;frame.strides[plane]=width*(planar16?2:1);frame.planes[plane].resize(frame.strides[plane]*height);if(planar16){auto *v=reinterpret_cast<quint16*>(frame.planes[plane].data());std::fill_n(v,width*height,quint16(32768));}else frame.planes[plane].fill(char(128));}
+                QVERIFY(player.submitFrame(frame));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0,5000);ThreeFpPixelProbe pixel{};QVERIFY(player.samplePixel(96,72,pixel));samples<<pixel;
+                qInfo()<<"neutral-color"<<planar16<<transfer<<output<<engine<<algorithm<<pixel.red<<pixel.green<<pixel.blue<<pixel.outputBitDepth<<pixel.colorMode<<player.colorStatus().engine<<player.colorStatus().fallback;
+                if(transfer==1 && output==1)levels &= std::abs(pixel.green-.5)<.03;
+            }
+            for(auto delta:{std::abs(samples[0].red-samples[1].red),std::abs(samples[0].green-samples[1].green),std::abs(samples[0].blue-samples[1].blue)})maximum=qMax(maximum,double(delta));
+        }
+        qInfo()<<"neutral-color max algorithm delta"<<maximum;QVERIFY(levels);QVERIFY(maximum<.03);
+    }
     void colorSettingsPreserveVsChain() {
         QTemporaryDir dir;const auto video=dir.filePath("color.mkv");QVERIFY(QFile::copy(":/startup/warmup.mkv",video));
         QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",false);settings.setValue("playback/remember",false);settings.sync();

@@ -33,3 +33,6 @@ Blu-ray 解析 / 缓存测试 8 passed、3 skipped（对应环境变量未设）
 真实 MyGO 下卷整卷约 8538.53 秒：`mouseSeekRendering` 全部 8 行覆盖普通视频 / 整卷 BD、SW / HW、播放 / 暂停；BD 点击依次到约 6426.87、1254.74、7712.26、2547.81 秒，再反复拖动并松开到约 90%，验证实际视频帧及位置、挂起与队列清空、播放状态恢复。结合整卷 5 次双向定位、默认分集拖动与菜单回归，14 passed、0 failed、0 skipped（含 init/cleanup）。日志 `build/bd-full-seek-after.txt`，修复前失败 `build/bd-full-mouse-before.txt`，原生构建 `build/bd-full-seek-native-build.log`。Lite 回归 7 passed、1 skipped（未配置实盘原始 FirstPlay）。没有将这些聚焦测试等同全量套件通过。
 
 版本继续为 1.0.12；重部署 Full / Lite 并重做单文件，校验配置与单文件内容后推送源码。原盘、播放列表和用户配置保持。
+
+
+Jinc 偏暗与无音轨 Anime4K 时钟续修见 [色彩与 VS 记录](player-color-vs-1.0.12.md)。

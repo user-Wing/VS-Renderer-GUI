@@ -2,6 +2,8 @@
 
 > 本文面向接手开发的维护者与 AI，负责说明架构、模块入口、约束与当前状态，不记录逐日开发流水账。用户指南见 [README](README.md)，版本变更见 [changelog](changelog.md)，专项证据见 [docs](docs/)。核对基线：2026-10-17，本地版本 1.0.12；BD 拖动只在松开时提交最终定位，原生 concat 使用全局时间定位以恢复整卷跨段点击 / 拖动；光盘菜单模式直接进入选集页。压缩包由维护者制作，验证见 [1.0.12记录](docs/update-1.0.12.md)。
 
+Jinc 权重使用 GPU t5，与色彩变换 LUT t4 分离；修改 HLSL 后必须重生通用与 SDR 专用字节码。无音轨 VS clock-only 以墙钟推进，不等待视频队列、不提前读到 EOF。指定 SDR 与 Anime4K 验证见 [色彩与 VS 记录](docs/player-color-vs-1.0.12.md)。
+
 本地清理约定：旧截图/播放器 `*-next.exe` 暂存构建清除后同步资源清单；`aria2-next.exe` 是有效运行依赖，不按后缀误删。
 
 当前部署：`dist/VS-GUI-Full` / `dist/1.0.12-PlayerLite`，1.0.12 源码上传 GitHub，Full 由维护者自行打包上传；追加交付独立单文件 `dist/VS-Player.exe`（启动器嵌入 Player 图标，运行时缓存展开，同目录自动创建并保留 `player.ini`，内置 Qt，FFmpeg shared x64 从 EXE 同目录 / PATH 解析，缺失先提示）。VapourSynth 后端固定 R81，BM3D 11.0、BM3Dvk2 1.0、BestSource 22；原有插件保留，使用 `tools/update-vapoursynth-runtime.py` 维护锁定版本和哈希。社区配置使用公开页面链接，目录遍历/下载使用内部解析地址。脚本型内置预设的处理脚本随时间组序列化；章节统一由 ThreeFpPlayer 适配 `startTime100ns`。详细修改、证据及性能未通过项见 [1.0.11记录](docs/update-1.0.11.md)。
