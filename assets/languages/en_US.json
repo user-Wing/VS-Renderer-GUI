@@ -602,5 +602,10 @@
   "原生输出(默认)": "Native output (default)",
   "独立播放器支持 Jinc / D3D11 原生播放。": "The standalone player supports native Jinc / D3D11 playback.",
   "缩放模式": "Scaling mode",
-  "原始：3FP 原生(709 / 2020 简易模式)": "Original: 3FP native (simple 709 / 2020)"
+  "原始：3FP 原生(709 / 2020 简易模式)": "Original: 3FP native (simple 709 / 2020)",
+  "源视频超过 2160p，内置 Anime4K 已禁用；专门测试请使用自定义预设。": "The source exceeds 2160p. Built-in Anime4K is disabled; use a custom preset for dedicated tests.",
+  "源视频超过 2160p；Anime4K 专门测试请使用自定义预设。": "The source exceeds 2160p; use a custom preset for dedicated Anime4K tests.",
+  "底部不透明度": "Bottom opacity",
+  "100% 为完全不透明。": "100% is fully opaque.",
+  "右键及倍速菜单不透明度": "Context and speed menu opacity"
 }

@@ -346,6 +346,7 @@ bool PlayerWindow::openMedia() {
 }
 void PlayerWindow::refreshScript() {
     if ((discMenu_ && discMenu_->active()) || imageMode_ || audioMode_ || source_.isEmpty() || mediaInput_.isEmpty() || (madvrMode() && !networkSource())) return;
+    if(profile()=="Anime" && media_.value("streams").toArray().isEmpty() && clock_->snapshot().state==ThreeFpState::Opening)return;
     stopDiscIndexing();discIndexParts_.clear();discIndexAttempted_.clear();
     const bool resume=autoPlay_ || playing_;
     if(resumeAt_<0 && ready_)resumeAt_=position();
@@ -359,7 +360,7 @@ void PlayerWindow::refreshScript() {
 #ifdef VSR_LITE_PLAYER
         true ||
 #endif
-        mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic" || (mode=="Anime" && ((high && fixedAnimeStage()<0) || qualityStage_>=4));
+        mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic" || (mode=="Anime" && (!animeSourceSupported() || (high && fixedAnimeStage()<0) || qualityStage_>=4));
     if(native && qualityStage_<4)qualityStage_=4;
     setDirectMode(native);
     applyScaling();
@@ -418,6 +419,10 @@ void PlayerWindow::loadPreset(const QString &path) {
     settings_->setValue("player/animeStage",name=="Anime-4-Jinc.vpy"?4:5);
 #endif
     if(madvrMode()) { const auto text=tr("工作在 madVR 模式下，VS 预设不生效。");setError(text);QToolTip::showText(pane_->mapToGlobal(QPoint(20,20)),text,pane_,QRect(),4000);return; }
+    const auto previous=preset_;preset_=path;
+    if(profile()=="Anime" && fixedAnimeStage()<4 && !animeSourceSupported()){
+        preset_=previous;message_->setText(tr("源视频超过 2160p，内置 Anime4K 已禁用；专门测试请使用自定义预设。"));return;
+    }
     interpolationAuto_=false;settings_->setValue("player/interpolationAuto",false);
     profileFallback_=false;profileStartup_.invalidate();preset_ = path; qualityStage_=initialQualityStage();settings_->setValue("player/preset",path); if (!source_.isEmpty() && !imageMode_) refreshScript();
 }

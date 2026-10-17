@@ -24,6 +24,8 @@ if(!$applied){
     & git -C $NativeRoot apply $patch
     if($LASTEXITCODE -ne 0){throw 'API 20 patch failed.'}
 }
+$projectRoot=Split-Path $PSScriptRoot -Parent
+Copy-Item -LiteralPath (Join-Path $projectRoot 'src/color/ColorBridge.h'), (Join-Path $projectRoot 'src/color/NativeColorEngine.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Render') -Force
 New-Item -ItemType Directory -Path (Join-Path $NativeRoot 'third_party') -Force | Out-Null
 foreach($name in @('ffmpeg','vcpkg_installed')){
     $source=Join-Path $DependenciesRoot $name

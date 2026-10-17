@@ -227,7 +227,7 @@ void PlayerWindow::dockPlaylist() {
     else {playlistPanel_->hide();playlistPanel_->setParent(centralWidget(),Qt::Tool|Qt::FramelessWindowHint);playlistPanel_->setAttribute(Qt::WA_TranslucentBackground);playlistPanel_->setMinimumWidth(0);}
 }
 void PlayerWindow::layoutChrome() {
-    const bool overlay=isFullScreen() || settings_->value("render/stableViewport",true).toBool() || settings_->value("theme/bottomTransparency",50).toInt()>0 || settings_->value("theme/playlistTransparency",50).toInt()>0;
+    const bool overlay=isFullScreen() || settings_->value("render/stableViewport",true).toBool() || settings_->value("theme/bottomTransparency",0).toInt()>0 || settings_->value("theme/playlistTransparency",50).toInt()>0;
     auto *layout=qobject_cast<QVBoxLayout *>(centralWidget()->layout());
     if(overlay!=overlayChrome_){overlayChrome_=overlay;if(overlay){layout->removeWidget(videoSplit_);layout->removeWidget(controls_);layout->removeWidget(imageTools_);controls_->setWindowFlags(Qt::Tool|Qt::FramelessWindowHint);controls_->setAttribute(Qt::WA_TranslucentBackground);}
         else {controls_->setWindowFlags(Qt::Widget);layout->insertWidget(0,imageTools_);layout->addWidget(videoSplit_,1);layout->addWidget(controls_);}}

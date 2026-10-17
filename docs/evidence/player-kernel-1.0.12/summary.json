@@ -1,0 +1,59 @@
+{
+  "native-full-w16-d16": {
+    "wallSeconds": 20.0,
+    "presentedFps": 34.0,
+    "decodedFps": 44.6,
+    "drops": 212,
+    "coalesced": 0,
+    "audioUnderruns": 19
+  },
+  "native-full-w8-d16": {
+    "wallSeconds": 20.011,
+    "presentedFps": 40.578,
+    "decodedFps": 40.628,
+    "drops": 1,
+    "coalesced": 0,
+    "audioUnderruns": 89
+  },
+  "combo-cpu2-slots2-d8": {
+    "wallSeconds": 20.01,
+    "presentedFps": 40.53,
+    "decodedFps": 40.58,
+    "drops": 1,
+    "coalesced": 0,
+    "audioUnderruns": 87
+  },
+  "final-y412": {
+    "wallSeconds": 30.0,
+    "presentedFps": 47.967,
+    "decodedFps": 47.933,
+    "drops": 0,
+    "coalesced": 0,
+    "audioUnderruns": 0
+  },
+  "final-hevc": {
+    "wallSeconds": 60.004,
+    "presentedFps": 23.982,
+    "decodedFps": 23.982,
+    "drops": 0,
+    "coalesced": 0,
+    "audioUnderruns": 0
+  },
+  "baselineNative": {
+    "bytes": 6464000,
+    "sha256": "666e5ec4c5a0e3776b4321b38e6dc8957689ed5c9a179764f1947d6d287c89ec"
+  },
+  "finalNative": {
+    "bytes": 6477824,
+    "sha256": "fc61e2f52e6d418c02ea311cb1059649f18a541b8be4af62375e9af0b18fd39a"
+  },
+  "avcodec": {
+    "bytes": 91913216,
+    "sha256": "07298f3f3bb71ba121e536f2495402ce43dddbb0a3b9d40178a20e19437c4c79"
+  },
+  "performanceNative": {
+    "bytes": 6477824,
+    "sha256": "991069f9b84aa8bd568c12d031c02738ae3c940bfa7956f940df9f149a7a5fa4"
+  },
+  "finalNativeChangeAfterPerformance": "Synchronize handoff capacity updates with the decode worker during codec reopening. Lifecycle regression repeated."
+}

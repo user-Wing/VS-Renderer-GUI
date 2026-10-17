@@ -110,6 +110,7 @@ private:
     void setDirectMode(bool enabled);
     void ensureProfiles();
     QString profile() const;
+    bool animeSourceSupported() const;
     int fixedAnimeStage() const;
     int initialQualityStage() const;
     QStringList qualityNames() const;

@@ -1,0 +1,8 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::software8kPlaybackMeasurement() open to first frames ms 787 subtitle enabled true surface QSize(2561, 1601) quality stage 5 scaling mode 0 decoder workers QJsonValue(double, 16)
+PASS   : TestPlayer::software8kPlaybackMeasurement()
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 68851ms
+********* Finished testing of TestPlayer *********

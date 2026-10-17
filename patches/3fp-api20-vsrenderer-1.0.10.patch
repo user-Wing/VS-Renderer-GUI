@@ -1,4 +1,5 @@
 diff --git a/FFF.Native/3FP/Api/FFF.Player.Api.h b/FFF.Native/3FP/Api/FFF.Player.Api.h
+index cd05048ae797a520c30b2f868ad7dcde0b861852..4d32f0e76a923892376edc2de371ed1c6e75a4c4 100644
 --- a/FFF.Native/3FP/Api/FFF.Player.Api.h
 +++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
 @@ -4,6 +4,7 @@
@@ -9,7 +10,7 @@ diff --git a/FFF.Native/3FP/Api/FFF.Player.Api.h b/FFF.Native/3FP/Api/FFF.Player
  
  enum class FFF3FPDecodeMode : std::uint32_t {
      Unspecified = 0,
-@@ -688,6 +689,58 @@
+@@ -688,6 +689,58 @@ struct FFF3FPVideoSuperResolutionStatus {
      std::uint32_t targetHeight;
  };
  
@@ -68,7 +69,7 @@ diff --git a/FFF.Native/3FP/Api/FFF.Player.Api.h b/FFF.Native/3FP/Api/FFF.Player
  #ifdef FFFNATIVE_EXPORTS
  #define FFF3FP_API extern "C" __declspec(dllexport)
  #else
-@@ -737,6 +790,9 @@
+@@ -737,6 +790,9 @@ FFF3FP_API FFFResult FFF3FP_SetExternalAudioOffset(FFF3FPHandle player,
  // (persists across media); see PlayerSession::SetAudioDelay for the mechanics.
  FFF3FP_API FFFResult FFF3FP_SetAudioDelay(FFF3FPHandle player,
      std::int64_t delay100ns) noexcept;
@@ -78,7 +79,7 @@ diff --git a/FFF.Native/3FP/Api/FFF.Player.Api.h b/FFF.Native/3FP/Api/FFF.Player
  FFF3FP_API FFFResult FFF3FP_SetColorMode(FFF3FPHandle player, FFF3FPColorMode mode,
      float sdrPeakNits, float hdrPeakNits, float sdrPaperWhiteNits,
      std::uint32_t forceHdrOutput) noexcept;
-@@ -1514,3 +1570,11 @@
+@@ -1514,3 +1570,11 @@ FFF3FP_API FFFResult FFF3FP_CopyFrameSideDataAfter(FFF3FPHandle player,
      std::uint32_t sideDataType, std::int64_t fromFrameIndex, void* buffer,
      std::uint32_t capacity, std::uint32_t* writtenSize,
      std::int64_t* foundFrameIndex) noexcept;
@@ -91,9 +92,10 @@ diff --git a/FFF.Native/3FP/Api/FFF.Player.Api.h b/FFF.Native/3FP/Api/FFF.Player
 +FFF3FP_API FFFResult FFF3FP_SetAudioEffects(FFF3FPHandle,uint32_t,const float*,float,int64_t) noexcept;
 +FFF3FP_API FFFResult FFF3FP_SetClockOnly(FFF3FPHandle,int32_t) noexcept;
 diff --git a/FFF.Native/3FP/Api/PlayerApi.cpp b/FFF.Native/3FP/Api/PlayerApi.cpp
+index b64bb0afc8e92b87d8ff2b26b0ae924c5ea97179..ede3fd2c9a4f11347f70f7fdb94e5860ea98bc1c 100644
 --- a/FFF.Native/3FP/Api/PlayerApi.cpp
 +++ b/FFF.Native/3FP/Api/PlayerApi.cpp
-@@ -133,6 +133,15 @@
+@@ -133,6 +133,15 @@ FFFResult FFF3FP_LoadExternalAudio(const FFF3FPHandle player, const char* path,
      const std::int64_t offset) noexcept { return player ? static_cast<PlayerSession*>(player)->LoadExternalAudio(path, stream, offset) : FFFResult::InvalidArgument; }
  FFFResult FFF3FP_ClearExternalAudio(const FFF3FPHandle player) noexcept { return player ? static_cast<PlayerSession*>(player)->ClearExternalAudio() : FFFResult::InvalidArgument; }
  FFFResult FFF3FP_SetExternalAudioOffset(const FFF3FPHandle player, const std::int64_t offset) noexcept { return player ? static_cast<PlayerSession*>(player)->SetExternalAudioOffset(offset) : FFFResult::InvalidArgument; }
@@ -109,7 +111,7 @@ diff --git a/FFF.Native/3FP/Api/PlayerApi.cpp b/FFF.Native/3FP/Api/PlayerApi.cpp
  FFFResult FFF3FP_SetColorMode(const FFF3FPHandle player, const FFF3FPColorMode mode, const float sdr,
      const float hdr, const float paper, const std::uint32_t forceHdr) noexcept {
      return player && forceHdr <= 1 ?
-@@ -405,3 +414,22 @@
+@@ -405,3 +414,22 @@ FFFResult FFF3FP_CopyFrameSideDataAfter(const FFF3FPHandle player,
      *foundFrameIndex = found;
      return result;
  }
@@ -133,9 +135,16 @@ diff --git a/FFF.Native/3FP/Api/PlayerApi.cpp b/FFF.Native/3FP/Api/PlayerApi.cpp
 +FFFResult FFF3FP_SetAudioEffects(FFF3FPHandle player,uint32_t enabled,const float* gains,float wave,int64_t delay) noexcept { return player?static_cast<PlayerSession*>(player)->SetAudioEffects(enabled!=0,gains,wave,delay):FFFResult::InvalidArgument; }
 +FFFResult FFF3FP_SetClockOnly(FFF3FPHandle player,int32_t enabled) noexcept { if(!player)return FFFResult::InvalidArgument;static_cast<PlayerSession*>(player)->clockOnly_=enabled!=0;return FFFResult::Success; }
 diff --git a/FFF.Native/3FP/Audio/WasapiRenderer.cpp b/FFF.Native/3FP/Audio/WasapiRenderer.cpp
+index 0cf5f830a87c0e2b6827a7e1ff2aba2a4cbe6984..67b9456aee7f0b0361d98137a2044284a289c33a 100644
 --- a/FFF.Native/3FP/Audio/WasapiRenderer.cpp
 +++ b/FFF.Native/3FP/Audio/WasapiRenderer.cpp
-@@ -259,6 +259,7 @@
+@@ -1,4 +1,5 @@
+ #include "pch.h"
++#include "3FP/Core/PlaybackScheduling.h"
+ #include "3FP/Audio/WasapiRenderer.h"
+ 
+ extern "C" {
+@@ -259,6 +260,7 @@ FFFResult PlayerWasapiRenderer::Enqueue(const AVFrame* frame, const std::int64_t
          // this path may trim preroll or synthesize leading silence.
          preRollFrames = static_cast<std::uint64_t>(std::max<std::int64_t>(0, -signedStartFrame));
          gapFrames = static_cast<std::uint64_t>(std::max<std::int64_t>(0, signedStartFrame));
@@ -143,18 +152,56 @@ diff --git a/FFF.Native/3FP/Audio/WasapiRenderer.cpp b/FFF.Native/3FP/Audio/Wasa
          timelineAnchored_ = true;
      } else if (position100ns != AV_NOPTS_VALUE) {
          const auto delta = signedStartFrame - static_cast<std::int64_t>(producedTimelineFrames_);
+@@ -558,6 +560,7 @@ void PlayerWasapiRenderer::PublishRuntimeDiagnostics() noexcept {
+ }
+ 
+ void PlayerWasapiRenderer::RenderThread() noexcept {
++    PlaybackScheduling scheduling(L"Audio");
+     const ComInitialization com;
+     const auto comResult = com.Result();
+     ComPtr<IMMDeviceEnumerator> enumerator;
+diff --git a/FFF.Native/3FP/Core/PlaybackScheduling.h b/FFF.Native/3FP/Core/PlaybackScheduling.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..cf33be4fc4e783864c27d8decdb9a6cd7110f84c
+--- /dev/null
++++ b/FFF.Native/3FP/Core/PlaybackScheduling.h
+@@ -0,0 +1,19 @@
++#pragma once
++#include <windows.h>
++#include <avrt.h>
++#pragma comment(lib, "avrt.lib")
++class PlaybackScheduling final {
++public:
++    explicit PlaybackScheduling(const wchar_t *task) noexcept {
++        wchar_t enabled[8]{};
++        if(GetEnvironmentVariableW(L"VSR_MMCSS",enabled,8) && enabled[0]==L'1'){
++            DWORD index=0;task_=AvSetMmThreadCharacteristicsW(task,&index);
++            if(task_)AvSetMmThreadPriority(task_,AVRT_PRIORITY_NORMAL);
++        }
++    }
++    ~PlaybackScheduling(){if(task_)AvRevertMmThreadCharacteristics(task_);}
++    PlaybackScheduling(const PlaybackScheduling&)=delete;
++    PlaybackScheduling& operator=(const PlaybackScheduling&)=delete;
++private:
++    HANDLE task_=nullptr;
++};
 diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
+index 333fd14a4fd5e5cf192d7b6b669d3b4ed933156b..0257d16bb429ed39ada9d375672ef032e1f174b1 100644
 --- a/FFF.Native/3FP/Core/PlayerSession.cpp
 +++ b/FFF.Native/3FP/Core/PlayerSession.cpp
-@@ -3,6 +3,7 @@
+@@ -1,8 +1,11 @@
+ #include "pch.h"
++#include "3FP/Core/PlaybackScheduling.h"
+ #include "3FP/Core/MediaText.h"
  #include "3FP/Core/PlayerSession.h"
++#include <tlhelp32.h>
  
  extern "C" {
 +#include <libswscale/swscale.h>
  #include <libavcodec/avcodec.h>
  #include <libavcodec/bsf.h>
  #include <libavcodec/codec_desc.h>
-@@ -116,7 +117,7 @@
+@@ -116,11 +119,62 @@ std::size_t VideoFrameQueueLimit(const std::deque<AVFrame*>& queue,
      if (queue.empty()) return MaxQueuedVideoFrames;
      const auto bytesPerFrame = EstimateDecodedFrameBytes(queue.back());
      if (bytesPerFrame == 0) return MaxQueuedVideoFrames;
@@ -163,7 +210,62 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      const auto queueBound = memoryBound > pipelineFrames ? memoryBound - pipelineFrames : 0;
      return std::clamp(queueBound, MinimumMemoryBoundVideoFrames, MaxQueuedVideoFrames);
  }
-@@ -753,6 +754,7 @@
+ 
++struct SoftwareCpuLayout {
++    std::vector<DWORD_PTR> workers;
++    DWORD_PTR host=0;
++};
++SoftwareCpuLayout SoftwareDecoderCpuLayout(unsigned workers) {
++    wchar_t enabled[8]{};
++    const auto mode=GetEnvironmentVariableW(L"VSR_SW_CCD",enabled,8)?enabled[0]:L'2';
++    if(workers!=8 || (mode!=L'1' && mode!=L'2') || GetActiveProcessorGroupCount()!=1)return {};
++    DWORD_PTR allowed=0,system=0;GetProcessAffinityMask(GetCurrentProcess(),&allowed,&system);
++    DWORD bytes=0;GetLogicalProcessorInformation(nullptr,&bytes);
++    std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> topology(bytes/sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION));
++    if(topology.empty() || !GetLogicalProcessorInformation(topology.data(),&bytes))return {};
++    std::vector<DWORD_PTR> cores,caches;
++    for(const auto &entry:topology){
++        if(entry.Relationship==RelationProcessorCore && (entry.ProcessorMask&allowed))cores.push_back(entry.ProcessorMask&allowed);
++        if(entry.Relationship==RelationCache && entry.Cache.Level==3)caches.push_back(entry.ProcessorMask&allowed);
++    }
++    std::sort(cores.begin(),cores.end());std::sort(caches.begin(),caches.end());
++    if(caches.size()!=2){
++        DWORD size=0;GetLogicalProcessorInformationEx(RelationProcessorCore,nullptr,&size);
++        std::vector<unsigned char> data(size);
++        if(!size || !GetLogicalProcessorInformationEx(RelationProcessorCore,reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(data.data()),&size))return {};
++        BYTE highest=0,lowest=255;
++        for(DWORD offset=0;offset<size;){const auto *entry=reinterpret_cast<const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(data.data()+offset);highest=(std::max)(highest,entry->Processor.EfficiencyClass);lowest=(std::min)(lowest,entry->Processor.EfficiencyClass);offset+=entry->Size;}
++        if(highest==lowest)return {};
++        SoftwareCpuLayout layout;layout.host=allowed;
++        for(DWORD offset=0;offset<size;){
++            const auto *entry=reinterpret_cast<const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(data.data()+offset);
++            const auto mask=entry->Processor.GroupMask[0].Mask&allowed;
++            if(entry->Processor.EfficiencyClass==highest && mask && layout.workers.size()<workers){layout.workers.push_back(mask);layout.host&=~mask;}
++            offset+=entry->Size;
++        }
++        return layout.workers.size()==workers && layout.host?layout:SoftwareCpuLayout{};
++    }
++    SoftwareCpuLayout layout;layout.host=allowed;
++    for(const auto cache:caches){
++        unsigned count=0;
++        for(const auto core:cores)if((core&cache) && count<workers/2){layout.workers.push_back(core);layout.host&=~core;++count;}
++        if(count!=workers/2)return {};
++    }
++    return layout.host?layout:SoftwareCpuLayout{};
++}
++std::vector<DWORD> SoftwareProcessThreads() {
++    std::vector<DWORD> ids;
++    const auto snapshot=CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD,0);
++    if(snapshot==INVALID_HANDLE_VALUE)return ids;
++    THREADENTRY32 entry{};entry.dwSize=sizeof(entry);
++    if(Thread32First(snapshot,&entry))do{if(entry.th32OwnerProcessID==GetCurrentProcessId())ids.push_back(entry.th32ThreadID);}while(Thread32Next(snapshot,&entry));
++    CloseHandle(snapshot);std::sort(ids.begin(),ids.end());return ids;
++}
++
+ void ApplyHdrState(FFF3FPSnapshot& snapshot, const HdrFrameState& hdr) noexcept {
+     const auto toUnsigned = [](const float value, const float scale = 1.0f) {
+         if (!std::isfinite(value) || value <= 0.0f) return 0u;
+@@ -753,6 +807,7 @@ std::int64_t PlayerSession::StreamTimestampPosition100ns(const AVFormatContext*
  }
  
  bool PlayerSession::ShouldGateAudioAtVideoStart() const noexcept {
@@ -171,7 +273,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (format_ == nullptr || videoStream_ < 0 ||
          videoStream_ >= static_cast<std::int32_t>(format_->nb_streams)) return false;
      const auto* stream = format_->streams[videoStream_];
-@@ -768,7 +770,7 @@
+@@ -768,7 +823,7 @@ bool PlayerSession::ShouldGateAudioAtVideoStart() const noexcept {
  void PlayerSession::ArmAudioUntilVideoFrame() noexcept {
      // Opening an animation while stopped must present its first frame without
      // Playing-only preroll. Play() arms preroll when playback starts.
@@ -180,7 +282,17 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      audioBlockedUntilVideoFrame_ = ShouldGateAudioAtVideoStart();
      audioUnblockVideoGeneration_ = 0;
      audioResumePendingAfterVideoFrame_ = audioBlockedUntilVideoFrame_ &&
-@@ -972,7 +974,7 @@
+@@ -793,7 +848,8 @@ std::size_t PlayerSession::VideoQueuePipelineReservation() const noexcept {
+ 
+ std::size_t PlayerSession::VideoQueueLimit() const noexcept {
+     const auto pipelineFrames = VideoQueuePipelineReservation();
+-    const auto limit = VideoFrameQueueLimit(videoFrameQueue_, pipelineFrames);
++    const auto originalLimit = VideoFrameQueueLimit(videoFrameQueue_, pipelineFrames);
++    const auto limit=std::max<std::size_t>(MinimumMemoryBoundVideoFrames,originalLimit-(std::min)(originalLimit-1,std::size_t(softwareVideoOutputLimit_-1)));
+     // The two numbers this slice stands on, said by the kernel itself: whether frame
+     // threading is really active for this decoder, and the depth the budget then
+     // allows. Without them "the honest queue is shorter" cannot be checked against
+@@ -972,7 +1028,7 @@ FFFResult PlayerSession::Play() noexcept {
          const auto current = state_.load();
          if (current == FFF3FPState::Ended) DoSeek(0);
          if (ResumeAudioRenderer() != FFFResult::Success) return;
@@ -189,7 +301,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          ResetClock(snapshot_.position100ns);
          ApplyAudioPlaybackPause(true);
          SetState(FFF3FPState::Playing, "play");
-@@ -1278,7 +1280,20 @@
+@@ -1278,7 +1334,20 @@ FFFResult PlayerSession::StepKeyframe(const std::int32_t direction) noexcept {
  }
  
  void PlayerSession::DoStepKeyframe(const std::int32_t direction) {
@@ -211,7 +323,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      SuspendAudioRenderer(true);
      if ((direction < 0 && snapshot_.position100ns <= 0) ||
          (direction > 0 && snapshot_.duration100ns > 0 &&
-@@ -1312,6 +1327,7 @@
+@@ -1312,6 +1381,7 @@ void PlayerSession::DoStepKeyframe(const std::int32_t direction) {
              return;
          }
          ClearVideoQueue();
@@ -219,7 +331,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          avcodec_flush_buffers(videoDecoder_);
          if (audioDecoder_) avcodec_flush_buffers(audioDecoder_);
          seekTarget100ns_ = -1;
-@@ -1418,6 +1434,28 @@
+@@ -1418,6 +1488,28 @@ FFFResult PlayerSession::GetPresentPacingStatus(
      status.displayRateDiscardedFrames = displayRateDiscardedFrames_.load(std::memory_order_relaxed);
      return FFFResult::Success;
  }
@@ -248,15 +360,18 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
  FFFResult PlayerSession::SetColorMode(const FFF3FPColorMode mode, const float sdr, const float hdr,
      const float paper, const bool forceHdrOutput) noexcept {
      if (mode > FFF3FPColorMode::MapToHdr || !std::isfinite(sdr) || sdr <= 0 ||
-@@ -1735,6 +1773,7 @@
+@@ -1735,7 +1827,10 @@ bool PlayerSession::RecoverVideoDevice() noexcept {
      ClearVideoQueue();
      if (videoDecodeFrame_ != nullptr) av_frame_unref(videoDecodeFrame_);
      if (videoTransferFrame_ != nullptr) av_frame_unref(videoTransferFrame_);
 +    StopSoftwareVideoDecode();
      if (videoDecoder_ != nullptr) avcodec_free_context(&videoDecoder_);
++    if(softwareOriginalAffinity_)SetThreadAffinityMask(GetCurrentThread(),softwareOriginalAffinity_);
++    softwareOriginalAffinity_=softwareHostAffinity_=softwareDecoderAffinity_=0;
  
      FFFResult result = FFFResult::DeviceFailure;
-@@ -2266,7 +2305,7 @@
+     {
+@@ -2266,7 +2361,7 @@ FFFResult PlayerSession::GetSnapshot(FFF3FPSnapshot& output) const noexcept {
          LARGE_INTEGER now{};
          QueryPerformanceCounter(&now);
          const auto elapsed = sampledQpc > 0 && now.QuadPart > sampledQpc && qpcFrequency_ > 0
@@ -265,7 +380,15 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          output.position100ns = sampledPosition + std::min(elapsed,
              std::max<std::int64_t>(0, limit - sampledPosition));
          if (output.duration100ns > 0) output.position100ns = std::min(output.position100ns, output.duration100ns);
-@@ -2490,6 +2529,24 @@
+@@ -2320,6 +2415,7 @@ std::string PlayerSession::MediaInfo() const { std::lock_guard lock(mutex_); ret
+ std::string PlayerSession::LastError() const { std::lock_guard lock(errorMutex_); return lastError_; }
+ 
+ void PlayerSession::Worker() noexcept {
++    PlaybackScheduling scheduling(L"Playback");
+     for (;;) {
+         Command command;
+         {
+@@ -2490,6 +2586,28 @@ FFFResult PlayerSession::OpenDecoder(AVFormatContext* owner, const std::int32_t
              static_cast<std::uint32_t>(stream->codecpar->width),
              static_cast<std::uint32_t>(stream->codecpar->height)));
          context->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
@@ -280,17 +403,60 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
 +                stream->codecpar->width >= 3840 && stream->codecpar->height >= 2160;
 +            const auto large420 = stream->codecpar->format == AV_PIX_FMT_YUV420P10LE &&
 +                stream->codecpar->width >= 7680 && stream->codecpar->height >= 4320;
-+            // 8K 4:2:0 measured faster at 16/16 than 32/32, leaving CPU and
-+            // memory bandwidth for uploading, audio and subtitles.
-+            const auto workers = heavy444 ? (std::min)(logical * 2, 32u) :
-+                (std::min)(logical, large420 ? 16u : 64u);
++            // Eight workers leave bandwidth and CPU time for upload, audio and subtitles.
++            // 7940HX fullscreen: ~40 fps with 8/8 versus ~34 fps with 16/16.
++            auto workers = heavy444 ? (std::min)(logical * 2, 32u) :
++                (std::min)(logical, large420 ? 8u : 64u);
++            wchar_t tuning[16]{};
++            if(GetEnvironmentVariableW(L"FFF_DAV1D_WORKERS",tuning,16))workers=std::clamp(static_cast<unsigned>(_wtoi(tuning)),1u,64u);
 +            context->thread_count = static_cast<int>(workers);
-+            result = av_opt_set_int(context->priv_data, "max_frame_delay", workers, 0);
++            auto delay=workers;
++            if(GetEnvironmentVariableW(L"FFF_DAV1D_DELAY",tuning,16))delay=std::clamp(static_cast<unsigned>(_wtoi(tuning)),1u,64u);
++            result = av_opt_set_int(context->priv_data, "max_frame_delay", delay, 0);
 +        }
      }
      if (disc_ && disc_->Menu() && video &&
          stream->codecpar->codec_id == AV_CODEC_ID_MPEG2VIDEO) {
-@@ -2691,7 +2748,7 @@
+@@ -2531,7 +2649,38 @@ FFFResult PlayerSession::OpenDecoder(AVFormatContext* owner, const std::int32_t
+         }
+         av_buffer_unref(&hardwareDevice);
+     }
++    if(video){
++        std::lock_guard lock(softwareVideoMutex_);
++        softwareVideoOutputLimit_=1;
++        if(!hardwareRequested && stream->codecpar->width>=7680 && stream->codecpar->height>=4320){softwareVideoOutputLimit_=2;wchar_t slots[8]{};if(GetEnvironmentVariableW(L"VSR_SW_HANDOFF",slots,8))softwareVideoOutputLimit_=std::clamp(static_cast<unsigned>(_wtoi(slots)),1u,3u);}
++    }
++    const auto cpuLayout=video && !hardwareRequested && stream->codecpar->width>=7680 && stream->codecpar->height>=4320?
++        SoftwareDecoderCpuLayout(context->thread_count):SoftwareCpuLayout{};
++    const auto threadsBefore=cpuLayout.workers.empty()?std::vector<DWORD>{}:SoftwareProcessThreads();
+     if (result >= 0) result = avcodec_open2(context, codec, nullptr);
++    if(result>=0 && !cpuLayout.workers.empty()){
++        std::vector<DWORD> created;
++        for(const auto id:SoftwareProcessThreads())if(!std::binary_search(threadsBefore.begin(),threadsBefore.end(),id))created.push_back(id);
++        if(created.size()==cpuLayout.workers.size()){
++            DWORD_PTR decodeMask=0;for(const auto mask:cpuLayout.workers)decodeMask|=mask;
++            wchar_t mode[8]{};const bool soft=!GetEnvironmentVariableW(L"VSR_SW_CCD",mode,8) || mode[0]!=L'1';unsigned assigned=0;
++            for(unsigned i=0;i<created.size();++i){
++                const auto thread=OpenThread(THREAD_SET_INFORMATION|THREAD_QUERY_INFORMATION,FALSE,created[i]);
++                if(thread){
++                    PROCESSOR_NUMBER ideal{};auto mask=cpuLayout.workers[i];while((mask&1)==0){++ideal.Number;mask>>=1;}
++                    if((soft || SetThreadAffinityMask(thread,decodeMask)) && SetThreadIdealProcessorEx(thread,&ideal,nullptr))++assigned;
++                    CloseHandle(thread);
++                }
++            }
++            if(assigned==created.size() && !soft){
++                softwareHostAffinity_=cpuLayout.host;softwareDecoderAffinity_=decodeMask;
++                const auto previous=SetThreadAffinityMask(GetCurrentThread(),cpuLayout.host);
++                if(!softwareOriginalAffinity_)softwareOriginalAffinity_=previous;
++            }
++            std::fprintf(stderr,"VSR software CCD: assigned %u/%zu workers, host mask %llx, soft %u\n",assigned,created.size(),static_cast<unsigned long long>(cpuLayout.host),unsigned(soft));
++        }else std::fprintf(stderr,"VSR software CCD: skipped, %zu new threads for %zu workers\n",created.size(),cpuLayout.workers.size());
++    }
++
+     if (result < 0) {
+         if (failureReason != nullptr && failureReason->empty())
+             setFailure("FFmpeg could not open decoder " + std::string(codec->name == nullptr ? "unknown" : codec->name) +
+@@ -2691,7 +2840,7 @@ void PlayerSession::DoOpen(std::string path) noexcept {
      snapshot_.decodeMode = decodeMode_;
      bool hardwareFallback = false;
      std::string hardwareFailureReason;
@@ -299,7 +465,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          // Still images are included here on purpose: the hardware decoder is tried
          // first for every media type and the retry below takes the CPU decoder when the
          // GPU refuses. Formats with no hardware path (PNG, WebP, TIFF, JPEG XL, JXR) are
-@@ -2748,7 +2805,7 @@
+@@ -2748,7 +2897,7 @@ void PlayerSession::DoOpen(std::string path) noexcept {
          snapshot_.position100ns = 0; snapshot_.frameIndex = -1; snapshot_.framePts = AV_NOPTS_VALUE;
          snapshot_.selectedVideoStream = videoStream_; snapshot_.selectedAudioStream = audioStream_;
          snapshot_.videoWidth = snapshot_.videoHeight = 0; snapshot_.isHdrSource = 0;
@@ -308,7 +474,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          else if (coverArtFrame_ != nullptr) { snapshot_.videoWidth = coverArtFrame_->width; snapshot_.videoHeight = coverArtFrame_->height; snapshot_.isHdrSource = 0; }
          // Downgrade only if HDR/wide-gamut output is unachievable; EnsureSwapChain
          // rechecks this gate before selecting the actual format.
-@@ -2823,7 +2880,7 @@
+@@ -2823,7 +2972,7 @@ FFFResult PlayerSession::DecodeInitialFrame() noexcept {
      int readResult = 0;
      while (videoRenderer_.PresentedVideoFrames() == before &&
          (readResult = av_read_frame(format_, playbackPacket_)) >= 0) {
@@ -317,7 +483,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
              if (staticImage_) {
                  av_packet_unref(stillImagePacket_);
                  if (av_packet_ref(stillImagePacket_, playbackPacket_) < 0) return FFFResult::NativeFailure;
-@@ -2858,6 +2915,7 @@
+@@ -2858,6 +3007,7 @@ FFFResult PlayerSession::DecodeInitialFrame() noexcept {
      const auto start = stream->start_time == AV_NOPTS_VALUE ? 0 : stream->start_time;
      if (av_seek_frame(format_, videoStream_, start, AVSEEK_FLAG_BACKWARD) >= 0)
      {
@@ -325,7 +491,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          avcodec_flush_buffers(videoDecoder_);
      }
      if (state_.load() == FFF3FPState::Failed) return FFFResult::DeviceFailure;
-@@ -2926,6 +2984,9 @@
+@@ -2926,6 +3076,9 @@ void PlayerSession::EvaluateDecoderLoad() noexcept {
      if (!adaptiveThreadsEnabled_ || format_ == nullptr || videoStream_ < 0) return;
      if (snapshot_.decodeMode != FFF3FPDecodeMode::Cpu) return;
      if (videoDecoder_ == nullptr) return;
@@ -335,23 +501,29 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
  
      // A rung costs a reopen and a seek, so let the new rung settle before judging it.
      if (ladderSettlingFrames_ > 0) { --ladderSettlingFrames_; return; }
-@@ -3001,6 +3062,7 @@
+@@ -3001,7 +3154,10 @@ void PlayerSession::EvaluateDecoderLoad() noexcept {
          return;
      }
      const auto resume = std::max<std::int64_t>(0, snapshot_.position100ns);
 +    StopSoftwareVideoDecode();
      avcodec_free_context(&videoDecoder_);
++    if(softwareOriginalAffinity_)SetThreadAffinityMask(GetCurrentThread(),softwareOriginalAffinity_);
++    softwareOriginalAffinity_=softwareHostAffinity_=softwareDecoderAffinity_=0;
      videoDecoder_ = replacement;
      if (videoDecodeFrame_ != nullptr) av_frame_unref(videoDecodeFrame_);
-@@ -3025,6 +3087,7 @@
+     if (videoTransferFrame_ != nullptr) av_frame_unref(videoTransferFrame_);
+@@ -3025,7 +3181,10 @@ FFFResult PlayerSession::FallbackToSoftwareVideoDecoder(const char* reason) noex
          -1, nullptr, false);
      if (openResult != FFFResult::Success) return openResult;
      const auto resumePosition = std::max<std::int64_t>(0, snapshot_.position100ns);
 +    StopSoftwareVideoDecode();
      avcodec_free_context(&videoDecoder_);
++    if(softwareOriginalAffinity_)SetThreadAffinityMask(GetCurrentThread(),softwareOriginalAffinity_);
++    softwareOriginalAffinity_=softwareHostAffinity_=softwareDecoderAffinity_=0;
      videoDecoder_ = softwareDecoder;
      if (videoDecodeFrame_ != nullptr) av_frame_unref(videoDecodeFrame_);
-@@ -3051,6 +3114,8 @@
+     if (videoTransferFrame_ != nullptr) av_frame_unref(videoTransferFrame_);
+@@ -3051,6 +3210,8 @@ FFFResult PlayerSession::FallbackToSoftwareVideoDecoder(const char* reason) noex
  
  void PlayerSession::PumpPlayback() noexcept {
      if (format_ == nullptr) { SetState(FFF3FPState::Failed); return; }
@@ -360,7 +532,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (disc_) {
          PublishDisc();
          if (disc_->RestartRequired() && !disc_->Held()) {
-@@ -3076,7 +3141,10 @@
+@@ -3076,7 +3237,10 @@ void PlayerSession::PumpPlayback() noexcept {
          if (GetEnvironmentVariableW(L"FFF_CADENCE_TRACE", nullptr, 0))
              std::fprintf(stderr, "CADENCE rebuild\n");
      }
@@ -372,7 +544,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          // Windows can block both shared and exclusive initialization while a
          // different process owns the endpoint. Keep audio-only media on its
          // normal wall clock instead of draining the entire file immediately.
-@@ -3090,7 +3158,7 @@
+@@ -3090,7 +3254,7 @@ void PlayerSession::PumpPlayback() noexcept {
      }
      const auto audioBuffered = audioRenderer_ ? audioRenderer_->Buffered100ns() : 0;
      const auto delayAudioUntilVideo = audioRenderer_ && ShouldDelayAudioUntilVideoFrame();
@@ -381,7 +553,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (!delayAudioUntilVideo && !pendingAudioPackets_.empty() &&
          audioBuffered < TargetAudioBuffer100ns) {
          DecodePendingPacket(false);
-@@ -3107,7 +3175,14 @@
+@@ -3107,7 +3271,14 @@ void PlayerSession::PumpPlayback() noexcept {
      // Feed already-demuxed audio before doing a due frame's enhancement/render
      // work. Otherwise a costly frame can starve a short WASAPI buffer.
      if (PumpVideoPresentation()) return;
@@ -397,7 +569,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          DecodePendingPacket(true);
          return;
      }
-@@ -3115,12 +3190,10 @@
+@@ -3115,12 +3286,10 @@ void PlayerSession::PumpPlayback() noexcept {
      if (externalFormat_ != nullptr && audioRenderer_ && !delayAudioUntilVideo &&
          audioBuffered < TargetAudioBuffer100ns) PumpExternalAudio();
      if (demuxEnded_) {
@@ -411,7 +583,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      const auto audioPacketsFull = pendingAudioPackets_.size() >= MaximumPendingAudioPackets ||
          pendingAudioPacketBytes_ >= MaximumPendingAudioPacketBytes;
      if (videoSaturated() &&
-@@ -3156,12 +3229,13 @@
+@@ -3156,12 +3325,13 @@ void PlayerSession::PumpPlayback() noexcept {
          }
          demuxEnded_ = true;
          if (!pendingVideoPackets_.empty()) return;
@@ -427,7 +599,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
              auto* retained = av_packet_clone(playbackPacket_);
              if (retained == nullptr) {
                  av_packet_unref(playbackPacket_);
-@@ -3406,22 +3480,150 @@
+@@ -3406,22 +3576,154 @@ FFFResult PlayerSession::DecodeIamfPacket(AVPacket* packet) noexcept {
      return FFFResult::Success;
  }
  
@@ -454,6 +626,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
 +}
 +
 +void PlayerSession::SoftwareVideoDecodeWorker(AVCodecContext* decoder) noexcept {
++    if(softwareDecoderAffinity_)SetThreadAffinityMask(GetCurrentThread(),softwareDecoderAffinity_);
 +    auto* frame = av_frame_alloc();
 +    const auto receive = [&] {
 +        int result;
@@ -464,10 +637,11 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
 +            }
 +            if (result < 0) return result;
 +            std::unique_lock lock(softwareVideoMutex_);
-+            softwareVideoCondition_.wait(lock, [this] { return !softwareVideoOutput_ || softwareVideoStopping_; });
++            softwareVideoCondition_.wait(lock, [this] { return softwareVideoOutputs_.size()<softwareVideoOutputLimit_ || softwareVideoStopping_; });
 +            if (!softwareVideoStopping_) {
-+                softwareVideoOutput_ = av_frame_clone(frame);
-+                if (!softwareVideoOutput_) { av_frame_unref(frame); return AVERROR(ENOMEM); }
++                auto *retained=av_frame_clone(frame);
++                if (!retained) { av_frame_unref(frame); return AVERROR(ENOMEM); }
++                softwareVideoOutputs_.push_back(retained);
 +            }
 +            av_frame_unref(frame);
 +            commandCondition_.notify_one();
@@ -511,7 +685,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
 +
 +bool PlayerSession::SoftwareVideoDecodePending() noexcept {
 +    std::lock_guard lock(softwareVideoMutex_);
-+    return softwareVideoBusy_ || !softwareVideoPackets_.empty() || softwareVideoOutput_;
++    return softwareVideoBusy_ || !softwareVideoPackets_.empty() || !softwareVideoOutputs_.empty();
 +}
 +
 +bool PlayerSession::SoftwareVideoInputFull() noexcept {
@@ -523,8 +697,8 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
 +    AVFrame* frame = nullptr;int result;
 +    {
 +        std::lock_guard lock(softwareVideoMutex_);
-+        if (videoFrameQueue_.size() < VideoQueueLimit()) {
-+            frame = softwareVideoOutput_;softwareVideoOutput_ = nullptr;
++        if (videoFrameQueue_.size() < VideoQueueLimit() && !softwareVideoOutputs_.empty()) {
++            frame = softwareVideoOutputs_.front();softwareVideoOutputs_.pop_front();
 +        }
 +        result = softwareVideoResult_;softwareVideoResult_ = 0;
 +    }
@@ -546,7 +720,9 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
 +    softwareVideoCondition_.notify_one();
 +    if (softwareVideoWorker_.joinable()) softwareVideoWorker_.join();
 +    for (auto* packet : softwareVideoPackets_) av_packet_free(&packet);
-+    softwareVideoPackets_.clear();av_frame_free(&softwareVideoOutput_);
++    softwareVideoPackets_.clear();
++    for(auto *output:softwareVideoOutputs_)av_frame_free(&output);
++    softwareVideoOutputs_.clear();
 +    softwareVideoBusy_ = false;softwareVideoStopping_ = false;softwareVideoResult_ = 0;
 +}
 +
@@ -556,7 +732,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (packet != nullptr && packet->size == 0 && packet->side_data_elems == 0)
          return FFFResult::Success;
 +    if (video && decoder == videoDecoder_ && decoder->codec &&
-+        std::strcmp(decoder->codec->name, "libdav1d") == 0 &&
++        !decoder->hw_device_ctx && (std::strcmp(decoder->codec->name, "libdav1d") == 0 || decoder->codec_id == AV_CODEC_ID_HEVC) &&
 +        state_.load() == FFF3FPState::Playing && !staticImage_ &&
 +        seekTarget100ns_ < 0 && seekTargetFrame_ < 0 && !keyframeSeekPending_)
 +        return QueueSoftwareVideoDecode(packet);
@@ -580,7 +756,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
              else PresentVideoFrame(decoded, owner);
          } else QueueAudioFrame(decoded, owner, owner == format_ ? audioStream_ : externalAudioStream_);
      };
-@@ -3465,6 +3667,9 @@
+@@ -3465,6 +3767,9 @@ FFFResult PlayerSession::DecodePacket(AVCodecContext* decoder, AVPacket* packet,
          result = avcodec_send_packet(decoder, packet);
      }
      if (result < 0 && result != AVERROR_EOF) {
@@ -590,7 +766,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          if (video && snapshot_.decodeMode == FFF3FPDecodeMode::Gpu &&
              FallbackToSoftwareVideoDecoder(("The GPU rejected a video packet: " +
                  FfmpegError(result) + "; playback continued with CPU decoding.").c_str()) == FFFResult::Success)
-@@ -3879,6 +4084,7 @@
+@@ -3879,6 +4184,7 @@ void PlayerSession::PresentVideoFrame(AVFrame* frame, AVFormatContext* owner) no
  
      if (keyframeSeekPending_) {
          keyframeSeekPending_ = false;
@@ -598,7 +774,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          seekTarget100ns_ = -1;
          seekTargetFrame_ = -1;
          ResetClock(position);
-@@ -3889,6 +4095,10 @@
+@@ -3889,6 +4195,10 @@ void PlayerSession::PresentVideoFrame(AVFrame* frame, AVFormatContext* owner) no
      const auto lateTolerance = std::max<std::int64_t>(frameDuration * 2, 500'000);
      if (state_.load() == FFF3FPState::Playing && !fulfillingSeek &&
          !audioBlockedUntilVideoFrame_ &&
@@ -609,7 +785,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          // Never discard the first decoded frame merely because the audio/device
          // clock won the startup race. Until one frame is actually presented,
          // waiting is preferable to creating a permanent opening-frame hole.
-@@ -4078,7 +4288,7 @@
+@@ -4078,7 +4388,7 @@ void PlayerSession::QueueAudioFrame(AVFrame* frame, AVFormatContext* owner, cons
          if (position + av_rescale(frame->nb_samples, TicksPerSecond, frame->sample_rate) < seekTarget100ns_) return;
      }
      ++snapshot_.decodedAudioFrames;
@@ -618,7 +794,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (result == FFFResult::Success && owner == format_) internalAudioDecodeErrorCount_ = 0;
      if (result == FFFResult::BufferTooSmall) ++snapshot_.audioRejectedFrames;
      else if (result != FFFResult::Success) {
-@@ -4478,6 +4688,7 @@
+@@ -4478,6 +4788,7 @@ FFFResult PlayerSession::ConvertPrimariesToBt2020(const AVFrame* input,
  }
  
  void PlayerSession::FlushAtEnd() noexcept {
@@ -626,7 +802,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (!draining_) {
          draining_ = true;
          if (videoDecoder_) DecodePacket(videoDecoder_, nullptr, true, format_);
-@@ -4542,6 +4753,8 @@
+@@ -4542,6 +4853,8 @@ void PlayerSession::FlushAtEnd() noexcept {
  
  FFFResult PlayerSession::DoSeek(std::int64_t position, const std::int64_t targetFrame,
      const bool exact) noexcept {
@@ -635,7 +811,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (disc_) {
          if (!disc_->Seek(position)) { ReportError(FFFResult::NotSupported, "This disc position cannot be seeked.", "seek"); return FFFResult::NotSupported; }
          if (ReopenDiscDemux() && state_.load() != FFF3FPState::Playing && videoStream_ >= 0)
-@@ -4553,18 +4766,20 @@
+@@ -4553,18 +4866,20 @@ FFFResult PlayerSession::DoSeek(std::int64_t position, const std::int64_t target
      // Still-image seek is a no-op: single-image demuxers have no seekable timeline.
      if (staticImage_) { PublishSnapshot(); return FFFResult::Success; }
      auto decodeStartPosition = position;
@@ -665,7 +841,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
          (format_->pb->seekable & AVIO_SEEKABLE_NORMAL) != 0) {
          const auto fileSize = avio_size(format_->pb);
          const auto timelineExtent = snapshot_.duration100ns > 0
-@@ -4611,6 +4826,7 @@
+@@ -4611,6 +4926,7 @@ FFFResult PlayerSession::DoSeek(std::int64_t position, const std::int64_t target
      }
      ClearVideoQueue();
      ResetBitRateTracking();
@@ -673,15 +849,18 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (videoDecoder_) avcodec_flush_buffers(videoDecoder_);
      if (audioDecoder_) avcodec_flush_buffers(audioDecoder_);
      internalAudioDecodeErrorCount_ = 0;
-@@ -4701,6 +4917,7 @@
+@@ -4701,7 +5017,10 @@ void PlayerSession::DoSelectStream(const std::int32_t index, const bool video) n
      }
      if (result != FFFResult::Success) { ReportError(result, "Could not open the selected media stream.", "select-stream"); return; }
      if (video) {
 +        StopSoftwareVideoDecode();
          if (videoDecoder_) avcodec_free_context(&videoDecoder_);
++        if(softwareOriginalAffinity_)SetThreadAffinityMask(GetCurrentThread(),softwareOriginalAffinity_);
++        softwareOriginalAffinity_=softwareHostAffinity_=softwareDecoderAffinity_=0;
          videoDecoder_ = replacement; videoStream_ = index;
          snapshot_.selectedVideoStream = index;
-@@ -4768,6 +4985,7 @@
+         videoRenderer_.ConfigureHdrStream(format_->streams[index]->codecpar);
+@@ -4768,6 +5087,7 @@ void PlayerSession::DoLoadExternalAudio(std::string path, const std::int32_t req
  }
  
  void PlayerSession::DoClose(const FFF3FPState finalState, const bool preserveVideoOutput) noexcept {
@@ -689,15 +868,18 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      if (audioRenderer_) { audioRenderer_->Stop(); audioRenderer_.reset(); }
      // SetTimedTextLayer is intentionally callable outside the session command
      // queue. Gate renderer teardown with its content lock so a final timer tick
-@@ -4776,6 +4994,7 @@
+@@ -4776,7 +5096,10 @@ void PlayerSession::DoClose(const FFF3FPState finalState, const bool preserveVid
      if (preserveVideoOutput) videoRenderer_.ResetMedia();
      else videoRenderer_.Close();
      if (externalAudioDecoder_) avcodec_free_context(&externalAudioDecoder_); CloseFormat(&externalFormat_, externalFormatIo_);
 +    StopSoftwareVideoDecode();
      if (videoDecoder_) avcodec_free_context(&videoDecoder_);
++    if(softwareOriginalAffinity_)SetThreadAffinityMask(GetCurrentThread(),softwareOriginalAffinity_);
++    softwareOriginalAffinity_=softwareHostAffinity_=softwareDecoderAffinity_=0;
      if (audioDecoder_) avcodec_free_context(&audioDecoder_);
      ReleaseIamfDecoder();
-@@ -4903,6 +5122,8 @@
+     if (coverArtFrame_) av_frame_free(&coverArtFrame_);
+@@ -4903,6 +5226,8 @@ double PlayerSession::MediaFrameRateCeilingHz(const AVStream* stream) const noex
  
  void PlayerSession::RebuildMediaInfo() noexcept {
      if (!format_) return;
@@ -706,17 +888,17 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      // Publish the per-media frame-rate ceiling on every media-info rebuild. This runs
      // from every path that can change the media identity (open, select-stream, disc
      // title change) as well as the idempotent re-rebuilds (device recovery, hardware
-@@ -4933,6 +5154,9 @@
+@@ -4933,6 +5258,9 @@ void PlayerSession::RebuildMediaInfo() noexcept {
          << ",\"fileSize\":" << std::max<std::int64_t>(0, format_->pb ? avio_size(format_->pb) : 0)
          << ",\"probeScore\":" << format_->probe_score
          << ",\"staticImage\":" << (staticImage_ ? "true" : "false")
 +        << ",\"videoDecoderThreads\":" << (videoDecoder_ ? videoDecoder_->thread_count : 0)
 +        << ",\"softwareVideoDecodeAsync\":" <<
-+            (videoDecoder_ && videoDecoder_->codec && std::strcmp(videoDecoder_->codec->name, "libdav1d") == 0 && !staticImage_ ? "true" : "false")
++            (videoDecoder_ && videoDecoder_->codec && !videoDecoder_->hw_device_ctx && (std::strcmp(videoDecoder_->codec->name, "libdav1d") == 0 || videoDecoder_->codec_id == AV_CODEC_ID_HEVC) && !staticImage_ ? "true" : "false")
          << ",\"metadata\":";
      AppendDictionaryJson(json, format_->metadata);
      json << ",\"chapters\":[";
-@@ -5067,6 +5291,9 @@
+@@ -5067,6 +5395,9 @@ void PlayerSession::RebuildMediaInfo() noexcept {
                  const auto decoderBitDepth = PixelFormatBitDepth(
                      decoderSurfaceFormat != AV_PIX_FMT_NONE ? decoderSurfaceFormat : decoderFormat);
                  if (decoderBitDepth > 0) json << ",\"decoderBitDepth\":" << decoderBitDepth;
@@ -726,7 +908,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
                  const auto acceleration = HardwareAccelerationName(videoDecoder_);
                  if (!acceleration.empty())
                      json << ",\"hardwareAcceleration\":\"" << EscapeJson(acceleration) << "\"";
-@@ -5217,13 +5444,13 @@
+@@ -5217,13 +5548,13 @@ std::int64_t PlayerSession::ClockPosition() const noexcept {
          return position;
      }
      if (!audioClockFinished_ && audioRenderer_ && (audioStream_ >= 0 || externalAudioStream_ >= 0)) {
@@ -743,7 +925,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
      PublishPlaybackClock(position, snapshot_.duration100ns > 0
          ? snapshot_.duration100ns : (std::numeric_limits<std::int64_t>::max)());
      return position;
-@@ -5273,3 +5500,238 @@
+@@ -5273,3 +5604,238 @@ bool PlayerSession::NormalizeLocalPath(const char* path, std::string& normalized
          normalized = ToUtf8(full.data()); return !normalized.empty();
      } catch (...) { error = "The local path could not be normalized."; return false; }
  }
@@ -983,9 +1165,10 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerS
 +    });return FFFResult::Success;
 +}
 diff --git a/FFF.Native/3FP/Core/PlayerSession.h b/FFF.Native/3FP/Core/PlayerSession.h
+index 76c791eb8fc237c7c093f079ab5d72b7ab79904c..adaf6aec96ef0a15ccc62dc037adf5c501ed2b62 100644
 --- a/FFF.Native/3FP/Core/PlayerSession.h
 +++ b/FFF.Native/3FP/Core/PlayerSession.h
-@@ -78,6 +78,9 @@
+@@ -78,6 +78,9 @@ public:
      // a gap the renderer's own silence-insertion path bridges. Session-level preference:
      // DoClose does not clear it, so it is expected to survive Close/Open.
      FFFResult SetAudioDelay(std::int64_t delay100ns) noexcept;
@@ -995,7 +1178,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.h b/FFF.Native/3FP/Core/PlayerSes
      FFFResult SetColorMode(FFF3FPColorMode mode, float sdrPeakNits,
          float hdrPeakNits, float paperWhiteNits, bool forceHdrOutput) noexcept;
      FFFResult SetPresentConfig(bool enableTearing) noexcept;
-@@ -104,6 +107,19 @@
+@@ -104,6 +107,19 @@ public:
      FFFResult Set360View(bool enabled, float yaw, float pitch, float fovY) noexcept;
      FFFResult SetAudioEndpoint(const char* endpointIdUtf8) noexcept;
      FFFResult SetAudioExclusiveMode(bool exclusive) noexcept;
@@ -1015,7 +1198,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.h b/FFF.Native/3FP/Core/PlayerSes
      FFFResult SetVolume(float volume, bool muted) noexcept;
      FFFResult SetTimedTextLayer(const FFF3FPTimedTextLayer& layer) noexcept;
      // RTX Video Super Resolution opt-in switch (default Off).
-@@ -134,6 +150,10 @@
+@@ -134,6 +150,10 @@ public:
      // Render-target diagnostics
      FFFResult GetRenderTargetInfo(FFF3FPRenderTargetInfo& info) noexcept;
      // Re-present the last cached frame (host calls it after a child HWND resize).
@@ -1026,7 +1209,7 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.h b/FFF.Native/3FP/Core/PlayerSes
      FFFResult Redraw() noexcept;
      // ST 2094-40 injection, new with this change.
      // See FFF3FP_SetHdrDynamicMetadata in FFF.Player.Api.h for the units and
-@@ -242,6 +262,12 @@
+@@ -242,6 +262,12 @@ private:
      FFFResult LoadCoverArt() noexcept;
      FFFResult DecodePacket(AVCodecContext* decoder, AVPacket* packet, bool video,
          AVFormatContext* owner) noexcept;
@@ -1039,24 +1222,66 @@ diff --git a/FFF.Native/3FP/Core/PlayerSession.h b/FFF.Native/3FP/Core/PlayerSes
      bool PumpVideoPresentation() noexcept;
      void QueueVideoFrame(AVFrame* frame) noexcept;
      void ClearVideoQueue() noexcept;
-@@ -306,6 +332,17 @@
+@@ -306,6 +332,19 @@ private:
      StepOperation pendingStepOperation_;
      std::int32_t pendingStepDirection_;
      std::thread worker_;
 +    // The codec worker hands off one frame; only the session worker updates
 +    // the timeline, renderer and snapshot. Stop/join precedes any codec reset.
 +    std::thread softwareVideoWorker_;
++    std::uintptr_t softwareHostAffinity_=0, softwareOriginalAffinity_=0, softwareDecoderAffinity_=0;
 +    std::mutex softwareVideoMutex_;
 +    std::mutex softwareVideoCodecMutex_;
 +    std::condition_variable softwareVideoCondition_;
 +    std::deque<AVPacket*> softwareVideoPackets_;
-+    AVFrame* softwareVideoOutput_ = nullptr;
++    std::deque<AVFrame*> softwareVideoOutputs_;
++    unsigned softwareVideoOutputLimit_=1;
 +    bool softwareVideoBusy_ = false;
 +    bool softwareVideoStopping_ = false;
 +    int softwareVideoResult_ = 0;
      std::atomic<bool> terminate_;
      AVFormatContext* format_;
      std::unique_ptr<DiscInput> disc_;
+diff --git a/FFF.Native/3FP/Core/PlayerSessionDisc.cpp b/FFF.Native/3FP/Core/PlayerSessionDisc.cpp
+index 646e4d59a3282f87be791ada34bfb992704390f5..6c103fa4e9d52cc993f2a9ee57699233010c2a35 100644
+--- a/FFF.Native/3FP/Core/PlayerSessionDisc.cpp
++++ b/FFF.Native/3FP/Core/PlayerSessionDisc.cpp
+@@ -62,6 +62,7 @@ bool PlayerSession::ReopenDiscDemux() {
+     if (!disc_) return false;
+     const bool playing = state_.load() == FFF3FPState::Playing;
+     if (audioRenderer_) { audioRenderer_->Stop(); audioRenderer_.reset(); }
++    StopSoftwareVideoDecode();
+     ClearVideoQueue();
+     avcodec_free_context(&videoDecoder_); avcodec_free_context(&audioDecoder_);
+     disc_->CloseDemux(&format_);
+diff --git a/FFF.Native/3FP/Disc/DiscInput.cpp b/FFF.Native/3FP/Disc/DiscInput.cpp
+index 1c587337ab001b270c85ff43f47f106b2e151fab..2e82daf2bb62f34589851b9a208f1216caf9f760 100644
+--- a/FFF.Native/3FP/Disc/DiscInput.cpp
++++ b/FFF.Native/3FP/Disc/DiscInput.cpp
+@@ -183,9 +183,9 @@ void DiscInput::HandleBluRayEvent(unsigned event, unsigned parameter) {
+         failed_ = true; error_ = "Blu-ray navigation or disc read error: " + std::to_string(event); break;
+     case BD_EVENT_TITLE:
+         title_ = parameter;
+-        // Title 1 can be reported while First Play is still running. Title 0
+-        // is the boundary after which the top-menu call is allowed.
+-        if (parameter == 0) startupTitleReached_ = true;
++        // Keep every playlist in authored First Play (0xffff). Once its VM
++        // transitions to a normal title, request the menu subject to disc UO.
++        if (parameter != 0xffff) startupTitleReached_ = true;
+         break;
+     case BD_EVENT_PLAYLIST:
+         if (playlist_ != parameter) Barrier(true);
+@@ -319,7 +319,9 @@ std::string DiscInput::StatusJson() const {
+         << ",\"waiting\":" << (held_ ? "true" : "false") << ",\"title\":" << title_
+         << ",\"chapter\":" << chapter_ << ",\"titles\":" << titleCount_ << ",\"chapters\":" << chapterCount_
+         << ",\"playlist\":" << playlist_ << ",\"width\":" << graphics_.width << ",\"height\":" << graphics_.height
+-        << ",\"aspect\":" << aspect_ << ",\"overlaySequence\":" << graphics_.sequence << '}';
++        << ",\"aspect\":" << aspect_ << ",\"overlaySequence\":" << graphics_.sequence << ",\"chapterStarts100ns\":[";
++    for (size_t i = 0; i < chapters_.size(); ++i) { if (i) json << ','; json << chapters_[i]; }
++    json << "]}";
+     return json.str();
+ }
+ void DiscInput::OverlayCallback(void* context, const bd_overlay_s* overlay) {
 diff --git a/FFF.Native/3FP/Render/SdrShaderBytecode.h b/FFF.Native/3FP/Render/SdrShaderBytecode.h
 index 405d02bc3a61b88c44ca0591a4e0178f5fe5b737..2c90ec8a5eeb1232a58a8c0a36462226516835d4 100644
 GIT binary patch
@@ -4385,9 +4610,16 @@ zlA~1~EFalJAzIKUV44Hrd3?KCKk6MxC8RT$KAO-lli_n$Ng&c1_nsn$ck5C=ImUeT
 OoD=TY9tyvD{r>?BeI!f(
 
 diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/VideoRenderer.cpp
+index 8887c06a613fecf605ebe65ec9813eac06fefde8..da12f3436d7fdde5656154009e0413822249a962 100644
 --- a/FFF.Native/3FP/Render/VideoRenderer.cpp
 +++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
-@@ -492,7 +492,8 @@
+@@ -1,4 +1,5 @@
+ #include "pch.h"
++#include "3FP/Core/PlaybackScheduling.h"
+ #include "3FP/Render/VideoRenderer.h"
+ #include "3FP/Render/ShaderBytecode.h"
+ #include "3FP/Render/SdrShaderBytecode.h"
+@@ -492,7 +493,8 @@ cbuffer Settings : register(b0) {
      float COffset; float CScale; float Kr; float Kb;
      float2 ChromaOffset; float2 ImageMode;
      uint Projection360; float ViewYaw; float ViewPitch; float ViewFovY;
@@ -4397,7 +4629,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
  };
  #ifdef FFF_SDR_LAYOUT
  // Compile-time specialization only: sampling and color formulas stay identical.
-@@ -701,6 +702,31 @@
+@@ -701,6 +703,31 @@ float Lanczos3Weight(float value) {
  float4 LoadClamped(Texture2D<float4> sourceTexture,int2 coordinate,uint2 dimensions) {
      return sourceTexture.Load(int3(clamp(coordinate,int2(0,0),int2(dimensions)-1),0));
  }
@@ -4429,11 +4661,10 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
  float4 SampleLanczos3(Texture2D<float4> sourceTexture,float2 uv,uint2 dimensions) {
      float2 position=uv*float2(dimensions)-0.5;
      int2 origin=int2(floor(position));
-@@ -758,6 +784,112 @@
-     uint width,height;
+@@ -759,6 +786,112 @@ float4 SamplePanorama(Texture2D<float4> sourceTexture,float2 uv) {
      sourceTexture.GetDimensions(width,height);
      return SampleLanczos3Panorama(sourceTexture,uv,uint2(width,height));
-+}
+ }
 +float CubicWeight(float value) {
 +    value=abs(value);
 +    if(value<1.0)return 1.5*value*value*value-2.5*value*value+1.0;
@@ -4539,10 +4770,11 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
 +    if(algorithm==5 || algorithm==7 || algorithm==8)return SampleSeparable(tex,uv,dim,algorithm);
 +    if(algorithm==6)return SampleSuperXbr(tex,uv,dim);
 +    return SampleBilateral(tex,uv,dim,algorithm==10);
- }
++}
  float4 SampleVideo(Texture2D<float4> sourceTexture,float2 uv) {
      uint width,height;
-@@ -774,6 +906,14 @@
+     sourceTexture.GetDimensions(width,height);
+@@ -774,6 +907,14 @@ float4 SampleVideo(Texture2D<float4> sourceTexture,float2 uv) {
          const int2 texel=int2(floor(uv*float2(dimensions)));
          return sourceTexture.Load(int3(clamp(texel,int2(0,0),int2(dimensions)-1),0));
      }
@@ -4557,7 +4789,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      return SampleLanczos3(sourceTexture,uv,dimensions);
  }
  float3 ReadSource(float2 uv) {
-@@ -788,8 +928,11 @@
+@@ -788,8 +929,11 @@ float3 ReadSource(float2 uv) {
      float2 chromaUv=uv+ChromaOffset;
      float y=SampleVideo(Source,uv).r*SampleScale;
      float2 chroma=InputLayout==1
@@ -4571,7 +4803,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      y=(y-YOffset)*YScale;
      chroma=(chroma-COffset)*CScale;
      // Kind-3 domain 0: the table replaces the YUV->RGB matrix below. Its input
-@@ -1024,6 +1167,7 @@
+@@ -1024,6 +1168,7 @@ float Sinc(float value) {
  }
  float ScaleWeight(float value) {
      value=abs(value);
@@ -4579,7 +4811,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      if(Filter==0)
          return value>=1.0?0.0:((2.0*value-3.0)*value*value+1.0);
      if(Filter==2)
-@@ -1035,7 +1179,7 @@
+@@ -1035,7 +1180,7 @@ float4 main(float4 position:SV_Position,float2 uv:TEXCOORD0):SV_Target {
      const float sourceExtent=Axis==0?SourceSize.x:SourceSize.y;
      const float destinationExtent=Axis==0?DestinationSize.x:DestinationSize.y;
      const float scale=min(destinationExtent/sourceExtent,1.0);
@@ -4588,7 +4820,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      const float support=radius/max(scale,0.000001);
      const float sourcePosition=((Axis==0?float(outputPixel.x):float(outputPixel.y))+0.5)
          *sourceExtent/destinationExtent-0.5;
-@@ -1184,6 +1328,7 @@
+@@ -1184,6 +1329,7 @@ struct ShaderSettings {
      // padding, so the constant buffer layout (and the HLSL cbuffer above) is
      // unchanged in size -- only the meaning of one slot moved.
      float viewAspect, viewRotation, padding4, padding5;
@@ -4596,7 +4828,27 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
  };
  
  struct ScaleShaderSettings {
-@@ -2572,6 +2717,22 @@
+@@ -1366,6 +1512,11 @@ constexpr std::uint32_t ToShaderFilter(const ScaleKernel kernel) noexcept {
+ constexpr std::uint32_t DefaultUploadWidthThreshold = 3840;
+ constexpr std::uint32_t DefaultUploadHeightThreshold = 2160;
+ 
++bool SoftwareUploadPipelineEnabled() noexcept {
++    static const auto enabled=[] {wchar_t value[8]{};return !GetEnvironmentVariableW(L"VSR_SW_UPLOAD_PIPELINE",value,8) || value[0]!=L'0';}();
++    return enabled;
++}
++
+ constexpr bool UseDefaultUploadForSize(const std::uint32_t width,
+     const std::uint32_t height) noexcept {
+     return width >= DefaultUploadWidthThreshold && height >= DefaultUploadHeightThreshold;
+@@ -2319,6 +2470,7 @@ FFFResult PlayerVideoRenderer::SetWindow(const HWND window) noexcept {
+     }
+     if (swapChain_ != nullptr) {
+         std::lock_guard presentLock(presentMutex_);
++        if(frameLatencyWaitable_){CloseHandle(frameLatencyWaitable_);frameLatencyWaitable_=nullptr;}
+         swapChain_->Release(); swapChain_ = nullptr;
+     }
+     window_ = window;
+@@ -2572,6 +2724,22 @@ FFFResult PlayerVideoRenderer::SetSdrScRgbMode(const std::uint32_t mode) noexcep
      return FFFResult::Success;
  }
  
@@ -4619,7 +4871,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
  FFFResult PlayerVideoRenderer::SetColorMode(const FFF3FPColorMode mode, const float sdrPeakNits,
      const float hdrPeakNits, const float paperWhiteNits, const bool forceHdrOutput) noexcept {
      std::lock_guard deviceLock(deviceMutex_);
-@@ -2630,6 +2791,12 @@
+@@ -2630,6 +2798,12 @@ void PlayerVideoRenderer::ConfigureHdrStream(const AVCodecParameters* parameters
          primaries == AVCOL_PRI_SMPTE431 || primaries == AVCOL_PRI_SMPTE432,
          std::memory_order_release);
      hdrProcessor_.ConfigureStream(parameters);
@@ -4632,7 +4884,94 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
  }
  
  FFFResult PlayerVideoRenderer::ForceSdrOutputForSdrSource() noexcept {
-@@ -3278,6 +3445,16 @@
+@@ -2917,7 +3091,7 @@ FFFResult PlayerVideoRenderer::EnsureSwapChain(std::uint32_t width, std::uint32_
+         hdr == swapHdr_ && outputBits == swapOutputBits_) return FFFResult::Success;
+     if (swapChain_ != nullptr && hdr == swapHdr_ && outputBits == swapOutputBits_) {
+         context_->ClearState();
+-        const auto resizeFlags = swapAllowTearing_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u;
++        const auto resizeFlags = (swapAllowTearing_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u) | (swapWaitable_ ? DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT : 0u);
+         const auto resize = swapChain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, resizeFlags);
+         if (SUCCEEDED(resize)) {
+             swapWidth_ = width; swapHeight_ = height;
+@@ -2959,8 +3133,11 @@ FFFResult PlayerVideoRenderer::CreateSwapChain(const std::uint32_t width,
+     description.BufferCount = 3; description.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+     description.AlphaMode = DXGI_ALPHA_MODE_IGNORE; description.Scaling = DXGI_SCALING_NONE;
+     description.Flags = allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
++    wchar_t waitable[8]{};
++    if(GetEnvironmentVariableW(L"VSR_DXGI_WAITABLE",waitable,8) && waitable[0]==L'1')description.Flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+     ComPtr<IDXGISwapChain1> chain1;
+-    const auto result = factory->CreateSwapChainForHwnd(device_, window_, &description, nullptr, nullptr, &chain1);
++    auto result = factory->CreateSwapChainForHwnd(device_, window_, &description, nullptr, nullptr, &chain1);
++    if(FAILED(result) && (description.Flags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT)){description.Flags &= ~DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;result=factory->CreateSwapChainForHwnd(device_,window_,&description,nullptr,nullptr,&chain1);}
+     if (FAILED(result) || FAILED(chain1->QueryInterface(IID_PPV_ARGS(&swapChain_)))) {
+         if (RequestRecoveryIfDeviceLostLocked()) return FFFResult::DeviceFailure;
+         std::ostringstream message;
+@@ -2968,6 +3145,10 @@ FFFResult PlayerVideoRenderer::CreateSwapChain(const std::uint32_t width,
+                 << static_cast<std::uint32_t>(result) << ").";
+         SetError(message.str()); return FFFResult::DeviceFailure;
+     }
++    swapWaitable_=(description.Flags & DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT)!=0;
++    if(swapWaitable_){
++        if(SUCCEEDED(swapChain_->SetMaximumFrameLatency(2)))frameLatencyWaitable_=swapChain_->GetFrameLatencyWaitableObject();
++    }
+     swapWidth_ = width; swapHeight_ = height; swapHdr_ = hdr; swapOutputBits_ = outputBits;
+     InvalidateHdrMetadataCache();
+     swapAllowTearing_ = allowTearing != FALSE;
+@@ -2986,7 +3167,8 @@ FFFResult PlayerVideoRenderer::CreateSwapChain(const std::uint32_t width,
+             hdrSwapChainRejected_ = true;
+             hdrSupportCheckedAt_ = std::chrono::steady_clock::now();
+             swapChain_->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_NONE, 0, nullptr);
+-            swapChain_->Release();
++            if(frameLatencyWaitable_){CloseHandle(frameLatencyWaitable_);frameLatencyWaitable_=nullptr;}
++        swapChain_->Release();
+             swapChain_ = nullptr;
+             swapWidth_ = swapHeight_ = 0;
+             swapHdr_ = false;
+@@ -3002,15 +3184,7 @@ FFFResult PlayerVideoRenderer::CreateSwapChain(const std::uint32_t width,
+         // call opts the window into an explicit Advanced Color presentation
+         // contract instead of the ordinary SDR desktop path.
+     }
+-    // This chain has no FRAME_LATENCY_WAITABLE_OBJECT flag, so IDXGISwapChain2's
+-    // latency API is invalid here (that call was silently failing before). The
+-    // device-level API has no such precondition.
+-    //
+-    // The value is 2 rather than the previous *intended* 1 or DXGI's default 3:
+-    // two permits one frame rendering while another waits on Present, which is the
+-    // overlap this path wants, and it stays strictly below the 3-deep buffer count
+-    // so the queue cannot outrun the chain. Measured via the queue-depth effect on
+-    // dropped frames; see docs/45.
++    // Keep the legacy device-level limit as the fallback for ordinary chains.
+     ComPtr<IDXGIDevice1> latencyDevice;
+     if (SUCCEEDED(device_->QueryInterface(IID_PPV_ARGS(&latencyDevice))))
+         latencyDevice->SetMaximumFrameLatency(2);
+@@ -3046,6 +3220,7 @@ FFFResult PlayerVideoRenderer::ReconfigureSwapChain(const bool hdr,
+         // The caller holds presentMutex_ for the entire rewrite (see
+         // EnsureSwapChain/SetColorMode); do not relock it here.
+         swapChain_->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_NONE, 0, nullptr);
++        if(frameLatencyWaitable_){CloseHandle(frameLatencyWaitable_);frameLatencyWaitable_=nullptr;}
+         swapChain_->Release();
+         swapChain_ = nullptr;
+         swapWidth_ = swapHeight_ = 0;
+@@ -3056,7 +3231,7 @@ FFFResult PlayerVideoRenderer::ReconfigureSwapChain(const bool hdr,
+     const auto format = formatBits >= 16 ? DXGI_FORMAT_R16G16B16A16_FLOAT :
+         (formatBits >= 10 ? DXGI_FORMAT_R10G10B10A2_UNORM :
+             DXGI_FORMAT_B8G8R8A8_UNORM);
+-    const auto resizeFlags = swapAllowTearing_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u;
++    const auto resizeFlags = (swapAllowTearing_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u) | (swapWaitable_ ? DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT : 0u);
+     const auto resize = swapChain_->ResizeBuffers(0, std::max(1u, swapWidth_),
+         std::max(1u, swapHeight_), format, resizeFlags);
+     if (FAILED(resize)) {
+@@ -3083,7 +3258,8 @@ FFFResult PlayerVideoRenderer::ReconfigureSwapChain(const bool hdr,
+             hdrSwapChainRejected_ = true;
+             hdrSupportCheckedAt_ = std::chrono::steady_clock::now();
+             swapChain_->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_NONE, 0, nullptr);
+-            swapChain_->Release();
++            if(frameLatencyWaitable_){CloseHandle(frameLatencyWaitable_);frameLatencyWaitable_=nullptr;}
++        swapChain_->Release();
+             swapChain_ = nullptr;
+             const auto width = std::max(1u, swapWidth_);
+             const auto height = std::max(1u, swapHeight_);
+@@ -3278,6 +3454,16 @@ FFFResult PlayerVideoRenderer::EnsurePipeline(const std::uint32_t sourceWidth,
      const std::uint32_t sourceHeight, const std::uint32_t inputLayout,
      const std::uint32_t bitDepth, const std::uint32_t chromaWidthShift,
      const std::uint32_t chromaHeightShift, const bool externalSource) noexcept {
@@ -4649,7 +4988,42 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      if (vertexShader_ == nullptr || pixelShader_ == nullptr || scalePixelShader_ == nullptr ||
          coverBackdropPixelShader_ == nullptr || timedTextPixelShader_ == nullptr ||
          sampler_ == nullptr || pointSampler_ == nullptr || panoramaSampler_ == nullptr ||
-@@ -3460,6 +3637,7 @@
+@@ -3375,6 +3561,8 @@ FFFResult PlayerVideoRenderer::EnsurePipeline(const std::uint32_t sourceWidth,
+     for (std::size_t plane = 0; plane < ARRAYSIZE(sourceTextures_); ++plane) {
+         ReleaseCom(sourceViews_[plane]);
+         ReleaseCom(sourceTextures_[plane]);
++        ReleaseCom(uploadTextures_[plane]);ReleaseCom(uploadViews_[plane]);
++        for(auto &slot:uploadStaging_)ReleaseCom(slot[plane]);
+     }
+     ReleaseScaleResources();
+     const auto planeCount = inputLayout == 1 ? 3u : (inputLayout == 2 ? 2u : 1u);
+@@ -3441,7 +3629,7 @@ FFFResult PlayerVideoRenderer::EnsurePipeline(const std::uint32_t sourceWidth,
+         //   3840x2160  Map 3.293 ms vs 2.886 ms                    (1.14x)
+         //   7680x4320  Map 22.266 ms vs 15.213 ms                  (1.46x)
+         // So only the large case is worth a second code path, and it needs a DEFAULT
+-        // texture because UpdateSubresource cannot target a DYNAMIC one.
++        // texture for either UpdateSubresource or the explicit staging ring.
+         if ((inputLayout == 1 || inputLayout == 2) && !UseDefaultUploadForSize(sourceWidth, sourceHeight)) {
+             texture.Usage = D3D11_USAGE_DYNAMIC;
+             texture.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+@@ -3451,6 +3639,16 @@ FFFResult PlayerVideoRenderer::EnsurePipeline(const std::uint32_t sourceWidth,
+             SetError("Could not create the decoded frame textures."); return FFFResult::DeviceFailure;
+         }
+     }
++    uploadSlot_=0;
++    if(!externalSource && (inputLayout==1 || inputLayout==2) && UseDefaultUploadForSize(sourceWidth,sourceHeight) && SoftwareUploadPipelineEnabled()){
++        for(unsigned plane=0;plane<planeCount;++plane){
++            D3D11_TEXTURE2D_DESC desc{};sourceTextures_[plane]->GetDesc(&desc);
++            if(FAILED(device_->CreateTexture2D(&desc,nullptr,&uploadTextures_[plane])) ||
++                FAILED(device_->CreateShaderResourceView(uploadTextures_[plane],nullptr,&uploadViews_[plane]))){SetError("Could not create the upload texture ring.");return FFFResult::DeviceFailure;}
++            desc.Usage=D3D11_USAGE_STAGING;desc.BindFlags=0;desc.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
++            for(auto &slot:uploadStaging_)if(FAILED(device_->CreateTexture2D(&desc,nullptr,&slot[plane]))){SetError("Could not create the upload staging textures.");return FFFResult::DeviceFailure;}
++        }
++    }
+     sourceWidth_ = sourceWidth; sourceHeight_ = sourceHeight;
+     sourceInputLayout_ = inputLayout; sourceBitDepth_ = bitDepth;
+     sourceExternal_ = externalSource;
+@@ -3460,6 +3658,7 @@ FFFResult PlayerVideoRenderer::EnsurePipeline(const std::uint32_t sourceWidth,
  }
  
  bool PlayerVideoRenderer::CanUseDirectVideoProcessor() const noexcept {
@@ -4657,7 +5031,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      if (hdrProcessor_.RequiresMetadataAwareShader()) return false;
      if (!sourceExternal_ || sourceInputLayout_ != 2 || sourceTextures_[0] == nullptr ||
          sourceBitDepth_ > 10 || sourceInterlaced_ ||
-@@ -3972,6 +4150,7 @@
+@@ -3972,6 +4171,7 @@ FFFResult PlayerVideoRenderer::DrawWithShader(ID3D11RenderTargetView* target,
      cachedVideoSettings_.imageModeX = sourceImageMode_ &&
          (width > cachedVideoSettings_.sourceWidth || height > cachedVideoSettings_.sourceHeight)
          ? 1.0f : 0.0f;
@@ -4665,7 +5039,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      context_->UpdateSubresource(constants_, 0, nullptr, &cachedVideoSettings_, 0, 0);
      context_->OMSetRenderTargets(1, &target, nullptr);
      const D3D11_VIEWPORT viewport{x, y, width, height, 0.0f, 1.0f};
-@@ -4009,6 +4188,7 @@
+@@ -4009,6 +4209,7 @@ FFFResult PlayerVideoRenderer::DrawWithShader(ID3D11RenderTargetView* target,
      }
      context_->PSSetShader(shader, nullptr, 0);
      context_->PSSetConstantBuffers(0, 1, &constants_);
@@ -4673,7 +5047,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      // ST 2094 curve state at b2 / t3. Both are always bound so the shader's
      // declared registers are never left holding a released object; with
      // DynamicEnabled == 0 the values are inert.
-@@ -4170,6 +4350,7 @@
+@@ -4170,6 +4371,7 @@ FFFResult PlayerVideoRenderer::ExecuteScalePass(ID3D11ShaderResourceView* source
  
  std::uint32_t PlayerVideoRenderer::SelectScaleFilter(const float scaleX,
      const float scaleY) const noexcept {
@@ -4681,7 +5055,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      const auto upscaling = scaleX > 1.0f || scaleY > 1.0f;
      const auto downscaling = scaleX < 1.0f || scaleY < 1.0f;
  
-@@ -4235,10 +4416,15 @@
+@@ -4235,10 +4437,15 @@ void PlayerVideoRenderer::ObserveFrameForAdaptiveDownscale(const bool dropped) n
  
  bool PlayerVideoRenderer::PrepareAdaptiveDownscale(const AVFrame* frame,
      const std::uint32_t width, const std::uint32_t height,
@@ -4700,7 +5074,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      if (outputWidth == 0 || outputHeight == 0) return false;
      // Only meaningful when the frame really is larger than its destination.
      if (width <= outputWidth && height <= outputHeight) return false;
-@@ -4250,10 +4436,10 @@
+@@ -4250,10 +4457,10 @@ bool PlayerVideoRenderer::PrepareAdaptiveDownscale(const AVFrame* frame,
      if (adaptiveScaler_ == nullptr) return false;
      // Match the main path's colour handling so the resample does not shift colours.
      const auto* sourceCoefficients = sws_getCoefficients(ToSwsColorSpace(frame, false));
@@ -4713,7 +5087,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
  
      const auto bytes = static_cast<std::size_t>(av_image_get_buffer_size(pixelFormat,
          static_cast<int>(outputWidth), static_cast<int>(outputHeight), 1));
-@@ -4284,6 +4470,13 @@
+@@ -4284,6 +4491,13 @@ FFFResult PlayerVideoRenderer::PrepareScaledVideo(const std::uint32_t outputWidt
      const std::uint32_t outputHeight, ID3D11ShaderResourceView** views) noexcept {
      if (views == nullptr || outputWidth == 0 || outputHeight == 0)
          return FFFResult::InvalidArgument;
@@ -4727,7 +5101,25 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      const auto generation = videoGeneration_.load(std::memory_order_acquire);
      // The cache key includes the VSR state: VSR swaps the effective source for an
      // upscaled surface of a different size, and that changes the result even
-@@ -5177,17 +5370,33 @@
+@@ -4512,6 +4726,7 @@ FFFResult PlayerVideoRenderer::SetTimedTextLayer(TimedTextRenderLayer layer,
+ }
+ 
+ void PlayerVideoRenderer::TimedTextThread() noexcept {
++    PlaybackScheduling scheduling(L"Playback");
+     // Held for the whole thread: this is the thread that owns the presentation cadence, and
+     // its waits are what hold the flip rate down to the ceiling.
+     PresenterTimerResolution timerResolution;
+@@ -4578,6 +4793,9 @@ void PlayerVideoRenderer::TimedTextThread() noexcept {
+         // was measured to be dead weight.
+         const auto presentationStart = std::chrono::steady_clock::now();
+         lastSubmitQpc_ = QpcNowValue();
++        HANDLE latency=nullptr;
++        {std::lock_guard lock(deviceMutex_);if(frameLatencyWaitable_)DuplicateHandle(GetCurrentProcess(),frameLatencyWaitable_,GetCurrentProcess(),&latency,0,FALSE,DUPLICATE_SAME_ACCESS);}
++        if(latency){WaitForSingleObjectEx(latency,20,FALSE);CloseHandle(latency);}
+         const auto result = PresentTimedText();
+         if (result != FFFResult::Success) {
+             if (result == FFFResult::DeviceFailure && RequestRecoveryIfDeviceLost()) continue;
+@@ -5177,17 +5395,33 @@ FFFResult PlayerVideoRenderer::DrawTimedText(const TimedTextLayerSlot slot) noex
              (command.x + command.width) * scaleX, (command.y + command.height) * scaleY);
          if (command.type == FFF3FPTimedTextCommandType::Bitmap) {
              D2D1_BITMAP_PROPERTIES properties{};
@@ -4767,7 +5159,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
                  d2dContext_->DrawBitmap(bitmap.Get(), destination, 1.0f,
                      D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
              continue;
-@@ -5310,6 +5519,7 @@
+@@ -5310,6 +5544,7 @@ void PlayerVideoRenderer::CompositeTimedText(ID3D11RenderTargetView* target,
          (actualMode_ == FFF3FPColorMode::MapToHdr ? 2u : 0u);
      context_->UpdateSubresource(constants_, 0, nullptr, &overlaySettings, 0, 0);
      context_->PSSetConstantBuffers(0, 1, &constants_);
@@ -4775,7 +5167,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      context_->PSSetShaderResources(0, ARRAYSIZE(views), views);
      context_->PSSetSamplers(0, 1, &sampler_);
      auto measurePipeline = false;
-@@ -5693,7 +5903,7 @@
+@@ -5693,7 +5928,7 @@ void PlayerVideoRenderer::RefreshHdrShaderInputs() noexcept {
  
  FFFResult PlayerVideoRenderer::Render(const AVFrame* frame, const std::int64_t frameIndex,
      const bool limitToNativeSize,
@@ -4784,7 +5176,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      if (frame == nullptr || frame->width <= 0 || frame->height <= 0) return FFFResult::InvalidArgument;
      const auto hdrState = hdrProcessor_.ProcessFrame(
          frame, hdrPeakNits_, paperWhiteNits_, frameIndex);
-@@ -5766,14 +5976,19 @@
+@@ -5766,14 +6001,19 @@ FFFResult PlayerVideoRenderer::Render(const AVFrame* frame, const std::int64_t f
          // the row pitch of the upload all describe the same picture. Converting at full
          // frame size and pouring that into the smaller texture is what used to leave a
          // magnified top-left corner of the frame on screen.
@@ -4808,7 +5200,33 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
              fittedWidth != 0 && fittedHeight != 0 &&
              (width > fittedWidth || height > fittedHeight)) {
              uploadWidth = fittedWidth;
-@@ -5953,6 +6168,11 @@
+@@ -5893,7 +6133,24 @@ FFFResult PlayerVideoRenderer::Render(const AVFrame* frame, const std::int64_t f
+         const auto largeFrame = UseDefaultUploadForSize(uploadWidth, uploadHeight);
+         if (input.layout == 1 || input.layout == 2) {
+             const auto planeCount = input.layout == 1 ? 3u : 2u;
+-            if (largeFrame) {
++            if(largeFrame && uploadStaging_[0][0]){
++                D3D11_MAPPED_SUBRESOURCE mapped[3]{};
++                for(unsigned plane=0;plane<planeCount;++plane){
++                    std::swap(sourceTextures_[plane],uploadTextures_[plane]);std::swap(sourceViews_[plane],uploadViews_[plane]);
++                    if(FAILED(context_->Map(uploadStaging_[uploadSlot_][plane],0,D3D11_MAP_WRITE,0,&mapped[plane]))){for(unsigned prior=0;prior<plane;++prior)context_->Unmap(uploadStaging_[uploadSlot_][prior],0);SetError("Could not map the upload staging texture.");return FFFResult::DeviceFailure;}
++                }
++                const auto copy=[&](unsigned part,unsigned count){
++                    for(unsigned plane=0;plane<planeCount;++plane){
++                        const auto xs=plane==0?0u:input.chromaWidthShift,ys=plane==0?0u:input.chromaHeightShift;
++                        const auto rows=(uploadHeight+(1u<<ys)-1)>>ys;
++                        const auto rowBytes=((uploadWidth+(1u<<xs)-1)>>xs)*(input.layout==2 && plane?2u:1u)*(input.bitDepth>8?2u:1u);
++                        for(unsigned row=rows*part/count;row<rows*(part+1)/count;++row)std::memcpy(static_cast<std::uint8_t*>(mapped[plane].pData)+std::size_t(row)*mapped[plane].RowPitch,uploadPlanes[plane]+std::ptrdiff_t(row)*uploadLines[plane],rowBytes);
++                    }
++                };
++                copy(0,1);
++                for(unsigned plane=0;plane<planeCount;++plane){context_->Unmap(uploadStaging_[uploadSlot_][plane],0);context_->CopyResource(sourceTextures_[plane],uploadStaging_[uploadSlot_][plane]);}
++                uploadSlot_=(uploadSlot_+1)%2;
++            } else if (largeFrame) {
+                 for (unsigned plane = 0; plane < planeCount; ++plane)
+                     context_->UpdateSubresource(sourceTextures_[plane], 0, nullptr,
+                         uploadPlanes[plane], uploadLines[plane], 0);
+@@ -5953,6 +6210,11 @@ FFFResult PlayerVideoRenderer::Render(const AVFrame* frame, const std::int64_t f
          upload100ns_.fetch_add(static_cast<std::uint64_t>(std::chrono::duration_cast<
              std::chrono::nanoseconds>(std::chrono::steady_clock::now() - rgbUploadStart).count() / 100));
      }
@@ -4820,7 +5238,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      ShaderSettings settings{};
      settings.colorMode = static_cast<std::uint32_t>(actualMode_);
      settings.reserved = 0;
-@@ -6371,8 +6591,10 @@
+@@ -6371,8 +6633,10 @@ FFFResult PlayerVideoRenderer::DrawCoverBackdrop(ID3D11RenderTargetView* target)
      cachedVideoSettings_.colorMode = static_cast<std::uint32_t>(actualMode_);
      cachedVideoSettings_.reserved =
          coverBackdropTintArgb_.load(std::memory_order_acquire);
@@ -4831,11 +5249,10 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      context_->PSSetSamplers(0, 1, &sampler_);
      ID3D11ShaderResourceView* views[] = {coverBackdropView_, nullptr, nullptr};
      context_->PSSetShaderResources(0, ARRAYSIZE(views), views);
-@@ -6853,6 +7075,32 @@
-             std::clamp((minY + maxY) * 0.5f + offsetY, minY, maxY)));
+@@ -6854,6 +7118,32 @@ FFFResult PlayerVideoRenderer::DrawCachedVideo(ID3D11RenderTargetView* target,
          destination.width = static_cast<std::uint32_t>(zoomedWidth);
          destination.height = static_cast<std::uint32_t>(zoomedHeight);
-+    }
+     }
 +    if (colorEngine_.settings.engine && (projection360 || sourceCoverArt_))
 +        colorEngine_.bypass("Special projection, cover or Dolby reconstruction uses the native compositor.");
 +    if (colorEngine_.settings.engine && !projection360 && !sourceCoverArt_) {
@@ -4861,10 +5278,11 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
 +                return FFFResult::Success;
 +            }
 +        }
-     }
++    }
      ID3D11ShaderResourceView* presentationViews[3]{};
      if (projection360) {
-@@ -7293,6 +7541,7 @@
+         // The panorama projection is view-dependent. Scaling the equirectangular
+@@ -7293,6 +7583,7 @@ bool PlayerVideoRenderer::RequestRecoveryIfDeviceLostLocked() noexcept {
  }
  
  void PlayerVideoRenderer::ReleaseDeviceObjects() noexcept {
@@ -4872,15 +5290,34 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
      ReleaseVideoProcessor();
      ReleaseVideoProcessorInputSurface();
      ReleaseSuperResolutionResources();
-@@ -7314,6 +7563,7 @@
+@@ -7307,13 +7598,17 @@ void PlayerVideoRenderer::ReleaseDeviceObjects() noexcept {
+     }
+     if (swapChain_ != nullptr) {
+         std::lock_guard presentLock(presentMutex_);
++        if(frameLatencyWaitable_){CloseHandle(frameLatencyWaitable_);frameLatencyWaitable_=nullptr;}
+         swapChain_->Release();
+         swapChain_ = nullptr;
+     }
+     for (std::size_t plane = 0; plane < ARRAYSIZE(sourceTextures_); ++plane) {
          ReleaseCom(sourceViews_[plane]);
          ReleaseCom(sourceTextures_[plane]);
++        ReleaseCom(uploadTextures_[plane]);ReleaseCom(uploadViews_[plane]);
++        for(auto &slot:uploadStaging_)ReleaseCom(slot[plane]);
      }
 +    ReleaseCom(jincWeightsView_);
      ReleaseCom(constants_);
      ReleaseCom(scaleConstants_);
      ReleaseCom(pointSampler_);
-@@ -7591,3 +7841,17 @@
+@@ -7382,6 +7677,8 @@ void PlayerVideoRenderer::ResetMedia() noexcept {
+     for (std::size_t plane = 0; plane < ARRAYSIZE(sourceTextures_); ++plane) {
+         ReleaseCom(sourceViews_[plane]);
+         ReleaseCom(sourceTextures_[plane]);
++        ReleaseCom(uploadTextures_[plane]);ReleaseCom(uploadViews_[plane]);
++        for(auto &slot:uploadStaging_)ReleaseCom(slot[plane]);
+     }
+     sourceWidth_ = sourceHeight_ = 0;
+     sourceInputLayout_ = UINT32_MAX;
+@@ -7591,3 +7888,17 @@ std::string PlayerVideoRenderer::LastError() const { std::lock_guard lock(errorM
  void PlayerVideoRenderer::SetError(std::string message) noexcept {
      try { std::lock_guard lock(errorMutex_); lastError_ = std::move(message); } catch (...) {}
  }
@@ -4899,6 +5336,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/Vid
 +    return FFFResult::Success;
 +}
 diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/VideoRenderer.h
+index f85f4e2a74b9e32dbf16cd0bdea977fba7ddaa0f..62d2679d84380f1e4906b8df8f1fe1c81e4880a1 100644
 --- a/FFF.Native/3FP/Render/VideoRenderer.h
 +++ b/FFF.Native/3FP/Render/VideoRenderer.h
 @@ -1,4 +1,5 @@
@@ -4907,7 +5345,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/Video
  
  #include "3FP/Api/FFF.Player.Api.h"
  #include "3FP/Hdr/HdrProcessor.h"
-@@ -182,6 +183,9 @@
+@@ -182,6 +183,9 @@ public:
      FFFResult SetPreferredAdapterIndex(std::int32_t index) noexcept;
      void SetDiscAspect(double aspect) noexcept { discAspect_.store(static_cast<float>(aspect)); }
      void SetInteractiveMove(bool enabled) noexcept;
@@ -4917,7 +5355,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/Video
      FFFResult SetScalingQuality(FFF3FPVideoScalingQuality quality) noexcept;
      // Adaptive downscale-before-upload: opt-in, software-decode only, and engaged
      // only while frames are being dropped. See the API field for the rationale.
-@@ -311,6 +315,12 @@
+@@ -311,6 +315,12 @@ public:
      };
      FFFResult GetRenderTargetInfo(RenderTargetInfo& info) noexcept;
      FFFResult Set360View(bool enabled, float yaw, float pitch, float fovY) noexcept;
@@ -4930,7 +5368,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/Video
      FFFResult SetColorMode(FFF3FPColorMode mode, float sdrPeakNits,
          float hdrPeakNits, float paperWhiteNits, bool forceHdrOutput = false) noexcept;
      FFFResult ForceSdrOutputForSdrSource() noexcept;
-@@ -335,7 +345,7 @@
+@@ -335,7 +345,7 @@ public:
      // the two policies in one place instead of guessing from the frame.
      FFFResult Render(const AVFrame* frame, std::int64_t frameIndex,
          bool limitToNativeSize = false,
@@ -4939,7 +5377,7 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/Video
      FFFResult Redraw() noexcept;
      // Re-pull the HDR classification and the ST 2094-40 curve from the processor and
      // refresh the shader inputs for the frame already sitting in the cached surface, so
-@@ -566,6 +576,7 @@
+@@ -566,6 +576,7 @@ private:
          // padding slot, so the constant-buffer layout the HLSL cbuffer expects
          // is unchanged in size.
          float viewAspect = 1, viewRotation = 0, padding4 = 0, padding5 = 0;
@@ -4947,15 +5385,30 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/Video
      };
      FFFResult EnsureTimedTextResources(TimedTextLayerSlot slot) noexcept;
      FFFResult EnsureD2DContext() noexcept;
-@@ -648,6 +659,7 @@
+@@ -646,8 +657,11 @@ private:
+     ID3D11Device* device_;
+     ID3D11DeviceContext* context_;
      IDXGISwapChain4* swapChain_;
++    HANDLE frameLatencyWaitable_ = nullptr;
++    bool swapWaitable_ = false;
      ID3D11VertexShader* vertexShader_;
      ID3D11PixelShader* pixelShader_;
 +    ID3D11ShaderResourceView* jincWeightsView_ = nullptr;
      ID3D11PixelShader* sdrPixelShaders_[3]{};
      std::uint32_t cachedOriginalInputLayout_ = 0;
      float cachedOriginalSampleScale_ = 1;
-@@ -943,6 +955,7 @@
+@@ -712,6 +726,10 @@ private:
+     bool hdrMetadataValid_ = false;
+     ID3D11Texture2D* sourceTextures_[3];
+     ID3D11ShaderResourceView* sourceViews_[3];
++    ID3D11Texture2D* uploadStaging_[2][3]{};
++    ID3D11Texture2D* uploadTextures_[3]{};
++    ID3D11ShaderResourceView* uploadViews_[3]{};
++    unsigned uploadSlot_=0;
+     PlaneScaleChain planeScaleChains_[3];
+     std::uint64_t scaledVideoGeneration_;
+     std::uint32_t scaledOutputWidth_;
+@@ -943,6 +961,7 @@ private:
      // Separate sws context: the main scaler_ is configured for the colour conversion
      // of full-size frames and must not be retargeted by this policy.
      SwsContext* adaptiveScaler_ = nullptr;
@@ -4964,9 +5417,10 @@ diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/Video
      std::uint32_t adaptiveSourceHeight_ = 0;
      std::uint32_t adaptiveTargetWidth_ = 0;
 diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
+index bf1e069f67d6a088f857011595ce4bf8597d3d41..719b079f49b62bd2e5d246a52b76fbdffaa0dc51 100644
 --- a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
 +++ b/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
-@@ -328,6 +328,7 @@
+@@ -328,6 +328,7 @@ public:
              output.size < sizeof(FFF3FPBitmapSubtitleFrame) || output.version != ApiVersion)
              return FFFResult::InvalidArgument;
          try {
@@ -4974,7 +5428,7 @@ diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Su
              const auto geometryChanged = width != canvasWidth_ || height != canvasHeight_;
              auto contentChanged = geometryChanged || !hasRenderedFrame_;
              if (geometryChanged) {
-@@ -338,7 +339,7 @@
+@@ -338,7 +339,7 @@ public:
                  canvasHeight_ = height;
              }
  
@@ -4983,7 +5437,7 @@ diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Su
                  int changed = 0;
                  const auto timestamp = position / TicksPerMillisecond;
                  ASS_Image* images = ass_render_frame(renderer_, track_, timestamp, &changed);
-@@ -350,6 +351,8 @@
+@@ -350,6 +351,8 @@ public:
                  hasRenderedFrame_ = true;
              }
              FillOutput(output, position);
@@ -4992,7 +5446,7 @@ diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Su
              if (!contentChanged) {
                  output.flags = static_cast<FFF3FPBitmapSubtitleFlags>(
                      static_cast<std::uint32_t>(output.flags) |
-@@ -406,9 +409,15 @@
+@@ -406,9 +409,15 @@ private:
              auto result = avformat_open_input(&format, path, nullptr, nullptr);
              if (result < 0)
                  throw std::runtime_error("Could not open the subtitle container: " + FfmpegError(result));
@@ -5011,7 +5465,7 @@ diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Su
              if (requestedStream < 0 || requestedStream >= static_cast<std::int32_t>(format->nb_streams) ||
                  format->streams[requestedStream]->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE)
                  throw std::runtime_error("The requested embedded subtitle stream does not exist.");
-@@ -481,8 +490,47 @@
+@@ -481,8 +490,47 @@ private:
  
              packet = av_packet_alloc();
              if (packet == nullptr) throw std::runtime_error("Could not allocate a subtitle packet.");
@@ -5061,7 +5515,7 @@ diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Su
                  if (packet->stream_index != requestedStream) {
                      av_packet_unref(packet);
                      continue;
-@@ -530,23 +578,13 @@
+@@ -530,23 +578,13 @@ private:
                              if (*current == '\n') text += "\\N";
                              else text += *current;
                          }
@@ -5086,7 +5540,7 @@ diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Su
      }
  
      static void AssMessageCallback(const int level, const char* format, va_list arguments,
-@@ -718,6 +756,10 @@
+@@ -718,6 +756,10 @@ private:
      }
  
      void Close() noexcept {
@@ -5097,7 +5551,7 @@ diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Su
          if (renderer_ != nullptr) ass_renderer_done(renderer_);
          if (track_ != nullptr) ass_free_track(track_);
          if (library_ != nullptr) ass_library_done(library_);
-@@ -730,6 +772,13 @@
+@@ -730,6 +772,13 @@ private:
      ASS_Library* library_{};
      ASS_Renderer* renderer_{};
      ASS_Track* track_{};
@@ -5112,6 +5566,7 @@ diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Su
      std::string lastLibassMessage_;
      std::vector<std::string> fontDirectories_;
 diff --git a/FFF.Native/FFF.Native.vcxproj b/FFF.Native/FFF.Native.vcxproj
+index d33886a659cb4a05eac0e00c324e0a0fb828e18c..533ef28f4faccd43e9d57e99268a408656ff7fa8 100644
 --- a/FFF.Native/FFF.Native.vcxproj
 +++ b/FFF.Native/FFF.Native.vcxproj
 @@ -117,7 +117,7 @@
@@ -5123,48 +5578,11 @@ diff --git a/FFF.Native/FFF.Native.vcxproj b/FFF.Native/FFF.Native.vcxproj
      </Link>
    </ItemDefinitionGroup>
    <ItemGroup>
-diff --git a/FFF.Native/3FP/Core/PlayerSessionDisc.cpp b/FFF.Native/3FP/Core/PlayerSessionDisc.cpp
---- a/FFF.Native/3FP/Core/PlayerSessionDisc.cpp
-+++ b/FFF.Native/3FP/Core/PlayerSessionDisc.cpp
-@@ -62,6 +62,7 @@
-     if (!disc_) return false;
-     const bool playing = state_.load() == FFF3FPState::Playing;
-     if (audioRenderer_) { audioRenderer_->Stop(); audioRenderer_.reset(); }
-+    StopSoftwareVideoDecode();
-     ClearVideoQueue();
-     avcodec_free_context(&videoDecoder_); avcodec_free_context(&audioDecoder_);
-     disc_->CloseDemux(&format_);
-diff --git a/FFF.Native/3FP/Disc/DiscInput.cpp b/FFF.Native/3FP/Disc/DiscInput.cpp
---- a/FFF.Native/3FP/Disc/DiscInput.cpp
-+++ b/FFF.Native/3FP/Disc/DiscInput.cpp
-@@ -183,9 +183,9 @@
-         failed_ = true; error_ = "Blu-ray navigation or disc read error: " + std::to_string(event); break;
-     case BD_EVENT_TITLE:
-         title_ = parameter;
--        // Title 1 can be reported while First Play is still running. Title 0
--        // is the boundary after which the top-menu call is allowed.
--        if (parameter == 0) startupTitleReached_ = true;
-+        // Keep every playlist in authored First Play (0xffff). Once its VM
-+        // transitions to a normal title, request the menu subject to disc UO.
-+        if (parameter != 0xffff) startupTitleReached_ = true;
-         break;
-     case BD_EVENT_PLAYLIST:
-         if (playlist_ != parameter) Barrier(true);
-@@ -319,7 +319,9 @@
-         << ",\"waiting\":" << (held_ ? "true" : "false") << ",\"title\":" << title_
-         << ",\"chapter\":" << chapter_ << ",\"titles\":" << titleCount_ << ",\"chapters\":" << chapterCount_
-         << ",\"playlist\":" << playlist_ << ",\"width\":" << graphics_.width << ",\"height\":" << graphics_.height
--        << ",\"aspect\":" << aspect_ << ",\"overlaySequence\":" << graphics_.sequence << '}';
-+        << ",\"aspect\":" << aspect_ << ",\"overlaySequence\":" << graphics_.sequence << ",\"chapterStarts100ns\":[";
-+    for (size_t i = 0; i < chapters_.size(); ++i) { if (i) json << ','; json << chapters_[i]; }
-+    json << "]}";
-     return json.str();
- }
- void DiscInput::OverlayCallback(void* context, const bd_overlay_s* overlay) {
 diff --git a/FFF.Native/Shared/Ffmpeg/FfmpegRuntime.cpp b/FFF.Native/Shared/Ffmpeg/FfmpegRuntime.cpp
+index e40d0594153ef89301d38c7e461e5253f5f60c32..d109464ff28cda80f5696781c1ae2554dae148f4 100644
 --- a/FFF.Native/Shared/Ffmpeg/FfmpegRuntime.cpp
 +++ b/FFF.Native/Shared/Ffmpeg/FfmpegRuntime.cpp
-@@ -99,6 +99,17 @@
+@@ -99,6 +99,17 @@ FARPROC WINAPI DelayLoadHook(const unsigned notification, PDelayLoadInfo delayLo
          if (_stricmp(delayLoadInfo->szDll, module.importName) != 0) continue;
  
          const auto nativeDirectory = GetDirectory(g_fffNativeModule);
@@ -5182,241 +5600,3 @@ diff --git a/FFF.Native/Shared/Ffmpeg/FfmpegRuntime.cpp b/FFF.Native/Shared/Ffmp
          if (const auto loaded = LoadMatchingModule(nativeDirectory.c_str(), module.filePrefix)) {
              return reinterpret_cast<FARPROC>(loaded);
          }
-diff --git a/FFF.Native/3FP/Render/ColorBridge.h b/FFF.Native/3FP/Render/ColorBridge.h
-new file mode 100644
---- /dev/null
-+++ b/FFF.Native/3FP/Render/ColorBridge.h
-@@ -0,0 +1,65 @@
-+#pragma once
-+#include <stdint.h>
-+
-+#ifdef __cplusplus
-+extern "C" {
-+#endif
-+
-+/* Separate, optional C ABI: the existing 3FP snapshot/frame ABI stays intact. */
-+typedef struct VsrColorSettings {
-+    uint32_t size, version;
-+    uint32_t engine;       /* 0: original 3FP, 1: libplacebo, 2: HDR-to-SDR auto */
-+    uint32_t output;       /* 0: display auto, 1: SDR, 2: HDR developer override */
-+    uint32_t tone;         /* auto, spline, ST2094-40, BT.2390, clip, linear */
-+    uint32_t gamut;        /* auto, perceptual, softclip, relative, clip */
-+    uint32_t quality;      /* balanced / high quality (color only) */
-+    uint32_t peakDetect, dither, inverseTone;
-+    uint32_t icc;          /* off / monitor auto / custom */
-+    float sdrPeak, displayPeak, paperWhite, contrastRecovery;
-+    char iccPath[1024];
-+    char lutPath[1024];
-+} VsrColorSettings;
-+
-+static inline VsrColorSettings VsrColorDefaultSettings(void) {
-+    VsrColorSettings c = {0};
-+    c.size = sizeof(c); c.version = 1;
-+    c.quality = 1; c.peakDetect = 1; c.dither = 1; c.icc = 1;
-+    c.sdrPeak = 100; c.paperWhite = 203;
-+    return c;
-+}
-+
-+typedef struct VsrColorStatus {
-+    uint32_t size, version;
-+    uint32_t requestedEngine, activeEngine, outputHdr, outputBits;
-+    uint32_t sourceMatrix, sourcePrimaries, sourceTransfer, sourceRange, sourceChroma;
-+    uint32_t sourceBits, explicitFields, sourceKind; /* 1: decoded frame, 2: VS props */
-+    uint32_t streamFields; /* Fields supplemented from decoded-stream metadata, never reapplied to VS. */
-+    uint32_t tone, gamut, dither;
-+    uint32_t hdr10plus, doviDetected, doviActive, vividDetected, iccState, lutActive;
-+    float masteringPeak, masteringBlack, maxCll, maxFall;
-+    float targetPeak, targetBlack, paperWhite, renderSubmitMs;
-+    uint64_t renderedFrames, cachedPresents;
-+    char engine[128], fallback[1024], profile[1024];
-+} VsrColorStatus;
-+
-+typedef struct VsrColorDraw {
-+    void *textures[3];
-+    void *targetTexture;
-+    uint32_t layout, upscale, downscale, hdr, outputBits;
-+    float targetPeak, targetBlack;
-+    float crop[4], destination[4];
-+    void *monitor;
-+} VsrColorDraw;
-+
-+/* All calls for one object are serialized by 3FP's existing device mutex. */
-+void *vsr_color_create(void *device);
-+void vsr_color_destroy(void *context);
-+int vsr_color_configure(void *context, const VsrColorSettings *settings);
-+int vsr_color_frame(void *context, const void *avframe, int softwareFormat,
-+                    uint32_t convertedRgb, uint32_t sourceKind);
-+int vsr_color_draw(void *context, const VsrColorDraw *draw);
-+int vsr_color_status(void *context, VsrColorStatus *status);
-+
-+#ifdef __cplusplus
-+}
-+#endif
-diff --git a/FFF.Native/3FP/Render/NativeColorEngine.h b/FFF.Native/3FP/Render/NativeColorEngine.h
-new file mode 100644
---- /dev/null
-+++ b/FFF.Native/3FP/Render/NativeColorEngine.h
-@@ -0,0 +1,163 @@
-+#pragma once
-+#include "ColorBridge.h"
-+#include <windows.h>
-+#include <d3d11.h>
-+#include <cstring>
-+#include <cstdio>
-+#include <string>
-+extern "C" {
-+#include <libavutil/frame.h>
-+#include <libavcodec/codec_par.h>
-+#include <libavcodec/packet.h>
-+}
-+
-+// Loaded only when requested; the original renderer has no new DLL requirement.
-+class NativeColorEngine final {
-+public:
-+    VsrColorSettings settings = VsrColorDefaultSettings();
-+    ~NativeColorEngine() { resetDevice(); av_frame_free(&metadata_); avcodec_parameters_free(&stream_); if (module_) FreeLibrary(module_); }
-+    void stream(const AVCodecParameters* source) {
-+        avcodec_parameters_free(&stream_);
-+        if(source) {stream_=avcodec_parameters_alloc();if(stream_)avcodec_parameters_copy(stream_,source);}
-+    }
-+    void resetDevice() { if (context_) destroy_(context_); context_ = nullptr; prepared_ = false; for(auto*& texture : importTextures_) { if(texture) texture->Release(); texture=nullptr; } }
-+    bool configure(const VsrColorSettings& value) {
-+        settings = value; prepared_ = false;
-+        if (!settings.engine) return true;
-+        if (context_) return prepare();
-+        return true;
-+    }
-+    void frame(const AVFrame* frame, int format, bool rgb, unsigned kind) {
-+        if (!metadata_) metadata_ = av_frame_alloc();
-+        if (!metadata_) { failure("Color properties allocation failed."); return; }
-+        av_frame_unref(metadata_);
-+        if (av_frame_copy_props(metadata_, frame) < 0) { failure("Color properties copy failed."); return; }
-+        metadata_->width = frame->width; metadata_->height = frame->height; metadata_->format = format;
-+        streamFields_ = 0;
-+        if (kind == 1 && stream_) {
-+            if(metadata_->colorspace==AVCOL_SPC_UNSPECIFIED && stream_->color_space!=AVCOL_SPC_UNSPECIFIED){metadata_->colorspace=stream_->color_space;streamFields_|=1;}
-+            if(metadata_->color_primaries==AVCOL_PRI_UNSPECIFIED && stream_->color_primaries!=AVCOL_PRI_UNSPECIFIED){metadata_->color_primaries=stream_->color_primaries;streamFields_|=2;}
-+            if(metadata_->color_trc==AVCOL_TRC_UNSPECIFIED && stream_->color_trc!=AVCOL_TRC_UNSPECIFIED){metadata_->color_trc=stream_->color_trc;streamFields_|=4;}
-+            if(metadata_->color_range==AVCOL_RANGE_UNSPECIFIED && stream_->color_range!=AVCOL_RANGE_UNSPECIFIED){metadata_->color_range=stream_->color_range;streamFields_|=8;}
-+            if(metadata_->chroma_location==AVCHROMA_LOC_UNSPECIFIED && stream_->chroma_location!=AVCHROMA_LOC_UNSPECIFIED){metadata_->chroma_location=stream_->chroma_location;streamFields_|=16;}
-+            if(metadata_->color_trc==AVCOL_TRC_SMPTE2084 || metadata_->color_trc==AVCOL_TRC_ARIB_STD_B67) {
-+                supplement(AV_PKT_DATA_MASTERING_DISPLAY_METADATA,AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
-+                supplement(AV_PKT_DATA_CONTENT_LIGHT_LEVEL,AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
-+            }
-+        }
-+        format_ = format; rgb_ = rgb; kind_ = kind;
-+        if (context_ && settings.engine && configured_) prepared_ = frame_(context_, metadata_, format_, rgb_, kind_) != 0;
-+    }
-+    bool draw(void* device, const VsrColorDraw& draw) {
-+        if (!settings.engine) return false;
-+        bypass_.clear();
-+        if (settings.engine == 2 && (draw.hdr || !metadata_ ||
-+            (metadata_->color_trc != AVCOL_TRC_SMPTE2084 && metadata_->color_trc != AVCOL_TRC_ARIB_STD_B67))) {
-+            bypass_ = "Automatic color management: native SDR / HDR output.";
-+            return false;
-+        }
-+        if (!context_) {
-+            if (!load()) return false;
-+            context_ = create_(device);
-+            if (!context_) { failure("libplacebo D3D11 initialization failed; using original 3FP."); return false; }
-+            if (!prepare()) return false;
-+        }
-+        if (!prepared_) return false;
-+        auto imported = draw;
-+        auto* d3d = static_cast<ID3D11Device*>(device);
-+        ID3D11DeviceContext* immediate = nullptr;
-+        d3d->GetImmediateContext(&immediate);
-+        for (unsigned i=0;i<3;++i) {
-+            auto* source=static_cast<ID3D11Texture2D*>(draw.textures[i]);
-+            if(!source) continue;
-+            D3D11_TEXTURE2D_DESC desc{};source->GetDesc(&desc);
-+            if(desc.Usage!=D3D11_USAGE_DYNAMIC) continue;
-+            D3D11_TEXTURE2D_DESC current{};
-+            if(importTextures_[i]) importTextures_[i]->GetDesc(&current);
-+            if(current.Width!=desc.Width || current.Height!=desc.Height || current.Format!=desc.Format) {
-+                if(importTextures_[i]) {importTextures_[i]->Release();importTextures_[i]=nullptr;}
-+                desc.Usage=D3D11_USAGE_DEFAULT;desc.CPUAccessFlags=0;
-+                desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
-+                if(FAILED(d3d->CreateTexture2D(&desc,nullptr,&importTextures_[i]))) {
-+                    immediate->Release();failure("Could not retain the optional color input.");return false;
-+                }
-+            }
-+            immediate->CopyResource(importTextures_[i],source);
-+            imported.textures[i]=importTextures_[i];
-+        }
-+        immediate->Release();
-+        return draw_(context_, &imported);
-+    }
-+    void bypass(const char* reason) { bypass_ = reason; }
-+    VsrColorStatus status() const {
-+        VsrColorStatus value{}; value.size = sizeof(value); value.version = 1;
-+        value.requestedEngine = settings.engine;
-+        std::snprintf(value.engine, sizeof(value.engine), "3FP native");
-+        if (settings.engine && context_) status_(context_, &value);
-+        value.requestedEngine = settings.engine;
-+        value.streamFields = streamFields_;
-+        if (settings.engine && !error_.empty()) {
-+            value.activeEngine = 0; std::snprintf(value.fallback, sizeof(value.fallback), "%s", error_.c_str());
-+        }
-+        if (settings.engine && !bypass_.empty()) {
-+            value.activeEngine = 0; std::snprintf(value.engine, sizeof(value.engine), "3FP native");
-+            std::snprintf(value.fallback, sizeof(value.fallback), "%s", bypass_.c_str());
-+        }
-+        if (!value.activeEngine) std::snprintf(value.engine, sizeof(value.engine), "3FP native");
-+        return value;
-+    }
-+private:
-+    void supplement(AVPacketSideDataType packetType, AVFrameSideDataType frameType) {
-+        if(av_frame_get_side_data(metadata_,frameType))return;
-+        const auto* source=av_packet_side_data_get(stream_->coded_side_data,stream_->nb_coded_side_data,packetType);
-+        if(source && source->size)if(auto* target=av_frame_new_side_data(metadata_,frameType,source->size))std::memcpy(target->data,source->data,source->size);
-+    }
-+    bool prepare() {
-+        error_.clear();
-+        auto effective = settings;
-+        if (effective.engine == 2) effective.engine = 1;
-+        configured_ = configure_(context_, &effective) != 0;
-+        prepared_ = configured_ && metadata_ &&
-+            frame_(context_, metadata_, format_, rgb_, kind_);
-+        return prepared_;
-+    }
-+    void failure(const char* error) { error_ = error; prepared_ = false; }
-+    bool load() {
-+        if (module_) return create_ && destroy_ && configure_ && frame_ && draw_ && status_;
-+        HMODULE own = nullptr; wchar_t path[32768]{};
-+        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-+            reinterpret_cast<LPCWSTR>(&moduleAnchor), &own) || !GetModuleFileNameW(own, path, 32768)) return false;
-+        std::wstring name(path); name.resize(name.find_last_of(L"\\/") + 1); name += L"color\\vsr-color.dll";
-+        module_ = LoadLibraryExW(name.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-+        if (!module_) { failure("Optional color/vsr-color.dll or its dependencies are unavailable; using original 3FP."); return false; }
-+        create_ = reinterpret_cast<decltype(create_)>(GetProcAddress(module_, "vsr_color_create"));
-+        destroy_ = reinterpret_cast<decltype(destroy_)>(GetProcAddress(module_, "vsr_color_destroy"));
-+        configure_ = reinterpret_cast<decltype(configure_)>(GetProcAddress(module_, "vsr_color_configure"));
-+        frame_ = reinterpret_cast<decltype(frame_)>(GetProcAddress(module_, "vsr_color_frame"));
-+        draw_ = reinterpret_cast<decltype(draw_)>(GetProcAddress(module_, "vsr_color_draw"));
-+        status_ = reinterpret_cast<decltype(status_)>(GetProcAddress(module_, "vsr_color_status"));
-+        if (!create_ || !destroy_ || !configure_ || !frame_ || !draw_ || !status_) {
-+            failure("The optional color engine ABI is incompatible; using original 3FP."); return false;
-+        }
-+        return true;
-+    }
-+    static void moduleAnchor() {}
-+    HMODULE module_ = nullptr;
-+    void* context_ = nullptr;
-+    ID3D11Texture2D* importTextures_[3]{};
-+    AVFrame* metadata_ = nullptr;
-+    AVCodecParameters* stream_ = nullptr;
-+    unsigned streamFields_ = 0;
-+    int format_ = 0;
-+    unsigned rgb_ = 0, kind_ = 1;
-+    bool prepared_ = false;
-+    bool configured_ = false;
-+    std::string error_;
-+    std::string bypass_;
-+    decltype(&vsr_color_create) create_ = nullptr;
-+    decltype(&vsr_color_destroy) destroy_ = nullptr;
-+    decltype(&vsr_color_configure) configure_ = nullptr;
-+    decltype(&vsr_color_frame) frame_ = nullptr;
-+    decltype(&vsr_color_draw) draw_ = nullptr;
-+    decltype(&vsr_color_status) status_ = nullptr;
-+};

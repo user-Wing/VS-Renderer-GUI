@@ -24,6 +24,13 @@ QString PlayerWindow::profile() const {
     if(interpolationStage()>=0)return "Interpolation";
     return {};
 }
+bool PlayerWindow::animeSourceSupported() const {
+    for(const auto &entry:media_.value("streams").toArray()){
+        const auto stream=entry.toObject();
+        if(stream.value("type").toString()=="video")return stream.value("height").toInt()<=2160;
+    }
+    return true;
+}
 int PlayerWindow::fixedAnimeStage() const {
     const QFileInfo file(preset_);
     if(file.absolutePath()!=QDir(PresetStore::directory()).filePath("builtin"))return -1;

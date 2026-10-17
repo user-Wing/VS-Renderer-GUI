@@ -1,0 +1,18 @@
+********* Start testing of TestBluray *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestBluray::initTestCase()
+PASS   : TestBluray::menuPreservesAuthoredFirstPlay()
+SKIP   : TestBluray::realRemux() Set VSR_BD_TEST_SOURCE and VSR_BD_REMUX_DIR for real GUI remux
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestBluray.cpp(45) : failure location
+PASS   : TestBluray::parseAndSlice()
+PASS   : TestBluray::rejectTruncation()
+PASS   : TestBluray::interactiveMenuSubpath()
+PASS   : TestBluray::concatPrerollKeepsOpeningKeyframe()
+PASS   : TestBluray::scanAndTemplate()
+SKIP   : TestBluray::realMetadata() Set VSR_BD_TEST_SOURCE for local/remote BD metadata audit
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestBluray.cpp(76) : failure location
+SKIP   : TestBluray::realWidget() Set VSR_BD_TEST_SOURCE for BD UI smoke
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestBluray.cpp(77) : failure location
+PASS   : TestBluray::cleanupTestCase()
+Totals: 8 passed, 0 failed, 3 skipped, 0 blacklisted, 57ms
+********* Finished testing of TestBluray *********

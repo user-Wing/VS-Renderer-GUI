@@ -65,7 +65,9 @@ void PlayerWindow::updateInfo() {
     decoderBadge_->setText(decoder); hdrBadge_->setText(source.isHdrSource ? "HDR" : "SDR");
     hdrBadge_->setToolTip(madvrMode()?tr("HDR / SDR 输出与色调映射由 madVR 控制"):source.isHdrSource ? (rendered.actualColorMode ? tr("HDR 输出") : tr("HDR 源，映射到 SDR 显示器")) : tr("SDR 源"));
     if (!infoVisible_) return;
-    const auto count=rendered.presentedVideoFrames>=rendered.coalescedVideoFrames?rendered.presentedVideoFrames-rendered.coalescedVideoFrames:0;
+    // Native already counts only generations that reached Present; coalesced frames are separate.
+    const auto count=rendered.presentedVideoFrames;
+    if(count<infoLastFrames_){infoLastFrames_=count;infoCurrentFps_=0;infoFpsTimer_.restart();}
     if(infoFpsTimer_.isValid() && infoFpsTimer_.elapsed()>=500){infoCurrentFps_=count>=infoLastFrames_?(count-infoLastFrames_)*1000./infoFpsTimer_.elapsed():0;infoLastFrames_=count;infoFpsTimer_.restart();}
     else if(!infoFpsTimer_.isValid()){infoFpsTimer_.start();infoLastFrames_=count;}
     QString gpu = tr("未知"); IDXGIFactory1 *factory = nullptr;

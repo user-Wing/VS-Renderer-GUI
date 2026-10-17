@@ -1,0 +1,69 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+PASS   : TestPlayer::infoCountsPresentedFramesOnce()
+PASS   : TestPlayer::separateThemeTransparencyControls()
+PASS   : TestPlayer::builtinAnimeResolutionLimit()
+PASS   : TestPlayer::softwareCodecPipeline(HEVC)
+PASS   : TestPlayer::softwareCodecPipeline(AV1)
+SKIP   : TestPlayer::softwareAv1SeekRecovery() Set VSR_RECOVERY_SOURCE to the AV1 12-bit regression video.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(728) : failure location
+QINFO  : TestPlayer::softwareUploadAndBilinearMatchReference() Native reference maximum RGB error 0
+PASS   : TestPlayer::softwareUploadAndBilinearMatchReference()
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 0 0 7 0.501961 0.501961 0.501961 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 0 0 4 0.501961 0.501961 0.501961 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 0 2 7 0.501961 0.501961 0.501961 8 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 0 2 4 0.501961 0.501961 0.501961 8 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 1 0 7 0.501961 0.501961 0.501961 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 1 0 4 0.501961 0.501961 0.501961 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 1 2 7 0.501961 0.501961 0.501961 8 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 1 2 4 0.501961 0.501961 0.501961 8 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 0 0 7 0.819608 0.823529 0.823529 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 0 0 4 0.819608 0.823529 0.823529 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 0 2 7 0.980392 0.980392 0.980392 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 0 2 4 0.980392 0.980392 0.980392 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 1 0 7 0.819608 0.823529 0.823529 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 1 0 4 0.819608 0.823529 0.823529 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 1 2 7 0.976471 0.976471 0.976471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 1 2 4 0.976471 0.976471 0.976471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 0 0 7 0.682353 0.682353 0.682353 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 0 0 4 0.682353 0.682353 0.682353 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 0 2 7 0.807843 0.807843 0.807843 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 0 2 4 0.807843 0.807843 0.807843 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 1 0 7 0.682353 0.682353 0.682353 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 1 0 4 0.682353 0.682353 0.682353 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 1 2 7 0.776471 0.776471 0.776471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 1 2 4 0.776471 0.776471 0.776471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 0 0 7 0.499511 0.499511 0.499511 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 0 0 4 0.499511 0.499511 0.499511 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 0 2 7 0.499511 0.499511 0.499511 10 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 0 2 4 0.499511 0.499511 0.499511 10 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 1 0 7 0.499511 0.499511 0.499511 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 1 0 4 0.499511 0.499511 0.499511 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 1 2 7 0.499511 0.499511 0.499511 10 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 1 2 4 0.499511 0.499511 0.499511 10 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 0 0 7 0.818182 0.818182 0.818182 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 0 0 4 0.818182 0.818182 0.818182 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 0 2 7 0.975562 0.97654 0.97654 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 0 2 4 0.975562 0.975562 0.97654 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 1 0 7 0.818182 0.818182 0.818182 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 1 0 4 0.818182 0.818182 0.818182 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 1 2 7 0.970675 0.970675 0.970675 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 1 2 4 0.970675 0.970675 0.970675 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 0 0 7 0.680352 0.680352 0.680352 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 0 0 4 0.680352 0.680352 0.680352 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 0 2 7 0.807429 0.808407 0.808407 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 0 2 4 0.807429 0.807429 0.807429 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 1 0 7 0.680352 0.680352 0.680352 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 1 0 4 0.680352 0.680352 0.680352 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 1 2 7 0.775171 0.776149 0.776149 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 1 2 4 0.775171 0.775171 0.775171 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color max algorithm delta 0.000977516
+PASS   : TestPlayer::jincColorMatchesNative()
+SKIP   : TestPlayer::silentVsClockFollowsWallTime() Set VSR_ANIME_COLOR_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1645) : failure location
+SKIP   : TestPlayer::transparentChromeAndFullscreenReveal() Desktop foreground is occupied; widget alpha and fullscreen assertions passed, live composition requires foreground.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(307) : failure location
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 9 passed, 0 failed, 3 skipped, 0 blacklisted, 41040ms
+********* Finished testing of TestPlayer *********

@@ -72,8 +72,11 @@ def main():
             if source.is_file():
                 sources['licenses/native-api20/' + source.name] = source
         sources['licenses/preset-community-LICENSE.txt'] = ROOT / 'third_party/preset-community-LICENSE.txt'
-        for file in ['docs/player-anime-performance-1.0.12.md', 'docs/player-color-vs-1.0.12.md', 'docs/update-1.0.12.md', 'docs/update-1.0.11.md', 'docs/vscap-hdr-1.0.11.md', 'docs/vscap-sdr-white-1.0.11.md', 'docs/jpeg-xl-1.0.11.md', 'README.md', 'project.md', 'changelog.md', 'docs/native-api20-build.md']:
+        for file in ['docs/player-kernel-performance-1.0.12.md', 'docs/player-anime-performance-1.0.12.md', 'docs/player-color-vs-1.0.12.md', 'docs/update-1.0.12.md', 'docs/update-1.0.11.md', 'docs/vscap-hdr-1.0.11.md', 'docs/vscap-sdr-white-1.0.11.md', 'docs/jpeg-xl-1.0.11.md', 'README.md', 'project.md', 'changelog.md', 'docs/native-api20-build.md']:
             sources[file] = ROOT / file
+        for source in (ROOT / 'docs/evidence/player-kernel-1.0.12').glob('*'):
+            if source.is_file():
+                sources[source.relative_to(ROOT).as_posix()] = source
         if folder == 'VS-GUI-Full':
             for file in ['docs/update-20261016.md', 'docs/vscap-2026-10-16-multipin-awj-hdr.md']:
                 sources[file] = ROOT / file
