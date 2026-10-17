@@ -36,3 +36,5 @@ Blu-ray 解析 / 缓存测试 8 passed、3 skipped（对应环境变量未设）
 
 
 Jinc 偏暗与无音轨 Anime4K 时钟续修见 [色彩与 VS 记录](player-color-vs-1.0.12.md)。
+
+VS 预取调度、手动 Anime 大文件冷索引与半透明样式续修见 [Anime 播放记录](player-anime-performance-1.0.12.md)。

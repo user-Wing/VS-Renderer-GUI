@@ -10,6 +10,8 @@ Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜�
 
 当前本地版本 **1.0.12**：修复 Jinc 直通显著偏暗及无音轨视频启用 Anime4K 后跳到结尾，见 [色彩与 VS 验证](docs/player-color-vs-1.0.12.md)。修复整卷连续播放点击 / 拖动无法跳转，BD 拖动进度条在松开时只定位最终目标；光盘菜单模式直接进入选集页，跳过版权首播片。见 [1.0.12 记录](docs/update-1.0.12.md)。
 
+本轮续修：VS 预取帧在短暂延迟后顺序追赶；手动 Anime 档位允许大文件冷索引，不再按文件大小推测硬盘类型并强制回退。底栏编码标签、倍速与右键菜单改为半透明，见 [Anime 播放验证](docs/player-anime-performance-1.0.12.md)。
+
 1.0.11 更新：修复 BD 右键与播放列表显式返回主菜单入口及文件章节位置，Renderer 时间与进度条同排、文件/播放/缩放控件同排，预设携带时间组并支持全片单组导入当前组。预设管理与社区递归显示目录树，默认源是 [VS-GUI 公开预设社区](https://www.modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI/PresetCommunity)。
 
 本轮 SDR 白位修复与 JXL 截图更新继续沿用 1.0.11，详情见 [发布说明](https://github.com/user-Wing/VS-Renderer-GUI/releases/tag/v1.0.11)。

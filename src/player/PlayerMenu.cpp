@@ -26,9 +26,10 @@ void PlayerMenu::showEvent(QShowEvent *event) {
 void PlayerMenu::hideEvent(QHideEvent *event) {animation_.stop();QMenu::hideEvent(event);}
 void PlayerMenu::paintEvent(QPaintEvent *) {
     QPainter painter(this);painter.setRenderHint(QPainter::Antialiasing);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);painter.fillRect(rect(),Qt::transparent);painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
     QPainterPath border;border.addRoundedRect(QRectF(rect()).adjusted(.5,.5,-.5,-.5),8,8);
     painter.setClipPath(border);painter.setClipRect(QRectF(0,0,width(),height()*reveal_),Qt::IntersectClip);
-    painter.fillPath(border,QColor("#292b30"));painter.setPen(QColor("#555860"));painter.drawPath(border);
+    painter.fillPath(border,QColor(41,43,48,220));painter.setPen(QColor("#555860"));painter.drawPath(border);
     painter.translate(0,-8*(1-reveal_));
     for(auto *action:actions()) {
         if(!action->isVisible())continue;

@@ -392,11 +392,6 @@ void PlayerWindow::refreshScript() {
     result.script.prepend(QString("import vapoursynth as _vsr_vs\ndef _vsr_player_ffms(*args, **options):\n    options['cache'] = %1\n    options['cachefile'] = %2\n    options.setdefault('threads', %5)\n    try:\n        return _vsr_vs.core.ffms2.Source(*args, **options)\n    except _vsr_vs.Error as error:\n        if 'Source: No video track found' not in str(error): raise\n        if 'track' in options: options['stream_index'] = options.pop('track')\n        return _vsr_player_lsmas(*args, **options)\ndef _vsr_player_lsmas(*args, **options):\n    options.pop('cachedir', None)\n    options['cache'] = %3\n    options['cachefile'] = %4\n    options.setdefault('threads', %5)\n    return _vsr_vs.core.lsmas.LWLibavSource(*args, **options)\n")
         .arg(ffindex.isEmpty()?"False":"True",literal(ffindex),lwi.isEmpty()?"0":"1",literal(lwi),settings_->value("playback/multithread",true).toBool()?"0":"1"));
     if(!mode.isEmpty() && interpolationStage()<0)result.script.prepend(QString("_vsr_target_width = %1\n_vsr_target_height = %2\n_vsr_quality_stage = %3\n_vsr_resize_before_enhance = %4\n").arg(profileSize_.width()).arg(profileSize_.height()).arg(qualityStage_).arg(settings_->value("performance/resizeBeforeEnhance",false).toBool()?"True":"False"));
-    if(mode=="Anime" && QFileInfo(source_).size()>1000000000 &&
-        (ffindex.isEmpty() || !QFileInfo::exists(ffindex)) && (lwi.isEmpty() || !QFileInfo::exists(lwi))){
-        profileFallback_=true;qualityStage_=4;refreshScript();
-        message_->setText(tr("首次 VS 索引需要扫描大文件：已切换 Jinc 直通，避免机械盘全片读取。"));return;
-    }
     requested_=lastFrame_=-1;profileStartup_.restart();
     server_->loadScript(result.script, preset_.isEmpty() ? QDir(QCoreApplication::applicationDirPath()).filePath("vpy/player.vpy") : preset_);
     message_->setText(preset_.isEmpty() ? tr("正在加载 VS 原画播放…") : tr("正在加载 VPY：%1").arg(QFileInfo(preset_).fileName()));
@@ -463,9 +458,9 @@ bool PlayerWindow::commitFrameEdit() {
 void PlayerWindow::requestFrame(int frame) {
     if (direct_ || !ready_ || pending_ || frame < 0 || frame == lastFrame_) return;
     int ahead=(playing_ || autoPlay_)?prefetchCount():timelineDragging_?std::min(2,prefetchCount()):0;
-    // MVTools reuses neighbouring motion fields; avoid abandoning a small
-    // lookahead window, but resync once its latency budget is exceeded.
-    if(playing_ && lastFrame_>=0 && interpolationStage()>=2 && ahead>0 && frame>lastFrame_ && frame-lastFrame_<=std::max(ahead,qRound(.15*clip_.fpsNumerator/qMax(1,clip_.fpsDenominator))))frame=lastFrame_+1;
+    // Consume prefetched neighbours after a short scheduling delay instead of
+    // dropping ready frames; resync once the lookahead budget is exceeded.
+    if(playing_ && lastFrame_>=0 && ahead>0 && frame>lastFrame_ && frame-lastFrame_<=std::max(ahead,qRound(.15*clip_.fpsNumerator/qMax(1,clip_.fpsDenominator))))frame=lastFrame_+1;
     requested_ = frame; pending_ = true; frameTimer_.restart(); server_->requestFrame(frame, ahead, autoPlay_ || lastFrame_<0);
 }
 double PlayerWindow::normalizedRate(double rate) { return std::round(std::clamp(rate, 0.1, 16.0) * 20) / 20; }
@@ -514,7 +509,7 @@ void PlayerWindow::updateState() {
         discMenu_->volume(volume_->value(),mute_->isChecked());if(infoVisible_ && ++infoTick_>=50){infoTick_=0;updateInfo();}return;
     }
     if(imageMode_){if(infoVisible_ && ++infoTick_>=50){infoTick_=0;updateInfo();}return;}
-    if(!direct_ && profile()=="Anime" && lastFrame_<0 && profileStartup_.isValid() && profileStartup_.elapsed()>=8000){
+    if(!direct_ && profile()=="Anime" && fixedAnimeStage()<0 && lastFrame_<0 && profileStartup_.isValid() && profileStartup_.elapsed()>=8000){
         profileStartup_.invalidate();profileFallback_=true;qualityStage_=4;refreshScript();message_->setText(tr("VS 首帧等待超过 8 秒：已切换 Jinc 直通。"));
     }
     const auto snap = clock_->snapshot();

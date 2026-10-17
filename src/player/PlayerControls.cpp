@@ -1,5 +1,6 @@
 #include "player/PlayerWindow.h"
 #include "player/PlayerDiscMenu.h"
+#include "player/PlayerChromePanel.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/LavPlayback.h"
 #include <QComboBox>
@@ -104,9 +105,10 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     connect(frame_, &QLineEdit::textEdited, this, [this] { frameEditPending_=true; });
     connect(frame_, &QLineEdit::editingFinished, this, [this] { commitFrameEdit(); });
     rate_ = new RateSpinBox(this); rate_->setObjectName("playerSpeed"); rate_->setRange(0.1, 16); rate_->setDecimals(2); rate_->setSingleStep(.05); rate_->setValue(1); rate_->setSuffix("×"); rate_->setButtonSymbols(QAbstractSpinBox::NoButtons); rate_->setKeyboardTracking(false); rate_->setFixedWidth(65); row->addWidget(rate_);
+    rate_->setStyleSheet("QDoubleSpinBox{background:rgba(48,50,56,180);border:1px solid #70747b;} QDoubleSpinBox QLineEdit{background:transparent;border:none;}");
     connect(rate_, &QDoubleSpinBox::valueChanged, this, &PlayerWindow::setRate);
     speedButton_=button("▾", tr("倍速配置"), [this] { showSpeedPopup(); }); speedButton_->setObjectName("playerSpeedPopupButton");
-    const auto badge = [this, row](const QString &text) { auto *label = new QLabel(text, this); label->setStyleSheet("background:#36383d;color:#c3c8d1;padding:3px;border-radius:2px;"); row->addWidget(label); return label; };
+    const auto badge = [this, row](const QString &text) { auto *label = new QLabel(text, this); label->setStyleSheet("background:rgba(48,50,56,90);color:#c3c8d1;padding:3px;border-radius:2px;"); row->addWidget(label); return label; };
     videoBadge_ = badge("—"); audioBadge_ = badge("—");
     decoderBadge_ = new QPushButton("3FP-HW", this); decoderBadge_->setObjectName("playerDecoder"); decoderBadge_->setToolTip(tr("切换 3FP 硬件 / 软件解码")); row->addWidget(decoderBadge_);
     connect(decoderBadge_, &QPushButton::clicked, this, [this] { if (lavVideo_) { showSettings(); return; } const auto current=source_.isEmpty()?settings_->value("decode/mode",2).toUInt():clock_->snapshot().decodeMode;const auto mode = current == 2 ? 1u : 2u; if (clock_->setDecodeMode(mode)) {settings_->setValue("decode/mode",mode);if(!source_.isEmpty())openFile(source_);} });
@@ -114,7 +116,8 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
 }
 void PlayerWindow::showSpeedPopup() {
     if(speedPopup_ && speedPopup_->isVisible()) {speedPopup_->close();return;}
-    auto *popup = new QWidget(this, Qt::Popup); popup->setAttribute(Qt::WA_DeleteOnClose); popup->setObjectName("playerSpeedPopup");speedPopup_=popup; auto *layout = new QVBoxLayout(popup);
+    auto *popup = new PlayerChromePanel(this);popup->setWindowFlags(Qt::Popup);popup->setTransparency(18);popup->setAttribute(Qt::WA_DeleteOnClose); popup->setObjectName("playerSpeedPopup");speedPopup_=popup; auto *layout = new QVBoxLayout(popup);
+    popup->setAttribute(Qt::WA_TranslucentBackground);popup->setStyleSheet("QWidget#playerSpeedPopup{background:transparent;} QWidget#playerSpeedPopup QPushButton{background:rgba(48,50,56,210);} QWidget#playerSpeedPopup QPushButton:checked{background:rgba(80,127,189,230);}");
     auto *grid = new QGridLayout; layout->addLayout(grid); const QList<double> rates{.25,.5,.75,.9,1,1.1,1.25,1.5,1.75,2,2.5,16};
     for (int i = 0; i < rates.size(); ++i) { auto *button = new QPushButton(QString::number(rates[i], 'f', 2), popup); button->setMinimumSize(75, 32);button->setProperty("speedValue",rates[i]); button->setCheckable(true); button->setChecked(std::abs(speed_ - rates[i]) < .001); grid->addWidget(button, i / 3, i % 3); connect(button, &QPushButton::clicked, popup, [this, popup, value = rates[i]] { setRate(value);for(auto *b:popup->findChildren<QPushButton *>())if(b->property("speedValue").isValid())b->setChecked(std::abs(speed_-b->property("speedValue").toDouble())<.001); }); }
     auto *bottom = new QHBoxLayout; layout->addLayout(bottom);
