@@ -1,4 +1,6 @@
 #include "player/PlayerWindow.h"
+#include "image/ImageJxl.h"
+#include "player/PlayerImage.h"
 #include "bluray/BlurayCatalog.h"
 #include "player/PlayerInfoPanel.h"
 #include "player/PlayerDiscMenu.h"
@@ -91,6 +93,16 @@ class TestPlayer final : public QObject {
     QString configPath() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
     Q_OBJECT
 private slots:
+    void desktopHdrPreviewUsesWhite(){
+        for(double white:{80.0,203.0,480.0}){
+            const double linear=std::pow((.5+.055)/1.055,2.4),p=std::pow(linear*white/10000,2610.0/16384.0);
+            const auto code=quint16(std::lround(std::pow((3424.0/4096.0+2413.0/128.0*p)/(1+2392.0/128.0*p),2523.0/32.0)*65535));
+            QImage source(4,4,QImage::Format_RGBA64);source.fill(QColor::fromRgba64(code,code,code,65535));source.setColorSpace(QColorSpace::Bt2100Pq);source.setText("capSdrWhiteNits",QString::number(white));
+            PreviewPane pane("HDR","HDR");pane.resize(400,300);pane.show();pane.setImage(source);QTest::qWait(30);
+            const auto display=pane.surface()->grab().toImage();const auto pixel=display.pixelColor(display.rect().center());
+            QVERIFY(qAbs(pixel.red()-128)<=1);QVERIFY(qAbs(pixel.green()-128)<=1);QVERIFY(qAbs(pixel.blue()-128)<=1);QCOMPARE(pane.image(),source);
+        }
+    }
     void hdrScreenshotStartup(){
         const auto path=qEnvironmentVariable("VSR_TEST_HDR_PNG");if(path.isEmpty())QSKIP("Set VSR_TEST_HDR_PNG for actual screenshot loading.");
         QElapsedTimer timer;timer.start();const auto reference=QImageReader(path).read();const auto qtMs=timer.elapsed();QVERIFY(!reference.isNull());
@@ -158,9 +170,9 @@ private slots:
         QTemporaryDir directory;PlayerWindow player;player.show();QCOMPARE(player.screenshotDirectory(),QDir(QCoreApplication::applicationDirPath()).filePath("screenshots"));const auto destination=directory.filePath(QStringLiteral("默认截图 路径"));
         QTimer::singleShot(100,&player,[&]{auto *dialog=player.findChild<QDialog *>("playerSettings");QVERIFY(dialog);auto *path=dialog->findChild<QLineEdit *>("playerScreenshotPath");QVERIFY(path);path->setText(destination);dialog->findChild<QPushButton *>("playerApplySettings")->click();dialog->reject();});player.showSettings();QCOMPARE(player.screenshotDirectory(),destination);
         QImage image(64,48,QImage::Format_RGBA64);image.fill(QColor("#327acc"));player.imageMode_=true;player.source_="path-test.png";player.pane_->setImage(image);player.captureImage(true);QTRY_VERIFY_WITH_TIMEOUT(!player.screenshotPending_,10000);QCOMPARE(QDir(destination).entryList({"*-source.png"},QDir::Files).size(),1);
-        QContextMenuEvent event(QContextMenuEvent::Mouse,QPoint(20,20),player.pane_->surface()->mapToGlobal(QPoint(20,20)));QApplication::sendEvent(player.pane_->surface(),&event);QPointer<QMenu> menu=player.findChild<QMenu *>("playerContextMenu");QVERIFY(menu);QMenu *specified=nullptr;for(auto *action:menu->actions())if(action->text()==QStringLiteral("截图到指定路径…"))specified=action->menu();QVERIFY(specified);QCOMPARE(specified->actions().size(),2);
+        QContextMenuEvent event(QContextMenuEvent::Mouse,QPoint(20,20),player.pane_->surface()->mapToGlobal(QPoint(20,20)));QApplication::sendEvent(player.pane_->surface(),&event);QPointer<QMenu> menu=player.findChild<QMenu *>("playerContextMenu");QVERIFY(menu);QMenu *specified=nullptr;for(auto *action:menu->actions())if(action->text()==QStringLiteral("截图到指定路径…"))specified=action->menu();QVERIFY(specified);QCOMPARE(specified->actions().size(),3);
         const auto selected=directory.filePath(QStringLiteral("单次截图 路径"));QVERIFY(QDir().mkpath(selected));const bool nativeDialogs=qApp->testAttribute(Qt::AA_DontUseNativeDialogs);qApp->setAttribute(Qt::AA_DontUseNativeDialogs,true);const auto restore=qScopeGuard([&]{qApp->setAttribute(Qt::AA_DontUseNativeDialogs,nativeDialogs);});
-        QTimer::singleShot(100,&player,[&]{auto *dialog=player.findChild<QFileDialog *>();QVERIFY(dialog);dialog->setDirectory(selected);QMetaObject::invokeMethod(dialog,"accept");});specified->actions().first()->trigger();if(menu)menu->close();QTRY_VERIFY_WITH_TIMEOUT(!player.screenshotPending_,10000);QCOMPARE(QDir(selected).entryList({"*-source.png"},QDir::Files).size(),1);QCOMPARE(player.screenshotDirectory(),destination);
+        QTimer::singleShot(100,&player,[&]{auto *dialog=player.findChild<QFileDialog *>();QVERIFY(dialog);dialog->setDirectory(selected);QMetaObject::invokeMethod(dialog,"accept");});specified->actions().first()->menu()->actions().first()->trigger();if(menu)menu->close();QTRY_VERIFY_WITH_TIMEOUT(!player.screenshotPending_,10000);QCOMPARE(QDir(selected).entryList({"*-source.png"},QDir::Files).size(),1);QCOMPARE(player.screenshotDirectory(),destination);
     }
     void algorithmBadgesReflectCurrentStages(){
         PlayerWindow player;player.show();const auto builtin=QDir(PresetStore::directory()).filePath("builtin/");const QStringList presets{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy"},labels{"A4KCNN+","A4KCNN","A4K+","A4K","Jinc","D3D11"};
@@ -174,6 +186,25 @@ private slots:
         QVERIFY2(writeScreenshotPng(path,image,{{"hdr",false}}).isEmpty(),"PNG write failed");QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));const auto bytes=file.readAll();QCOMPARE(uchar(bytes[24]),uchar(16));QCOMPARE(uchar(bytes[25]),uchar(6));
         const auto decoded=QImage(path).convertToFormat(QImage::Format_RGBA64);QCOMPARE(decoded.size(),image.size());for(int y=0;y<image.height();++y)QVERIFY(std::memcmp(decoded.constScanLine(y),image.constScanLine(y),image.width()*8)==0);QCOMPARE(decoded.colorSpace(),image.colorSpace());
         QVERIFY(!QFileInfo::exists(path+".rgba32f"));
+    }
+    void screenshotFormats_data(){
+        QTest::addColumn<QString>("format");QTest::addColumn<bool>("hdr");
+        for(const auto &format:QStringList{"png","avif","jxl"})for(bool hdr:{false,true})QTest::newRow(qPrintable(format+(hdr?"-HDR":"-SDR")))<<format<<hdr;
+    }
+    void jxlScRgbScreenshot(){
+        QTemporaryDir directory;const auto path=directory.filePath("float.jxl");QImage image(4,2,QImage::Format_RGBA32FPx4);for(int y=0;y<2;++y){auto *row=reinterpret_cast<float*>(image.scanLine(y));for(int x=0;x<4;++x){row[x*4]=row[x*4+1]=row[x*4+2]=2.5375f;row[x*4+3]=1;}}image.setColorSpace(QColorSpace::SRgbLinear);const auto original=image.copy();
+        const auto error=writeScreenshot(path,image,{{"hdr",true},{"encoding","scRGB-linear"}});QVERIFY2(error.isEmpty(),qPrintable(error));const auto decoded=readJxl(path);QCOMPARE(decoded.colorSpace(),QColorSpace(QColorSpace::Bt2100Pq));const auto white=decoded.pixelColor(0,0);QVERIFY(std::abs(white.redF()-.580688881)<.00002);QVERIFY(std::abs(white.greenF()-.580688881)<.00002);QVERIFY(std::abs(white.blueF()-.580688881)<.00002);QCOMPARE(image,original);QCOMPARE(QDir(directory.path()).entryList(QDir::Files).size(),1);
+    }
+    void screenshotFormats(){
+        QFETCH(QString,format);QFETCH(bool,hdr);QTemporaryDir directory;PlayerWindow player;player.show();player.imageMode_=true;player.source_="format-test.png";
+        QImage image(64,48,QImage::Format_RGBA64);image.fill(QColor::fromRgbF(.45,.5,.55));image.setColorSpace(hdr?QColorSpace::Bt2100Pq:QColorSpace::SRgb);image.setText("capSdrWhiteNits","480");player.pane_->setImage(image);
+        player.captureImage(true,directory.path(),format);QTRY_VERIFY_WITH_TIMEOUT(!player.screenshotPending_,30000);QVERIFY2(!player.message_->text().contains(QStringLiteral("截图失败")),qPrintable(player.message_->text()));
+        const auto files=QDir(directory.path()).entryList({"*-source."+format},QDir::Files);QCOMPARE(files.size(),1);const auto path=directory.filePath(files.first());
+        const auto artifacts=qEnvironmentVariable("VSR_SCREENSHOT_FIXTURES");if(!artifacts.isEmpty()){QDir().mkpath(artifacts);const auto copy=QDir(artifacts).filePath(format+(hdr?"-HDR.":"-SDR.")+format);QFile::remove(copy);QVERIFY(QFile::copy(path,copy));}
+        PlayerImage decoder;QSignalSpy loaded(&decoder,&PlayerImage::loaded),failed(&decoder,&PlayerImage::failed);decoder.open(format=="png" && hdr?path.left(path.size()-4)+".hdr.png":path);
+        QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !failed.isEmpty(),10000);QVERIFY2(failed.isEmpty(),failed.isEmpty()?"":qPrintable(failed.first().first().toString()));const auto decoded=qvariant_cast<QImage>(loaded.first().first());QCOMPARE(decoded.size(),image.size());qInfo()<<format<<hdr<<decoded.text("sourcePixelFormat")<<decoded.colorSpace();QCOMPARE(decoded.colorSpace().transferFunction(),image.colorSpace().transferFunction());
+        if(format=="jxl") {QCOMPARE(decoded.text("sourceBitDepth"),QString("16"));QCOMPARE(decoded.text("capSdrWhiteNits"),QString("480"));for(int y=0;y<image.height();++y)QVERIFY(std::memcmp(decoded.constScanLine(y),image.constScanLine(y),image.width()*8)==0);QVERIFY(decoded.text("decoder").contains("libjxl"));QCOMPARE(QDir(directory.path()).entryList(QDir::Files).size(),1);}
+        if(format=="avif"){QCOMPARE(decoded.text("sourceBitDepth"),hdr?QString("12"):QString("10"));const auto before=image.pixelColor(0,0),after=decoded.pixelColor(0,0);QVERIFY(std::abs(before.redF()-after.redF())<.03);QVERIFY(std::abs(before.greenF()-after.greenF())<.03);QVERIFY(std::abs(before.blueF()-after.blueF())<.03);QCOMPARE(QDir(directory.path()).entryList(QDir::Files).size(),1);}
     }
     void hdrScreenshotKeepsFloatSamples(){
         QTemporaryDir directory;const auto path=directory.filePath("hdr.png");QImage image(4,2,QImage::Format_RGBA32FPx4);image.setColorSpace(QColorSpace(QColorSpace::SRgbLinear));
@@ -1377,7 +1408,7 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         const auto preset=dir.filePath("capture.vpy");QVERIFY(PresetStore::write(preset,"import vapoursynth as vs\nvs.core.ffms2.Source(source=_vsr_source).set_output()\n"));PlayerWindow player;player.show();player.loadPreset(preset);QVERIFY(player.openFile(source));QVERIFY(player.openFile(path));QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>2,15000);player.togglePlayback();QTest::qWait(500);
         auto *pane=player.findChild<PreviewPane *>();QContextMenuEvent event(QContextMenuEvent::Mouse,QPoint(30,30),pane->surface()->mapToGlobal(QPoint(30,30)));QApplication::sendEvent(pane->surface(),&event);auto *menu=player.findChild<QMenu *>("playerContextMenu");QVERIFY(menu);
         QMenu *tracks=nullptr,*capture=nullptr;for(auto *action:menu->actions()){if(action->text()==QStringLiteral("字幕设置"))tracks=action->menu();if(action->text()==QStringLiteral("图像截取"))capture=action->menu();}QVERIFY(tracks && capture);auto *primary=tracks->actions().first()->menu();QVERIFY(primary);const auto choices=primary->actions();QVERIFY(std::any_of(choices.cbegin(),choices.cend(),[&](const auto *a){return a->isChecked() && a->text().contains(QFileInfo(path).fileName());}));
-        capture->actions().first()->trigger();QTRY_VERIFY_WITH_TIMEOUT(!player.screenshotPending_,20000);QVERIFY2(!player.message_->text().contains(QStringLiteral("截图失败")),qPrintable(player.message_->text()));capture->actions().last()->trigger();menu->close();QTRY_VERIFY_WITH_TIMEOUT(!player.screenshotPending_,20000);const QDir images(QDir(QCoreApplication::applicationDirPath()).filePath("screenshots"));const auto name=QFileInfo(source).completeBaseName();QCOMPARE(images.entryList({name+"*.png"},QDir::Files).size(),2);
+        capture->actions().first()->menu()->actions().first()->trigger();QTRY_VERIFY_WITH_TIMEOUT(!player.screenshotPending_,20000);QVERIFY2(!player.message_->text().contains(QStringLiteral("截图失败")),qPrintable(player.message_->text()));capture->actions().first()->menu()->actions().last()->trigger();menu->close();QTRY_VERIFY_WITH_TIMEOUT(!player.screenshotPending_,20000);const QDir images(QDir(QCoreApplication::applicationDirPath()).filePath("screenshots"));const auto name=QFileInfo(source).completeBaseName();QCOMPARE(images.entryList({name+"*.png"},QDir::Files).size(),2);
         QImage original,display;for(const auto &file:images.entryList({name+"*.png"},QDir::Files)){if(file.contains("-VS.png"))original.load(images.filePath(file));else display.load(images.filePath(file));}QCOMPARE(original.size(),QSize(320,180));QCOMPARE(display.size(),pane->surface()->size()*pane->surface()->devicePixelRatioF());int light=0;for(int y=0;y<display.height();++y)for(int x=0;x<display.width();++x){const auto c=display.pixelColor(x,y);if(c.red()>180 && c.green()>180 && c.blue()>180)++light;}QVERIFY(light>100);
         for(const auto &file:images.entryList({name+"*.png"},QDir::Files))QFile::rename(images.filePath(file),QDir::current().filePath("build/"+file));
     }

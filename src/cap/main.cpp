@@ -18,6 +18,7 @@
 #include <cstring>
 #include "DesktopCapture.h"
 #include "UiAccess.h"
+#include "image/ImageJxl.h"
 
 static QString defaultDirectory()
 {
@@ -40,6 +41,7 @@ static void copyImage(const QImage &image, unsigned attempt=0, unsigned request=
         stream<<qint32(image.width())<<qint32(image.height());
         for(int y=0;y<image.height();++y)raw.append(reinterpret_cast<const char*>(image.constScanLine(y)),image.width()*16);
         mime->setData("application/x-vscap-scrgb",raw);
+        mime->setData("application/x-vscap-sdr-white-nits",QByteArray::number(cap::sdrWhiteNits(image),'g',17));
     }
     QApplication::clipboard()->setMimeData(mime);
     // Clipboard viewers can briefly hold OpenClipboard while processing a copy.
@@ -144,9 +146,9 @@ class CaptureOverlay final : public QWidget {
     struct Edit { QRect area; QImage pixels; QPointer<CaptureTextBox> text; TextState before; bool created=false; };
     QList<Edit> history_;
     QWidget *bar_ = nullptr;
-    std::function<bool(QImage, bool, bool, bool)> output_;
+    std::function<bool(QImage, bool, QString, bool)> output_;
 public:
-    CaptureOverlay(QScreen *screen, QImage shot, std::function<bool(QImage,bool,bool,bool)> output, bool embedded=false)
+    CaptureOverlay(QScreen *screen, QImage shot, std::function<bool(QImage,bool,QString,bool)> output, bool embedded=false)
         : canvas_(std::move(shot)), embedded_(embedded), output_(std::move(output)) {
         setWindowFlags(embedded_?Qt::Widget:Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
         if(!embedded_ && QApplication::activeModalWidget())setWindowModality(Qt::ApplicationModal);
@@ -231,12 +233,13 @@ public:
         if(!embedded_){auto *undoShortcut=new QShortcut(QKeySequence::Undo,this);connect(undoShortcut,&QShortcut::activated,this,[this]{undo();});}
         add(QStringLiteral("保存"), [this] {
             QSettings preferences(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);
-            deliver(false,preferences.value("save/format","png").toString()=="avif");
+            deliver(false,preferences.value("save/format","jxl").toString());
         })->setToolTip(QStringLiteral("使用设置中的默认格式保存"));
-        add(QStringLiteral("PNG"), [this] {deliver(false,false);});
-        add(QStringLiteral("AVIF"), [this] {deliver(false,true);});
-        add(QStringLiteral("贴图"), [this] {deliver(true,false);});
-        add(QStringLiteral("✓"), [this] {if(embedded_)bar_->hide();else deliver(false,false,true);})->setToolTip(embedded_?QStringLiteral("隐藏工具栏"):QStringLiteral("复制到剪贴板"));
+        add(QStringLiteral("JXL"), [this] {deliver(false,"jxl");});
+        add(QStringLiteral("AVIF"), [this] {deliver(false,"avif");});
+        add(QStringLiteral("PNG"), [this] {deliver(false,"png");});
+        add(QStringLiteral("贴图"), [this] {deliver(true,"jxl");});
+        add(QStringLiteral("✓"), [this] {if(embedded_)bar_->hide();else deliver(false,"jxl",true);})->setToolTip(embedded_?QStringLiteral("隐藏工具栏"):QStringLiteral("复制到剪贴板"));
         bar_->setStyleSheet("QWidget{background:#252831;} QPushButton,QComboBox,QToolButton{color:white;background:#3b414e;padding:5px;border:1px solid transparent;} QPushButton:checked,QToolButton:checked{border:2px solid #78baff;background:#24496a;} QPushButton:disabled{color:#858585;} QSpinBox{color:white;background:#3b414e;padding:4px 24px 4px 5px;border:1px solid transparent;min-height:24px;} QSpinBox::up-button{subcontrol-origin:border;subcontrol-position:top right;width:20px;height:16px;} QSpinBox::down-button{subcontrol-origin:border;subcontrol-position:bottom right;width:20px;height:16px;}");
         const int shapeHeight=tools_->button(Rect)->sizeHint().height();strokeButton_->setFixedHeight(shapeHeight);fillButton_->setFixedSize(shapeHeight,shapeHeight);
         updateColor();updateOptions();
@@ -247,7 +250,7 @@ public:
     QWidget *takeToolBar(QWidget *parent,std::function<void()> position) {
         positionExternalBar_=std::move(position);bar_->setParent(parent,Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);bar_->hide();return bar_;
     }
-    void exportImage(bool pin,bool avif,bool copy=false){deliver(pin,avif,copy);}
+    void exportImage(bool pin,const QString &format,bool copy=false){deliver(pin,format,copy);}
     void undoEdit(){undo();}
     bool isPanTool() const { return tool_==Pan; }
 private:
@@ -329,7 +332,7 @@ private:
         const int y = qBound(0, selection_.bottom() + 8, height() - bar_->height());
         bar_->move(x,y);
     }
-    void deliver(bool pin, bool avif, bool copy = false) {
+    void deliver(bool pin, const QString &format, bool copy = false) {
         if(selection_.isEmpty()) return;
         QImage composite=canvas_;
         if(!texts_.isEmpty()){
@@ -342,7 +345,7 @@ private:
         }
         const QImage crop = composite.copy(pixelRect(selection_.intersected(rect())));
         if(copy) copyImage(crop);
-        const bool accepted=embedded_ && copy?true:output_(crop,pin,avif,copy);
+        const bool accepted=embedded_ && copy?true:output_(crop,pin,format,copy);
         if(!embedded_ && accepted)close();
     }
 protected:
@@ -369,7 +372,8 @@ protected:
     QColor annotationInk(QColor ink) const {
         if(canvas_.text("capHdr")=="scRGB-FP16") {
             const auto linear=[](float c){return c<=.04045f?c/12.92f:std::pow((c+.055f)/1.055f,2.4f);};
-            ink=QColor::fromRgbF(linear(ink.redF()),linear(ink.greenF()),linear(ink.blueF()));
+            const float white=float(cap::sdrWhiteNits(canvas_)/80.0);
+            ink=QColor::fromRgbF(linear(ink.redF())*white,linear(ink.greenF())*white,linear(ink.blueF())*white);
         }
         return ink;
     }
@@ -520,7 +524,7 @@ class PinWindow final : public QWidget {
     QMenu *menu_ = nullptr;
     double zoom_ = 1;
 public:
-    explicit PinWindow(QImage image,std::function<bool(QImage,bool,bool,bool)> output) {
+    explicit PinWindow(QImage image,std::function<bool(QImage,bool,QString,bool)> output) {
         setWindowFlags(Qt::Tool | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);setAttribute(Qt::WA_DeleteOnClose);
         setWindowTitle(QStringLiteral("VS Cap 贴图"));
         canvas_=new CaptureOverlay(qApp->primaryScreen(),std::move(image),std::move(output),true);
@@ -534,9 +538,10 @@ public:
         menu_=new QMenu(this);menu_->setObjectName("capPinMenu");
         menu_->addAction(QStringLiteral("显示工具栏"),this,[this]{if(bar_->isVisible())bar_->hide();else showToolBar();});
         connect(menu_,&QMenu::aboutToShow,this,[this]{menu_->actions().first()->setText(bar_->isVisible()?QStringLiteral("隐藏工具栏"):QStringLiteral("显示工具栏"));});
-        menu_->addAction(QStringLiteral("复制"),this,[this]{canvas_->exportImage(false,false,true);});
-        menu_->addAction(QStringLiteral("保存为PNG"),this,[this]{canvas_->exportImage(false,false);});
-        menu_->addAction(QStringLiteral("保存为AVIF"),this,[this]{canvas_->exportImage(false,true);});
+        menu_->addAction(QStringLiteral("复制"),this,[this]{canvas_->exportImage(false,"jxl",true);});
+        menu_->addAction(QStringLiteral("保存为JXL"),this,[this]{canvas_->exportImage(false,"jxl");});
+        menu_->addAction(QStringLiteral("保存为AVIF"),this,[this]{canvas_->exportImage(false,"avif");});
+        menu_->addAction(QStringLiteral("保存为PNG"),this,[this]{canvas_->exportImage(false,"png");});
         menu_->addAction(QStringLiteral("销毁"),this,&QWidget::close);
         auto *targetScreen=QGuiApplication::screenAt(QCursor::pos());if(!targetScreen)targetScreen=qApp->primaryScreen();
         const auto available=targetScreen->availableGeometry();
@@ -646,7 +651,7 @@ private:
     }
     void addPin(QImage image) {
         pins_.removeIf([](const QPointer<PinWindow> &pin){return pin.isNull();});
-        auto *pin=new PinWindow(std::move(image),[this](QImage shot,bool paste,bool avif,bool copy){return output(std::move(shot),paste,avif,copy);});
+        auto *pin=new PinWindow(std::move(image),[this](QImage shot,bool paste,QString format,bool copy){return output(std::move(shot),paste,format,copy);});
         const int index=pins_.size();
         if(index) {
             const auto area=pin->screen()->availableGeometry();
@@ -661,23 +666,26 @@ private:
         const auto dir=settings_.value(automatic?"save/defaultDirectory":"save/lastDirectory",defaultDirectory()).toString();
         return QDir(dir).filePath(QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz")+"."+ext);
     }
-    static bool saveCapturePng(const QImage &image,const QString &path) {
-        if(!savePng(image,path))return false;
+    static bool saveCapture(const QImage &image,const QString &path,const QString &format) {
+        const auto write=[&](const QImage &pixels,const QString &destination){return format=="jxl"?vsr::writeJxl(destination,cap::pngPixels(pixels)).isEmpty():savePng(pixels,destination);};
+        if(!write(image,path))return false;
         if(image.text("capHdr")!="scRGB-FP16")return true;
         const auto info=QFileInfo(path);
-        const auto sdrPath=QDir(info.absolutePath()).filePath(info.completeBaseName()+"_SDR.png");
-        return savePng(cap::preview(image),sdrPath);
+        const auto sdrPath=QDir(info.absolutePath()).filePath(info.completeBaseName()+"_SDR."+format);
+        return write(cap::preview(image),sdrPath);
     }
     void saveHdrCaptureAsync(const QImage &image) {
         if(image.text("capHdr")!="scRGB-FP16")return;
-        const auto path=makePath("png",true);
+        const auto format=settings_.value("save/format","jxl").toString();
+        const auto path=makePath(format,true);
+        if(format=="avif") {QDir().mkpath(QFileInfo(path).absolutePath());startAvif(image,path);return;}
         auto *watcher=new QFutureWatcher<bool>(this);
         connect(watcher,&QFutureWatcher<bool>::finished,this,[this,watcher]{
             if(!watcher->result())tray_.showMessage("VS Cap",QStringLiteral("HDR 截图自动保存失败，请检查默认保存路径"),QSystemTrayIcon::Warning);
             watcher->deleteLater();
         });
-        watcher->setFuture(QtConcurrent::run([image,path]{
-            return QDir().mkpath(QFileInfo(path).absolutePath()) && saveCapturePng(image,path);
+        watcher->setFuture(QtConcurrent::run([image,path,format]{
+            return QDir().mkpath(QFileInfo(path).absolutePath()) && saveCapture(image,path,format);
         }));
     }
     void storeDir(const QString &path) {
@@ -739,18 +747,18 @@ private:
         process->start(encoder,args);
         return true;
     }
-    bool output(QImage image, bool pin, bool avif, bool copy) {
+    bool output(QImage image, bool pin, const QString &format, bool copy) {
         if(image.isNull())return false;
         if(pin) {addPin(std::move(image));return true;}
         if(copy)return true;
-        const auto ext=avif?"avif":"png";
+        const auto ext=format;
         const auto path=QFileDialog::getSaveFileName(QApplication::activeModalWidget(),QStringLiteral("保存截图"),makePath(ext),
-                         avif?"AVIF (*.avif)":"PNG (*.png)");
+                         QString("%1 (*.%2)").arg(format.toUpper(),format));
         if(path.isEmpty())return false;
         storeDir(path);
-        if(avif)return startAvif(image,path);
-        if(saveCapturePng(image,path))return true;
-        tray_.showMessage("VS Cap",QStringLiteral("PNG 写入失败"),QSystemTrayIcon::Warning);return false;
+        if(format=="avif")return startAvif(image,path);
+        if(saveCapture(image,path,format))return true;
+        tray_.showMessage("VS Cap",QStringLiteral("截图写入失败"),QSystemTrayIcon::Warning);return false;
     }
     void capture() {
         QScreen *screen=QGuiApplication::screenAt(QCursor::pos());
@@ -759,8 +767,8 @@ private:
         QString error;
         const QImage shot=cap::captureScreen(screen,&error);
         if(shot.isNull()){tray_.showMessage("VS Cap",error,QSystemTrayIcon::Warning);return;}
-        auto *overlay=new CaptureOverlay(screen,shot,[this](QImage shot,bool pin,bool avif,bool copy){
-            return output(std::move(shot),pin,avif,copy);
+        auto *overlay=new CaptureOverlay(screen,shot,[this](QImage shot,bool pin,QString format,bool copy){
+            return output(std::move(shot),pin,format,copy);
         });
         applyTopPriority(overlay);
         saveHdrCaptureAsync(shot);
@@ -774,6 +782,7 @@ private:
                 pic=QImage(w,h,QImage::Format_RGBA32FPx4);
                 for(int y=0;y<h;++y)memcpy(pic.scanLine(y),raw.constData()+8+qint64(y)*w*16,w*16);
                 pic.setColorSpace(QColorSpace::SRgbLinear);pic.setText("capHdr","scRGB-FP16");
+                pic.setText("capSdrWhiteNits",QString::fromLatin1(QApplication::clipboard()->mimeData()->data("application/x-vscap-sdr-white-nits")));
             }
         }
         const bool hadImage=!pic.isNull();
@@ -782,7 +791,7 @@ private:
         for(const auto &url:QApplication::clipboard()->mimeData()->urls()){
             if(!url.isLocalFile())continue;
             QImageReader reader(url.toLocalFile());reader.setAutoTransform(true);
-            const auto next=reader.read();if(next.isNull())continue;
+            const auto next=QFileInfo(url.toLocalFile()).suffix().compare("jxl",Qt::CaseInsensitive)==0?vsr::readJxl(url.toLocalFile()):reader.read();if(next.isNull())continue;
             addPin(next);++added;
         }
         if(!hadImage && !added)tray_.showMessage("VS Cap",QStringLiteral("剪贴板中没有可读取的图片或图片文件"));
@@ -797,8 +806,8 @@ private:
         QCheckBox trayMode(QStringLiteral("启动时最小化到托盘"));
         QCheckBox uiAccess(QStringLiteral("UIAccess 高优先级置顶（重启后生效，需要管理员授权）"));
         uiAccess.setObjectName("capUiAccess");uiAccess.setChecked(settings_.value("general/uiAccess",false).toBool());
-        QComboBox format;format.setObjectName("capDefaultFormat");format.addItem("PNG","png");format.addItem("AVIF · AWJ","avif");
-        format.setCurrentIndex(qMax(0,format.findData(settings_.value("save/format","png").toString())));
+        QComboBox format;format.setObjectName("capDefaultFormat");format.addItem("JXL · 16-bit 无损","jxl");format.addItem("AVIF · AWJ","avif");format.addItem("PNG · 16-bit 无损","png");
+        format.setCurrentIndex(qMax(0,format.findData(settings_.value("save/format","jxl").toString())));
         QSpinBox quality;quality.setObjectName("capAvifQuality");quality.setRange(1,100);quality.setValue(settings_.value("avif/quality",70).toInt());quality.setSuffix(QStringLiteral("（推荐 70）"));
         QWidget saveLocation;QHBoxLayout saveLayout(&saveLocation);saveLayout.setContentsMargins(0,0,0,0);
         QLineEdit saveDirectory(settings_.value("save/defaultDirectory",defaultDirectory()).toString());saveDirectory.setObjectName("capDefaultSaveDirectory");
@@ -813,7 +822,7 @@ private:
         layout.addRow(QStringLiteral("AWJ AVIF 质量"),&quality);
         layout.addRow(&uiAccess);
         layout.addRow(&autostart);layout.addRow(&trayMode);
-        QLabel note(QStringLiteral("PNG 无损压缩、16bit×4 通道；HDR 自动保存 HDR 与 SDR 两张 PNG，不生成浮点附件。AWJ 使用 AOM、默认质量 70。UIAccess 默认关闭，启用后下次启动会请求 Windows 管理员授权，无需驱动或安装证书。"));
+        QLabel note(QStringLiteral("默认 JXL，16bit×4 通道无损，原生携带 HDR 色彩信息；PNG 为兼容候选。HDR 自动按所选格式保存，JXL/PNG 同时提供 SDR 副本，不生成浮点附件。AWJ AVIF 使用 AOM、默认质量 70。UIAccess 默认关闭，启用后下次启动会请求 Windows 管理员授权，无需驱动或安装证书。"));
         note.setWordWrap(true);layout.addRow(&note);
         QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
         layout.addRow(&buttons);

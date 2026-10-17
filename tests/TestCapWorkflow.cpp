@@ -6,13 +6,25 @@
 class TestCapWorkflow : public QObject {
     Q_OBJECT
 private slots:
+    void defaultJxlCaptureAndPin(){
+        const auto path=QCoreApplication::applicationDirPath()+"/vs-cap.ini";QFile originalFile(path);const bool existed=originalFile.exists();QByteArray original;
+        if(existed){QVERIFY(originalFile.open(QIODevice::ReadOnly));original=originalFile.readAll();originalFile.close();}
+        const auto restore=qScopeGuard([&]{if(existed){QFile file(path);if(file.open(QIODevice::WriteOnly|QIODevice::Truncate))file.write(original);}else QFile::remove(path);});
+        QTemporaryDir directory;{QSettings settings(path,QSettings::IniFormat);settings.clear();settings.setValue("save/defaultDirectory",directory.path());settings.setValue("hotkeys/capture","Ctrl+Alt+Shift+F11");settings.setValue("hotkeys/pin","Ctrl+Alt+Shift+F12");}
+        CapApp controller;QCOMPARE(controller.settings_.value("save/format","jxl").toString(),QString("jxl"));
+        QImage hdr(80,50,QImage::Format_RGBA32FPx4);hdr.fill(QColor::fromRgbF(.5,.6,1.5));hdr.setColorSpace(QColorSpace::SRgbLinear);hdr.setText("capHdr","scRGB-FP16");hdr.setText("capSdrWhiteNits","480");
+        controller.saveHdrCaptureAsync(hdr);QTRY_VERIFY_WITH_TIMEOUT(controller.findChildren<QFutureWatcherBase*>().isEmpty(),10000);const auto files=QDir(directory.path()).entryList({"*.jxl"},QDir::Files);QCOMPARE(files.size(),2);QCOMPARE(QDir(directory.path()).entryList(QDir::Files).size(),2);
+        const auto decoded=vsr::readJxl(directory.filePath(files.first()));QCOMPARE(decoded.colorSpace(),QColorSpace(QColorSpace::Bt2100Pq));QCOMPARE(decoded.text("capSdrWhiteNits"),QString("480"));const auto expected=cap::pngPixels(hdr);for(int y=0;y<hdr.height();++y)QVERIFY(std::memcmp(decoded.constScanLine(y),expected.constScanLine(y),hdr.width()*8)==0);
+        const auto sdr=vsr::readJxl(directory.filePath(files.last()));QCOMPARE(sdr.colorSpace(),QColorSpace(QColorSpace::SRgb));QCOMPARE(sdr,cap::preview(hdr));
+        auto *mime=new QMimeData;mime->setUrls({QUrl::fromLocalFile(directory.filePath(files.first()))});QApplication::clipboard()->setMimeData(mime);QTest::qWait(150);controller.pastePin();QCOMPARE(controller.pins_.size(),1);controller.pins_.last()->close();
+    }
     void captureWhileSettingsModal(){
         QDialog settings;QLineEdit unsaved(QStringLiteral("keep pending changes"),&settings);bool verified=false;
         QTimer::singleShot(0,&settings,[&]{
             const auto closeSettings=qScopeGuard([&]{settings.reject();});
             QCOMPARE(qApp->activeModalWidget(),&settings);
             QImage source(640,480,QImage::Format_RGB32);source.fill(Qt::white);
-            QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[](QImage,bool,bool,bool){return false;});
+            QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[](QImage,bool,QString,bool){return false;});
             const auto closeOverlay=qScopeGuard([&]{if(overlay)delete overlay;});
             QTRY_COMPARE_WITH_TIMEOUT(qApp->activeModalWidget(),static_cast<QWidget*>(overlay),1000);
             QTest::mousePress(overlay->windowHandle(),Qt::LeftButton,Qt::NoModifier,{20,20});
@@ -26,7 +38,7 @@ private slots:
     }
     void shapeFillAndWheelWidth(){
         QImage source(640,480,QImage::Format_RGBA8888);source.fill(Qt::white);QImage delivered;
-        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,bool,bool){delivered=image;return false;});
+        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,QString,bool){delivered=image;return false;});
         const auto close=qScopeGuard([&]{if(overlay)overlay->close();});
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{20,20});QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{500,350});
         for(auto *button:overlay->findChildren<QPushButton*>())if(button->text()==QStringLiteral("矩形"))button->click();
@@ -35,16 +47,16 @@ private slots:
         QWheelEvent wheel(QPointF(4,4),QPointF(stroke->mapToGlobal(QPoint(4,4))),QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
         QApplication::sendEvent(stroke,&wheel);QCOMPARE(width->value(),before+1);QVERIFY(stroke->isChecked());fill->click();QVERIFY(fill->isChecked());QVERIFY(!stroke->isChecked());
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{100,100});QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{300,250});
-        overlay->exportImage(false,false);QVERIFY(!delivered.isNull());
+        overlay->exportImage(false,"png");QVERIFY(!delivered.isNull());
         const auto ink=delivered.pixelColor(qRound((200-20)*640.0/overlay->width()),qRound((170-20)*480.0/overlay->height()));
         QVERIFY(ink.red()>240 && ink.green()<20);
         stroke->click();QVERIFY(stroke->isChecked());QVERIFY(!fill->isChecked());
         QApplication::sendEvent(stroke,&wheel);QCOMPARE(width->value(),before+2);
         for(auto *button:overlay->findChildren<QPushButton*>())if(button->text()==QStringLiteral("圆形"))button->click();
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{340,100});QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{460,240});
-        overlay->exportImage(false,false);const auto blank=delivered.pixelColor(qRound((400-20)*640.0/overlay->width()),qRound((170-20)*480.0/overlay->height()));QVERIFY(blank.green()>240);
+        overlay->exportImage(false,"png");const auto blank=delivered.pixelColor(qRound((400-20)*640.0/overlay->width()),qRound((170-20)*480.0/overlay->height()));QVERIFY(blank.green()>240);
         QImage pinImage(200,150,QImage::Format_RGBA8888);pinImage.fill(Qt::white);
-        QPointer<PinWindow> pin=new PinWindow(pinImage,[](QImage,bool,bool,bool){return true;});
+        QPointer<PinWindow> pin=new PinWindow(pinImage,[](QImage,bool,QString,bool){return true;});
         const auto closePin=qScopeGuard([&]{if(pin)pin->close();});pin->showToolBar();
         QPushButton *pan=nullptr;for(auto *button:pin->findChildren<QPushButton*>())if(button->text()==QStringLiteral("拖动"))pan=button;
         QVERIFY(pan);pan->click();QVERIFY(pan->isChecked());
@@ -69,7 +81,7 @@ private slots:
         QVERIFY(display.pixelColor(point).red()>80);
         QImage delivered;
         QPointer<CaptureOverlay> overlay=new CaptureOverlay(marker.screen(),desktop,
-            [&](QImage image,bool,bool,bool){delivered=image;return true;});
+            [&](QImage image,bool,QString,bool){delivered=image;return true;});
         const auto close=qScopeGuard([&]{if(overlay)overlay->close();});
         QVERIFY(QTest::qWaitForWindowExposed(overlay));
         const auto local=marker.geometry().center()-overlay->geometry().topLeft();
@@ -89,12 +101,12 @@ private slots:
         source.setText("capHdr","scRGB-FP16");
         QImage delivered;bool copied=false;
         QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,
-            [&](QImage image,bool pin,bool avif,bool copy){delivered=image;copied=copy;return !pin && !avif;});
+            [&](QImage image,bool pin,QString format,bool copy){delivered=image;copied=copy;return !pin && format!="avif";});
         QVERIFY(QTest::qWaitForWindowExposed(overlay));
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(50,50));
         QTest::mouseMove(overlay,QPoint(350,250));
         QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(350,250));
-        const auto buttons=overlay->findChildren<QPushButton*>();QCOMPARE(buttons.size(),13);
+        const auto buttons=overlay->findChildren<QPushButton*>();QCOMPARE(buttons.size(),14);
         QPushButton *rectangle=nullptr,*check=nullptr;
         for(auto *button:buttons){QVERIFY(button->isVisible());if(button->text()==QStringLiteral("矩形"))rectangle=button;if(button->text()==QStringLiteral("✓"))check=button;}
         QVERIFY(rectangle && check);rectangle->click();
@@ -116,7 +128,7 @@ private slots:
     void selectedToolsLineAndUndo() {
         QImage source(640,480,QImage::Format_RGBA32FPx4);source.fill(QColor::fromRgbF(.4,.5,.6));
         source.setColorSpace(QColorSpace::SRgbLinear);source.setText("capHdr","scRGB-FP16");
-        QImage delivered;QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,bool,bool){delivered=image;return true;});
+        QImage delivered;QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,QString,bool){delivered=image;return true;});
         const auto close=qScopeGuard([&]{if(overlay)overlay->close();});QVERIFY(QTest::qWaitForWindowExposed(overlay));
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(50,50));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(450,350));
         const auto button=[&](const QString &name){for(auto *b:overlay->findChildren<QPushButton*>())if(b->text()==name)return b;return static_cast<QPushButton*>(nullptr);};
@@ -136,14 +148,14 @@ private slots:
         for(int y=0;y<source.height();++y)for(int x=0;x<source.width();++x)source.setPixelColor(x,y,QColor(x%256,y%256,80));
         struct Resize {QPoint from,to;QRect crop;};
         for(const auto &resize:QList<Resize>{{{100,100},{80,80},{80,80,321,221}},{{250,100},{250,80},{100,80,301,221}},{{400,100},{420,80},{100,80,321,221}},{{400,200},{420,200},{100,100,321,201}},{{400,300},{420,320},{100,100,321,221}},{{250,300},{250,320},{100,100,301,221}},{{100,300},{80,320},{80,100,321,221}},{{100,200},{80,200},{80,100,321,201}}}){
-            QImage delivered;QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,bool,bool){delivered=image;return true;});
+            QImage delivered;QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,QString,bool){delivered=image;return true;});
             const auto close=qScopeGuard([&]{if(overlay)overlay->close();});overlay->resize(source.size());QVERIFY(QTest::qWaitForWindowExposed(overlay));
             QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(400,300));
             QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,resize.from);QTest::mouseMove(overlay,resize.to);QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,resize.to);
-            overlay->exportImage(false,false,true);QCOMPARE(delivered,source.copy(resize.crop));
+            overlay->exportImage(false,"png",true);QCOMPARE(delivered,source.copy(resize.crop));
         }
         source.fill(Qt::white);QImage delivered;
-        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,bool,bool){delivered=image;return true;});
+        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,QString,bool){delivered=image;return true;});
         const auto close=qScopeGuard([&]{if(overlay)overlay->close();});overlay->resize(source.size());QVERIFY(QTest::qWaitForWindowExposed(overlay));
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(400,300));
         const auto button=[&](const QString &name){for(auto *b:overlay->findChildren<QPushButton*>())if(b->text()==name)return b;return static_cast<QPushButton*>(nullptr);};
@@ -154,7 +166,7 @@ private slots:
         auto *box=static_cast<CaptureTextBox*>(overlay->findChild<QWidget*>("capTextBox"));QVERIFY(box);QTest::keyClicks(box->editor,"Outside");const auto textPosition=box->pos();
         button(QStringLiteral("选区"))->click();QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(250,200));QTest::mouseMove(overlay,QPoint(570,200));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(570,200));
         QCOMPARE(box->pos(),textPosition);QCOMPARE(box->editor->toPlainText(),QString("Outside"));
-        overlay->exportImage(false,false,true);QCOMPARE(delivered.size(),QSize(301,201));
+        overlay->exportImage(false,"png",true);QCOMPARE(delivered.size(),QSize(301,201));
         QCOMPARE(delivered.pixelColor(100,50),QColor(Qt::red));QCOMPARE(delivered.pixelColor(100,160),QColor(Qt::red));QCOMPARE(delivered.pixelColor(250,50),QColor(Qt::white));
         bool textInk=false;for(int y=106;y<145;++y)for(int x=16;x<120;++x)textInk|=delivered.pixelColor(x,y).green()<100;QVERIFY(textInk);
     }
@@ -166,19 +178,19 @@ private slots:
         QTemporaryDir dir;const auto hdrDir=dir.filePath("hdr"),manualDir=dir.filePath("manual");QVERIFY(QDir().mkpath(manualDir));
         {QSettings settings(settingsPath,QSettings::IniFormat);settings.clear();settings.setValue("hotkeys/capture","Ctrl+Alt+Shift+F11");settings.setValue("hotkeys/pin","Ctrl+Alt+Shift+F12");settings.setValue("save/defaultDirectory",hdrDir);settings.setValue("save/lastDirectory",manualDir);settings.sync();}
         CapApp controller;QImage sdr(32,32,QImage::Format_RGBA8888);sdr.fill(Qt::white);
-        controller.saveHdrCaptureAsync(sdr);controller.output(sdr,false,false,true);QVERIFY(!QFileInfo::exists(hdrDir));QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
+        controller.saveHdrCaptureAsync(sdr);controller.output(sdr,false,"png",true);QVERIFY(!QFileInfo::exists(hdrDir));QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
         QImage hdr(32,32,QImage::Format_RGBA32FPx4);hdr.fill(QColor::fromRgbF(.4,.5,1.5));hdr.setColorSpace(QColorSpace::SRgbLinear);hdr.setText("capHdr","scRGB-FP16");
-        controller.saveHdrCaptureAsync(hdr);QTRY_VERIFY_WITH_TIMEOUT(controller.findChildren<QFutureWatcherBase*>().isEmpty(),10000);
+        controller.settings_.setValue("save/format","png");controller.saveHdrCaptureAsync(hdr);QTRY_VERIFY_WITH_TIMEOUT(controller.findChildren<QFutureWatcherBase*>().isEmpty(),10000);
         const auto files=QDir(hdrDir).entryList(QDir::Files);QCOMPARE(files.size(),2);
         const auto pngs=QDir(hdrDir).entryList({"*.png"},QDir::Files);QCOMPARE(pngs.size(),2);QCOMPARE(QImageReader(QDir(hdrDir).filePath(pngs.first())).read().depth(),64);
         const auto sdrPath=QDir(hdrDir).filePath(pngs.last());QVERIFY(sdrPath.endsWith("_SDR.png"));
         QCOMPARE(QImageReader(sdrPath).read().pixelColor(10,10),cap::preview(hdr).pixelColor(10,10));
         QVERIFY(!QFile::exists(sdrPath+".json"));QVERIFY(!QFile::exists(sdrPath+".scrgb-f32"));
         QVERIFY(!QFile::exists(QDir(hdrDir).filePath(pngs.first()+".scrgb-f32")));
-        controller.output(hdr,false,false,true);QCOMPARE(QDir(hdrDir).entryList(QDir::Files),files);QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
+        controller.output(hdr,false,"png",true);QCOMPARE(QDir(hdrDir).entryList(QDir::Files),files);QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
         QCOMPARE(controller.settings_.value("save/lastDirectory").toString(),manualDir);
         auto large=hdr.scaled(2560,1440);QElapsedTimer automaticTimer;automaticTimer.start();
-        controller.saveHdrCaptureAsync(large);QVERIFY(automaticTimer.elapsed()<100);
+        controller.settings_.setValue("save/format","png");controller.saveHdrCaptureAsync(large);QVERIFY(automaticTimer.elapsed()<100);
         QVERIFY(!controller.findChildren<QFutureWatcherBase*>().isEmpty());
         bool responsive=false;QTimer::singleShot(0,&controller,[&]{responsive=true;});
         QTRY_VERIFY_WITH_TIMEOUT(responsive,500);
@@ -190,15 +202,15 @@ private slots:
         for(int i=0;i<2;++i){
             const auto path=QDir(manualDir).filePath(QString("manual-%1.png").arg(i));bool dialogSeen=false;
             QTimer::singleShot(50,qApp,[&]{auto *dialog=qobject_cast<QFileDialog*>(qApp->activeModalWidget());if(!dialog)return;dialogSeen=true;QCOMPARE(dialog->directory().absolutePath(),manualDir);auto *name=dialog->findChild<QLineEdit*>("fileNameEdit");QVERIFY(name);name->setText(path);QMetaObject::invokeMethod(dialog,"accept");});
-            watchdog.start(2000);controller.output(sdr,false,false,false);watchdog.stop();QVERIFY(dialogSeen);QVERIFY2(QFileInfo::exists(path),qPrintable(QDir(manualDir).entryList(QDir::Files).join(',')));
+            watchdog.start(2000);controller.output(sdr,false,"png",false);watchdog.stop();QVERIFY(dialogSeen);QVERIFY2(QFileInfo::exists(path),qPrintable(QDir(manualDir).entryList(QDir::Files).join(',')));
         }
         QImage capture(1000,700,QImage::Format_RGB32);capture.fill(Qt::white);
-        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),capture,[&](QImage image,bool pin,bool avif,bool copy){return controller.output(std::move(image),pin,avif,copy);});
+        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),capture,[&](QImage image,bool pin,QString format,bool copy){return controller.output(std::move(image),pin,format,copy);});
         const auto closeOverlay=qScopeGuard([&]{if(overlay)overlay->close();});QVERIFY(QTest::qWaitForWindowExposed(overlay));
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(40,40));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(900,500));
         const auto button=[&](const QString &name){for(auto *b:overlay->findChildren<QPushButton*>())if(b->text()==name)return b;return static_cast<QPushButton*>(nullptr);};
         button(QStringLiteral("文字"))->click();QTest::mouseClick(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(100,120));auto *editor=overlay->findChild<QTextEdit*>("capTextEditor");QVERIFY(editor);QTest::keyClicks(editor,"Keep after cancel");
-        for(const auto name:{QStringLiteral("PNG"),QStringLiteral("AVIF")}){
+        for(const auto name:{QStringLiteral("JXL"),QStringLiteral("AVIF"),QStringLiteral("PNG")}){
             bool dialogSeen=false;QTimer::singleShot(50,qApp,[&]{auto *dialog=qobject_cast<QFileDialog*>(qApp->activeModalWidget());if(!dialog)return;dialogSeen=true;dialog->reject();});
             watchdog.start(2000);button(name)->click();watchdog.stop();QVERIFY(dialogSeen);QVERIFY(overlay && overlay->isVisible());QCOMPARE(editor->toPlainText(),QString("Keep after cancel"));
         }
@@ -212,7 +224,7 @@ private slots:
         const auto oldPins=controller.pins_.size();controller.pastePin();QCOMPARE(controller.pins_.size(),oldPins+1);
         auto pin=controller.pins_.last();const auto closePin=qScopeGuard([&]{if(pin)pin->close();});QVERIFY(QTest::qWaitForWindowExposed(pin));
         auto *view=pin->findChild<QGraphicsView*>("capPinView");QVERIFY(view);auto *proxy=qgraphicsitem_cast<QGraphicsProxyWidget*>(view->scene()->items().first());QVERIFY(proxy);
-        static_cast<CaptureOverlay*>(proxy->widget())->exportImage(false,false,true);
+        static_cast<CaptureOverlay*>(proxy->widget())->exportImage(false,"png",true);
         QTRY_COMPARE(QImage::fromData(QApplication::clipboard()->mimeData()->data("image/png")).convertToFormat(sdr.format()),sdr);
         QTimer::singleShot(50,qApp,[&]{auto *dialog=qApp->activeModalWidget();QVERIFY(dialog);QVERIFY(dialog->findChild<QLineEdit*>("capDefaultSaveDirectory"));QCOMPARE(dialog->findChild<QLineEdit*>("capDefaultSaveDirectory")->text(),hdrDir);QMetaObject::invokeMethod(dialog,"reject");});
         watchdog.start(2000);controller.configure();watchdog.stop();QCOMPARE(controller.settings_.value("save/defaultDirectory").toString(),hdrDir);QCOMPARE(controller.settings_.value("save/lastDirectory").toString(),manualDir);
@@ -220,7 +232,7 @@ private slots:
     void editableTextObjects() {
         QImage source(1000,700,QImage::Format_RGBA32FPx4);source.fill(QColor::fromRgbF(.4,.5,1.5));
         source.setColorSpace(QColorSpace::SRgbLinear);source.setText("capHdr","scRGB-FP16");
-        QImage delivered;QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,bool,bool){delivered=image;return true;});
+        QImage delivered;QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,QString,bool){delivered=image;return true;});
         const auto close=qScopeGuard([&]{if(overlay)overlay->close();});overlay->resize(source.size());QVERIFY(QTest::qWaitForWindowExposed(overlay));
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(40,40));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(900,500));
         const auto button=[&](const QString &name){for(auto *b:overlay->findChildren<QPushButton*>())if(b->text()==name)return b;return static_cast<QPushButton*>(nullptr);};
@@ -268,7 +280,7 @@ private slots:
     }
     void textAndDrawingUndo() {
         QImage source(800,600,QImage::Format_RGBA8888);source.fill(Qt::white);QImage delivered;
-        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,bool,bool){delivered=image;return true;});overlay->resize(source.size());
+        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,QString,bool){delivered=image;return true;});overlay->resize(source.size());
         const auto close=qScopeGuard([&]{if(overlay)overlay->close();});QVERIFY(QTest::qWaitForWindowExposed(overlay));
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(20,20));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(700,400));
         const auto button=[&](const QString &name){for(auto *b:overlay->findChildren<QPushButton*>())if(b->text()==name)return b;return static_cast<QPushButton*>(nullptr);};
@@ -282,7 +294,7 @@ private slots:
     }
     void toolbarShapesAndTextFrames() {
         QImage source(1000,700,QImage::Format_RGBA8888);source.fill(QColor(70,80,90));
-        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[](QImage,bool,bool,bool){return true;});overlay->resize(source.size());
+        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[](QImage,bool,QString,bool){return true;});overlay->resize(source.size());
         const auto close=qScopeGuard([&]{if(overlay)overlay->close();});QVERIFY(QTest::qWaitForWindowExposed(overlay));
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(40,40));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(900,500));
         const auto button=[&](const QString &name){for(auto *b:overlay->findChildren<QPushButton*>())if(b->text()==name)return b;return static_cast<QPushButton*>(nullptr);};
@@ -334,7 +346,7 @@ private slots:
         QImage source(1600,400,QImage::Format_RGBA8888);source.fill(Qt::white);
         {QPainter painter(&source);for(int y=0;y<400;y+=10)for(int x=0;x<1600;x+=10)if((x/10+y/10)%2)painter.fillRect(x,y,10,10,Qt::black);}
         QImage delivered;bool avif=false;
-        QPointer<PinWindow> pin=new PinWindow(source,[&](QImage image,bool,bool isAvif,bool){delivered=image;avif=isAvif;return true;});
+        QPointer<PinWindow> pin=new PinWindow(source,[&](QImage image,bool,QString format,bool){delivered=image;avif=format=="avif";return true;});
         const auto close=qScopeGuard([&]{if(pin)pin->close();});QVERIFY(QTest::qWaitForWindowExposed(pin));
         auto *view=pin->findChild<QGraphicsView*>("capPinView");QVERIFY(view);const double originalZoom=1.0/pin->screen()->devicePixelRatio();
         QCOMPARE(view->size(),QSize(qRound(1600*originalZoom),qRound(400*originalZoom)));QCOMPARE(view->transform().m11(),originalZoom);QCOMPARE(view->transform().m11(),view->transform().m22());
@@ -344,8 +356,8 @@ private slots:
         const auto pixels=view->viewport()->grab().toImage();int black=0,white=0;
         for(int y=3;y<pixels.height()-3;++y)for(int x=3;x<pixels.width()-3;++x){const auto pixel=pixels.pixelColor(x,y);QVERIFY(pixel==QColor(Qt::black) || pixel==QColor(Qt::white));black+=pixel==QColor(Qt::black);white+=pixel==QColor(Qt::white);}
         QVERIFY(black>100 && white>100);
-        auto *menu=pin->findChild<QMenu*>("capPinMenu");QVERIFY(menu);const auto actions=menu->actions();QCOMPARE(actions.size(),5);
-        QCOMPARE(actions[0]->text(),QStringLiteral("显示工具栏"));QCOMPARE(actions[1]->text(),QStringLiteral("复制"));QCOMPARE(actions[2]->text(),QStringLiteral("保存为PNG"));QCOMPARE(actions[3]->text(),QStringLiteral("保存为AVIF"));QCOMPARE(actions[4]->text(),QStringLiteral("销毁"));
+        auto *menu=pin->findChild<QMenu*>("capPinMenu");QVERIFY(menu);const auto actions=menu->actions();QCOMPARE(actions.size(),6);
+        QCOMPARE(actions[0]->text(),QStringLiteral("显示工具栏"));QCOMPARE(actions[1]->text(),QStringLiteral("复制"));QCOMPARE(actions[2]->text(),QStringLiteral("保存为JXL"));QCOMPARE(actions[3]->text(),QStringLiteral("保存为AVIF"));QCOMPARE(actions[4]->text(),QStringLiteral("保存为PNG"));QCOMPARE(actions[5]->text(),QStringLiteral("销毁"));
         actions[2]->trigger();QCOMPARE(delivered,source);QVERIFY(!avif);actions[3]->trigger();QCOMPARE(delivered,source);QVERIFY(avif);
         actions[1]->trigger();QTRY_COMPARE(QImage::fromData(QApplication::clipboard()->mimeData()->data("image/png")).size(),source.size());QVERIFY(pin->isVisible());
         actions[0]->trigger();auto *bar=pin->findChild<QWidget*>("capToolBar");QVERIFY(bar && bar->isVisible());QCOMPARE(bar->cursor().shape(),Qt::ArrowCursor);
@@ -368,7 +380,7 @@ private slots:
         QTest::mousePress(canvas,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));QTest::mouseRelease(canvas,Qt::LeftButton,Qt::NoModifier,QPoint(250,200));
         bar->activateWindow();QVERIFY(QTest::qWaitForWindowActive(bar));QTest::keyClick(bar,Qt::Key_Z,Qt::ControlModifier);actions[2]->trigger();QCOMPARE(delivered,source);
         QDir().mkpath("build/acceptance-cap-interaction");pin->grab().save("build/acceptance-cap-interaction/pin-nearest.png");bar->grab().save("build/acceptance-cap-interaction/pin-toolbar.png");
-        actions[4]->trigger();QTRY_VERIFY(!pin);
+        actions[5]->trigger();QTRY_VERIFY(!pin);
     }
     void pinScreenFitAndBorders() {
         auto *screen=QGuiApplication::screenAt(QCursor::pos());if(!screen)screen=qApp->primaryScreen();
@@ -380,7 +392,7 @@ private slots:
         };
         for(const auto size:{QSize(320,180),QSize(qRound(available.width()*screen->devicePixelRatio()*2),qRound(available.height()*screen->devicePixelRatio()*2))}){
             QImage source(size,QImage::Format_RGBA8888);source.fill(Qt::white);QImage delivered;
-            QPointer<PinWindow> pin=new PinWindow(source,[&](QImage image,bool,bool,bool){delivered=image;return true;});
+            QPointer<PinWindow> pin=new PinWindow(source,[&](QImage image,bool,QString,bool){delivered=image;return true;});
             const auto close=qScopeGuard([&]{if(pin)pin->close();});QVERIFY(QTest::qWaitForWindowExposed(pin));
             auto *view=pin->findChild<QGraphicsView*>("capPinView");QVERIFY(view);
             QVERIFY(available.contains(pin->geometry()));QCOMPARE(view->transform().m11(),view->transform().m22());
@@ -404,8 +416,18 @@ private slots:
             QCOMPARE(raw.size(),8+image.width()*image.height()*16);
             QCOMPARE(raw.mid(8,image.width()*16),QByteArray(reinterpret_cast<const char*>(image.constScanLine(0)),image.width()*16));
         }
-        auto *pin=new PinWindow(image,[](QImage,bool,bool,bool){return true;});QVERIFY(pin->windowFlags().testFlag(Qt::WindowStaysOnTopHint));
-        pin->showToolBar();QCOMPARE(pin->findChildren<QPushButton*>().size(),13);pin->close();
+        auto *pin=new PinWindow(image,[](QImage,bool,QString,bool){return true;});QVERIFY(pin->windowFlags().testFlag(Qt::WindowStaysOnTopHint));
+        pin->showToolBar();QCOMPARE(pin->findChildren<QPushButton*>().size(),14);pin->close();
+        QImage grey(64,32,QImage::Format_RGBA32FPx4);grey.fill(QColor::fromRgbF(1.2842468f,1.2842468f,1.2842468f));
+        grey.setColorSpace(QColorSpace::SRgbLinear);grey.setText("capHdr","scRGB-FP16");grey.setText("capSdrWhiteNits","480");copyImage(grey);
+        const auto clipboardIsGrey=[] {const auto image=QImage::fromData(QApplication::clipboard()->mimeData()->data("image/png"));return !image.isNull() && qAbs(image.pixelColor(10,10).redF()-.5)<.0001;};
+        QTRY_VERIFY(clipboardIsGrey());
+        QCOMPARE(QApplication::clipboard()->mimeData()->data("application/x-vscap-sdr-white-nits"),QByteArray("480"));
+        CapApp controller;controller.pastePin();QCOMPARE(controller.pins_.size(),1);auto *roundTrip=controller.pins_.last().data();QVERIFY(roundTrip);
+        const auto closePin=qScopeGuard([&]{if(controller.pins_.last())controller.pins_.last()->close();});
+        auto *menu=roundTrip->findChild<QMenu*>("capPinMenu");QVERIFY(menu);menu->actions()[1]->trigger();QTest::qWait(150);
+        QTRY_VERIFY(clipboardIsGrey());
+        QCOMPARE(QApplication::clipboard()->mimeData()->data("application/x-vscap-sdr-white-nits"),QByteArray("480"));
     }
     void realHdrAvif() {
         QImage desktop(128,128,QImage::Format_RGBA32FPx4);

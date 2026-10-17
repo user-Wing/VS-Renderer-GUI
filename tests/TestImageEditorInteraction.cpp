@@ -106,9 +106,11 @@ private slots:
             QImage source(257,129,QImage::Format_RGBA64);source.setColorSpace(pattern%2 || pattern==4?QColorSpace::Bt2100Pq:QColorSpace::SRgb);
             for(int y=0;y<source.height();++y)for(int x=0;x<source.width();++x){auto *p=reinterpret_cast<quint16*>(source.scanLine(y))+x*4;for(int c=0;c<4;++c)p[c]=quint16(pattern==0?0:pattern==1?65535:pattern==2?x*257+c:pattern==3?y*511+c:(x*997+y*1501+c*131));}
             const auto path=directory.filePath(QString::number(pattern)+".png");
+            if(pattern==3)source.setText("capSdrWhiteNits","480");
             if(pattern==4)QVERIFY(writeScreenshotPng(path,source,{}).isEmpty());else QVERIFY(source.save(path));
             const auto decoded=decodeRgbaPng(path,generation,1);QVERIFY(!decoded.isNull());
             QCOMPARE(decoded,source);QCOMPARE(decoded.colorSpace(),source.colorSpace());QCOMPARE(decoded.text("sourceBitDepth"),QString("16"));
+            if(pattern==3)QCOMPARE(decoded.text("capSdrWhiteNits"),QString("480"));
         }
         generation=2;QVERIFY(decodeRgbaPng(directory.filePath("0.png"),generation,1).isNull());
     }

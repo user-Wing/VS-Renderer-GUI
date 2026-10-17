@@ -134,7 +134,7 @@ private:
     void updateAudioLyrics(qint64 time);
     void useNativeAudio();
     QString screenshotDirectory() const;
-    void captureImage(bool source, const QString &directory = {});
+    void captureImage(bool source, const QString &directory = {}, const QString &format = "png");
     void saveScreenshot(const QString &path,const QImage &image,const QJsonObject &metadata);
     void applySettings(bool reopen);
     void applyAppearance();

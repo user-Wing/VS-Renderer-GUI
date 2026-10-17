@@ -1,6 +1,7 @@
 #include "player/PlayerImage.h"
 #include "player/PlayerPng.h"
 #include "image/ImagePsd.h"
+#include "image/ImageJxl.h"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
@@ -46,6 +47,10 @@ void PlayerImage::open(const QString &path) {
         const auto suffix=QFileInfo(path).suffix().toLower();
         QImage image;
         QString decoderName;
+        if(suffix=="jxl") {
+            image=readJxl(path,&error);
+            if(!image.isNull())decoderName="libjxl 0.12 / lossless HDR color";
+        }
         if(suffix=="png"){
             image=decodeRgbaPng(path,generation_,generation);
             if(!image.isNull())decoderName="libdeflate / SIMD PNG / mapped input";

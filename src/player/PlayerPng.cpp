@@ -1,4 +1,5 @@
 #include "player/PlayerPng.h"
+#include "image/ImageJxl.h"
 #include <QFile>
 #include <QSaveFile>
 #include <QJsonDocument>
@@ -15,12 +16,63 @@
 #include <limits>
 #include <memory>
 #include <QThread>
+#include <QCoreApplication>
+#include <QDir>
+#include <QProcess>
+#include <QTemporaryDir>
+#include <QImageWriter>
 #include <future>
 #include <thread>
 #include <vector>
 #include <windows.h>
 
 namespace vsr {
+QString writeScreenshot(const QString &path,const QImage &input,QJsonObject metadata) {
+    const auto format=QFileInfo(path).suffix().toLower();
+    if(format=="png")return writeScreenshotPng(path,input,metadata);
+    if(format!="jxl" && format!="avif")return QStringLiteral("Unsupported screenshot format");
+    if(input.isNull())return QStringLiteral("No screenshot pixels");
+    auto image=input;
+    if(metadata.value("encoding").toString()=="scRGB-linear") {
+        image=input.convertToFormat(QImage::Format_RGBA32FPx4);
+        const auto pq=[](double v){const double p=std::pow(std::clamp(v*.008,0.0,1.0),2610.0/16384.0);return float(std::pow((3424.0/4096.0+2413.0/128.0*p)/(1+2392.0/128.0*p),2523.0/32.0));};
+        for(int y=0;y<image.height();++y){auto *row=reinterpret_cast<float*>(image.scanLine(y));for(int x=0;x<image.width();++x){auto *v=row+x*4;const double r=v[0],g=v[1],b=v[2];v[0]=pq(.6274039*r+.3292830*g+.0433131*b);v[1]=pq(.0690973*r+.9195404*g+.0113623*b);v[2]=pq(.0163914*r+.0880133*g+.8955953*b);}}
+        image.setColorSpace(QColorSpace::Bt2100Pq);
+    } else if(!image.colorSpace().isValid()) {
+        const int primaries=metadata.value("pngPrimaries").toInt(1),transfer=metadata.value("pngTransfer").toInt(13);
+        image.setColorSpace(QColorSpace(primaries==9?QColorSpace::Primaries::Bt2020:primaries==12?QColorSpace::Primaries::DciP3D65:QColorSpace::Primaries::SRgb,
+            transfer==16?QColorSpace::TransferFunction::St2084:transfer==18?QColorSpace::TransferFunction::Hlg:transfer==8?QColorSpace::TransferFunction::Linear:transfer==1 || transfer==14 || transfer==15?QColorSpace::TransferFunction::Bt2020:QColorSpace::TransferFunction::SRgb));
+    }
+    image=image.convertToFormat(QImage::Format_RGBA64);
+    if(format=="jxl")return writeJxl(path,image);
+    // The single-file edition deliberately uses external FFmpeg; Full can use
+    // its existing AWJ encoder, without embedding another 40 MB tool in Lite.
+    QTemporaryDir temporary;if(!temporary.isValid())return QStringLiteral("Cannot create AVIF temporary directory");
+    const auto staged=temporary.filePath("input.png"),encoded=temporary.filePath("result.avif");
+    const QDir app(QCoreApplication::applicationDirPath());QProcess process;process.setProcessChannelMode(QProcess::MergedChannels);
+    const auto awj=app.filePath("runtime/awj/AWJ.exe");
+    const bool hdr=image.colorSpace().transferFunction()==QColorSpace::TransferFunction::St2084 || image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Hlg;
+    const auto primaries=image.colorSpace().primaries()==QColorSpace::Primaries::Bt2020?"9":image.colorSpace().primaries()==QColorSpace::Primaries::DciP3D65?"12":"1";
+    const auto transfer=hdr?(image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Hlg?"18":"16"):image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Linear?"8":image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Bt2020?"1":"13";
+    auto stagedImage=image;
+    // FFmpeg propagates Qt's approximate HDR ICC as well as nclx. Supply
+    // explicit nclx below, without a contradictory inherited ICC profile.
+    if(!QFileInfo::exists(awj))stagedImage.setColorSpace({});
+    QImageWriter writer(staged,"png");writer.setCompression(70);if(!writer.write(stagedImage))return writer.errorString();
+    if(QFileInfo::exists(awj))process.start(awj,{"-i",staged,"-o",temporary.path(),"--format","avif","--template","result","--quality","70","--avif-encoder","aom","--chroma","444","--bit-depth",hdr?"12":"10","--speed","6","--color-primaries",primaries,"--transfer-characteristics",transfer,"--matrix-coefficients",hdr?"9":"1","--color-range","1","--keep-metadata","--no-summary","--no-log"});
+    else {
+        const auto bundled=app.filePath("ffmpeg.exe");
+        const auto filter=QString("scale=out_color_matrix=%1:out_range=full,setparams=color_primaries=%2:color_trc=%3:colorspace=%4:range=full").arg(hdr?"bt2020":"bt709",primaries,transfer,hdr?"9":"1");
+        process.start(QFileInfo::exists(bundled)?bundled:QStringLiteral("ffmpeg.exe"),{"-v","error","-i",staged,"-frames:v","1","-vf",filter,"-c:v","libaom-av1","-still-picture","1","-crf","19","-cpu-used","6","-pix_fmt",hdr?"yuv444p12le":"yuv444p10le","-color_primaries",primaries,"-color_trc",transfer,"-colorspace",hdr?"9":"1","-color_range","pc","-y",encoded});
+    }
+    if(!process.waitForStarted())return QStringLiteral("AVIF requires AWJ or FFmpeg with libaom-av1: ")+process.errorString();
+    while(!process.waitForFinished(100))if(QThread::currentThread()->isInterruptionRequested()){process.kill();process.waitForFinished();return QStringLiteral("Screenshot canceled");}
+    if(process.exitStatus()!=QProcess::NormalExit || process.exitCode()!=0)return QStringLiteral("AVIF encoding failed: ")+QString::fromUtf8(process.readAll().right(2048));
+    QFile source(encoded);QSaveFile destination(path);
+    if(!source.open(QIODevice::ReadOnly))return source.errorString();if(!destination.open(QIODevice::WriteOnly))return destination.errorString();
+    while(!source.atEnd()){const auto block=source.read(1024*1024);if(block.isEmpty())return source.errorString();if(destination.write(block)!=block.size())return destination.errorString();}
+    return destination.commit()?QString():destination.errorString();
+}
 static QString writeScreenshotImage(const QString &path,const QImage &input,QJsonObject metadata){
     if(input.isNull())return QStringLiteral("No screenshot pixels");
     const bool hdr=metadata.value("hdr").toBool();
@@ -111,7 +163,7 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
     const auto unmap=qScopeGuard([&]{file.unmap(const_cast<uchar *>(bytes));});
     if(std::memcmp(bytes,"\x89PNG\r\n\x1a\n",8))return {};
     QByteArray compressed(qsizetype(file.size()-33),Qt::Uninitialized);qsizetype compressedSize=0;
-    int width=0,height=0,dpmX=0,dpmY=0,bitDepth=8;bool end=false;QColorSpace space,cicpSpace;
+    int width=0,height=0,dpmX=0,dpmY=0,bitDepth=8;bool end=false;QColorSpace space,cicpSpace;QString desktopWhite;
     auto *decoder=libdeflate_alloc_decompressor();if(!decoder)return {};
     const auto cleanup=qScopeGuard([&]{libdeflate_free_decompressor(decoder);});
     for(qint64 offset=8;offset+12<=file.size();){
@@ -139,6 +191,8 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
             const auto transfer=data[1]==16?QColorSpace::TransferFunction::St2084:data[1]==18?QColorSpace::TransferFunction::Hlg:data[1]==13?QColorSpace::TransferFunction::SRgb:QColorSpace::TransferFunction::Custom;
             if(primaries==QColorSpace::Primaries::Custom || transfer==QColorSpace::TransferFunction::Custom)return {};
             cicpSpace=QColorSpace(primaries,transfer);
+        }else if(!std::memcmp(type,"tEXt",4) && size>16 && size<=80 && !std::memcmp(data,"capSdrWhiteNits",16)){
+            desktopWhite=QString::fromLatin1(reinterpret_cast<const char*>(data+16),qsizetype(size-16));
         }else if(!std::memcmp(type,"gAMA",4) || !std::memcmp(type,"cHRM",4) || !std::memcmp(type,"acTL",4) || !std::memcmp(type,"eXIf",4))return {};
         else if(!(type[0]&32))return {}; // Unknown critical chunks cannot be ignored.
         offset+=qint64(size)+12;
@@ -163,6 +217,7 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
     QImage image(outputPixels,width,height,qsizetype(stride),bitDepth==16?QImage::Format_RGBA64:QImage::Format_RGBA8888,[](void *pixels){std::free(pixels);},outputPixels);if(image.isNull()){if(outputPixels!=rawPixels)std::free(outputPixels);return {};}
     if(outputPixels==rawPixels)raw.release();
     image.setColorSpace(cicpSpace.isValid()?cicpSpace:space);image.setDotsPerMeterX(dpmX);image.setDotsPerMeterY(dpmY);
+    if(!desktopWhite.isEmpty())image.setText("capSdrWhiteNits",desktopWhite);
     const auto zero=_mm_setzero_si128();
 #if defined(__GNUC__) && defined(__x86_64__)
     const bool avx2=__builtin_cpu_supports("avx2");

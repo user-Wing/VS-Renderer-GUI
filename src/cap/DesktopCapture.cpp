@@ -14,9 +14,40 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 namespace cap {
+static double screenSdrWhiteNits(QScreen *screen)
+{
+    const auto *native=screen->nativeInterface<QNativeInterface::QWindowsScreen>();
+    MONITORINFOEXW monitor{};monitor.cbSize=sizeof(monitor);
+    if(!native || !GetMonitorInfoW(native->handle(),reinterpret_cast<MONITORINFO*>(&monitor)))return 80.0;
+    for(int attempt=0;attempt<3;++attempt){
+        UINT32 pathCount=0,modeCount=0;
+        if(GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS,&pathCount,&modeCount)!=ERROR_SUCCESS)return 80.0;
+        std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+        const auto status=QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS,&pathCount,paths.data(),&modeCount,modes.data(),nullptr);
+        if(status==ERROR_INSUFFICIENT_BUFFER)continue;
+        if(status!=ERROR_SUCCESS)return 80.0;
+        for(UINT32 i=0;i<pathCount;++i){
+            const auto &path=paths[i];DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+            source.header={DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,sizeof(source),path.sourceInfo.adapterId,path.sourceInfo.id};
+            if(DisplayConfigGetDeviceInfo(&source.header)!=ERROR_SUCCESS || QString::fromWCharArray(source.viewGdiDeviceName)!=QString::fromWCharArray(monitor.szDevice))continue;
+            DISPLAYCONFIG_SDR_WHITE_LEVEL white{};
+            white.header={DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL,sizeof(white),path.targetInfo.adapterId,path.targetInfo.id};
+            if(DisplayConfigGetDeviceInfo(&white.header)==ERROR_SUCCESS && white.SDRWhiteLevel>0)return white.SDRWhiteLevel*80.0/1000.0;
+        }
+    }
+    return 80.0;
+}
+
+double sdrWhiteNits(const QImage &image)
+{
+    const double value=image.text("capSdrWhiteNits").toDouble();
+    return std::isfinite(value) && value>0?value:80.0;
+}
+
 QImage captureScreen(QScreen *screen, QString *error)
 {
     ComPtr<IDXGIFactory1> factory;
@@ -94,6 +125,7 @@ QImage captureScreen(QScreen *screen, QString *error)
                     if (angle) image=image.transformed(QTransform().rotate(angle));
                     image.setColorSpace(QColorSpace::SRgbLinear);
                     image.setText("capHdr","scRGB-FP16");
+                    image.setText("capSdrWhiteNits",QString::number(screenSdrWhiteNits(screen),'g',17));
                 }
                 duplicate->ReleaseFrame();
                 if (image.isNull()) *error=QStringLiteral("HDR 桌面未提供可读取的 FP16 图像。");
@@ -135,12 +167,14 @@ QImage pngPixels(const QImage &image)
         }
     }
     output.setColorSpace(QColorSpace::Bt2100Pq);
+    output.setText("capSdrWhiteNits",QString::number(sdrWhiteNits(image),'g',17));
     return output;
 }
 
 QImage preview(const QImage &image)
 {
-    return vsr::imageForSdrDisplay(image,image.text("capHdr")=="scRGB-FP16");
+    const bool scRgb=image.text("capHdr")=="scRGB-FP16";
+    return vsr::imageForSdrDisplay(image,scRgb,scRgb?sdrWhiteNits(image):0);
 }
 
 bool savePng(const QImage &image,const QString &path)

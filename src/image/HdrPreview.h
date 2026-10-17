@@ -8,12 +8,15 @@
 namespace vsr {
 // Shared by desktop SDR companions and the player's raster preview.
 // Original HDR pixels are retained separately; scRGB 1.0 represents 80 nits.
-inline QImage imageForSdrDisplay(const QImage &original, bool scRgb = false) {
+inline QImage imageForSdrDisplay(const QImage &original, bool scRgb = false, double desktopWhiteNits = 0) {
     if(original.isNull())return {};
     const auto transfer=original.colorSpace().transferFunction();
     const bool pq=transfer==QColorSpace::TransferFunction::St2084;
     const bool hlg=transfer==QColorSpace::TransferFunction::Hlg;
     if(!scRgb && !pq && !hlg)return original;
+    if(desktopWhiteNits<=0)desktopWhiteNits=original.text("capSdrWhiteNits").toDouble();
+    const bool desktop=std::isfinite(desktopWhiteNits) && desktopWhiteNits>0;
+    const double whiteNits=desktop?desktopWhiteNits:203.0;
     const auto source=original.convertToFormat(scRgb?QImage::Format_RGBA32FPx4:QImage::Format_RGBA64);
     QImage result(source.size(),QImage::Format_RGBA64);
     if(result.isNull())return {};
@@ -43,11 +46,11 @@ inline QImage imageForSdrDisplay(const QImage &original, bool scRgb = false) {
         for(int x=0;x<source.width();++x){
             const auto pixel=scRgb?QRgba64::fromRgba64(0,0,0,65535):pixels[x];
             double rgb[]{pixel.red()/65535.0,pixel.green()/65535.0,pixel.blue()/65535.0};
-            if(scRgb)for(int c=0;c<3;++c)rgb[c]=floats[x*4+c]*80.0/203.0;
-            else if(pq){rgb[0]=pqNits[pixel.red()]/203.0;rgb[1]=pqNits[pixel.green()]/203.0;rgb[2]=pqNits[pixel.blue()]/203.0;}
+            if(scRgb)for(int c=0;c<3;++c)rgb[c]=floats[x*4+c]*80.0/whiteNits;
+            else if(pq){rgb[0]=pqNits[pixel.red()]/whiteNits;rgb[1]=pqNits[pixel.green()]/whiteNits;rgb[2]=pqNits[pixel.blue()]/whiteNits;}
             else {
                 for(auto &v:rgb)v=v<=.5?v*v/3.0:(std::exp((v-.55991073)/.17883277)+.28466892)/12.0;
-                const double l=.2627*rgb[0]+.6780*rgb[1]+.0593*rgb[2],gain=1000.0*std::pow(std::max(0.0,l),.2)/203.0;
+                const double l=.2627*rgb[0]+.6780*rgb[1]+.0593*rgb[2],gain=1000.0*std::pow(std::max(0.0,l),.2)/whiteNits;
                 for(auto &v:rgb)v*=gain;
             }
             const double r=rgb[0],g=rgb[1],b=rgb[2];
@@ -56,9 +59,13 @@ inline QImage imageForSdrDisplay(const QImage &original, bool scRgb = false) {
             }else if(!scRgb && original.colorSpace().primaries()==QColorSpace::Primaries::DciP3D65){
                 rgb[0]=1.224940*r-.224940*g;rgb[1]=-.042057*r+1.042057*g;rgb[2]=-.019638*r-.078636*g+1.098274*b;
             }
-            const double lum=std::max(0.0,.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2]);
-            const double mapped=lum*(2.51*lum+.03)/(lum*(2.43*lum+.59)+.14);
-            if(lum>0)for(auto &v:rgb)v*=mapped/lum;
+            // Desktop SDR pixels already include the OS reference-white gain.
+            // Undo that gain without applying a second, film-style tone curve.
+            if(!desktop){
+                const double lum=std::max(0.0,.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2]);
+                const double mapped=lum*(2.51*lum+.03)/(lum*(2.43*lum+.59)+.14);
+                if(lum>0)for(auto &v:rgb)v*=mapped/lum;
+            }
             const auto alpha=scRgb?quint16(std::lround(std::clamp(double(floats[x*4+3]),0.0,1.0)*65535.0)):pixel.alpha();
             out[x]=QRgba64::fromRgba64(pack(rgb[0]),pack(rgb[1]),pack(rgb[2]),alpha);
         }

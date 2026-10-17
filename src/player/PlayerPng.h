@@ -8,4 +8,5 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
 // RGBA16 PNG, adaptive filtering and libdeflate's highest lossless level.
 // HDR additionally retains the original RGBA float32 samples and their encoding.
 QString writeScreenshotPng(const QString &path,const QImage &image,QJsonObject metadata);
+QString writeScreenshot(const QString &path,const QImage &image,QJsonObject metadata);
 }

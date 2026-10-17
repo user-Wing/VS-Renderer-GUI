@@ -1,6 +1,6 @@
 # VS Renderer / VS Player：项目开发地图
 
-> 本文面向接手开发的维护者与 AI，负责说明架构、模块入口、约束与当前状态，不记录逐日开发流水账。用户指南见 [README](README.md)，版本变更见 [changelog](changelog.md)，专项证据见 [docs](docs/)。核对基线：2026-10-17，工作区版本 1.0.11（不等于正式 Release 已发布）。
+> 本文面向接手开发的维护者与 AI，负责说明架构、模块入口、约束与当前状态，不记录逐日开发流水账。用户指南见 [README](README.md)，版本变更见 [changelog](changelog.md)，专项证据见 [docs](docs/)。核对基线：2026-10-17，版本 1.0.11 已发布，本轮 SDR 白位与 JXL 续修同步至源码及现有发布说明；二进制附件由维护者替换。
 
 本地清理约定：旧截图/播放器 `*-next.exe` 暂存构建清除后同步资源清单；`aria2-next.exe` 是有效运行依赖，不按后缀误删。
 
@@ -8,7 +8,7 @@
 
 窗口模式播放器为底栏保留独立高度，视频区域不与底栏重叠；全屏继续浮层。VSCap 在已有模态窗口时打开截图层，会将截图层设为当前模态窗口，保存对话框随当前模态窗口建立父子关系，防止设置阻断置顶截图层输入。矩形/圆形的边框与填充按钮互斥，边框按钮保留滚轮调粗；填充图标单独绘制，按钮高度与相邻工具一致。
 
-HDR 截图自动落盘在后台进行，仅输出 HDR / SDR 两张压缩 RGBA16 PNG，色彩信息嵌入 ICC，不再默认生成 JSON / 裸浮点附件。`src/image/HdrPreview.h` 共用 VSCap 与 VSP 的 SDR 映射和查找表；`PlayerPng` 的 SIMD 路径支持 RGBA8 / RGBA16 及受支持的 cICP，保留原始像素。图片信息栏统一报告物理像素视口。实图性能及 HDR 屏未复验边界见 [HDR 续修](docs/vscap-hdr-1.0.11.md)。
+VSCap 新配置默认 JXL，顺序 JXL / AVIF / PNG，保留已有显式配置。HDR 后台自动保存跟随格式，JXL / PNG 继续附带 SDR 副本，无 JSON / 裸浮点附件。`DesktopCapture` 查询 `DISPLAYCONFIG_SDR_WHITE_LEVEL`，`capSdrWhiteNits` 经选区、PNG、JXL XML、HDR 剪贴板和贴图传递。`HdrPreview.h` 撤销桌面 SDR 增益；普通 HDR 图仍走通用映射。`ImageJxl` 使用静态 libjxl 0.12.0 无损 RGBA16 编解码、原生 PQ / HLG 标记，不依赖 FFmpeg。VSP 两个截取菜单均支持 PNG / AVIF / JXL；AVIF Full 复用 AWJ，Lite 回退外部 FFmpeg，PNG 原有 HDR 附件行为保留。图片视口按物理像素报告。见 [JXL 记录](docs/jpeg-xl-1.0.11.md) 与 [白位修复](docs/vscap-sdr-white-1.0.11.md)。
 
 ## 1. 发心与边界
 
