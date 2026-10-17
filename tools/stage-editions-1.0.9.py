@@ -111,8 +111,8 @@ for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', f'{version}-PlayerLite
         copy(root / 'assets/languages' / name, target / 'languages' / name)
     for name in ['README.md', 'project.md', 'changelog.md', 'THIRD_PARTY_NOTICES.md']:
         copy(root / name, target / name)
-    for name in [f'validation-{version}.md', f'release-{version}.md']:
-        copy(root / 'docs' / name, target / 'docs' / name)
+    for source in (root / 'docs').glob('*.md'):
+        copy(source, target / 'docs' / source.name)
     for name in ['Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll', 'Qt6Concurrent.dll']:
         copy(qt / 'bin' / name, target / name)
     copy(qt / 'plugins/platforms/qwindows.dll', target / 'platforms/qwindows.dll')

@@ -28,6 +28,7 @@ $sourceFiles = & git -C $root ls-files --cached --others --exclude-standard
 if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate project sources.' }
 foreach ($relative in $sourceFiles) {
     if ($relative -like 'assets/icon-concepts/*') { continue }
+    if (-not (Test-Path -LiteralPath (Join-Path $root $relative) -PathType Leaf)) { continue }
     Copy-FileToPayload $relative
 }
 # Keep the VS API headers, not its full Git checkout or build environment.
@@ -41,8 +42,8 @@ foreach ($part in @('include','lib','share')) { Copy-TreeToPayload ".deps/fff-pl
 # Extracted, pinned CMake dependency inputs avoid another network download.
 foreach ($name in @('libdeflate','libavif','dav1d','libyuv','turbojpeg-source','nasm')) { Copy-TreeToPayload ".deps/image/$name" @('.git','__pycache__') }
 Copy-TreeToPayload '.deps/color/ucrt64'
-Copy-FileToPayload 'docs/nuxbox-performance-handoff.md'
-Copy-Item -LiteralPath (Join-Path $root 'docs/nuxbox-performance-handoff.md') -Destination (Join-Path $payload 'START-HERE.md')
+Copy-FileToPayload 'docs/performance-debugging.md'
+Copy-Item -LiteralPath (Join-Path $root 'docs/performance-debugging.md') -Destination (Join-Path $payload 'START-HERE.md')
 $commit = & git -C $root rev-parse HEAD
 $changes = @(& git -C $root status --short)
 $files = @(Get-ChildItem -LiteralPath $payload -Recurse -File | Sort-Object FullName)

@@ -56,7 +56,7 @@ New-Item -ItemType Directory -Force -Path $staging | Out-Null
 Copy-Item -LiteralPath $exe -Destination $staging
 if (Test-Path -LiteralPath (Join-Path $BuildDirectory 'color/vsr-color.dll')) {
     Copy-Item -LiteralPath (Join-Path $BuildDirectory 'color') -Destination $staging -Recurse
-    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/color-management-1.0.4.md') -Destination (Join-Path $staging 'COLOR-MANAGEMENT.md')
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/color-management.md') -Destination (Join-Path $staging 'COLOR-MANAGEMENT.md')
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $staging "runtime") | Out-Null
 Copy-Item -LiteralPath $pythonRuntime -Destination (Join-Path $staging "runtime\python") -Recurse

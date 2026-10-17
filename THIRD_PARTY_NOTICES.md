@@ -39,12 +39,12 @@ Hyllian, Copyright (c) 2015. MIT License. Adapted from the pass-0 diagonal kerne
 - `madVR09217`：从用户现有 PotPlayer madVR 目录复制，专有软件，保留目录内 license.txt；不是本项目开源代码。播放器通过 DirectShow 加载随附 madVR64.ax，不注册系统。
 - 早期仅在本地携带；本轮完整便携包包含上述现有运行时与许可，源码仓库仍不包含这些二进制。清理后的资源 SHA-256 随包记录。
 
-- `anime4k-a-fast.glsl`：官方 Anime4K Windows Low-end Mode A (Fast) 的六段组合，算法未修改，保留上游版权 / MIT 等原文件许可；commit `7684e9586f8dcc738af08a1cdceb024cc184f426`。文件顺序和来源见 `docs/anime4k-fast-source.md`。
-- `anime4k-no-cnn.glsl`：同一 Anime4K commit 的 Clamp_Highlights + Thin_HQ + Darken_HQ 组合，保留原 MIT 许可与系数；传统梯度 / DoG 线条处理，不含神经网络。来源见 `docs/player-six-stage-1.0.3.md`。
+- `anime4k-a-fast.glsl`：官方 Anime4K Windows Low-end Mode A (Fast) 的六段组合，算法未修改，保留上游版权 / MIT 等原文件许可；commit `7684e9586f8dcc738af08a1cdceb024cc184f426`。来源为 [bloc97/Anime4K](https://github.com/bloc97/Anime4K/tree/7684e9586f8dcc738af08a1cdceb024cc184f426)，完整许可保留在该 shader 文件头。
+- `anime4k-no-cnn.glsl`：同一 Anime4K commit 的 Clamp_Highlights + Thin_HQ + Darken_HQ 组合，保留原 MIT 许可与系数；传统梯度 / DoG 线条处理，不含神经网络。来源同上，完整许可保留在 shader 文件头。
 
 ## mpv 用户着色器库
 
-`assets/mpv-shaders` 收录维护者指定的 mpv User Shaders 与 hooke007 列表中的 GLSL / hook 文件，按上游来源保留目录、版权头和许可证。`manifest.json` 固定每个源文件的 URL、修订、字节数和 SHA-256；相同内容只携带一份，其他来源列入 aliases。这些着色器不是本项目 MIT 许可的原创代码，遵循各文件/上游目录的许可。使用前请查看对应许可；上游未给单独许可的 gist 不另行宣称 MIT。来源与执行兼容说明见 `docs/mpv-shaders-interpolation-1.0.3.md`。
+`assets/mpv-shaders` 收录维护者指定的 mpv User Shaders 与 hooke007 列表中的 GLSL / hook 文件，按上游来源保留目录、版权头和许可证。`manifest.json` 固定每个源文件的 URL、修订、字节数和 SHA-256；相同内容只携带一份，其他来源列入 aliases。这些着色器不是本项目 MIT 许可的原创代码，遵循各文件/上游目录的许可。使用前请查看对应许可；上游未给单独许可的 gist 不另行宣称 MIT。来源见 `assets/mpv-shaders/manifest.json`，使用方式见 [Renderer 指南](docs/renderer.md)。
 
 ## 便携更新工具
 
@@ -61,7 +61,7 @@ Hyllian, Copyright (c) 2015. MIT License. Adapted from the pass-0 diagonal kerne
 
 - libdeflate 1.25：MIT，https://github.com/ebiggers/libdeflate 。RGBA8 PNG 快速路径静态链接，版本及 SHA-256 固定于 `tools/image-runtime.cmake`；许可全文随 `IMAGE-LICENSE.txt` 分发。不增加用户需安装的 DLL。
 
-- 图层 PSD/PSB 模块使用 zlib 1.3.2，Jean-loup Gailly / Mark Adler，zlib 许可；未修改的最小压缩/解压源文件位于 `third_party/image-zlib`，来源为 libjpeg-turbo 3.2.0 的 spng 内含副本。静态链接，无新增运行时 DLL；完整许可随 `docs/image-zlib-LICENSE.txt` 分发。PSD 解析、工具与编辑核心为本项目 MIT 自有实现，未复制 GIMP GPL 或闭源 Photopea 代码。
+- 图层 PSD/PSB 模块使用 zlib 1.3.2，Jean-loup Gailly / Mark Adler，zlib 许可；未修改的最小压缩/解压源文件位于 `third_party/image-zlib`，来源为 libjpeg-turbo 3.2.0 的 spng 内含副本。静态链接，无新增运行时 DLL；完整许可随 `licenses/image-zlib-LICENSE.txt` 分发。PSD 解析、工具与编辑核心为本项目 MIT 自有实现，未复制 GIMP GPL 或闭源 Photopea 代码。
 
 - libavif 1.4.2：BSD-2-Clause，https://github.com/AOMediaCodec/libavif 。通过官方源码与 dav1d 静态链接；构建时仅扩大显式图像像素上限，保留网格、格式、尺寸算术与码流检查。依赖版本和 SHA-256 固定于 `tools/image-runtime.cmake`。
 - dav1d 1.5.3：BSD-2-Clause，https://code.videolan.org/videolan/dav1d 。Windows MinGW 静态库来自 MSYS2；不增加用户需安装的解码器。

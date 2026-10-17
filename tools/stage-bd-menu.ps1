@@ -12,5 +12,5 @@ New-Item -ItemType Directory -Force -Path $output | Out-Null
 foreach ($file in @('libvlc.dll', 'libvlccore.dll', 'plugins', 'COPYING.txt', 'AUTHORS.txt')) {
     Copy-Item -LiteralPath (Join-Path $source $file) -Destination $output -Recurse -Force
 }
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../docs/libvlc-NOTICE.txt') -Destination $output -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../third_party/runtime-notices/libvlc-NOTICE.txt') -Destination $output -Force
 Write-Host "BD menu runtime staged: $output"

@@ -1,111 +1,60 @@
-# VS Renderer / VS Player
+# VS Renderer / VS Player / VS Cap
 
-Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜链生成 VapourSynth 脚本、预览和导出；**VS Player** 独立播放视频、音频与图片，并可加载 VPY 实时滤镜。**VS Cap**为操作舒适度接近Snipaste的高精度HDR截图工具，并保存为JXL/AVIF/PNG格式。提供**单文件版本VS Player**，仅支持Jinc/D3D11直通模式，不能加载滤镜。
+![源码版本 1.0.12](https://img.shields.io/badge/source-1.0.12-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
 
-当前版本：**1.0.12** 2026.10.17
+Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片，用 **VSCap** 截图与标注。
 
-VS后端：R81
+[下载便携包](https://github.com/user-Wing/VS-Renderer-GUI/releases) · [ModelScope 下载源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) · [操作指南](docs/README.md) · [更新日志](changelog.md)
 
-3FP后端：20261017 PR#21
+源码版本：**1.0.12**。这是工作区版本，不代表下载源已有同版本附件；下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
 
-FFMPEG：自编译完整版 2026.10.07 加强SVT-AV1能力
+## 功能介绍
 
-## 下载与启动
+| 程序 | 使用场景 |
+| --- | --- |
+| VS Renderer | 可视化组织VapourSynth滤镜和分段时间组，保存 VPY 预设；源/输出预览、多路视频比对、批量编码导出及 BD Remux |
+| VS Player | 播放本地媒体、网络链接与图片；音轨/双字幕、章节、逐帧、截图；Full 版本可选 VS 增强和补帧 |
+| VSCap | 框选、移动选区、绘图和可编辑文字；剪贴板复制、多贴图、JXL/AVIF/PNG 保存 |
+| PhotoCraft（Full） | 从播放器打开独立图片编辑器，编辑图层、文字与滤镜；关闭播放器后可继续保存工作 |
 
-在Release/Latest中下载最新版解压即可，主程序为vs-player.exe/vs-cap.exe和VSRenderer.exe。
+VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处理视频。配置好的VPY脚本可以直接导入VS Player播放，要求Full版本。
 
-最新版 1.0.11/1.0.12 (2026.10.17) 更新说明
+## 安装与启动
 
-修复了如下问题：
+1. 下载便携包并完整解压到独立目录；Full 建议使用纯英文安装路径，避免 RIFE 模型加载的已知路径问题。
+2. 运行 `VSRenderer.exe`、`vs-player.exe` 或 `vs-cap.exe`。**Full 随包提供 Qt、Python 和 VapourSynth，无需另行安装。**
+3. 打开媒体后先使用 D3D11 或 Jinc 直通，再按需要启用增强；高级滤镜速度取决于素材、输出尺寸和硬件。
 
-Jinc 直通显著偏暗及无音轨视频启用 Anime4K 后跳到结尾。
+系统要求：Windows 10 22H2+ x64、支持 Direct3D 11 的显卡与驱动。RIFE 需要 Vulkan；AWJ 图片转换需要 AVX2，增强 FFmpeg 需要匹配的 CPU 指令集。
 
-BD 右键与播放列表显式返回主菜单入口及文件章节位置，整卷连续播放点击 / 拖动无法跳转，BD 拖动进度条在松开时只定位最终目标；光盘菜单模式直接进入选集页，跳过版权首播片。
+| 分发形式 | 功能与运行要求 |
+| --- | --- |
+| Full | Renderer、Player、VSCap、VS 滤镜及完整编辑/可选后端；以所下载包的组件清单为准 |
+| 当前 PlayerLite | 独立播放器，仅 3FP、D3D11/Jinc、音视频字幕和图片查看；不含 Renderer、VS/RIFE、PhotoCraft、libVLC/LAV/madVR 或高级色彩运行时 |
+| 单文件 `VS-Player.exe` | 遵循 PlayerLite 边界；首次启动展开缓存，同目录保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
 
-VS 预取帧在短暂延迟后顺序追赶；手动 Anime 档位允许大文件冷索引，不再按文件大小推测硬盘类型并强制回退。底栏编码标签、倍速与右键菜单改为半透明，见 [Anime 播放验证](docs/player-anime-performance-1.0.12.md)。
+早期名为 Lite 的包只是 Full 删减部分组件，与当前 PlayerLite 不同。
 
-Renderer 时间与进度条同排、文件/播放/缩放控件同排，预设携带时间组并支持全片单组导入当前组。预设管理与社区递归显示目录树，默认源是 [VS-GUI 公开预设社区](https://www.modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI/PresetCommunity)。
+## 快速上手
 
-## 核心功能
+**视频处理**：在 Renderer 打开视频 → 添加滤镜或加载预设 → 比较源/输出画面 → 保存预设或加入导出队列。按段使用不同滤镜、社区预设和多路对比见 [Renderer 指南](docs/renderer.md)。
 
-1.0.5 **Full** 内置 MKVToolNix 102.0；Player 设置新增“组件下载”，从 ModelScope 展示软件与组件版本，支持自动下载更高版本、缓存清理及固定目录安装。Player 打开 BD 直接加入播放列表，Remux 操作位于 Renderer；Tab 透明度默认 50%，设置窗口优先。详见 [组件与播放器更新](docs/components-player-1.0.5.md) 和 [1.0.5 发行草稿](docs/release-1.0.5.md)。
+**媒体播放**：拖入媒体，`Space` 播放/暂停，`Enter` 或 `F11` 切换全屏，`Esc` 退出全屏，`Tab` 查看实际输出与运行信息。音轨、字幕、预设和设置在右键菜单；详细操作见 [Player 指南](docs/player.md)。
 
-2026-10-05 原生后端补充大分辨率 AV1 软件解码线程、平面上传与 D3D11 专用 shader 优化；本地 dist 已更新核心。780M 真实 8K 软件回退改善但仍未达 48fps，AV1 444 硬解限制与精度回归见 [软件回退记录](docs/av1-software-decode-1.0.5.md)。
+**截图与图片**：在 VSCap 中设置截图/贴图热键，框选后调整选区并标注；“✓”复制到剪贴板，保存按钮选择格式与路径。播放器的图片工具栏可打开 PhotoCraft 或格式转换，见 [截图与图片指南](docs/capture-images.md)。
 
-2026-10-05 本地新增 **BD Remux** 页面和 Player 右键“打开 BD 文件夹 / 光盘镜像”：读取 MPLS 自动列出剧集候选，支持完整节目、手动 M2TS、自定义匹配模板、结构反馈和 MKVToolNix 无重编码队列；网络挂载可通过现有 ModelScope Manager 下载到本地。操作与真实验收边界见 [BD 使用说明](docs/bd-remux-1.0.5.md)。
+**蓝光**：Player 打开 BD 文件夹后选择节目或菜单模式；需要无重编码封装时使用 Renderer 的 BD Remux 页面，见 [蓝光指南](docs/bluray.md)。
 
-| 程序        | 功能                                                         |
-| ----------- | ------------------------------------------------------------ |
-| VS Renderer | 可排序、可开关的滤镜链；参数编辑与 VPY 预设；源画面和处理结果同步预览 |
-|             | Anime4K、降噪、锐化、去伪影、反交错，以及 MVTools / RIFE 补帧 |
-|             | 最多九路视频比对、时间对齐、并排/网格/滑块；单文件、批量及对比画布 MKV 导出 |
-| VS Player   | 视频、音频、网络链接与超大图片；倍速、逐帧、章节、播放列表、缩放与截图 |
-|             | VPY 实时处理，自动或手动 Anime 档位；主次字幕、音轨切换、同步与均衡器 |
-| 两个程序    | 随包运行时、便携配置、检查更新                               |
+## 使用边界与配置
 
-## VS Renderer 操作
+- 在7940HX上，**8K48 软件播放仍未达到实时目标**（已经榨干了D3D11的极限，但是仍然需要14700K以上的处理器性能）；局部测试零新增丢帧不等于所有素材全程流畅，增强/补帧也没有通用实时保证。
+- 原始高度超过 2160p 时禁用内置自动 Anime 和四档 Anime4K；D3D11/Jinc 可用，自定义 VPY 需自行评估负载。
+- Full 新配置在 HDR→SDR 时自动使用高级色彩映射；已有配置保留。PlayerLite 不含该运行时，见 [色彩设置](docs/color-management.md)。
+- 图片使用 CPU 解码，动图当前显示首帧；复杂 PSD/RAW 支持以编辑器实际能力为准。
+- Player 配置保存在程序旁 `player.ini`；Renderer 使用独立设置。更新前保留自定义 VPY、项目、截图及配置，按 [更新说明](docs/portable-updates.md) 操作。
 
-1. **导入视频**：在“VS 实时渲染”中打开或拖入源文件。
-2. **编辑处理链**：从滤镜库添加节点，调整顺序、开关与参数；在“参数与脚本”查看生成的 VPY，播放比较源画面与处理结果。
-   **mpv GLSL**：按功能分类选择或加载自定义 GLSL；输出可选倍率或指定分辨率，开启“保持宽高比”后宽高联动。悬停查看完整着色器路径及硬件要求。
-3. **保存预设**：使用顶部“预设管理”保存/加载处理链，或“加载 VPY”使用现有脚本。
-4. **导出**：打开导出窗口，粘贴 3FUI 的 FFmpeg 命令，保留输入和输出位置；选择 MKV 输出并加入编码队列。批量文件放入“准备文件”，统一加入队列。
+## 开发与反馈
 
-**多视频比对**：左侧导航切到“图像分析比对”，导入多个视频，选择并排、网格或滑块布局；用各路时间轴调整偏移，用源下拉框切换视频，用音频下拉框选择声音来源。滚轮缩放，放大后拖动画面。
+[项目地图](project.md) 说明架构和改动入口，[构建指南](docs/dependencies.md) 说明开发环境，[性能排查](docs/performance-debugging.md) 说明如何复测。反馈问题请提供软件/包版本、Full 或 PlayerLite、实际解码与输出模式、素材元数据、复现步骤和日志。
 
-**对比画布导出**：使用“导出对比画布…”。支持 AB 滑块、ABC 左右 2+1、ABCD 常规/滑块 2×2；输出保持最大源分辨率，其它布局会提示不支持。
-
-## VS Player 操作
-
-播放器的“设置 → 解码设置 → 打开3FP 解码配置…”提供可选 libplacebo 高级色彩管理，默认保留原生 709 / 2020 模式。支持 HDR→SDR / scRGB、ICC、输出 LUT、末端抖动及 Tab 诊断；应用配置不会重新加载 VS 处理链。实际能力与 HDR 边界见 [色彩管理说明](docs/color-management-1.0.4.md)。
-
-打开或拖入视频、音频、图片，也可从右键菜单打开文件夹或网络链接。底栏提供逐帧、关键帧、前后文件、时间/帧号输入和倍速；画面右键菜单提供预设、音频、字幕、截图、缩放算法及设置。
-
-D3D11 / Jinc 直通及 VS 模式支持拖动进度条时连续预览；松手精确定位并恢复原暂停或播放状态。帧号修改后按 Enter 或点击其它位置提交，跳转未完成时 Enter 不触发全屏。Tab 信息面板可从右下角调整大小，下方滑条调整背景不透明度；本轮验证与性能未达标项见 [交互与调度记录](docs/player-interaction-performance-1.0.5.md)。
-
-停用预设的原画播放同样使用 3FP 直通，不建立 VS 帧索引；Jinc / D3D11 不等待 VS 初始化。内嵌 ASS / SRT 字幕按播放位置增量读取，不再为了提取字幕扫描整部视频。自定义 VPY 和增强 / 补帧仍可能需要首次索引。大文件加载验证边界见 [直通加载说明](docs/player-direct-open-1.0.4.md)。
-
-**图片工具栏**：点击“PhotoCraft 图像编辑器”打开原生 Rust 编辑工作区，完整采用 PhotoCraft 的菜单、工具组、参数栏、文档标签和右侧面板。裁剪、调整尺寸、文字、图层及滤镜均在此窗口操作；同一播放器重复打开同一路径会切回已有文档，关闭播放器后编辑器仍可保存未完成的工作。
-
-图片查看栏保留旋转、镜像、回收站、桌面背景，以及“高精度导出和格式转换”。后者继续使用 [AWJimage](https://github.com/Dominic485649/AWJimage) 的 AVIF、WebP、JXL、JPEGli、PNG 编码（该后端需要 AVX2）。PhotoCraft 的文件保存方式以自身菜单为准；“另存为”会将当前文档关联到新路径，请选择新文件名以保留原图。
-
-普通图片、PSD/PSB 和支持的 RAW 直接打开原文件；超大图片复用 VSP 原有解码器，以 32 MiB 分带交换完整分辨率、位深、透明度和 ICC，已验证 48000×32000 PNG；旋转后的视图及 AVIF 等原生编辑器暂不支持的格式，通过 16 位 PNG 或 32 位浮点 TIFF 副本传入，保留 ICC 和 HDR 原始值。视图副本需要在编辑器中另存为。VSP 的高精度截图与 SDR 显示回退继续保留。运行无需安装 Rust，接入、体积和验收见 [PhotoCraft 编辑器记录](docs/photocraft-editor-1.0.8.md)。
-
-| 操作                     | 快捷键 / 鼠标                                                |
-| ------------------------ | ------------------------------------------------------------ |
-| 打开文件 / 加载 VPY      | `Ctrl+O` / `Ctrl+P`                                          |
-| 播放 / 暂停              | `Space`                                                      |
-| 切换全屏 / 退出全屏      | `Enter` 或 `F11` / `Esc`                                     |
-| 显示输入、输出与运行信息 | `Tab`                                                        |
-| 视频前后跳转             | `←` / `→`，默认 ±1 秒，设置中可改为帧或关键帧                |
-| 较大跨度跳转             | `Ctrl+←/→` 默认 ±10 秒；`Ctrl+Alt+←/→` 默认 ±60 秒           |
-| 切换图片                 | `←` / `→`，按同文件夹名称排序                                |
-| 调整音量 / 浏览图片      | 视频滚轮默认调音量，右键可改鼠标位置锚定缩放；图片滚轮缩放，Shift滚轮平移 |
-
-- **滤镜预设**：右键 → VapourSynth 预设 → 开发者内置，选择自动 Anime、Realistic 或六个手动固定档位；用户 VPY 可通过 `Ctrl+P` 加载。Renderer 的 mpv GLSL 节点支持按名称搜索随包着色器。图片和网络视频不执行 VS 滤镜。
-- **实时补帧**：右键 → 图像处理 → 补帧，选择 Jinc / D3D11 两个自动入口，或 RIFE 完整/半宽高、MVTools HQ/LQ 与两个呈现器组成的八个固定组合。保持 YUV444P16 输出；关闭恢复 Anime 自动超分。实时性能取决于素材与设备，完整 RIFE / MVTools 的本机无丢帧目标尚未全部通过。
-- **音频与字幕**：右键切换音轨、调整同步、打开均衡器或选择主次字幕。同目录名称匹配的音频/字幕可自动加载；播放视频时，音频拖到画面上半部作为外部音轨，下半部单独播放；字幕上40%挂为次字幕，下60%挂为主字幕。
-- **设置与关联**：设置左下角加载/保存完整 INI 配置；“确定”保存并关闭，“应用”保留窗口及暂停/播放状态。文件关联页注册所选格式后，在 Windows 默认应用中选择 VS Player。
-
-**图层编辑**：支持 RGB PSD/PSB 像素图层、层组、蒙版及有限混合模式；选择、修复/图章、画笔、渐变/填充、局部调整、栅格化文字/形状、色阶/曲线和ICC工作空间转换保持8/16bit或Float32精度。图片共用一个编辑窗口的文档标签，普通背景层锁定，PSD保留原锁定；图层右键提供混合选项和常用操作，见 [文档与混合选项](docs/image-editor-workflows-1.0.4.md)。文件菜单可另存支持的PSD/PSB图层，或导出扁平PNG/浮点TIFF。新建Float32文档缺少Photoshop HDR色彩数据时应选TIFF；DNG和完整复杂PSD对象尚未支持。
-
-HDR显示自动检测Windows能力并回退SDR，视图菜单可调整HDR→SDR映射；真实HDR面板观感尚未验证。操作与限制见 [第二轮编辑说明](docs/image-editor-round2-1.0.4.md)。
-
-图片不使用 VS 或视频预解码，动图目前显示首帧；图片解码使用 CPU。滤镜实时速度取决于素材、分辨率和硬件，可切换较轻的预设或离线导出。
-
-HEVC 444p10 高码率尖峰的本机复现、队列预算与解码线程对照见 [尖峰性能诊断](docs/hevc444-peak-diagnosis-1.0.6.md)。实验参数尚未部署为默认值。
-
-1.0.4开发版采用增强版FFmpeg，支持AVS3编解码及更多旧格式。新增编码器可在导出自定义命令中指定；见 [FFmpeg运行时说明](docs/ffmpeg-enhanced-1.0.4.md)。音频/字幕菜单显示轨道名称、语言和Default/Forced，默认使用编号最前的Default轨道，无Default时选择同类首条音频/字幕。程序文件约625 MB，用户缓存另计；见 [轨道与体积](docs/tracks-size-1.0.4.md)。
-
-## 文档与源码构建
-
-- [更新日志](changelog.md)：版本改动、性能测量与验证记录。
-- [依赖与构建指南](docs/dependencies.md)：Qt / CMake、VapourSynth、3FP 和完整运行时准备步骤。
-- [NuxBox 性能开发交接](docs/nuxbox-performance-handoff.md)：780M 上四份本地素材、mpv 对照条件、原生构建和验收；干净开发包由 `tools/package-dev-handoff.ps1` 生成。
-- [便携更新说明](docs/portable-updates.md)：配置保留、更新包与安装流程。更新包兼容 1.0.2 更新器，安装时保留已有目录路径。
-- [项目地图](project.md)：实现路径与专项技术文档。
-- [工作区清理记录](docs/workspace-cleanup.md)：开发副本与缓存占用；主目录 `Clean-Workspace.bat` 可手动清理，`--preview`仅预览。
-
-源码采用 [MIT License](LICENSE)，随包第三方组件遵循各自许可证，见 [第三方声明](THIRD_PARTY_NOTICES.md)。
-
-1.0.8 延迟加载 3FP、VS/Python、字幕库和 GPU 计数器，直接看图不初始化视频后端。Renderer 对比默认使用 D3D11 原生直通，并保留可选高精度算法。HEVC Rext 4:4:4 10 位在 D3D11VA 不支持时使用 NVDEC/CUDA；正常 D3D11VA 路径保持不变。CPU 预缩放位于解码设置，默认关闭，仅作为实验项，性能验收留待专项更新。实测条件见 [性能与大图验收](docs/performance-large-images-1.0.8.md)。
+源码采用 [MIT License](LICENSE)，第三方组件按各自许可证分发，见 [第三方声明](THIRD_PARTY_NOTICES.md)。

@@ -25,6 +25,7 @@ if (Test-Path -LiteralPath $archive) { throw 'Archive already exists; do not sil
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 # Construct a clean distribution, retaining the live installation's settings and user files.
 $excludedDirectories = @('cache', (Join-Path $program 'data'), 'PhotoCraftData', 'shader-cache', 'screenshots', 'vpy', '__pycache__', '.git', '.deps', 'temp', 'logs')
+$excludedDirectories += (Join-Path $program 'docs')
 if ($Edition -eq 'Lite') {
     $excludedDirectories += @((Join-Path $program 'LAVFilters64'), (Join-Path $program 'madVR09217'), (Join-Path $program 'runtime/mkvtoolnix'))
 }
@@ -34,6 +35,9 @@ foreach ($name in @('README.md', 'project.md', 'changelog.md')) {
     Copy-Item -LiteralPath (Join-Path $root $name) -Destination $payload -Force
 }
 Copy-Item -LiteralPath (Join-Path $root 'docs') -Destination $payload -Recurse -Force
+New-Item -ItemType Directory -Path (Join-Path $payload 'licenses') -Force | Out-Null
+Get-ChildItem -LiteralPath (Join-Path $root 'third_party/runtime-notices') -File | Copy-Item -Destination (Join-Path $payload 'licenses') -Force
+Copy-Item -LiteralPath (Join-Path $root 'third_party/image-zlib/LICENSE') -Destination (Join-Path $payload 'licenses/image-zlib-LICENSE.txt') -Force
 foreach ($name in @('zh_CN.json', 'en_US.json')) {
     Copy-Item -LiteralPath (Join-Path $root "assets/languages/$name") -Destination (Join-Path $payload "languages/$name") -Force
 }

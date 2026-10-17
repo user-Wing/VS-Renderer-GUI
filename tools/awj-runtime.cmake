@@ -26,5 +26,5 @@ if(NOT awj_source_hash STREQUAL "1049dbeb46cd63779e54f0b22124a627716ea9e3b22797f
 endif()
 add_custom_command(TARGET VSPlayer POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_directory "${awj_directory}" "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj"
-    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/docs/awjimage-NOTICE.txt" "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj/VSPlayer-NOTICE.txt"
+    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third_party/runtime-notices/awjimage-NOTICE.txt" "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj/VSPlayer-NOTICE.txt"
     VERBATIM)

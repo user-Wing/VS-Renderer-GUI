@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$BuildDirectory = "build/mingw-release",
     [string]$PreviousDirectory = "dist/VS-Renderer-GUI-1.0.1-windows-x64",
     [string]$ShaderDirectory = "C:/PortableSoft/FFmpegFreeUI ReadyToRun x64/libplacebo",
@@ -58,19 +58,10 @@ Get-ChildItem -LiteralPath $MadvrDirectory | Copy-Item -Destination (Join-Path $
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md"), (Join-Path $projectRoot "project.md"), (Join-Path $projectRoot "changelog.md"), (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $output -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/dependencies.md") -Destination (Join-Path $output "DEPENDENCIES.md") -Force
 New-Item -ItemType Directory -Path (Join-Path $output "docs") -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $projectRoot "docs/player-performance-1.0.2.md"), (Join-Path $projectRoot "docs/anime4k-fast-source.md"), (Join-Path $projectRoot "docs/portable-updates.md"), (Join-Path $projectRoot "docs/player-images-menu-1.0.3.md"), (Join-Path $projectRoot "docs/player-images-audio-1.0.3.md"), (Join-Path $projectRoot "docs/player-six-stage-1.0.3.md"), (Join-Path $projectRoot "docs/player-resolution-threshold-1.0.3.md") -Destination (Join-Path $output "docs") -Force
+Get-ChildItem -LiteralPath (Join-Path $projectRoot 'docs') -Filter '*.md' -File | Copy-Item -Destination (Join-Path $output 'docs') -Force
 Write-Host "Local $version program directory: $output"
 
-Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/image-editor-plan.md'), (Join-Path $projectRoot 'docs/image-editor-round2-1.0.4.md') -Destination (Join-Path $output 'docs') -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/image-editor-interaction-1.0.4.md') -Destination (Join-Path $output 'docs') -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/image-editor-workflows-1.0.4.md') -Destination (Join-Path $output 'docs') -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot 'third_party/image-zlib/LICENSE') -Destination (Join-Path $output 'docs/image-zlib-LICENSE.txt') -Force
-
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets/image-runtime-LICENSE.txt") -Destination (Join-Path $output "IMAGE-LICENSE.txt") -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot "docs/player-apply-avif-1.0.3.md") -Destination (Join-Path $output "docs") -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot "docs/player-manual-presets-1.0.3.md") -Destination (Join-Path $output "docs") -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot "docs/release-1.0.3.md"), (Join-Path $projectRoot "docs/avif-large-yuv444-analysis.md"), (Join-Path $projectRoot "docs/renderer-panels-1.0.3.md"), (Join-Path $projectRoot "docs/renderer-ui-export-1.0.3.md"), (Join-Path $projectRoot "docs/icons-integration.md") -Destination (Join-Path $output "docs") -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot "docs/mpv-shaders-interpolation-1.0.3.md") -Destination (Join-Path $output "docs") -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/player-image-tools-1.0.4.md'), (Join-Path $projectRoot 'docs/awjimage-NOTICE.txt') -Destination (Join-Path $output 'docs') -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/tracks-size-1.0.4.md'), (Join-Path $projectRoot 'docs/ffmpeg-enhanced-1.0.4.md'), (Join-Path $projectRoot 'docs/ffmpeg-enhanced-runtime.json') -Destination (Join-Path $output 'docs') -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/color-management-1.0.4.md') -Destination (Join-Path $output 'docs') -Force
+New-Item -ItemType Directory -Path (Join-Path $output 'licenses') -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $projectRoot 'third_party/image-zlib/LICENSE') -Destination (Join-Path $output 'licenses/image-zlib-LICENSE.txt') -Force
+Get-ChildItem -LiteralPath (Join-Path $projectRoot 'third_party/runtime-notices') -File | Copy-Item -Destination (Join-Path $output 'licenses') -Force

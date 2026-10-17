@@ -1,10 +1,10 @@
 # API 20 原生内核构建
 
-1.0.12 继续使用同一固定上游与完整补丁；补丁已包含上传纹理／暂存环、8 线程策略、HEVC 异步交接、拓扑提示及可选 MMCSS / DXGI 等待对象。构建脚本无需手工修改 `build/native-api20`，开关见 [性能记录](player-kernel-performance-1.0.12.md)。
+1.0.12 继续使用同一固定上游与完整补丁；补丁已包含上传纹理／暂存环、8 线程策略、HEVC 异步交接、拓扑提示及可选 MMCSS / DXGI 等待对象。构建脚本无需手工修改 `build/native-api20`，开关见 [诊断开关](performance-debugging.md)。
 
-本轮最终固定上游 `Lake1059/FFF_Project` 的 `ce195ebd06e9cbb8352a443f0c874cf569a60733`（PR23，含 PR22），在独立 checkout 应用 `patches/3fp-api20-vsrenderer-1.0.10.patch`。不能把 API18 补丁直接应用到 API20，也不能直接使用未移植扩展的上游 DLL。
+当前固定上游 `Lake1059/FFF_Project` 的 `ce195ebd06e9cbb8352a443f0c874cf569a60733`（PR23，含 PR22），在独立 checkout 应用 `patches/3fp-api20-vsrenderer-1.0.10.patch`。不能把 API18 补丁直接应用到 API20，也不能直接使用未移植扩展的上游 DLL。
 
-保留本项目的外部 VS 帧输入、clock-only、输出格式、像素探测、缩放、音频 EQ/tempo、软件解码队列和可选 libplacebo 色彩桥。snapshot、字幕及音频电平结构均按 API20 版本号传递，MinGW/MSVC 的配置、snapshot、字幕命令及图层布局已实测一致。上游20移除了旧私有 DV/RPU 测试扩展；本补丁沿用上游公开色彩和元数据路径，没有复活该私有接口。
+保留本项目的外部 VS 帧输入、clock-only、输出格式、像素探测、缩放、音频 EQ/tempo、软件解码队列和可选 libplacebo 色彩桥。snapshot、字幕及音频电平结构均按 API20 版本号传递，构建时必须保持 MinGW/MSVC 的配置、snapshot、字幕命令及图层布局一致。上游20移除了旧私有 DV/RPU 测试扩展；本补丁沿用上游公开色彩和元数据路径，不恢复该私有接口。
 
 ## IAMF/OBR
 
@@ -45,6 +45,4 @@
 
 脚本强制 `FFF_FORCE_LIBIAMF=true`。vcxproj 补齐上游遗漏的 `fdk-aac.lib`。运行目录需保留 MSVC runtime、FFmpeg ABI63/61/7/10/12、libass、匹配的 libbluray3 及它们的依赖。第三方静态许可位于 `third_party/native-api20/`，分发时一起复制。
 
-本机实际构建目录为 `build/native-api20`（上游 archive 加同一补丁），依赖目录通过 junction 引用；这只是本机产物，不作为源码交付。补丁已在固定上游执行 `git apply --check`，构建日志位于 `build/api20-build-*.log`。完整内核包含 IAMF/OBR，但没有对应真实空间音频素材的听感验收；不能由成功链接推断该功能已完成实机验收。
-
-追加：上游PR22已合并到固定内核并编译，按用户要求未运行测试。此前API20运行证据来自PR22合入前；最终验收边界见 [续修记录](update-20261016.md)。
+修改后先检查补丁可应用，再独立构建并核对 ABI、依赖与实际媒体路径。IAMF/OBR 成功链接不能替代真实空间音频听感验收。测试结论写入源码工作区的 `development/validation.md`，不在本指南追加逐轮日志。

@@ -1,23 +1,36 @@
-# 完整便携更新与发布
+# 安装、更新、部署与打包
 
-Renderer 设置和 Player 的“设置 → 基本设置”都显示当前版本与检查更新按钮。检查读取公开数据集 `ARXChem/Software-List` 的 `VS-GUI` 目录，支持分页，按数字版本选最新的 `<版本>.7z`。例如 `1.0.10` 大于 `1.0.2`，`1.0.2.0` 等于 `1.0.2`；同版本与旧包不安装。
+## 用户更新
 
-下载使用随包 `runtime/tools/aria2-next.exe`（2.8.3），八路分段、证书验证、有限重试；哈希按小块异步验证，下载和解压也不阻塞界面。更新包需要目录接口提供有效大小与 SHA-256，下载地址使用文件 Revision 固定版本。关闭更新窗取消准备，取消或校验失败不会修改原程序目录。
+Renderer 设置或 Player“设置 → 基本设置”中检查更新。完整更新读取 ModelScope `ARXChem/Software-List` 的 `VS-GUI` 目录，按数字比较版本；同版本/旧版本不自动安装。
 
-为兼容已发布的 1.0.2 更新器，打包脚本仍使用单个带版本号的 `VS-Renderer-GUI-<版本>-windows-x64` 目录。本轮修订的 1.0.3 及后续更新器按内容识别：程序文件可以直接位于解压顶层，或位于顶层下任意名称的一层目录；必须找到唯一完整程序目录，拒绝更深嵌套、不完整包和多个完整候选。保留路径穿越、重复路径、符号链接与 Windows 保留名称检查。完整目录包含两个正式 EXE、匹配的原生 DLL、完整 VS / Python / 解码器 / 着色器 / Qt 运行时、语言包、更新工具与 `release.json`。`release.json` 示例：
+下载使用随包 aria2，完成大小与 SHA-256 校验、解压和必需文件检查后才允许安装。关闭更新窗可取消准备；失败时保留原目录。安装器等待同目录程序退出，不强杀正在播放的其它窗口。
 
-```json
-{"schema": 1, "version": "1.0.3", "platform": "windows-x64"}
-```
+安装在同级准备新目录，将旧目录保留为 `.previous-标识` 备份；保留顶层 INI、自定义 VPY、项目和截图，内置 VPY 随新版更新，旧缓存不直接沿用。备份不自动删除；确认新版本正常后再自行处理。更新失败先检查 `update.log`。
 
-包路径验证拒绝绝对路径、驱动器/ADS、父目录跳转、重复路径、链接、Windows 设备名及不合法尾字符。解压后检查必需组件和内部版本。下载并验证成功才出现“安装并重启”；点击后关闭本程序，独立 PowerShell 安装器等待该目录内其他程序退出（最多 120 秒），不强杀另一个正在播放的窗口。
+## 包形式与 FFmpeg
 
-完整更新先在原目录同级构建新目录，再把原目录移到 `.previous-<标识>` 备份，将新目录替换为原位置。保留顶层 INI、自定义 VPY、预设元数据、用户项目与截图；内置 VPY 随新版替换，旧内置和缓存仍可在完整备份查找。新目录不沿用寻帧/着色器缓存。复制失败不触碰旧目录，交换失败在原目录缺失时恢复备份；结果写入 `update.log`，安装失败会显示提示。备份不自动删除。
+Full、当前 PlayerLite 和早期 Full 删减 Lite 的范围见 [README](../README.md)。不要把 Full 更新包覆盖到 PlayerLite；独立单文件按其分发方式替换。
 
-维护者先构建并运行回归，再运行 `tools/stage-update-tools.ps1` 部署更新工具及许可（SHA-256 固定验证 aria2-next 2.8.3）。`tools/stage-portable.ps1` 也会调用它。`tools/package-portable.ps1` 从活跃目录复制到全新暂存目录，排除缓存、个人 INI / VPY、测试产物和历史脚本，携带 Anime / Realistic 及六个手动 Anime 内置 VPY。移除 madVR 的安装/卸载/重置/调试开启脚本和本机 settings.bin，保留便携运行时与许可。活跃目录的用户文件不删除。
+单文件 `VS-Player.exe` 首次运行展开到 `%LOCALAPPDATA%/VSPlayerLite/runtime/<payload-hash>/`，`player.ini` 留在启动器旁。它内置 Qt/Native 等播放器依赖，但 FFmpeg 从 EXE 同目录或 PATH 查找。需要：
 
-1.0.3 压缩采用标准 7z LZMA2：`-m0=lzma2 -mx=9 -md=256m -mfb=273 -ms=on -mmt=2`，9级极限压缩、256 MiB 字典、实心归档，不使用 Zstandard 编码，兼容支持 LZMA2 的常见解压软件。输出 `dist/<CMake 版本>.7z` 与 SHA-256 文件；包内 `local-resource-sha256.json` 在清理后重新生成，记录全部文件（不包含其自身）的校验值。
+- `ffmpeg.exe`、`ffprobe.exe`；
+- 匹配的 shared x64 DLL：`avcodec-63`、`avformat-63`、`avutil-61`、`swresample-7`、`swscale-10`、`avfilter-12` 及其依赖。
 
-1.0.3 发布安排：推送完整源码到 GitHub，创建无附件的 Release 草稿。`1.0.3.7z` 与 `1.0.3.7z.sha256` 由维护者手动上传到 GitHub Release 及 ModelScope 数据集 `ARXChem/Software-List` 的 `VS-GUI` 目录；本轮不自动上传二进制或更新源，不发布草稿。
+只有静态版 `ffmpeg.exe` 不够。缺少时按启动提示补齐同一套组件，不混搭不同 major ABI。单文件是自动展开的分发形式，需可写的配置与缓存目录。
 
-1.0.3 修正归档根目录后，1.0.2 可正常验证与更新，无需首次手动迁移。安装器保持已有安装目录路径，不因压缩包的版本目录名重命名目标；本地开发目录仍为 `dist/VS-Renderer-GUI-windows-x64`。旧固定根目录包的大小及 SHA-256 正确，但会在 1.0.2 路径安全校验阶段被拒绝；维护者需替换更新源中的 `1.0.3.7z` 并同步校验文件。
+## 维护者部署
+
+当前 Full 固定为 `dist/VS-GUI-Full`，目录式 PlayerLite 为 `dist/1.0.12-PlayerLite`。`tools/deploy-local-runtime.py` 面向已存在的这两套运行目录，更新产物、备份旧文件并核对 INI/VPY/ICC/LUT 哈希；执行前先读脚本里的源目录与目标。`tools/stage-portable.ps1` 是较早的环境组装入口，默认目录和本机路径也必须显式核对。
+
+只同步当前 guides 和许可，不部署 `development/` 历史测试数据。旧运行目录可能已有历史报告，本轮脚本调整不会自动清理这些既存文件；清理须另行核对，不能删除配置或媒体。`aria2-next.exe` 是有效依赖，不能按 `-next` 后缀一并清除。
+
+## 打包与交付
+
+1. 按 [构建指南](dependencies.md) 完成相关构建/测试，核对最终产物哈希和配置保护。
+2. Full 可用 `tools/package-portable.ps1 -ProgramDirectory 'dist/VS-GUI-Full' -Edition Full`。该脚本的 `-Edition Lite` 是历史删减 Full，仍要求 PhotoCraft，不能用来生成当前 PlayerLite。
+3. 当前 PlayerLite 的单文件构建使用 `tools/package-playerlite-single.ps1`，参数以脚本头部为准；目录式 PlayerLite 从其专用目标部署。不同版本的专用脚本不要互换。
+4. 发布包使用干净暂存，排除 INI、用户 VPY、缓存、截图、测试程序和日志，包含许可证及资源哈希。兼容旧更新器时保持单个带版本号顶层目录；新更新器可识别唯一完整目录，拒绝路径穿越、链接和多候选。
+5. 检查压缩完整性、独立解压后的清单/版本/依赖、主程序启动与配置保留。源码推送、Release 草稿、附件上传和正式发布分别确认，不由版本号或构建成功推断。
+
+本地开发记录、测试数据和 README 改动不得混进上游 PR；提交前逐项检查暂存区。运行包可携带用户指南，开发归档留在源码工作区。
