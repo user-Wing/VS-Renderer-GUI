@@ -1,10 +1,10 @@
 #include "DesktopCapture.h"
+#include "image/HdrPreview.h"
 #include <QScreen>
 #include <QtGui/qscreen_platform.h>
 #include <QPixmap>
 #include <QColorSpace>
 #include <QImageWriter>
-#include <QFile>
 #include <QTransform>
 #include <QElapsedTimer>
 #include <QtCore/qfloat16.h>
@@ -140,34 +140,14 @@ QImage pngPixels(const QImage &image)
 
 QImage preview(const QImage &image)
 {
-    if (image.text("capHdr")!="scRGB-FP16") return image;
-    auto output=image.copy();
-    for (int y=0;y<output.height();++y) {
-        auto *row=reinterpret_cast<float*>(output.scanLine(y));
-        for (int x=0;x<output.width();++x) {
-            const float l=std::max(0.0f,.2126f*row[x*4]+.7152f*row[x*4+1]+.0722f*row[x*4+2]);
-            const float scale=1.0f/(1.0f+l);
-            for (int c=0;c<3;++c) row[x*4+c]=std::max(0.0f,row[x*4+c]*scale);
-        }
-    }
-    output=output.convertedToColorSpace(QColorSpace::SRgb,QImage::Format_RGBA64);
-    output.setText("capHdr",{});
-    return output;
+    return vsr::imageForSdrDisplay(image,image.text("capHdr")=="scRGB-FP16");
 }
 
 bool savePng(const QImage &image,const QString &path)
 {
-    QImageWriter writer(path,"png");writer.setCompression(9);
-    if (!writer.write(pngPixels(image))) return false;
-    if (image.text("capHdr")!="scRGB-FP16") return true;
-    // PNG compression is lossless; PQ's integer representation is quantized.
-    // Keep exact captured linear samples beside it for precision workflows.
-    QFile raw(path+".scrgb-f32");
-    if (!raw.open(QIODevice::WriteOnly)) return false;
-    for (int y=0;y<image.height();++y)
-        if (raw.write(reinterpret_cast<const char*>(image.constScanLine(y)),image.width()*16)!=image.width()*16) return false;
-    QFile metadata(path+".json");
-    if (!metadata.open(QIODevice::WriteOnly)) return false;
-    return metadata.write(QString("{\"width\":%1,\"height\":%2,\"channels\":4,\"rawFormat\":\"RGBA-float32-little-endian\",\"rawColorSpace\":\"linear-sRGB-80nits\",\"pngColorSpace\":\"BT.2100-PQ\"}\n").arg(image.width()).arg(image.height()).toUtf8())>0;
+    // Qt maps 0..100 to zlib 0..9; 9 accidentally selected no compression.
+    QImageWriter writer(path,"png");writer.setCompression(70);
+    // The ICC profile in the PNG carries HDR color information without sidecars.
+    return writer.write(pngPixels(image));
 }
 }

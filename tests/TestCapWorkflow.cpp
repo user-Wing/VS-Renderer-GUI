@@ -166,16 +166,24 @@ private slots:
         QTemporaryDir dir;const auto hdrDir=dir.filePath("hdr"),manualDir=dir.filePath("manual");QVERIFY(QDir().mkpath(manualDir));
         {QSettings settings(settingsPath,QSettings::IniFormat);settings.clear();settings.setValue("hotkeys/capture","Ctrl+Alt+Shift+F11");settings.setValue("hotkeys/pin","Ctrl+Alt+Shift+F12");settings.setValue("save/defaultDirectory",hdrDir);settings.setValue("save/lastDirectory",manualDir);settings.sync();}
         CapApp controller;QImage sdr(32,32,QImage::Format_RGBA8888);sdr.fill(Qt::white);
-        QVERIFY(controller.saveHdrCapture(sdr));controller.output(sdr,false,false,true);QVERIFY(!QFileInfo::exists(hdrDir));QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
+        controller.saveHdrCaptureAsync(sdr);controller.output(sdr,false,false,true);QVERIFY(!QFileInfo::exists(hdrDir));QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
         QImage hdr(32,32,QImage::Format_RGBA32FPx4);hdr.fill(QColor::fromRgbF(.4,.5,1.5));hdr.setColorSpace(QColorSpace::SRgbLinear);hdr.setText("capHdr","scRGB-FP16");
-        QVERIFY(controller.saveHdrCapture(hdr));const auto files=QDir(hdrDir).entryList(QDir::Files);QCOMPARE(files.size(),4);
+        controller.saveHdrCaptureAsync(hdr);QTRY_VERIFY_WITH_TIMEOUT(controller.findChildren<QFutureWatcherBase*>().isEmpty(),10000);
+        const auto files=QDir(hdrDir).entryList(QDir::Files);QCOMPARE(files.size(),2);
         const auto pngs=QDir(hdrDir).entryList({"*.png"},QDir::Files);QCOMPARE(pngs.size(),2);QCOMPARE(QImageReader(QDir(hdrDir).filePath(pngs.first())).read().depth(),64);
         const auto sdrPath=QDir(hdrDir).filePath(pngs.last());QVERIFY(sdrPath.endsWith("_SDR.png"));
         QCOMPARE(QImageReader(sdrPath).read().pixelColor(10,10),cap::preview(hdr).pixelColor(10,10));
         QVERIFY(!QFile::exists(sdrPath+".json"));QVERIFY(!QFile::exists(sdrPath+".scrgb-f32"));
-        QFile raw(QDir(hdrDir).filePath(pngs.first()+".scrgb-f32"));QVERIFY(raw.open(QIODevice::ReadOnly));QCOMPARE(raw.readAll(),QByteArray(reinterpret_cast<const char*>(hdr.constBits()),hdr.sizeInBytes()));
+        QVERIFY(!QFile::exists(QDir(hdrDir).filePath(pngs.first()+".scrgb-f32")));
         controller.output(hdr,false,false,true);QCOMPARE(QDir(hdrDir).entryList(QDir::Files),files);QVERIFY(QDir(manualDir).entryList(QDir::Files).isEmpty());
         QCOMPARE(controller.settings_.value("save/lastDirectory").toString(),manualDir);
+        auto large=hdr.scaled(2560,1440);QElapsedTimer automaticTimer;automaticTimer.start();
+        controller.saveHdrCaptureAsync(large);QVERIFY(automaticTimer.elapsed()<100);
+        QVERIFY(!controller.findChildren<QFutureWatcherBase*>().isEmpty());
+        bool responsive=false;QTimer::singleShot(0,&controller,[&]{responsive=true;});
+        QTRY_VERIFY_WITH_TIMEOUT(responsive,500);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.findChildren<QFutureWatcherBase*>().isEmpty(),10000);
+        QCOMPARE(QDir(hdrDir).entryList(QDir::Files).size(),4);
         const bool nativeDisabled=QCoreApplication::testAttribute(Qt::AA_DontUseNativeDialogs);QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs,true);
         const auto restoreDialogs=qScopeGuard([&]{QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs,nativeDisabled);});
         QTimer watchdog;watchdog.setSingleShot(true);connect(&watchdog,&QTimer::timeout,qApp,[]{if(auto *dialog=qApp->activeModalWidget())QMetaObject::invokeMethod(dialog,"reject");});

@@ -32,7 +32,8 @@ void PlayerWindow::updateInfo() {
     if(imageMode_){
         if(!infoVisible_)return;
         usage_=resources_.sample();const auto image=pane_->image();const QFileInfo file(source_);
-        const auto fitted=QSizeF(pane_->imageDisplaySize()).scaled(QSizeF(pane_->surface()->size()),Qt::KeepAspectRatio)*pane_->zoom();
+        const auto viewport=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();
+        const auto fitted=QSizeF(pane_->imageDisplaySize()).scaled(QSizeF(viewport),Qt::KeepAspectRatio)*pane_->zoom();
         const auto color=image.colorSpace().isValid()?image.colorSpace().description():tr("未提供");
         QStringList lines;
         lines<<tr("文件名：%1").arg(file.fileName())<<tr("路径：%1").arg(file.absoluteFilePath())
@@ -41,7 +42,7 @@ void PlayerWindow::updateInfo() {
              <<tr("源像素：%1 · 原始位深：%2 bit/channel").arg(image.text("sourcePixelFormat").isEmpty()?file.suffix().toUpper():image.text("sourcePixelFormat"),image.text("sourceBitDepth").isEmpty()?tr("未提供"):image.text("sourceBitDepth"))
              <<tr("解码器：%1 · 耗时：%2 ms").arg(image.text("decoder"),image.text("decodeMilliseconds"))
              <<tr("解码像素：%1 bit/pixel · Alpha：%2 · 像素内存：%3 MiB").arg(image.depth()).arg(image.hasAlphaChannel()?tr("是"):tr("否")).arg(image.sizeInBytes()/1048576.0,0,'f',1)
-             <<tr("输出：%1 × %2 · 视口：%3 × %4 · 缩放：%5%").arg(fitted.width(),0,'f',0).arg(fitted.height(),0,'f',0).arg(pane_->surface()->width()).arg(pane_->surface()->height()).arg(pane_->zoom()*100,0,'f',1)
+             <<tr("输出：%1 × %2 · 视口：%3 × %4 · 缩放：%5%").arg(fitted.width(),0,'f',0).arg(fitted.height(),0,'f',0).arg(viewport.width()).arg(viewport.height()).arg(pane_->zoom()*100,0,'f',1)
              <<tr("图片渲染器：Qt Raster · 可见区域裁切 · SDR")
              <<tr("VS 滤镜：未启用 · 预解码：未启用")
              <<tr("CPU：%1 · GPU：%2 · 内存：%3 MiB").arg(usage_.processCpu>=0?QString::number(usage_.processCpu,'f',1)+"%":tr("采样中"),usage_.gpu>=0?QString::number(usage_.gpu,'f',1)+"%":tr("未提供")).arg(usage_.memoryMiB);

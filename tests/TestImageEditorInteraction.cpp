@@ -100,6 +100,18 @@ private slots:
         }
         generation=2;QVERIFY(decodeRgbaPng(directory.filePath("0.png"),generation,1).isNull());
     }
+    void rgba16PngMatchesQt(){
+        QTemporaryDir directory;std::atomic<quint64> generation{1};
+        for(int pattern=0;pattern<5;++pattern){
+            QImage source(257,129,QImage::Format_RGBA64);source.setColorSpace(pattern%2 || pattern==4?QColorSpace::Bt2100Pq:QColorSpace::SRgb);
+            for(int y=0;y<source.height();++y)for(int x=0;x<source.width();++x){auto *p=reinterpret_cast<quint16*>(source.scanLine(y))+x*4;for(int c=0;c<4;++c)p[c]=quint16(pattern==0?0:pattern==1?65535:pattern==2?x*257+c:pattern==3?y*511+c:(x*997+y*1501+c*131));}
+            const auto path=directory.filePath(QString::number(pattern)+".png");
+            if(pattern==4)QVERIFY(writeScreenshotPng(path,source,{}).isEmpty());else QVERIFY(source.save(path));
+            const auto decoded=decodeRgbaPng(path,generation,1);QVERIFY(!decoded.isNull());
+            QCOMPARE(decoded,source);QCOMPARE(decoded.colorSpace(),source.colorSpace());QCOMPARE(decoded.text("sourceBitDepth"),QString("16"));
+        }
+        generation=2;QVERIFY(decodeRgbaPng(directory.filePath("0.png"),generation,1).isNull());
+    }
     void parallelRgbaPngMatchesQt(){
         QTemporaryDir directory;std::atomic<quint64> generation{1};
         QImage source(20000,1800,QImage::Format_RGBA8888);
@@ -107,6 +119,13 @@ private slots:
         const auto path=directory.filePath("parallel.png");QVERIFY(source.save(path));
         const auto decoded=decodeRgbaPng(path,generation,1);QVERIFY(!decoded.isNull());qInfo()<<decoded.text("pngStages");
         QCOMPARE(decoded,source);QCOMPARE(decoded,QImageReader(path).read().convertToFormat(QImage::Format_RGBA8888));
+    }
+    void parallelRgba16PngMatchesQt(){
+        QTemporaryDir directory;std::atomic<quint64> generation{1};QImage source(10000,1800,QImage::Format_RGBA64);
+        for(int y=0;y<source.height();++y){auto *row=reinterpret_cast<quint16*>(source.scanLine(y));for(int x=0;x<source.width();++x)for(int c=0;c<4;++c)row[x*4+c]=quint16(x*997+y*1501+c*131+(y%17==0?x*y:0));}
+        const auto path=directory.filePath("parallel16.png");QVERIFY(source.save(path));
+        const auto decoded=decodeRgbaPng(path,generation,1);QVERIFY(!decoded.isNull());qInfo()<<decoded.text("pngStages");
+        QCOMPARE(decoded,source);QCOMPARE(decoded,QImageReader(path).read());
     }
     void largeImageEditorStartup(){
         const auto path=qEnvironmentVariable("VSR_TEST_IMAGE");if(path.isEmpty())QSKIP("Set VSR_TEST_IMAGE for the real large-image benchmark");

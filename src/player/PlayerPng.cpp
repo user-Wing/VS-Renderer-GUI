@@ -111,7 +111,7 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
     const auto unmap=qScopeGuard([&]{file.unmap(const_cast<uchar *>(bytes));});
     if(std::memcmp(bytes,"\x89PNG\r\n\x1a\n",8))return {};
     QByteArray compressed(qsizetype(file.size()-33),Qt::Uninitialized);qsizetype compressedSize=0;
-    int width=0,height=0,dpmX=0,dpmY=0;bool end=false;QColorSpace space;
+    int width=0,height=0,dpmX=0,dpmY=0,bitDepth=8;bool end=false;QColorSpace space,cicpSpace;
     auto *decoder=libdeflate_alloc_decompressor();if(!decoder)return {};
     const auto cleanup=qScopeGuard([&]{libdeflate_free_decompressor(decoder);});
     for(qint64 offset=8;offset+12<=file.size();){
@@ -120,9 +120,10 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
         if(size>0x7fffffffU || qint64(size)>file.size()-offset-12)return {};
         if(libdeflate_crc32(0,type,size_t(size)+4)!=qFromBigEndian<quint32>(data+size))return {};
         if(!std::memcmp(type,"IHDR",4)){
-            if(offset!=8 || size!=13 || data[8]!=8 || data[9]!=6 || data[10] || data[11] || data[12])return {};
+            if(offset!=8 || size!=13 || (data[8]!=8 && data[8]!=16) || data[9]!=6 || data[10] || data[11] || data[12])return {};
+            bitDepth=data[8];
             const auto w=qFromBigEndian<quint32>(data),h=qFromBigEndian<quint32>(data+4);
-            if(!w || !h || w>quint32(INT_MAX/4) || h>quint32(INT_MAX))return {};width=int(w);height=int(h);
+            if(!w || !h || w>quint32(INT_MAX/(bitDepth/2)) || h>quint32(INT_MAX))return {};width=int(w);height=int(h);
         }else if(!std::memcmp(type,"IDAT",4)){if(!width || size>quint64(compressed.size()-compressedSize))return {};std::memcpy(compressed.data()+compressedSize,data,size);compressedSize+=size;}
         else if(!std::memcmp(type,"IEND",4)){if(size)return {};end=true;break;}
         else if(!std::memcmp(type,"sRGB",4)){space=QColorSpace(QColorSpace::SRgb);}
@@ -132,13 +133,19 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
             if(libdeflate_zlib_decompress(decoder,data+name+2,size-name-2,profile.data(),profile.size(),&written)!=LIBDEFLATE_SUCCESS)return {};
             profile.resize(qsizetype(written));space=QColorSpace::fromIccProfile(profile);if(!space.isValid())return {};
         }else if(!std::memcmp(type,"pHYs",4) && size==9 && data[8]==1){dpmX=int(qFromBigEndian<quint32>(data));dpmY=int(qFromBigEndian<quint32>(data+4));}
-        else if(!std::memcmp(type,"gAMA",4) || !std::memcmp(type,"cHRM",4) || !std::memcmp(type,"cICP",4) || !std::memcmp(type,"acTL",4) || !std::memcmp(type,"eXIf",4))return {};
+        else if(!std::memcmp(type,"cICP",4)){
+            if(size!=4 || data[2]!=0 || data[3]!=1)return {};
+            const auto primaries=data[0]==9?QColorSpace::Primaries::Bt2020:data[0]==1?QColorSpace::Primaries::SRgb:QColorSpace::Primaries::Custom;
+            const auto transfer=data[1]==16?QColorSpace::TransferFunction::St2084:data[1]==18?QColorSpace::TransferFunction::Hlg:data[1]==13?QColorSpace::TransferFunction::SRgb:QColorSpace::TransferFunction::Custom;
+            if(primaries==QColorSpace::Primaries::Custom || transfer==QColorSpace::TransferFunction::Custom)return {};
+            cicpSpace=QColorSpace(primaries,transfer);
+        }else if(!std::memcmp(type,"gAMA",4) || !std::memcmp(type,"cHRM",4) || !std::memcmp(type,"acTL",4) || !std::memcmp(type,"eXIf",4))return {};
         else if(!(type[0]&32))return {}; // Unknown critical chunks cannot be ignored.
         offset+=qint64(size)+12;
     }
     if(!end || !width || !compressedSize)return {};
     const auto parseMs=timer.elapsed();
-    const size_t stride=size_t(width)*4,rawSize=(stride+1)*size_t(height);
+    const size_t pixelBytes=size_t(bitDepth/2),stride=size_t(width)*pixelBytes,rawSize=(stride+1)*size_t(height);
     if(rawSize/size_t(height)!=stride+1)return {};
     compressed.resize(compressedSize);
     std::unique_ptr<uchar,decltype(&std::free)> raw(static_cast<uchar *>(std::malloc(rawSize)),std::free);if(!raw)return {};
@@ -153,9 +160,9 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
     int workers=rawSize>=128*1024*1024 && height>=512 && memory.ullAvailPhys>=rawSize*2?std::clamp(QThread::idealThreadCount()/2,1,16):1;
     auto *outputPixels=workers>1?static_cast<uchar *>(std::malloc(stride*size_t(height))):nullptr;
     if(!outputPixels){workers=1;outputPixels=rawPixels;}
-    QImage image(outputPixels,width,height,qsizetype(stride),QImage::Format_RGBA8888,[](void *pixels){std::free(pixels);},outputPixels);if(image.isNull()){if(outputPixels!=rawPixels)std::free(outputPixels);return {};}
+    QImage image(outputPixels,width,height,qsizetype(stride),bitDepth==16?QImage::Format_RGBA64:QImage::Format_RGBA8888,[](void *pixels){std::free(pixels);},outputPixels);if(image.isNull()){if(outputPixels!=rawPixels)std::free(outputPixels);return {};}
     if(outputPixels==rawPixels)raw.release();
-    image.setColorSpace(space);image.setDotsPerMeterX(dpmX);image.setDotsPerMeterY(dpmY);
+    image.setColorSpace(cicpSpace.isValid()?cicpSpace:space);image.setDotsPerMeterX(dpmX);image.setDotsPerMeterY(dpmY);
     const auto zero=_mm_setzero_si128();
 #if defined(__GNUC__) && defined(__x86_64__)
     const bool avx2=__builtin_cpu_supports("avx2");
@@ -164,14 +171,14 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
         const auto filter=rawPixels[size_t(y)*(stride+1)];const auto *input=rawPixels+size_t(y)*(stride+1)+1+begin;auto *out=outputPixels+size_t(y)*stride+begin;const auto *above=y?outputPixels+size_t(y-1)*stride+begin:nullptr;const auto count=end-begin;
         if(filter==0){std::memmove(out,input,count);return;}
 #if defined(__GNUC__) && defined(__x86_64__)
-        if(filter==4 && avx2){paethRow(out,input,above,count,begin>0);return;}
+        if(filter==4 && avx2 && pixelBytes==4){paethRow(out,input,above,count,begin>0);return;}
 #endif
         if(filter==2){for(size_t x=0;x<count;x+=16){if(x+16<=count){const auto a=_mm_loadu_si128(reinterpret_cast<const __m128i *>(input+x));const auto b=above?_mm_loadu_si128(reinterpret_cast<const __m128i *>(above+x)):zero;_mm_storeu_si128(reinterpret_cast<__m128i *>(out+x),_mm_add_epi8(a,b));}else for(;x<count;++x)out[x]=uchar(input[x]+(above?above[x]:0));}return;}
         auto left=zero,upperLeft=zero;
-        if(begin){quint32 value=0;std::memcpy(&value,out-4,4);left=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(value)),zero);if(above){std::memcpy(&value,above-4,4);upperLeft=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(value)),zero);}}
-        for(size_t x=0;x<count;x+=4){
-            quint32 value=0,upValue=0;std::memcpy(&value,input+x,4);if(above)std::memcpy(&upValue,above+x,4);
-            auto current=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(value)),zero);const auto up=_mm_unpacklo_epi8(_mm_cvtsi32_si128(int(upValue)),zero);auto predictor=left;
+        const auto loadPixel=[&](const uchar *p){quint64 value=0;std::memcpy(&value,p,pixelBytes);return _mm_unpacklo_epi8(_mm_cvtsi64_si128(static_cast<long long>(value)),zero);};
+        if(begin){left=loadPixel(out-pixelBytes);if(above)upperLeft=loadPixel(above-pixelBytes);}
+        for(size_t x=0;x<count;x+=pixelBytes){
+            auto current=loadPixel(input+x);const auto up=above?loadPixel(above+x):zero;auto predictor=left;
             if(filter==3)predictor=_mm_srli_epi16(_mm_add_epi16(left,up),1);
             else if(filter==4){
                 const auto low=_mm_min_epi16(left,up),high=_mm_max_epi16(left,up);
@@ -181,7 +188,7 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
                 predictor=_mm_or_si128(_mm_or_si128(_mm_and_si128(chooseHigh,high),_mm_and_si128(chooseLow,low)),_mm_andnot_si128(_mm_or_si128(chooseHigh,chooseLow),upperLeft));
             }
             left=_mm_and_si128(_mm_add_epi16(current,predictor),_mm_set1_epi16(255));upperLeft=up;
-            value=quint32(_mm_cvtsi128_si32(_mm_packus_epi16(left,zero)));std::memcpy(out+x,&value,4);
+            const auto value=quint64(_mm_cvtsi128_si64(_mm_packus_epi16(left,zero)));std::memcpy(out+x,&value,pixelBytes);
         }
     };
     if(workers==1){for(int y=0;y<height;++y){if(generation!=expected)return {};unfilter(y,0,stride);}}
@@ -197,6 +204,14 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
             }
         }));for(auto &job:jobs)job.get();if(generation!=expected)return {};
     }
-    image.setText("sourceBitDepth","8");image.setText("sourcePixelFormat","PNG RGBA8");image.setText("pngStages",QString("parse=%1 inflate=%2 unfilter=%3 ms; filters=%4/%5/%6/%7/%8; predictorThreads=%9").arg(parseMs).arg(inflateMs-parseMs).arg(timer.elapsed()-inflateMs).arg(filters[0]).arg(filters[1]).arg(filters[2]).arg(filters[3]).arg(filters[4]).arg(workers));return image;
+    // PNG stores 16-bit channels in network order. Swap only after prediction,
+    // since the next row still needs the previous row's encoded byte order.
+    if(bitDepth==16)for(int y=0;y<height;++y){
+        if(generation!=expected)return {};
+        auto *row=image.scanLine(y);size_t x=0;
+        for(;x+16<=stride;x+=16){const auto v=_mm_loadu_si128(reinterpret_cast<const __m128i*>(row+x));_mm_storeu_si128(reinterpret_cast<__m128i*>(row+x),_mm_or_si128(_mm_srli_epi16(v,8),_mm_slli_epi16(v,8)));}
+        for(;x<stride;x+=2)std::swap(row[x],row[x+1]);
+    }
+    image.setText("sourceBitDepth",QString::number(bitDepth));image.setText("sourcePixelFormat",QString("PNG RGBA%1").arg(bitDepth));image.setText("pngStages",QString("parse=%1 inflate=%2 unfilter=%3 ms; filters=%4/%5/%6/%7/%8; predictorThreads=%9").arg(parseMs).arg(inflateMs-parseMs).arg(timer.elapsed()-inflateMs).arg(filters[0]).arg(filters[1]).arg(filters[2]).arg(filters[3]).arg(filters[4]).arg(workers));return image;
 }
 }

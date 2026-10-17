@@ -4,9 +4,11 @@
 
 本地清理约定：旧截图/播放器 `*-next.exe` 暂存构建清除后同步资源清单；`aria2-next.exe` 是有效运行依赖，不按后缀误删。
 
-当前部署：`dist/VS-GUI-Full` / `dist/1.0.11-PlayerLite`，本轮推送源码并准备无附件 Release Draft，Full 由维护者自行打包上传；追加交付独立单文件 `dist/VS-Player.exe`（启动器嵌入 Player 图标，运行时缓存展开，同目录自动创建并保留 `player.ini`，内置 Qt，FFmpeg shared x64 从 EXE 同目录 / PATH 解析，缺失先提示）。VapourSynth 后端固定 R81，BM3D 11.0、BM3Dvk2 1.0、BestSource 22；原有插件保留，使用 `tools/update-vapoursynth-runtime.py` 维护锁定版本和哈希。社区配置使用公开页面链接，目录遍历/下载使用内部解析地址。脚本型内置预设的处理脚本随时间组序列化；章节统一由 ThreeFpPlayer 适配 `startTime100ns`。详细修改、证据及性能未通过项见 [1.0.11记录](docs/update-1.0.11.md)。
+当前部署：`dist/VS-GUI-Full` / `dist/1.0.11-PlayerLite`，源码与现有 1.0.11 发布说明同步维护，Full 由维护者自行打包上传；追加交付独立单文件 `dist/VS-Player.exe`（启动器嵌入 Player 图标，运行时缓存展开，同目录自动创建并保留 `player.ini`，内置 Qt，FFmpeg shared x64 从 EXE 同目录 / PATH 解析，缺失先提示）。VapourSynth 后端固定 R81，BM3D 11.0、BM3Dvk2 1.0、BestSource 22；原有插件保留，使用 `tools/update-vapoursynth-runtime.py` 维护锁定版本和哈希。社区配置使用公开页面链接，目录遍历/下载使用内部解析地址。脚本型内置预设的处理脚本随时间组序列化；章节统一由 ThreeFpPlayer 适配 `startTime100ns`。详细修改、证据及性能未通过项见 [1.0.11记录](docs/update-1.0.11.md)。
 
 窗口模式播放器为底栏保留独立高度，视频区域不与底栏重叠；全屏继续浮层。VSCap 在已有模态窗口时打开截图层，会将截图层设为当前模态窗口，保存对话框随当前模态窗口建立父子关系，防止设置阻断置顶截图层输入。矩形/圆形的边框与填充按钮互斥，边框按钮保留滚轮调粗；填充图标单独绘制，按钮高度与相邻工具一致。
+
+HDR 截图自动落盘在后台进行，仅输出 HDR / SDR 两张压缩 RGBA16 PNG，色彩信息嵌入 ICC，不再默认生成 JSON / 裸浮点附件。`src/image/HdrPreview.h` 共用 VSCap 与 VSP 的 SDR 映射和查找表；`PlayerPng` 的 SIMD 路径支持 RGBA8 / RGBA16 及受支持的 cICP，保留原始像素。图片信息栏统一报告物理像素视口。实图性能及 HDR 屏未复验边界见 [HDR 续修](docs/vscap-hdr-1.0.11.md)。
 
 ## 1. 发心与边界
 

@@ -8,6 +8,8 @@
 #include <QPointer>
 #include <QDateTime>
 #include <QSaveFile>
+#include <QFutureWatcher>
+#include <QtConcurrentRun>
 #include <QAbstractTextDocumentLayout>
 #include <windows.h>
 #include <dwmapi.h>
@@ -659,17 +661,24 @@ private:
         const auto dir=settings_.value(automatic?"save/defaultDirectory":"save/lastDirectory",defaultDirectory()).toString();
         return QDir(dir).filePath(QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz")+"."+ext);
     }
-    bool saveCapturePng(const QImage &image,const QString &path) {
+    static bool saveCapturePng(const QImage &image,const QString &path) {
         if(!savePng(image,path))return false;
         if(image.text("capHdr")!="scRGB-FP16")return true;
         const auto info=QFileInfo(path);
         const auto sdrPath=QDir(info.absolutePath()).filePath(info.completeBaseName()+"_SDR.png");
         return savePng(cap::preview(image),sdrPath);
     }
-    bool saveHdrCapture(const QImage &image) {
-        if(image.text("capHdr")!="scRGB-FP16")return true;
+    void saveHdrCaptureAsync(const QImage &image) {
+        if(image.text("capHdr")!="scRGB-FP16")return;
         const auto path=makePath("png",true);
-        return QDir().mkpath(QFileInfo(path).absolutePath()) && saveCapturePng(image,path);
+        auto *watcher=new QFutureWatcher<bool>(this);
+        connect(watcher,&QFutureWatcher<bool>::finished,this,[this,watcher]{
+            if(!watcher->result())tray_.showMessage("VS Cap",QStringLiteral("HDR 截图自动保存失败，请检查默认保存路径"),QSystemTrayIcon::Warning);
+            watcher->deleteLater();
+        });
+        watcher->setFuture(QtConcurrent::run([image,path]{
+            return QDir().mkpath(QFileInfo(path).absolutePath()) && saveCapturePng(image,path);
+        }));
     }
     void storeDir(const QString &path) {
         settings_.setValue("save/lastDirectory",QFileInfo(path).absolutePath());settings_.sync();
@@ -750,11 +759,11 @@ private:
         QString error;
         const QImage shot=cap::captureScreen(screen,&error);
         if(shot.isNull()){tray_.showMessage("VS Cap",error,QSystemTrayIcon::Warning);return;}
-        if(!saveHdrCapture(shot))tray_.showMessage("VS Cap",QStringLiteral("HDR 截图自动保存失败，请检查默认保存路径"),QSystemTrayIcon::Warning);
         auto *overlay=new CaptureOverlay(screen,shot,[this](QImage shot,bool pin,bool avif,bool copy){
             return output(std::move(shot),pin,avif,copy);
         });
         applyTopPriority(overlay);
+        saveHdrCaptureAsync(shot);
     }
     void pastePin() {
         QImage pic=QApplication::clipboard()->image();
@@ -804,7 +813,7 @@ private:
         layout.addRow(QStringLiteral("AWJ AVIF 质量"),&quality);
         layout.addRow(&uiAccess);
         layout.addRow(&autostart);layout.addRow(&trayMode);
-        QLabel note(QStringLiteral("PNG 总是 16bit×4 通道；HDR PNG 同时生成 SDR 预览。AWJ 使用 AOM、默认质量 70。UIAccess 默认关闭，启用后下次启动会请求 Windows 管理员授权，无需驱动或安装证书。"));
+        QLabel note(QStringLiteral("PNG 无损压缩、16bit×4 通道；HDR 自动保存 HDR 与 SDR 两张 PNG，不生成浮点附件。AWJ 使用 AOM、默认质量 70。UIAccess 默认关闭，启用后下次启动会请求 Windows 管理员授权，无需驱动或安装证书。"));
         note.setWordWrap(true);layout.addRow(&note);
         QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
         layout.addRow(&buttons);

@@ -91,6 +91,17 @@ class TestPlayer final : public QObject {
     QString configPath() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
     Q_OBJECT
 private slots:
+    void hdrScreenshotStartup(){
+        const auto path=qEnvironmentVariable("VSR_TEST_HDR_PNG");if(path.isEmpty())QSKIP("Set VSR_TEST_HDR_PNG for actual screenshot loading.");
+        QElapsedTimer timer;timer.start();const auto reference=QImageReader(path).read();const auto qtMs=timer.elapsed();QVERIFY(!reference.isNull());
+        PlayerWindow player;player.resize(1000,700);player.show();timer.restart();QVERIFY(player.openFile(path));
+        QTRY_VERIFY_WITH_TIMEOUT(!player.pane_->image().isNull(),15000);const auto readyMs=timer.elapsed();
+        QCOMPARE(player.pane_->image(),reference);QVERIFY(player.pane_->image().text("decoder").contains("libdeflate"));
+        player.infoVisible_=true;player.updateInfo();const auto viewport=player.pane_->surface()->size()*player.pane_->surface()->devicePixelRatioF();
+        QVERIFY(player.info_->text().contains(QStringLiteral("视口：%1 × %2").arg(viewport.width()).arg(viewport.height())));
+        qInfo()<<"HDR-PNG"<<reference.size()<<"Qt-decode-ms"<<qtMs<<"fast-decode-ms"<<player.pane_->image().text("decodeMilliseconds")<<"load-and-preview-ms"<<readyMs<<"DPR"<<player.pane_->surface()->devicePixelRatioF()<<"viewport"<<viewport;
+        qInfo().noquote()<<player.pane_->image().text("pngStages");
+    }
     void hdrImagePreviewKeepsSource(){
         QImage source(4,4,QImage::Format_RGBA64);source.fill(QColor::fromRgbF(.5,.5,.5));source.setColorSpace(QColorSpace::Bt2100Pq);
         PreviewPane pane("HDR","HDR");pane.resize(400,300);pane.show();pane.setImage(source);

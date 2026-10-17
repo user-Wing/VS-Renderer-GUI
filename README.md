@@ -10,13 +10,13 @@ Windows 桌面视频处理与播放工具：**VS Renderer** 用图形化滤镜�
 
 当前本地版本 **1.0.11**：修复 BD 右键与播放列表显式返回主菜单入口及文件章节位置，Renderer 时间与进度条同排、文件/播放/缩放控件同排，预设携带时间组并支持全片单组导入当前组。预设管理与社区递归显示目录树，默认源是 [VS-GUI 公开预设社区](https://www.modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI/PresetCommunity)。
 
-VS 后端更新为 **VapourSynth R81 + BM3D 11.0 + BM3Dvk2 1.0 + BestSource 22**，已验证 Vulkan 解码及 GPU 时域降噪。3FP 更新至 API20 / PR23（含 PR22，保留本地扩展）；指定 8K 软件播放复测仍未通过，详细条件、差距及限制见 [1.0.11 本地更新记录](docs/update-1.0.11.md)。本轮推送源码并准备 1.0.11 无附件 Release Draft，Full 由维护者自行打包上传；另按要求生成单文件独立播放器 `dist/VS-Player.exe`，启动器已嵌入 Player 图标，首次运行自动在同目录创建 `player.ini`，保留已有配置，内置 Qt；单文件版不再内置 FFmpeg，启动时先查 EXE 同目录，再查 `PATH`，缺少时提示所需组件。需要匹配的 **FFmpeg shared x64**（含 `ffmpeg.exe`、`ffprobe.exe` 和 `avcodec-63` / `avformat-63` / `avutil-61` / `swresample-7` / `swscale-10` / `avfilter-12` DLL 及其依赖），仅静态版 `ffmpeg.exe` 不够。
+VS 后端更新为 **VapourSynth R81 + BM3D 11.0 + BM3Dvk2 1.0 + BestSource 22**，已验证 Vulkan 解码及 GPU 时域降噪。3FP 更新至 API20 / PR23（含 PR22，保留本地扩展）；指定 8K 软件播放复测仍未通过，详细条件、差距及限制见 [1.0.11 本地更新记录](docs/update-1.0.11.md)。HDR 续修继续沿用 1.0.11，源码与现有发布说明同步更新，Full 由维护者自行打包上传；另按要求生成单文件独立播放器 `dist/VS-Player.exe`，启动器已嵌入 Player 图标，首次运行自动在同目录创建 `player.ini`，保留已有配置，内置 Qt；单文件版不再内置 FFmpeg，启动时先查 EXE 同目录，再查 `PATH`，缺少时提示所需组件。需要匹配的 **FFmpeg shared x64**（含 `ffmpeg.exe`、`ffprobe.exe` 和 `avcodec-63` / `avformat-63` / `avutil-61` / `swresample-7` / `swscale-10` / `avfilter-12` DLL 及其依赖），仅静态版 `ffmpeg.exe` 不够。
 
 VS Player 非全屏时底栏独立放在视频下方，初始窗口高度相应增加；全屏继续使用可自动隐藏的浮层。VSCap 设置窗口打开时仍可截图，截图层接管输入，Esc 退出后可继续修改未保存的设置。矩形 / 圆形的点按钮可点击选择边框模式，保留滚轮调粗；点和填充方块互斥显示选中状态；只放大方块内部图标，两个按钮保持与相邻工具相同的高度。
 
 VSCap 框选完成后默认使用“选区”工具：拖动四角或四边调整大小，拖动框内移动选区，已有文字和图形保持截图上的原位置。切换到标注工具后可在选区外绘制或输入，复制 / 保存时才按最终选区裁切。
 
-截图“✓”只复制到剪贴板。普通截图不会自动保存；HDR 在打开截图界面时，将原始截图的高精度 PNG 与浮点附件自动保存到设置中的“截图默认保存路径”，剪贴板提供 SDR 预览。PNG / AVIF 手动保存每次都选择文件路径，并记住上次目录；手动目录与 HDR 默认目录分别记录。
+截图“✓”只复制到剪贴板。普通截图不会自动保存；HDR 先打开截图界面，再后台保存原始截图的 HDR PNG 与 `_SDR.png` 到设置中的“截图默认保存路径”，不再自动生成 JSON / 裸浮点附件，剪贴板提供 SDR 预览。PNG 均为无损压缩、每通道 16 位；SDR 伴随图与 VSP 共用色调映射。PNG / AVIF 手动保存每次都选择文件路径，并记住上次目录；手动目录与 HDR 默认目录分别记录。修复依据、体积与加载实测见 [HDR 截图续修](docs/vscap-hdr-1.0.11.md)。
 
 取消 PNG / AVIF 保存会保留截图窗口、选区和标注，可以继续编辑或重新保存。Alt+T 同时支持剪贴板图像与资源管理器 Ctrl+C 复制的本地图片文件；文件列表中每张可读取图片分别建立贴图。
 
