@@ -38,8 +38,8 @@ void routeDiscInput(HWND parent,QHash<DWORD,HHOOK> &hooks){
 }
 }
 struct PlayerDiscMenu::Impl {
-    QTimer inputTimer;HWND window=nullptr;QHash<DWORD,HHOOK> inputHooks;QVector<QFuture<void>> retiring;
-    int lastVolume=-1,lastMute=-1;bool firstPlaySeen=false,menuRequested=false;QLibrary core,library;void *instance=nullptr,*player=nullptr,*media=nullptr;QString failure;QMutex mutex;
+    QTimer inputTimer;HWND window=nullptr;QHash<DWORD,HHOOK> inputHooks;QVector<QFuture<void>> retiring;QFuture<void> navigation;
+    int lastVolume=-1,lastMute=-1;bool firstPlaySeen=false,menuRequested=false,directTopMenu=false;QLibrary core,library;void *instance=nullptr,*player=nullptr,*media=nullptr;QString failure;QMutex mutex;
     struct Stats {int readBytes;float inputBitrate;int demuxBytes;float demuxBitrate;int corrupted,discontinuities,decodedVideo,decodedAudio,presented,lostVideo,playedAudio,lostAudio,sentPackets,sentBytes;float sendBitrate;};
     struct Description {int id;char *name;Description *next;};
     struct Chapter {qint64 offset,duration;char *name;};
@@ -115,8 +115,8 @@ struct PlayerDiscMenu::Impl {
 };
 PlayerDiscMenu::PlayerDiscMenu():impl_(std::make_unique<Impl>()){}
 PlayerDiscMenu::~PlayerDiscMenu(){close();if(impl_->instance)impl_->libvlc_release(impl_->instance);}
-bool PlayerDiscMenu::open(const QString &root,void *window){
-    impl_->firstPlaySeen=impl_->menuRequested=false;
+bool PlayerDiscMenu::open(const QString &root,void *window,bool directTopMenu){
+    impl_->firstPlaySeen=impl_->menuRequested=false;impl_->directTopMenu=directTopMenu;
     if(impl_->player || impl_->media)close();impl_->lastVolume=impl_->lastMute=-1;if(!impl_->load())return false;{QMutexLocker lock(&impl_->mutex);impl_->failure.clear();}
     const auto location=("bluray:///"+QDir::fromNativeSeparators(root)).toUtf8();auto *media=impl_->libvlc_media_new_location(impl_->instance,location.constData());if(!media)return false;
     impl_->libvlc_media_add_option(media,":bluray-menu");
@@ -128,6 +128,10 @@ bool PlayerDiscMenu::open(const QString &root,void *window){
     if(impl_->libvlc_media_player_play(impl_->player)!=0){close();return false;}return true;
 }
 void PlayerDiscMenu::close(QWidget *retiredSurface){
+    if(impl_->navigation.isRunning()){
+        QFutureWatcher<void> watcher;QEventLoop wait;QObject::connect(&watcher,&QFutureWatcher<void>::finished,&wait,&QEventLoop::quit);
+        watcher.setFuture(impl_->navigation);if(!watcher.isFinished())wait.exec(QEventLoop::ExcludeUserInputEvents);
+    }
     impl_->inputTimer.stop();impl_->inputTimer.disconnect();if(impl_->window){for(const auto hook:impl_->inputHooks)UnhookWindowsHookEx(hook);impl_->inputHooks.clear();EnumChildWindows(impl_->window,[](HWND child,LPARAM)->BOOL{RemovePropW(child,InputOwner);return TRUE;},0);impl_->window=nullptr;}
     auto *player=impl_->player,*media=impl_->media;impl_->player=impl_->media=nullptr;
     for(int i=impl_->retiring.size()-1;i>=0;--i)if(impl_->retiring[i].isFinished())impl_->retiring.removeAt(i);
@@ -144,7 +148,13 @@ bool PlayerDiscMenu::active()const{return impl_->player!=nullptr;}
 QString PlayerDiscMenu::error()const{QMutexLocker lock(&impl_->mutex);return impl_->failure;}
 int PlayerDiscMenu::state()const{return active()?impl_->libvlc_media_player_get_state(impl_->player):0;}
 void PlayerDiscMenu::navigate(unsigned command){if(active())impl_->libvlc_media_player_navigate(impl_->player,command);}
-void PlayerDiscMenu::topMenu(){if(active())impl_->libvlc_media_player_set_title(impl_->player,0);}
+void PlayerDiscMenu::topMenu(){
+    if(!active() || impl_->navigation.isRunning())return;
+    // VLC may synchronously replace its native vout while changing titles.
+    // Keep Qt pumping HWND messages, as during asynchronous vout teardown.
+    auto *player=impl_->player;const auto setTitle=impl_->libvlc_media_player_set_title;
+    impl_->navigation=QtConcurrent::run([player,setTitle]{setTitle(player,0);});
+}
 void PlayerDiscMenu::pointer(const QPoint &position,const QSize &,bool activate){
     if(!active() || !impl_->window)return;
     auto *widget=QWidget::find(reinterpret_cast<WId>(impl_->window));if(!widget)return;
@@ -169,11 +179,11 @@ void PlayerDiscMenu::selectTrack(bool audio,int id){if(active()){if(audio)impl_-
 quint64 PlayerDiscMenu::presentedFrames()const{Impl::Stats stats{};return active() && impl_->libvlc_media_get_stats(impl_->media,&stats)?qMax(0,stats.presented):0;}
 QJsonObject PlayerDiscMenu::programme()const {
     if(!active())return {};const int title=impl_->libvlc_media_player_get_title(impl_->player);Impl::Chapter **chapters=nullptr;
-    const bool firstPlay=title==impl_->libvlc_media_player_get_title_count(impl_->player)-1;
+    const bool firstPlay=!impl_->directTopMenu && title==impl_->libvlc_media_player_get_title_count(impl_->player)-1;
     if(firstPlay)impl_->firstPlaySeen=true;
     if(title==0)impl_->firstPlaySeen=false;
     if(impl_->firstPlaySeen && !firstPlay && title>0 && !impl_->menuRequested){
-        impl_->menuRequested=true;impl_->libvlc_media_player_set_title(impl_->player,0);
+        impl_->menuRequested=true;const_cast<PlayerDiscMenu*>(this)->topMenu();
     }
     const int count=impl_->libvlc_media_player_get_full_chapter_descriptions(impl_->player,title,&chapters);QJsonArray starts;
     for(int i=0;i<count;++i)starts<<double(chapters[i]->offset*10000);if(chapters)impl_->libvlc_chapter_descriptions_release(chapters,qMax(0,count));

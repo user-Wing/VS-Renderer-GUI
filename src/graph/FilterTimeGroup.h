@@ -7,5 +7,6 @@ struct FilterTimeGroup {
     QString name;
     qint64 startSeconds = 0;
     FilterGraph graph;
+    QString script; // Script-backed single-group presets (including player profiles).
 };
 }

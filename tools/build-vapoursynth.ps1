@@ -70,6 +70,10 @@ Copy-Item (Join-Path $build "vapoursynth.pyd"),
               (Join-Path $build "vspipe.exe") -Destination $runtime -Force
 Copy-Item (Join-Path $source "src\py\*.py"), (Join-Path $source "src\py\*.pyi") -Destination $runtime -Force
 
+# Replace the source-built core with the pinned official ABI3 R81 build and plugins.
+& $python (Join-Path $PSScriptRoot "update-vapoursynth-runtime.py") --site-packages (Join-Path $venv "Lib\site-packages")
+if ($LASTEXITCODE -ne 0) { throw "Pinned VapourSynth R81 installation failed." }
+
 & (Join-Path $runtime "vspipe.exe") --version
 if ($LASTEXITCODE -ne 0) { throw "VapourSynth runtime smoke test failed." }
 

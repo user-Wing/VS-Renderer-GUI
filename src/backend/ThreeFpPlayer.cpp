@@ -1,3 +1,6 @@
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include "backend/ThreeFpPlayer.h"
 
 #include "backend/VapourSynthFrameServer.h"
@@ -155,7 +158,17 @@ bool ThreeFpPlayer::selectAudio(int stream) {return handle_ && check(api_.select
 bool ThreeFpPlayer::loadExternalAudio(const QString &path) {return handle_ && check(api_.loadExternalAudio(handle_,path.toUtf8().constData()),QStringLiteral("Load external audio"));}
 bool ThreeFpPlayer::clearExternalAudio() {return handle_ && check(api_.clearExternalAudio(handle_),QStringLiteral("Clear external audio"));}
 bool ThreeFpPlayer::setAudioEffects(bool enabled,const float *gains,float wave,qint64 delay) {return handle_ && check(api_.setAudioEffects(handle_,enabled,gains,wave,delay),QStringLiteral("Audio effects"));}
-QString ThreeFpPlayer::mediaInfo() const { return handle_ ? api_.mediaInfo(handle_) : QString(); }
+QString ThreeFpPlayer::mediaInfo() const {
+    if(!handle_)return {};
+    auto data=QJsonDocument::fromJson(api_.mediaInfo(handle_).toUtf8()).object();
+    auto chapters=data.value("chapters").toArray();
+    for(int i=0;i<chapters.size();++i){auto chapter=chapters[i].toObject();
+        if(!chapter.contains("start100ns") && chapter.contains("startTime100ns"))chapter.insert("start100ns",chapter.value("startTime100ns"));
+        chapters[i]=chapter;
+    }
+    data.insert("chapters",chapters);
+    return QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
+}
 
 bool ThreeFpPlayer::setVrrPresent(bool enabled)
 {

@@ -12,7 +12,7 @@ $LibiamfRoot=(Resolve-Path -LiteralPath $LibiamfRoot).Path
 $checkout=(& git -C $NativeRoot rev-parse --show-toplevel).Trim()
 if($LASTEXITCODE -ne 0 -or (Resolve-Path -LiteralPath $checkout).Path -ne $NativeRoot){throw 'NativeRoot must be a separate FFF_Project Git checkout.'}
 $commit=(& git -C $NativeRoot rev-parse HEAD).Trim()
-if($commit -ne '0fe651ddab8a2bb6ddb729f314f9f4c5117fb565'){throw 'Checkout the pinned API 20 commit 0fe651ddab8a2bb6ddb729f314f9f4c5117fb565 first.'}
+if($commit -ne 'ce195ebd06e9cbb8352a443f0c874cf569a60733'){throw 'Checkout the pinned API 20 commit ce195ebd06e9cbb8352a443f0c874cf569a60733 first.'}
 $patch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches\3fp-api20-vsrenderer-1.0.10.patch'
 $savedPreference=$ErrorActionPreference
 $ErrorActionPreference='Continue'

@@ -1,4 +1,5 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerAudioMetadata.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/VapourSynthFrameServer.h"
 #include "player/PlayerDiscMenu.h"
@@ -59,6 +60,10 @@ private slots:
         QSettings settings(config(),QSettings::IniFormat);settings.setValue("player/renderer","madVR");settings.setValue("decode/video","LAV");settings.setValue("decode/audio","LAV");settings.setValue("color/engine",1);settings.sync();
         PlayerWindow player;player.show();QCOMPARE(player.settings_->value("decode/video").toString(),QString("3FP"));QCOMPARE(player.settings_->value("decode/audio").toString(),QString("3FP"));QCOMPARE(player.settings_->value("color/engine").toInt(),0);
         bool checked=false;QTimer::singleShot(100,&player,[&]{auto* dialog=player.findChild<QDialog*>("playerSettings");QVERIFY(dialog);auto* video=dialog->findChild<QComboBox*>("playerVideoDecoder");auto* audio=dialog->findChild<QComboBox*>("playerAudioDecoder");QVERIFY(video && audio);QCOMPARE(video->count(),1);QCOMPARE(audio->count(),1);checked=true;dialog->reject();});player.showSettings();QVERIFY(checked);
+    }
+    void ffprobeFromRuntimeOrPath(){
+        QTemporaryDir directory;const auto file=directory.filePath("probe.mkv");QVERIFY(QFile::copy(":/startup/warmup.mkv",file));
+        const auto info=PlayerAudioMetadata::probe(file);QVERIFY(!info.value("streams").toArray().isEmpty());
     }
     void softwarePlaybackWithoutVs(){
         QTemporaryDir directory;const auto file=directory.filePath("sample.mkv");QVERIFY(QFile::copy(":/startup/warmup.mkv",file));

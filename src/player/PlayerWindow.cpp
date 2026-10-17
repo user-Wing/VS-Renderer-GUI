@@ -250,6 +250,7 @@ PlayerWindow::PlayerWindow() {
     profileResize_=new QTimer(this);profileResize_->setSingleShot(true);profileResize_->setInterval(350);
     connect(profileResize_,&QTimer::timeout,this,[this]{if(!direct_ && !source_.isEmpty() && !profile().isEmpty() && !media_.isEmpty() && profileTarget()!=profileSize_) {resumeAt_=position();autoPlay_=playing_ || autoPlay_;refreshScript();}});
     applySettings(false);
+    if(overlayChrome_)resize(width(),height()+controls_->sizeHint().height());
     qApp->installEventFilter(this);
     timer_ = new QTimer(this); timer_->setTimerType(Qt::PreciseTimer);timer_->setInterval(interpolationStage()>=0?4:10); connect(timer_, &QTimer::timeout, this, &PlayerWindow::updateState); timer_->start();
 }

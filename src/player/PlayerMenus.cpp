@@ -84,7 +84,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
         }
     }
 #else
-    if(!discRoot_.isEmpty())menu->addAction(tr("BD 主菜单 / 弹出菜单"),this,[this]{if(discMenu_ && discMenu_->active())discMenu_->topMenu();else openDiscMenu(discRoot_);});
+    if(!discRoot_.isEmpty())menu->addAction(tr("BD 主菜单 / 弹出菜单"),this,&PlayerWindow::returnToDiscMenu);
 #endif
     if(discMenu_ && discMenu_->active()){menu->addAction(tr("切回节目列表模式 (3FP)"),this,[this]{if(!files_.isEmpty())openFile(files_.first());});
         for(bool audio:{true,false}){auto *tracks=PlayerMenu::add(menu,audio?tr("音轨"):tr("字幕"));for(const auto &track:discMenu_->tracks(audio))tracks->addAction(track.second,this,[this,audio,id=track.first]{discMenu_->selectTrack(audio,id);});}
@@ -215,7 +215,8 @@ void PlayerWindow::captureImage(bool source,const QString &directory) {
     else arguments<<"-i"<<"pipe:0";
     arguments<<"-frames:v"<<"1"<<"-vf"<<conversion+",format=gbrpf32le"<<"-pix_fmt"<<"gbrpf32le"<<"-f"<<"rawvideo"<<"pipe:1";
     screenshotPending_=true;
-    process->start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),arguments);
+    const auto bundled=QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe");
+    process->start(QFileInfo::exists(bundled)?bundled:QStringLiteral("ffmpeg.exe"),arguments);
     if(direct_)return;
     for(int plane=0;plane<4;++plane)if(!frame.planes[plane].isEmpty()){const int width=plane>0&&value<40?(frame.width+(1<<subW)-1)>>subW:frame.width;const int height=plane>0&&value<40?(frame.height+(1<<subH)-1)>>subH:frame.height;for(int y=0;y<height;++y)process->write(frame.planes[plane].constData()+y*frame.strides[plane],width*bytes);}process->closeWriteChannel();
 }

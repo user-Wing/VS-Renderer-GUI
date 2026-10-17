@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QLineEdit>
+#include <QTimer>
 
 namespace vsr {
 void MainWindow::showCommunity(){PresetCommunityDialog dialog([this](const QString &path,bool current){loadPreset(path,current);},this);dialog.exec();}
@@ -40,18 +41,22 @@ void MainWindow::loadPreset(const QString &path, bool currentGroup)
     const auto result = PresetStore::load(path);
     if (!result.errors.isEmpty()) { setStatus(result.errors.join('\n'), true); return; }
     const auto data = PresetStore::metadata(result.script);
+    auto groups=PresetStore::timeGroups(data);
+    if(groups.size()==1 && result.script.contains("# VSR_PLAYER_PROFILE "))groups[0].script=result.script.mid(result.script.indexOf("# VSR_PLAYER_PROFILE "));
     if(currentGroup){
         if(data.isEmpty()){setStatus(QStringLiteral("当前时间组导入需要含滤镜元数据的 VSR 预设，外部 VPY 请导入所有时间组。"),true);return;}
-        const auto groups=PresetStore::timeGroups(data);graph_=groups.first().graph;activePreset_.clear();refreshPipeline(graph_.nodes().isEmpty()?-1:0);
+        if(groups.size()!=1 || groups.first().startSeconds!=0){setStatus(QStringLiteral("导入当前时间组仅支持从开头到结尾的单组预设；多组预设请导入所有时间组。"),true);return;}
+        timeGroups_=currentTimeGroups();timeGroups_[timeGroupIndex_].graph=graph_=groups.first().graph;timeGroups_[timeGroupIndex_].script=groups.first().script;activePreset_.clear();refreshPipeline(graph_.nodes().isEmpty()?-1:0);
         setStatus(QStringLiteral("已导入当前时间组，时间边界保持不变。"));return;
     }
     activePreset_ = path;
     if (!data.isEmpty()) {
-        replaceTimeGroups(PresetStore::timeGroups(data));
+        replaceTimeGroups(groups);
+        activePreset_.clear();
         sourceFilter_->setCurrentIndex(sourceFilter_->findData(data.value("sourceFilter").toInt()));
         refreshPipeline(graph_.nodes().isEmpty() ? -1 : 0);
         if (sourcePath_->text().isEmpty() && QFileInfo::exists(data.value("sourcePath").toString()))
-            { loadSource(data.value("sourcePath").toString()); return; }
+            { if(loadSource(data.value("sourcePath").toString()))QTimer::singleShot(0,this,&MainWindow::validateScript); return; }
     }
     setStatus(QStringLiteral("已载入 VPY：%1").arg(QFileInfo(path).fileName()));
     if (!sourcePath_->text().isEmpty()) validateScript();

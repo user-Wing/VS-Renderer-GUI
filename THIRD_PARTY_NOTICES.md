@@ -73,3 +73,7 @@ Hyllian, Copyright (c) 2015. MIT License. Adapted from the pass-0 diagonal kerne
 FFF.Native 的 IAMF / OBR 构建静态链接 libiamf、OAR/OBR、Abseil、Eigen、PFFFT、FLAC、Opus、FDK-AAC。固定源与构建见 [构建说明](docs/native-api20-build.md)；许可全文保留在 `third_party/native-api20/`（发布目录 `licenses/native-api20/`）。IAMF/OAR 采用其上游许可，OAR 同时附 PATENTS；Abseil 为 Apache-2.0，Eigen 使用 MPL2 覆盖的路径，PFFFT 为其 FFTPACK 许可，FLAC/Opus/FDK-AAC 各依自身许可。FDK-AAC 不包含专利授权，重新分发须保留其完整通知。未静态链接 GoogleTest。
 
 预设社区下载协议与策略参考 MIT 许可的 3fui-preset-community / VideoEnhancer，Qt 实现位于 `src/ui/PresetCommunityDialog.cpp`；原始许可保留在 `third_party/preset-community-LICENSE.txt`。
+
+## VapourSynth R81 runtime update (1.0.11)
+
+The Windows runtime uses the official VapourSynth R81 ABI3 wheel (LGPL-2.1-or-later), BM3D 11.0 (MIT), BM3Dvk2 1.0 (GPL-3.0), and BestSource 22 (MIT; its bundled FFmpeg build carries additional FFmpeg licensing). Sources: https://github.com/vapoursynth/vapoursynth/tree/R81, https://github.com/HomeOfVapourSynthEvolution/VapourSynth-BM3D, https://github.com/HolyWu/VapourSynth-bm3dvk2, https://github.com/vapoursynth/bestsource. Package license texts and the pinned component hashes are installed under `runtime/python/Lib/site-packages/vapoursynth/licenses/` and `runtime-components.json`.

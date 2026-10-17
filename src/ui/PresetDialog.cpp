@@ -12,7 +12,9 @@
 #include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
-#include <QListWidget>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
+#include <QDirIterator>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -30,18 +32,20 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(new QLabel(QStringLiteral("双击或读取加载预设；拖动排序；Delete 删除到回收站。预设保存在便携目录 vpy。"), this));
     auto *split = new QSplitter(this);
-    auto *list = new QListWidget(split); list->setObjectName("presetList"); list->setDragDropMode(QAbstractItemView::InternalMove);
+    auto *list = new QTreeWidget(split); list->setObjectName("presetList"); list->setHeaderHidden(true); list->setDragDropMode(QAbstractItemView::InternalMove);
     auto *overview = new QPlainTextEdit(split); overview->setReadOnly(true); overview->setPlaceholderText(QStringLiteral("参数总览"));
     auto *script = new QPlainTextEdit(split); script->setReadOnly(true); script->setPlaceholderText(QStringLiteral("VPY 脚本预览")); script->setLineWrapMode(QPlainTextEdit::NoWrap);
     layout->addWidget(split, 1); split->setSizes({240, 280, 460});
     auto *name = new QLineEdit(this); name->setObjectName("presetName"); name->setPlaceholderText(QStringLiteral("预设名称"));
     auto *note = new QLineEdit(this); note->setPlaceholderText(QStringLiteral("预设备注"));
     layout->addWidget(name); layout->addWidget(note);
-    const auto selected = [list] { return list->currentItem() ? list->currentItem()->data(Qt::UserRole).toString() : QString(); };
+    const auto selected = [list] { return list->currentItem() ? list->currentItem()->data(0,Qt::UserRole).toString() : QString(); };
     const auto refresh = [list] {
-        const QString previous = list->currentItem() ? list->currentItem()->data(Qt::UserRole).toString() : QString();
+        const QString previous = list->currentItem() ? list->currentItem()->data(0,Qt::UserRole).toString() : QString();
         list->clear(); QDir dir(PresetStore::directory()); dir.mkpath(".");
-        QStringList files = dir.entryList({"*.vpy"}, QDir::Files, QDir::Name);
+        QStringList files;QDirIterator it(dir.path(),{"*.vpy"},QDir::Files|QDir::NoSymLinks,QDirIterator::Subdirectories);
+        while(it.hasNext())files<<dir.relativeFilePath(it.next());
+        files.sort(Qt::CaseInsensitive);
         QFile order(dir.filePath(".preset-order.txt"));
         if (order.open(QIODevice::ReadOnly)) {
             QStringList sorted;
@@ -49,15 +53,22 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
                 if (files.removeOne(entry)) sorted << entry;
             files = sorted + files;
         }
+        QMap<QString,QTreeWidgetItem*> folders;
         for (const auto &file : files) {
-            auto *item = new QListWidgetItem(QFileInfo(file).completeBaseName(), list);
-            item->setData(Qt::UserRole, dir.filePath(file)); item->setToolTip(dir.filePath(file));
-            if (dir.filePath(file) == previous) list->setCurrentItem(item);
+            const auto parts=file.split('/');QString relative;QTreeWidgetItem *parent=nullptr;
+            for(int i=0;i+1<parts.size();++i){relative+=(relative.isEmpty()?"":"/")+parts[i];
+                if(!folders.contains(relative)){auto *folder=parent?new QTreeWidgetItem(parent,{parts[i]}):new QTreeWidgetItem(list,{parts[i]});folders.insert(relative,folder);}
+                parent=folders.value(relative);
+            }
+            auto *item=parent?new QTreeWidgetItem(parent,{QFileInfo(file).completeBaseName()}):new QTreeWidgetItem(list,{QFileInfo(file).completeBaseName()});
+            item->setData(0,Qt::UserRole, dir.filePath(file)); item->setToolTip(0,dir.filePath(file));
+            item->setFlags(item->flags() & ~Qt::ItemIsDropEnabled);
+            if (dir.filePath(file) == previous) {list->setCurrentItem(item);for(auto *p=parent;p;p=p->parent())p->setExpanded(true);}
         }
     };
-    const auto selectPath = [list](const QString &path) { for (int i=0; i<list->count(); ++i) if (list->item(i)->data(Qt::UserRole).toString() == path) { list->setCurrentRow(i); break; } };
+    const auto selectPath = [list](const QString &path) { for(QTreeWidgetItemIterator it(list);*it;++it)if((*it)->data(0,Qt::UserRole).toString()==path){list->setCurrentItem(*it);for(auto *p=(*it)->parent();p;p=p->parent())p->setExpanded(true);break;} };
     const auto error = [this](const QString &message) { QMessageBox::warning(this, QStringLiteral("预设管理"), message); };
-    connect(list, &QListWidget::currentItemChanged, this, [=] {
+    connect(list, &QTreeWidget::currentItemChanged, this, [=] {
         if (selected().isEmpty()) { name->clear(); note->clear(); script->clear(); overview->clear(); return; }
         const auto result = PresetStore::load(selected());
         const auto data = PresetStore::metadata(result.script);
@@ -67,18 +78,20 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
         if (data.isEmpty()) summary << QStringLiteral("外部 VPY：直接运行脚本，不重建处理链。");
         else {
             summary << QStringLiteral("源滤镜：%1").arg(data.value("sourceFilter").toInt() == 0 ? "L-SMASH Works" : "FFMS2") << QStringLiteral("备注：%1").arg(data.value("note").toString()) << "";
-            const auto graph = PresetStore::graph(data);
-            for (const auto &node : graph.nodes()) {
+            for(const auto &group:PresetStore::timeGroups(data)){
+            summary<<QStringLiteral("时间组：%1 · %2 秒开始").arg(group.name).arg(group.startSeconds);
+            for (const auto &node : group.graph.nodes()) {
                 const auto *definition = FilterCatalog::find(node.definitionId); if (!definition) continue;
                 summary << (node.enabled ? QStringLiteral("✓ ") : QStringLiteral("停用 · ")) + definition->name;
                 for (const auto &parameter : definition->parameters) summary << "  " + parameter.label + "：" + node.parameters.value(parameter.id).toString();
                 summary << "";
             }
+            }
         }
         overview->setPlainText(summary.join('\n'));
     });
     connect(list->model(), &QAbstractItemModel::rowsMoved, this, [=] {
-        QStringList order; for (int i = 0; i < list->count(); ++i) order << QFileInfo(list->item(i)->data(Qt::UserRole).toString()).fileName();
+        QStringList order;for(QTreeWidgetItemIterator it(list);*it;++it){const auto path=(*it)->data(0,Qt::UserRole).toString();if(!path.isEmpty())order<<QDir(PresetStore::directory()).relativeFilePath(path);}
         QString message; if (!PresetStore::write(QDir(PresetStore::directory()).filePath(".preset-order.txt"), order.join('\n'), &message)) error(message);
     });
     auto *buttons = new QHBoxLayout; layout->addLayout(buttons);
@@ -88,7 +101,7 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
     const auto safeName = [=] {
         const QString n = name->text().trimmed();
         if (n.isEmpty() || n == "." || n == ".." || n.contains(QRegularExpression("[<>:\"/\\\\|?*]")) || n.endsWith('.') || n.endsWith(' ')) return QString();
-        return QDir(PresetStore::directory()).filePath(n + ".vpy");
+        return QDir(selected().isEmpty()?PresetStore::directory():QFileInfo(selected()).absolutePath()).filePath(n + ".vpy");
     };
     const auto confirmOverwrite = [this](const QString &path) {
         return !QFileInfo::exists(path) || QMessageBox::question(this, QStringLiteral("覆盖预设"), QStringLiteral("覆盖 %1？").arg(QFileInfo(path).fileName())) == QMessageBox::Yes;
@@ -101,7 +114,7 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
     });
     button(loadCurrentGroup?QStringLiteral("导入所有时间组"):QStringLiteral("读取"), [=] { if (!selected().isEmpty()) load(selected()); });
     if(loadCurrentGroup)button(QStringLiteral("导入当前时间组"),[=]{if(!selected().isEmpty())loadCurrentGroup(selected());});
-    connect(list, &QListWidget::itemDoubleClicked, this, [=] { load(selected()); });
+    connect(list, &QTreeWidget::itemDoubleClicked, this, [=] { if(!selected().isEmpty())load(selected()); });
     button(QStringLiteral("导入"), [=] {
         const auto files = QFileDialog::getOpenFileNames(this, QStringLiteral("导入 VPY"), {}, "VapourSynth (*.vpy)");
         for (const auto &source : files) {

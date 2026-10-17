@@ -25,6 +25,8 @@ class QToolButton;
 class QSplitter;
 class QSpinBox;
 
+class TestAnalysis;
+
 namespace vsr {
 
 class AnalysisPage;
@@ -48,6 +50,7 @@ protected:
     void dropEvent(QDropEvent *event) override;
 
 private:
+    friend class ::TestAnalysis;
     QWidget *buildSidebar();
     QWidget *buildParameterPanel();
     QWidget *buildSettingsPage();
@@ -99,6 +102,7 @@ private:
     FilterGraph graph_;
     QList<FilterTimeGroup> timeGroups_{{QStringLiteral("全片"),0,{}}};
     FilterGraph copiedFilters_;
+    QString copiedGroupScript_;
     bool hasCopiedFilters_ = false;
     int timeGroupIndex_ = 0;
     QListWidget *timeGroupList_ = nullptr;

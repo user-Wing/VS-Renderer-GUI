@@ -1,6 +1,6 @@
 # API 20 原生内核构建
 
-本轮最终固定上游 `Lake1059/FFF_Project` 的 `0fe651ddab8a2bb6ddb729f314f9f4c5117fb565`（PR22），在独立 checkout 应用 `patches/3fp-api20-vsrenderer-1.0.10.patch`。不能把 API18 补丁直接应用到 API20，也不能直接使用未移植扩展的上游 DLL。
+本轮最终固定上游 `Lake1059/FFF_Project` 的 `ce195ebd06e9cbb8352a443f0c874cf569a60733`（PR23，含 PR22），在独立 checkout 应用 `patches/3fp-api20-vsrenderer-1.0.10.patch`。不能把 API18 补丁直接应用到 API20，也不能直接使用未移植扩展的上游 DLL。
 
 保留本项目的外部 VS 帧输入、clock-only、输出格式、像素探测、缩放、音频 EQ/tempo、软件解码队列和可选 libplacebo 色彩桥。snapshot、字幕及音频电平结构均按 API20 版本号传递，MinGW/MSVC 的配置、snapshot、字幕命令及图层布局已实测一致。上游20移除了旧私有 DV/RPU 测试扩展；本补丁沿用上游公开色彩和元数据路径，没有复活该私有接口。
 

@@ -1,7 +1,6 @@
 // Single-file PlayerLite bootstrapper. Windows 10+ provides tar.exe for ZIP extraction.
 // First run extracts bundled Qt/player components once; subsequent launches reuse the cache.
-// The archive deliberately does not contain FFmpeg. FFmpeg shared DLLs are resolved from
-// beside this EXE or the user's PATH, and player.ini always lives beside this EXE.
+// Qt/player dependencies are embedded; FFmpeg is external. player.ini lives beside this EXE.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
@@ -19,6 +18,25 @@ static void fail(const wchar_t *message) {
 static int exists(const wchar_t *p) {
     DWORD a = GetFileAttributesW(p);
     return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
+}
+static const wchar_t *ffmpegFiles[] = {
+    L"ffmpeg.exe", L"ffprobe.exe", L"avcodec-63.dll", L"avformat-63.dll",
+    L"avutil-61.dll", L"swresample-7.dll", L"swscale-10.dll", L"avfilter-12.dll"
+};
+static int checkFfmpeg(const wchar_t *searchPath) {
+    wchar_t found[4096], message[2048];
+    for (unsigned i = 0; i < sizeof(ffmpegFiles) / sizeof(ffmpegFiles[0]); ++i) {
+        DWORD count = SearchPathW(searchPath, ffmpegFiles[i], NULL, 4096, found, NULL);
+        if (count && count < 4096 && exists(found)) continue;
+        swprintf_s(message, 2048,
+            L"需要 FFmpeg shared x64 组件，缺少：%ls\n\n"
+            L"请将组件放在 VS-Player.exe 同目录，或将其 bin 目录加入 PATH 环境变量。\n"
+            L"需要 ffmpeg.exe、ffprobe.exe，以及 avcodec-63、avformat-63、avutil-61、"
+            L"swresample-7、swscale-10、avfilter-12 DLL 和它们的依赖。\n"
+            L"仅有静态版 ffmpeg.exe 不能替代这些共享库。", ffmpegFiles[i]);
+        fail(message); return 0;
+    }
+    return 1;
 }
 static int launchAndWait(const wchar_t *file, wchar_t *cmd, const wchar_t *dir) {
     STARTUPINFOW si = { 0 };
@@ -45,6 +63,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show
     wchar_t *last = wcsrchr(originalDir, L'\\');
     if (!last) { fail(L"Invalid executable directory."); return 1; }
     *last = 0;
+    wchar_t originalPath[28000] = { 0 }, externalPath[32768];
+    GetEnvironmentVariableW(L"PATH", originalPath, 28000);
+    swprintf_s(externalPath, 32768, L"%ls;%ls", originalDir, originalPath);
+    if (!checkFfmpeg(externalPath)) return 2;
     HANDLE input = CreateFileW(self, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (input == INVALID_HANDLE_VALUE) { fail(L"Cannot open single-file package."); return 1; }
     LARGE_INTEGER size, pos;
@@ -113,10 +135,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show
     if (mutex) { ReleaseMutex(mutex); CloseHandle(mutex); }
     CloseHandle(input);
 
-    // DLL search and ffmpeg.exe/ffprobe.exe use the original directory or PATH.
-    wchar_t originalPath[30000] = { 0 };
-    GetEnvironmentVariableW(L"PATH", originalPath, 30000);
-    swprintf_s(envPath, 32768, L"%ls;%ls", originalDir, originalPath);
+    // Keep the launcher directory ahead of PATH; cache supplies Qt/common DLLs.
+    swprintf_s(envPath, 32768, L"%ls;%ls", cache, externalPath);
     SetEnvironmentVariableW(L"PATH", envPath);
     wchar_t config[4096];
     swprintf_s(config, 4096, L"%ls\\player.ini", originalDir);
@@ -125,7 +145,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show
         HANDLE settings = CreateFileW(config, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW,
                                       FILE_ATTRIBUTE_NORMAL, NULL);
         if (settings == INVALID_HANDLE_VALUE && !exists(config)) {
-            fail(L"Cannot create player.ini beside VSPlayerLite.exe. Check folder permissions.");
+            fail(L"Cannot create player.ini beside VS-Player.exe. Check folder permissions.");
             return 1;
         }
         if (settings != INVALID_HANDLE_VALUE) {
@@ -145,7 +165,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show
     PROCESS_INFORMATION process = { 0 };
     startup.cb = sizeof(startup);
     if (!CreateProcessW(player, command, NULL, NULL, FALSE, 0, NULL, originalDir, &startup, &process)) {
-        fail(L"Cannot start VS Player Lite. Place the FFmpeg shared DLLs next to this EXE or add them to PATH.");
+        fail(L"Cannot start VS Player. Check the FFmpeg shared x64 components and the extracted runtime.");
         return 1;
     }
     CloseHandle(process.hThread);

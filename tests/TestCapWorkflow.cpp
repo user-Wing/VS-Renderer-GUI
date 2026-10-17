@@ -6,6 +6,24 @@
 class TestCapWorkflow : public QObject {
     Q_OBJECT
 private slots:
+    void captureWhileSettingsModal(){
+        QDialog settings;QLineEdit unsaved(QStringLiteral("keep pending changes"),&settings);bool verified=false;
+        QTimer::singleShot(0,&settings,[&]{
+            const auto closeSettings=qScopeGuard([&]{settings.reject();});
+            QCOMPARE(qApp->activeModalWidget(),&settings);
+            QImage source(640,480,QImage::Format_RGB32);source.fill(Qt::white);
+            QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[](QImage,bool,bool,bool){return false;});
+            const auto closeOverlay=qScopeGuard([&]{if(overlay)delete overlay;});
+            QTRY_COMPARE_WITH_TIMEOUT(qApp->activeModalWidget(),static_cast<QWidget*>(overlay),1000);
+            QTest::mousePress(overlay->windowHandle(),Qt::LeftButton,Qt::NoModifier,{20,20});
+            QTest::mouseRelease(overlay->windowHandle(),Qt::LeftButton,Qt::NoModifier,{300,250});
+            QVERIFY(overlay->findChild<QWidget*>("capToolBar")->isVisible());
+            QTest::keyClick(overlay->windowHandle(),Qt::Key_Escape);
+            QTRY_VERIFY(!overlay || !overlay->isVisible());
+            QCOMPARE(qApp->activeModalWidget(),&settings);QCOMPARE(unsaved.text(),QStringLiteral("keep pending changes"));verified=true;
+        });
+        settings.exec();QVERIFY(verified);
+    }
     void shapeFillAndWheelWidth(){
         QImage source(640,480,QImage::Format_RGBA8888);source.fill(Qt::white);QImage delivered;
         QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,bool,bool){delivered=image;return false;});
@@ -13,13 +31,18 @@ private slots:
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{20,20});QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{500,350});
         for(auto *button:overlay->findChildren<QPushButton*>())if(button->text()==QStringLiteral("矩形"))button->click();
         auto *stroke=overlay->findChild<QToolButton*>("capShapeWidth"),*fill=overlay->findChild<QToolButton*>("capShapeFill");
-        auto *width=overlay->findChild<QSpinBox*>("capPenWidth");QVERIFY(stroke && fill && width);const int before=width->value();
+        auto *width=overlay->findChild<QSpinBox*>("capPenWidth");QVERIFY(stroke && fill && width);QVERIFY(stroke->isCheckable());QVERIFY(stroke->isChecked());QVERIFY(!fill->isChecked());QVERIFY(!fill->icon().isNull());QCOMPARE(fill->iconSize(),QSize(20,20));QCOMPARE(fill->height(),stroke->height());const int before=width->value();
         QWheelEvent wheel(QPointF(4,4),QPointF(stroke->mapToGlobal(QPoint(4,4))),QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
-        QApplication::sendEvent(stroke,&wheel);QCOMPARE(width->value(),before+1);fill->click();
+        QApplication::sendEvent(stroke,&wheel);QCOMPARE(width->value(),before+1);QVERIFY(stroke->isChecked());fill->click();QVERIFY(fill->isChecked());QVERIFY(!stroke->isChecked());
         QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{100,100});QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{300,250});
         overlay->exportImage(false,false);QVERIFY(!delivered.isNull());
         const auto ink=delivered.pixelColor(qRound((200-20)*640.0/overlay->width()),qRound((170-20)*480.0/overlay->height()));
         QVERIFY(ink.red()>240 && ink.green()<20);
+        stroke->click();QVERIFY(stroke->isChecked());QVERIFY(!fill->isChecked());
+        QApplication::sendEvent(stroke,&wheel);QCOMPARE(width->value(),before+2);
+        for(auto *button:overlay->findChildren<QPushButton*>())if(button->text()==QStringLiteral("圆形"))button->click();
+        QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{340,100});QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{460,240});
+        overlay->exportImage(false,false);const auto blank=delivered.pixelColor(qRound((400-20)*640.0/overlay->width()),qRound((170-20)*480.0/overlay->height()));QVERIFY(blank.green()>240);
         QImage pinImage(200,150,QImage::Format_RGBA8888);pinImage.fill(Qt::white);
         QPointer<PinWindow> pin=new PinWindow(pinImage,[](QImage,bool,bool,bool){return true;});
         const auto closePin=qScopeGuard([&]{if(pin)pin->close();});pin->showToolBar();

@@ -1,6 +1,7 @@
 #include "ui/AnalysisPage.h"
 #include "ui/ExportWindow.h"
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QPlainTextEdit>
 #include <QLineEdit>
 #include <QDialog>
@@ -81,16 +82,23 @@ private slots:
         QVERIFY(groups->mapToGlobal(QPoint()).y()>catalog->mapToGlobal(QPoint()).y());
         QVERIFY(pipeline->mapToGlobal(QPoint()).x()>groups->mapToGlobal(QPoint()).x());
         QVERIFY(input->mapToGlobal(QPoint()).y()>timeline->mapToGlobal(QPoint()).y());
+        auto *position=window.findChild<QLabel*>("rendererPosition");QVERIFY(position);
+        QVERIFY(qAbs(position->mapToGlobal(position->rect().center()).y()-timeline->mapToGlobal(timeline->rect().center()).y())<5);QVERIFY(input->width()<=320);
         const auto width=view->width();auto *one=window.findChild<QAction*>("rendererToggleArea1"),*two=window.findChild<QAction*>("rendererToggleArea2");QVERIFY(one && two);
         one->trigger();QTest::qWait(80);QVERIFY(view->width()>width);two->trigger();QTest::qWait(80);QVERIFY(view->width()>width+300);
         one->trigger();two->trigger();QTest::qWait(80);QVERIFY(qAbs(view->width()-width)<10);
         QVERIFY(window.findChild<QLabel*>("rendererSourceMonitor"));QVERIFY(window.findChild<QLabel*>("rendererProcessedMonitor"));
-        window.grab().save("build/audit-20261016/renderer-timegroups.png");
+        auto *browse=window.findChild<QPushButton*>("rendererBrowse");auto *controls=window.findChild<QWidget*>("rendererFrameControls");auto *mode=window.findChild<QComboBox*>("rendererCompareMode");
+        QVERIFY(browse && controls && mode);QVERIFY(qAbs(input->mapToGlobal(input->rect().center()).y()-controls->mapToGlobal(controls->rect().center()).y())<6);
+        QVERIFY(browse->mapToGlobal(QPoint()).x()<controls->mapToGlobal(QPoint()).x());QVERIFY(controls->mapToGlobal(QPoint()).x()<mode->mapToGlobal(QPoint()).x());
+        window.grab().save("build/audit-20261017/renderer-timegroups.png");
     }
     void timeGroupPresetAndFrames(){
         FilterGraph first,second;const int node=first.add("resize");first.setParameter(node,"width",64);first.setParameter(node,"height",32);
         const int other=second.add("resize");second.setParameter(other,"width",64);second.setParameter(other,"height",32);
         QList<FilterTimeGroup> groups{{"Opening",0,first},{"Main",1,second},{"End",2,first}};
+        groups[1].script=PresetStore::create(second,SourceFilter::Ffms2,{},{});
+        groups[1].script+="\nassert os.path.isfile(os.path.join(_vsr_directory, 'runtime', 'python', 'python.exe'))\n";
         const auto preset=PresetStore::create(groups,SourceFilter::Ffms2,"input.mkv","roundtrip");const auto restored=PresetStore::timeGroups(PresetStore::metadata(preset));
         QCOMPARE(restored.size(),3);QCOMPARE(restored[1].startSeconds,1);QCOMPARE(restored[1].graph.nodes().first().parameters.value("width").toInt(),64);
         auto built=VpyScriptBuilder::buildGroups("input.mkv",SourceFilter::Ffms2,groups);QVERIFY(built.errors.isEmpty());
@@ -102,15 +110,36 @@ private slots:
         QCOMPARE(qvariant_cast<VapourSynthClipInfo>(loaded.first().first()).totalFrames,101);
         for(const int frame:{0,23,24,47,48,100}){frames.clear();server.requestFrame(frame);QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty(),5000);QCOMPARE(qvariant_cast<VapourSynthFrame>(frames.first().first()).frameIndex,frame);}
     }
+    void presetImportKeepsTimeGroups(){
+        FilterGraph first,second;first.add("resize");second.add("crop");
+        QList<FilterTimeGroup> groups{{"First",0,first},{"Second",12,second},{"Third",30,first}};
+        MainWindow window;window.replaceTimeGroups(groups);window.refreshTimeGroups(1);
+        QTemporaryDir dir;const auto single=dir.filePath("single.vpy"),multi=dir.filePath("multi.vpy");
+        QVERIFY(PresetStore::write(single,PresetStore::create(first,SourceFilter::Ffms2,{},{})));
+        QVERIFY(PresetStore::write(multi,PresetStore::create(groups,SourceFilter::Ffms2,{},{})));
+        window.loadPreset(single,true);auto result=window.currentTimeGroups();
+        QCOMPARE(result.size(),3);QCOMPARE(result[1].startSeconds,12);QCOMPARE(result[2].startSeconds,30);
+        QCOMPARE(result[1].graph.nodes().first().definitionId,QString("resize"));
+        window.loadPreset(multi,true);QCOMPARE(window.currentTimeGroups()[1].graph.nodes().first().definitionId,QString("resize"));
+        window.loadPreset(multi);result=window.currentTimeGroups();QCOMPARE(result.size(),3);QCOMPARE(result[1].graph.nodes().first().definitionId,QString("crop"));
+        // Script-backed builtins must survive import, boundaries, save and reload.
+        const auto profile=dir.filePath("profile.vpy");const auto custom=PresetStore::create(first,SourceFilter::Ffms2,{},{})+"\nclip = core.std.Invert(clip)\nclip.set_output(0)\n";
+        QVERIFY(PresetStore::write(profile,"# VSR_PLAYER_PROFILE Test\n"+custom));window.refreshTimeGroups(2);window.loadPreset(profile,true);
+        result=window.currentTimeGroups();QVERIFY(result[2].script.contains("core.std.Invert"));QCOMPARE(result[2].startSeconds,30);
+        const auto saved=PresetStore::create(result,SourceFilter::Ffms2,{},{});const auto restored=PresetStore::timeGroups(PresetStore::metadata(saved));
+        QCOMPARE(restored[2].script,result[2].script);QCOMPARE(restored[1].startSeconds,12);
+    }
     void communityExampleDownload(){
-        PresetCommunityDialog dialog([](const QString&,bool){});dialog.show();auto *files=dialog.findChild<QTreeWidget*>("communityFiles");QVERIFY(files);
-        QTRY_VERIFY_WITH_TIMEOUT(files->topLevelItemCount()>0,45000);files->setCurrentItem(files->topLevelItem(0));
+        QString imported;bool current=false;
+        PresetCommunityDialog dialog([&](const QString &path,bool group){imported=path;current=group;});dialog.show();auto *files=dialog.findChild<QTreeWidget*>("communityFiles");QVERIFY(files);
+        QTRY_VERIFY_WITH_TIMEOUT(files->topLevelItemCount()>0 && files->topLevelItem(0)->childCount()>0,45000);
+        auto *folder=files->topLevelItem(0);QCOMPARE(folder->text(0),QString("Builtin"));QVERIFY(!folder->isExpanded());folder->setExpanded(true);
+        auto *row=folder->child(0);files->setCurrentItem(row);
         for(auto *button:dialog.findChildren<QPushButton*>())if(button->text()==QStringLiteral("下载选中"))button->click();
-        QTRY_COMPARE_WITH_TIMEOUT(files->topLevelItem(0)->text(2),QStringLiteral("已安装"),45000);
-        bool viewed=false;QTimer::singleShot(100,&dialog,[&]{auto *view=dialog.findChild<QDialog*>();QVERIFY(view);auto *text=view->findChild<QPlainTextEdit*>();QVERIFY(text && text->isReadOnly());QVERIFY(text->toPlainText().contains(QStringLiteral("预设文件版本")));viewed=true;view->accept();});
-        for(auto *button:dialog.findChildren<QPushButton*>())if(button->text()==QStringLiteral("导入所有时间组"))button->click();
-        QVERIFY(viewed);
-        dialog.grab().save("build/audit-20261016/preset-community.png");
+        QTRY_COMPARE_WITH_TIMEOUT(row->text(2),QStringLiteral("已安装"),45000);
+        for(auto *button:dialog.findChildren<QPushButton*>())if(button->text()==QStringLiteral("导入当前时间组"))button->click();
+        QVERIFY(current);QVERIFY(imported.contains("/Community/Builtin/"));QVERIFY(!PresetStore::metadata(PresetStore::load(imported).script).isEmpty());
+        dialog.grab().save("build/audit-20261017/preset-community.png");
     }
     void rendererStartupBudget() {
         const auto before=GetModuleHandleW(L"FFF.Native.dll");QElapsedTimer timer;timer.start();MainWindow window;window.show();
@@ -266,13 +295,25 @@ private slots:
             return false;
         };
         QVERIFY(click(QStringLiteral("保存当前"))); QVERIFY(QFileInfo::exists(target));
-        auto *list = dialog.findChild<QListWidget *>("presetList"); QVERIFY(list);
-        for (int i = 0; i < list->count(); ++i) if (list->item(i)->text() == name) list->setCurrentRow(i);
+        auto *list = dialog.findChild<QTreeWidget *>("presetList"); QVERIFY(list);
+        for (int i = 0; i < list->topLevelItemCount(); ++i) if (list->topLevelItem(i)->text(0) == name) list->setCurrentItem(list->topLevelItem(i));
         QVERIFY(click(QStringLiteral("读取"))); QCOMPARE(loaded,target);
         input->setText(name + "_renamed"); QVERIFY(click(QStringLiteral("变更名称"))); QVERIFY(QFileInfo::exists(renamed)); QVERIFY(!QFileInfo::exists(target));
         QVERIFY(!PresetStore::metadata(PresetStore::load(renamed).script).isEmpty());
         dialog.grab().save("build/mingw-release/preset-management-layout.png");
         QVERIFY(QFile::remove(renamed));
+    }
+    void presetTreeSubdirectories(){
+        const auto folder="__tree_"+QUuid::createUuid().toString(QUuid::Id128);const QDir root(PresetStore::directory());
+        const auto path=root.filePath(folder+"/child/original.vpy"),renamed=root.filePath(folder+"/child/renamed.vpy");
+        QVERIFY(PresetStore::write(path,PresetStore::create(FilterGraph(),SourceFilter::Ffms2,{},{})));
+        const auto cleanup=qScopeGuard([&]{QFile::remove(path);QFile::remove(renamed);QDir().rmdir(root.filePath(folder+"/child"));QDir().rmdir(root.filePath(folder));});
+        PresetDialog dialog([](const QString&){return QString();},[](const QString&){},[]{});auto *tree=dialog.findChild<QTreeWidget*>("presetList");QVERIFY(tree);
+        QTreeWidgetItem *leaf=nullptr;for(QTreeWidgetItemIterator it(tree);*it;++it)if((*it)->data(0,Qt::UserRole).toString()==path)leaf=*it;
+        QVERIFY(leaf && leaf->parent() && leaf->parent()->parent());QCOMPARE(leaf->parent()->text(0),QString("child"));QVERIFY(!leaf->parent()->isExpanded());leaf->parent()->setExpanded(true);QVERIFY(leaf->parent()->isExpanded());
+        tree->setCurrentItem(leaf);dialog.findChild<QLineEdit*>("presetName")->setText("renamed");
+        for(auto *button:dialog.findChildren<QPushButton*>())if(button->text()==QStringLiteral("变更名称"))button->click();
+        QVERIFY(QFileInfo::exists(renamed));QVERIFY(!QFileInfo::exists(path));
     }
     void portablePreset()
     {

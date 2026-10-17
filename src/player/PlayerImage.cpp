@@ -143,7 +143,8 @@ void PlayerImage::open(const QString &path) {
             // FFmpeg provides additional still-image codecs absent from Qt's plugins.
             if(image.isNull() && suffix!="avif" && temporary.isValid()) {
                 decoded=temporary.filePath("image.png");QProcess process;
-                process.start(QDir(runtime).filePath("ffmpeg.exe"),
+                const auto bundled=QDir(runtime).filePath("ffmpeg.exe");
+                process.start(QFileInfo::exists(bundled)?bundled:QStringLiteral("ffmpeg.exe"),
                     {"-v","error","-i",path,"-frames:v","1","-y",decoded});
                 if(process.waitForStarted()) {
                     while(!process.waitForFinished(100))if(generation!=generation_){process.kill();process.waitForFinished();return;}

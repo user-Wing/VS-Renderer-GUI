@@ -56,7 +56,13 @@ Copy-Item (Join-Path $package "*.py"),
               (Join-Path $package "*.dll"),
               (Join-Path $package "*.exe") -Destination $sitePackage -Force
 
+Copy-Item -LiteralPath (Join-Path $package "licenses") -Destination $sitePackage -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $package "runtime-components.json") -Destination $sitePackage -Force
+
 $pluginFiles = @(
+    "plugins\bm3d.dll",
+    "plugins\bm3dvk2.dll",
+    "plugins\libbestsource.dll",
     "plugins\mvtools.dll",
     "plugins\librife.dll",
     "plugins\vsrepo\libdescale.dll",

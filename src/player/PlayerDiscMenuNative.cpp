@@ -25,7 +25,7 @@ struct PlayerDiscMenu::Impl {
 };
 PlayerDiscMenu::PlayerDiscMenu() : impl_(std::make_unique<Impl>()) {}
 PlayerDiscMenu::~PlayerDiscMenu() { close(); }
-bool PlayerDiscMenu::open(const QString &root,void *window) {
+bool PlayerDiscMenu::open(const QString &root,void *window,bool) {
     close();auto &i=*impl_;
     if(!i.api.available()){i.failure=i.api.errorString();return false;}
     const auto dll=i.api.libraryPath();

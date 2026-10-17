@@ -51,10 +51,10 @@ def write_json(target, data):
 
 def main():
     backup = ROOT / 'build' / ('deployment-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
-    report = {'upstream': '0fe651ddab8a2bb6ddb729f314f9f4c5117fb565', 'editions': {}}
+    report = {'upstream': 'ce195ebd06e9cbb8352a443f0c874cf569a60733', 'editions': {}}
     editions = {
         'VS-GUI-Full': {'VSRenderer.exe': BUILD / 'VSRenderer.exe', 'vs-player.exe': BUILD / 'vs-player.exe', 'vs-cap.exe': BUILD / 'vs-cap.exe'},
-        '1.0.10-PlayerLite': {'vs-player.exe': BUILD / 'lite/vs-player.exe'},
+        '1.0.11-PlayerLite': {'vs-player.exe': BUILD / 'lite/vs-player.exe'},
     }
     for folder, programs in editions.items():
         target = ROOT / 'dist' / folder
@@ -71,9 +71,16 @@ def main():
             if source.is_file():
                 sources['licenses/native-api20/' + source.name] = source
         sources['licenses/preset-community-LICENSE.txt'] = ROOT / 'third_party/preset-community-LICENSE.txt'
+        for file in ['docs/update-1.0.11.md', 'README.md', 'project.md', 'changelog.md', 'docs/native-api20-build.md']:
+            sources[file] = ROOT / file
         if folder == 'VS-GUI-Full':
-            for file in ['README.md', 'project.md', 'changelog.md', 'docs/update-20261016.md', 'docs/native-api20-build.md', 'docs/vscap-2026-10-16-multipin-awj-hdr.md']:
+            for file in ['docs/update-20261016.md', 'docs/vscap-2026-10-16-multipin-awj-hdr.md']:
                 sources[file] = ROOT / file
+        if folder == 'VS-GUI-Full':
+            package = BUILD / 'runtime/python/Lib/site-packages/vapoursynth'
+            for source in package.rglob('*'):
+                if source.is_file() and (source.suffix in ('.dll', '.pyd', '.py', '.pyi', '.exe') or 'licenses' in source.parts or source.name == 'runtime-components.json'):
+                    sources['runtime/python/Lib/site-packages/vapoursynth/' + source.relative_to(package).as_posix()] = source
         changed = {}
         for relative, source in sources.items():
             destination = target / relative
@@ -91,6 +98,7 @@ def main():
         release['totalBytes'] = sum(p.stat().st_size for p in files)
         ffmpeg = set(release['ffmpegOnlyFiles'])
         release['excludingFFmpegBytes'] = sum(p.stat().st_size for p in files if p.name not in ffmpeg)
+        release['version'] = '1.0.11'
         release['nativeApi'] = 20
         release['nativeUpstream'] = report['upstream']
         write_json(target / 'release.json', release)

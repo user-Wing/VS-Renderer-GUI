@@ -92,8 +92,13 @@ bool PlayerWindow::openBluRay(const QString &path, bool menus) {
         for(const auto &file:audio){list.paths<<file;list.labels.insert(file,QFileInfo(file).fileName());list.groups.insert(file,"audio");}return list;
     }));return true;
 }
-bool PlayerWindow::openDiscMenu(const QString &root, bool menus) {
-    QString error;const auto input=menus?BlurayCatalog::prepareMenu(root,&error):root;if(input.isEmpty()){setError(error);return false;}
+void PlayerWindow::returnToDiscMenu() {
+    if(discMenu_ && discMenu_->active() && !discMenu_->programme().value("firstPlay").toBool()){
+        discMenu_->topMenu();discMenu_->pause(false);playing_=true;play_->setText("Ⅱ");discMenuNavigation_=true;
+    }else if(!discRoot_.isEmpty())openDiscMenu(discRoot_,true,true);
+}
+bool PlayerWindow::openDiscMenu(const QString &root, bool menus, bool topMenu) {
+    QString error;const auto input=menus?BlurayCatalog::prepareMenu(root,&error,topMenu):root;if(input.isEmpty()){setError(error);return false;}
     pendingMediaOpen_.clear();
     discProgrammeKey_.clear();discProgrammeSettling_.invalidate();seekUiTarget_=queuedSeek_=-1;seekPending_=false;
     savePosition();if(discMenu_ && discMenu_->active()){discMenu_->close(discSurface_);discSurface_=nullptr;}clock_->stop();output_->stop();server_->unloadScript();lav_.reset();subtitles_->load(0,{},-1,{},{});subtitles_->load(1,{},-1,{},{});
@@ -102,7 +107,7 @@ bool PlayerWindow::openDiscMenu(const QString &root, bool menus) {
     if(!discSurface_){discSurface_=new QWidget(pane_->surface());discSurface_->setObjectName("playerDiscSurface");discSurface_->setAttribute(Qt::WA_NativeWindow);discSurface_->setFocusPolicy(Qt::StrongFocus);}
     imageMode_=audioMode_=false;imageTools_->hide();lyricLabel_->hide();audioSubtitle_->hide();info_->hide();infoVisible_=false;autoPlay_=false;pending_=false;profileStartup_.invalidate();
     discSurface_->setMouseTracking(true);discSurface_->setGeometry(pane_->surface()->rect());discSurface_->show();discSurface_->raise();
-    if(!discMenu_->open(input,reinterpret_cast<void *>(discSurface_->winId()))){discSurface_->hide();setError(discMenu_->error());return false;}
+    if(!discMenu_->open(input,reinterpret_cast<void *>(discSurface_->winId()),topMenu)){discSurface_->hide();setError(discMenu_->error());return false;}
     discMenuNavigation_=menus;discMenu_->volume(volume_->value(),mute_->isChecked());discMenu_->rate(speed_);
     if(menus){source_=root;fileIndex_=-1;}ready_=playing_=true;play_->setText("Ⅱ");rendererBadge_->setText("libVLC");decoderBadge_->setText("BD-Auto");decoderBadge_->setEnabled(false);decoderBadge_->setToolTip(tr("BD 菜单/短节目自动解码 (libVLC)"));message_->setText(menus?tr("BD 菜单交互 · 鼠标点击或方向键选择，Enter 确认；节目列表可切回 3FP"):tr("BD 短节目 · libVLC (保留 MPLS 顺序和裁切边界)"));discSurface_->setFocus();return true;
 }
@@ -134,7 +139,7 @@ void PlayerWindow::chooseLink() {
 void PlayerWindow::buildPlaylist(QWidget *parent) {
     playlistPanel_=new PlayerChromePanel(parent);playlistPanel_->setObjectName("playerPlaylistPanel");playlistPanel_->setAttribute(Qt::WA_NativeWindow);
     playlistPanel_->setStyleSheet("background:#292b30;border:1px solid #50535a;");auto *layout=new QVBoxLayout(playlistPanel_);
-    auto *title=new QHBoxLayout;title->addWidget(new QLabel(tr("播放列表"),playlistPanel_),1);auto *menu=new QPushButton(tr("BD 菜单"),playlistPanel_);menu->setObjectName("playerOpenDiscMenu");title->addWidget(menu);connect(menu,&QPushButton::clicked,this,[this]{if(!discRoot_.isEmpty())openDiscMenu(discRoot_);});auto *close=new QPushButton("×",playlistPanel_);close->setObjectName("playerPlaylistClose");close->setFixedWidth(30);title->addWidget(close);layout->addLayout(title);connect(close,&QPushButton::clicked,this,[this]{setPlaylistPinned(false);playlistDismissed_=true;playlistPanel_->hide();});
+    auto *title=new QHBoxLayout;title->addWidget(new QLabel(tr("播放列表"),playlistPanel_),1);auto *menu=new QPushButton(tr("BD 菜单"),playlistPanel_);menu->setObjectName("playerOpenDiscMenu");title->addWidget(menu);connect(menu,&QPushButton::clicked,this,&PlayerWindow::returnToDiscMenu);auto *close=new QPushButton("×",playlistPanel_);close->setObjectName("playerPlaylistClose");close->setFixedWidth(30);title->addWidget(close);layout->addLayout(title);connect(close,&QPushButton::clicked,this,[this]{setPlaylistPinned(false);playlistDismissed_=true;playlistPanel_->hide();});
     playlistWidth_=std::clamp(settings_->value("playlist/width",320).toInt(),180,800);
     connect(videoSplit_,&QSplitter::splitterMoved,this,[this]{if(playlistPinned_ && !isFullScreen()){playlistWidth_=playlistPanel_->width();settings_->setValue("playlist/width",playlistWidth_);}});
     playlist_=new QTreeWidget(playlistPanel_);playlist_->setObjectName("playerPlaylist");playlist_->setHeaderHidden(true);playlist_->header()->setSectionResizeMode(QHeaderView::Stretch);playlist_->setTextElideMode(Qt::ElideMiddle);playlist_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);playlist_->setToolTip(tr("双击文件播放；展开子目录查看文件"));layout->addWidget(playlist_);
@@ -191,7 +196,7 @@ void PlayerWindow::layoutChrome() {
     auto *layout=qobject_cast<QVBoxLayout *>(centralWidget()->layout());
     if(overlay!=overlayChrome_){overlayChrome_=overlay;if(overlay){layout->removeWidget(videoSplit_);layout->removeWidget(controls_);layout->removeWidget(imageTools_);controls_->setWindowFlags(Qt::Tool|Qt::FramelessWindowHint);controls_->setAttribute(Qt::WA_TranslucentBackground);}
         else {controls_->setWindowFlags(Qt::Widget);layout->insertWidget(0,imageTools_);layout->addWidget(videoSplit_,1);layout->addWidget(controls_);}}
-    if(overlay){videoSplit_->setGeometry(centralWidget()->rect());const int h=controls_->sizeHint().height();controlsTop_=centralWidget()->height()-h;controls_->setGeometry(QRect(centralWidget()->mapToGlobal(QPoint(0,controlsTop_)),QSize(centralWidget()->width(),h)));controls_->raise();if(imageTools_){imageTools_->setGeometry(0,0,centralWidget()->width(),imageTools_->sizeHint().height());imageTools_->raise();}}
+    if(overlay){const int h=controls_->sizeHint().height();controlsTop_=centralWidget()->height()-h;videoSplit_->setGeometry(centralWidget()->rect().adjusted(0,0,0,isFullScreen()?0:-h));controls_->setGeometry(QRect(centralWidget()->mapToGlobal(QPoint(0,controlsTop_)),QSize(centralWidget()->width(),h)));controls_->raise();if(imageTools_){imageTools_->setGeometry(0,0,centralWidget()->width(),imageTools_->sizeHint().height());imageTools_->raise();}}
     if(playlistPanel_->isWindow()){const int top=isFullScreen()?fullscreenTitle_->sizeHint().height():0,width=qMin(playlistWidth_,centralWidget()->width()/2);playlistPanel_->setGeometry(QRect(centralWidget()->mapToGlobal(QPoint(centralWidget()->width()-width,top)),QSize(width,centralWidget()->height()-controls_->sizeHint().height()-top)));}
 }
 void PlayerWindow::updateChrome() {
@@ -225,5 +230,5 @@ void PlayerWindow::updateChrome() {
     else if(!titleIdle_.isValid() || titleIdle_.elapsed()>=1000)fullscreenTitle_->hide();
     layoutInfoPanels();
 }
-void PlayerWindow::layoutInfoPanels(){const int top=isFullScreen() && fullscreenTitle_->isVisible()?fullscreenTitle_->height():0,bottom=overlayChrome_?controls_->height():0;static_cast<PlayerInfoPanel *>(info_)->setOverlayInsets(top,bottom);audioInfo_->setOverlayInsets(top,bottom);if(info_->isVisible())info_->raise();if(audioInfo_->isVisible())audioInfo_->raise();if(fullscreenTitle_->isVisible())fullscreenTitle_->raise();}
+void PlayerWindow::layoutInfoPanels(){const int top=isFullScreen() && fullscreenTitle_->isVisible()?fullscreenTitle_->height():0,bottom=overlayChrome_ && isFullScreen()?controls_->height():0;static_cast<PlayerInfoPanel *>(info_)->setOverlayInsets(top,bottom);audioInfo_->setOverlayInsets(top,bottom);if(info_->isVisible())info_->raise();if(audioInfo_->isVisible())audioInfo_->raise();if(fullscreenTitle_->isVisible())fullscreenTitle_->raise();}
 }

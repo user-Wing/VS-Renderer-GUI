@@ -163,7 +163,7 @@ struct VapourSynthFrameServer::Impl {
         }
         scriptApi = getApi(VSSCRIPT_API_VERSION);
         if (!scriptApi) {
-            error = QStringLiteral("VSScript API 4.4 不可用；请使用项目固定的 VapourSynth R80 构建。");
+            error = QStringLiteral("VSScript API 4.4 不可用；请使用项目固定的 VapourSynth R81 构建。");
             return false;
         }
         vsApi = scriptApi->getVSAPI(VAPOURSYNTH_API_VERSION);

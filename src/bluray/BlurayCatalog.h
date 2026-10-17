@@ -49,6 +49,6 @@ public:
     static QString mkvmerge();
     static QString time(qint64 ticks);
     static QString clipPlaybackIssue(const QString &path);
-    static QString prepareMenu(const QString &root, QString *error);
+    static QString prepareMenu(const QString &root, QString *error, bool directTopMenu = false);
 };
 }

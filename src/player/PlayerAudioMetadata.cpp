@@ -20,7 +20,8 @@ QByteArray run(const QString &name,const QStringList &args) {
 #ifdef Q_OS_WIN
     process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args){args->flags|=CREATE_NO_WINDOW;});
 #endif
-    process.start(QDir(QCoreApplication::applicationDirPath()).filePath(name),args);
+    const auto bundled=QDir(QCoreApplication::applicationDirPath()).filePath(name);
+    process.start(QFileInfo::exists(bundled)?bundled:name,args);
     if(!process.waitForStarted(5000)){qWarning()<<"Metadata process failed to start"<<name<<process.errorString();return {};}
     if(process.state()!=QProcess::NotRunning && !process.waitForFinished(20000)){qWarning()<<"Metadata process timed out"<<name<<process.errorString();process.kill();process.waitForFinished();return {};}
     if(process.exitCode()!=0 || process.exitStatus()!=QProcess::NormalExit){qWarning()<<"Metadata process failed"<<name<<process.exitCode()<<process.readAllStandardError();return {};}

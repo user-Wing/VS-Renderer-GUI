@@ -401,21 +401,28 @@ def _vsr_rife(c, model, factor, gpu, threads, scene, scale):
 
 ScriptBuildResult VpyScriptBuilder::buildGroups(const QString &sourcePath, SourceFilter sourceFilter,
                                                const QList<FilterTimeGroup> &groups) {
-    if(groups.size()==1 && groups.first().startSeconds==0)return build(sourcePath,sourceFilter,groups.first().graph);
+    if(groups.size()==1 && groups.first().startSeconds==0 && groups.first().script.isEmpty())return build(sourcePath,sourceFilter,groups.first().graph);
     ScriptBuildResult result=build(sourcePath,sourceFilter,FilterGraph());
     if(!result.errors.isEmpty())return result;
     if(groups.isEmpty() || groups.first().startSeconds!=0){result.errors<<QStringLiteral("第一个时间组必须从 0 秒开始。");return result;}
     result.script.remove("src.set_output(1)\n");result.script.remove("clip.set_output(0)\n");
+    if(std::any_of(groups.begin(),groups.end(),[](const FilterTimeGroup &group){return !group.script.isEmpty();}))
+        result.script.prepend("_vsr_directory = globals().get('_vsr_directory', "+pythonString(QCoreApplication::applicationDirPath())+")\n");
     result.script+="\n_vsr_parts = []\n";
     for(int i=0;i<groups.size();++i){
         if(groups[i].startSeconds<0 || (i && groups[i].startSeconds<=groups[i-1].startSeconds)){
             result.errors<<QStringLiteral("时间组起点必须按秒递增，不能重叠。");return result;
         }
-        auto part=build(sourcePath,sourceFilter,groups[i].graph);result.errors+=part.errors;
+        auto part=build(sourcePath,sourceFilter,groups[i].graph);
+        if(!groups[i].script.isEmpty())part.script=groups[i].script;
+        result.errors+=part.errors;
         for(const auto &ns:part.requiredNamespaces)if(!result.requiredNamespaces.contains(ns))result.requiredNamespaces<<ns;
         auto lines=part.script.split('\n');
         result.script+=QString("\ndef _vsr_group_%1(_vsr_segment):\n").arg(i);
-        for(auto line:lines){
+        if(!groups[i].script.isEmpty()){
+            for(auto &line:lines){if(line.startsWith("src = "))line="src = _vsr_segment";if(line=="src.set_output(1)" || line=="clip.set_output(0)")line.clear();}
+            result.script+="    _scope = dict(globals(), _vsr_segment=_vsr_segment)\n    exec("+pythonString(lines.join('\n'))+", _scope)\n    return _scope['clip']\n";
+        }else for(auto line:lines){
             if(line.startsWith("src = "))line="src = _vsr_segment";
             if(line=="src.set_output(1)")continue;
             if(line=="clip.set_output(0)")line="return clip";

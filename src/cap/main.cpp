@@ -147,6 +147,7 @@ public:
     CaptureOverlay(QScreen *screen, QImage shot, std::function<bool(QImage,bool,bool,bool)> output, bool embedded=false)
         : canvas_(std::move(shot)), embedded_(embedded), output_(std::move(output)) {
         setWindowFlags(embedded_?Qt::Widget:Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+        if(!embedded_ && QApplication::activeModalWidget())setWindowModality(Qt::ApplicationModal);
         setAttribute(Qt::WA_DeleteOnClose,!embedded_);
         setAttribute(Qt::WA_OpaquePaintEvent);
         setMouseTracking(true);
@@ -214,8 +215,11 @@ public:
         if(!embedded_)tool(QStringLiteral("选区"),Selection);
         if(embedded_)tool(QStringLiteral("拖动"),Pan);
         tool(QStringLiteral("画笔"),Pen);
-        strokeButton_=new QToolButton(bar_);strokeButton_->setObjectName("capShapeWidth");strokeButton_->setText(QStringLiteral("●"));strokeButton_->setToolTip(QStringLiteral("滚轮调节矩形/圆形线条粗细"));strokeButton_->installEventFilter(this);layout->addWidget(strokeButton_);
+        strokeButton_=new QToolButton(bar_);strokeButton_->setObjectName("capShapeWidth");strokeButton_->setText(QStringLiteral("●"));strokeButton_->setCheckable(true);strokeButton_->setChecked(true);strokeButton_->setToolTip(QStringLiteral("边框模式；滚轮调节矩形/圆形线条粗细"));strokeButton_->installEventFilter(this);layout->addWidget(strokeButton_);
         fillButton_=new QToolButton(bar_);fillButton_->setObjectName("capShapeFill");fillButton_->setText(QStringLiteral("■"));fillButton_->setToolTip(QStringLiteral("纯色填充"));fillButton_->setCheckable(true);layout->addWidget(fillButton_);
+        QPixmap fillIcon(QSize(20,20)*devicePixelRatioF());fillIcon.setDevicePixelRatio(devicePixelRatioF());fillIcon.fill(Qt::transparent);
+        {QPainter painter(&fillIcon);painter.fillRect(QRect(2,2,16,16),Qt::white);}fillButton_->setText({});fillButton_->setIcon(QIcon(fillIcon));fillButton_->setIconSize(QSize(20,20));
+        auto *shapeModes=new QButtonGroup(this);shapeModes->setExclusive(true);shapeModes->addButton(strokeButton_);shapeModes->addButton(fillButton_);
         connect(fillButton_,&QToolButton::toggled,this,[this](bool enabled){filled_=enabled;});
         tool(QStringLiteral("矩形"),Rect);
         tool(QStringLiteral("圆形"),Ellipse);tool(QStringLiteral("线"),Line);tool(QStringLiteral("文字"),Text);
@@ -232,6 +236,7 @@ public:
         add(QStringLiteral("贴图"), [this] {deliver(true,false);});
         add(QStringLiteral("✓"), [this] {if(embedded_)bar_->hide();else deliver(false,false,true);})->setToolTip(embedded_?QStringLiteral("隐藏工具栏"):QStringLiteral("复制到剪贴板"));
         bar_->setStyleSheet("QWidget{background:#252831;} QPushButton,QComboBox,QToolButton{color:white;background:#3b414e;padding:5px;border:1px solid transparent;} QPushButton:checked,QToolButton:checked{border:2px solid #78baff;background:#24496a;} QPushButton:disabled{color:#858585;} QSpinBox{color:white;background:#3b414e;padding:4px 24px 4px 5px;border:1px solid transparent;min-height:24px;} QSpinBox::up-button{subcontrol-origin:border;subcontrol-position:top right;width:20px;height:16px;} QSpinBox::down-button{subcontrol-origin:border;subcontrol-position:bottom right;width:20px;height:16px;}");
+        const int shapeHeight=tools_->button(Rect)->sizeHint().height();strokeButton_->setFixedHeight(shapeHeight);fillButton_->setFixedSize(shapeHeight,shapeHeight);
         updateColor();updateOptions();
         bar_->adjustSize();
         bar_->hide();
@@ -730,7 +735,7 @@ private:
         if(pin) {addPin(std::move(image));return true;}
         if(copy)return true;
         const auto ext=avif?"avif":"png";
-        const auto path=QFileDialog::getSaveFileName(nullptr,QStringLiteral("保存截图"),makePath(ext),
+        const auto path=QFileDialog::getSaveFileName(QApplication::activeModalWidget(),QStringLiteral("保存截图"),makePath(ext),
                          avif?"AVIF (*.avif)":"PNG (*.png)");
         if(path.isEmpty())return false;
         storeDir(path);
@@ -849,6 +854,7 @@ int main(int argc,char **argv) {
     }
     app.setQuitOnLastWindowClosed(false);
     app.setApplicationName("VS Cap");
+    app.setApplicationVersion(VSR_VERSION);
     const int waitArgument=app.arguments().indexOf("--wait-parent");
     if(waitArgument>=0){const auto parent=OpenProcess(SYNCHRONIZE,FALSE,app.arguments().value(waitArgument+1).toULong());if(parent){WaitForSingleObject(parent,10000);CloseHandle(parent);}}
     if(const auto running=OpenMutexW(SYNCHRONIZE,FALSE,L"Local\\VSRenderer-VSCap")){CloseHandle(running);return 0;}

@@ -77,7 +77,8 @@ private:
     void chooseBluRay();
     void chooseBluRayMode(const QString &path);
     bool openBluRay(const QString &path, bool menus = false);
-    bool openDiscMenu(const QString &root, bool menus = true);
+    void returnToDiscMenu();
+    bool openDiscMenu(const QString &root, bool menus = true, bool topMenu = false);
     QString discRoot_;
     std::unique_ptr<PlayerDiscMenu> discMenu_;
     QWidget *discSurface_=nullptr;

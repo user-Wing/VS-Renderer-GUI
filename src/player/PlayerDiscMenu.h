@@ -13,7 +13,7 @@ class PlayerDiscMenu final {
 public:
     PlayerDiscMenu();
     ~PlayerDiscMenu();
-    bool open(const QString &root, void *window);
+    bool open(const QString &root, void *window, bool directTopMenu=false);
     void close(QWidget *retiredSurface=nullptr);
     bool active() const;
     QString error() const;

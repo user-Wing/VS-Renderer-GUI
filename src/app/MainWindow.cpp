@@ -384,9 +384,11 @@ QWidget *MainWindow::buildSettingsPage()
     auto *apply = new QPushButton(QStringLiteral("应用"), page);
     apply->setObjectName(QStringLiteral("rendererApplySettings"));
     layout->addWidget(apply);
-    layout->addWidget(new QLabel(QStringLiteral("预设下载源（ModelScope 目录 API 或 JSON 清单）"),page));
+    layout->addWidget(new QLabel(QStringLiteral("预设下载源（ModelScope 公开目录链接或 JSON 清单）"),page));
     auto *communitySource=new QLineEdit(page);communitySource->setMinimumWidth(650);communitySource->setObjectName("rendererCommunitySource");
-    communitySource->setText(QSettings().value("community/sourceUrl",PresetCommunityDialog::defaultSource()).toString());layout->addWidget(communitySource);
+    auto communityUrl=QSettings().value("community/sourceUrl",PresetCommunityDialog::defaultSource()).toString();
+    if(communityUrl.contains("/api/v1/datasets/ARXChem/Software-List/repo/tree"))communityUrl=PresetCommunityDialog::defaultSource();
+    communitySource->setText(communityUrl);layout->addWidget(communitySource);
     connect(apply, &QPushButton::clicked, this, [this, source,communitySource] {
         const QUrl url(communitySource->text().trimmed());if(!url.isValid() || (url.scheme()!="http" && url.scheme()!="https")){setStatus(QStringLiteral("预设源必须是有效 HTTP / HTTPS 地址。"),true);return;}
         QSettings().setValue("community/sourceUrl",url.toString());
@@ -477,14 +479,17 @@ QWidget *MainWindow::buildSidebar()
 
     auto *input = fileInput_ = new QWidget(this);
     auto *inputLayout = new QVBoxLayout(input);
-    inputLayout->setContentsMargins(8, 8, 8, 8);
+    inputLayout->setContentsMargins(0, 0, 0, 0);
     inputLayout->setSpacing(4);
     sourcePath_ = new QLineEdit(input);
     sourcePath_->setObjectName(QStringLiteral("rendererSourcePath"));
     sourcePath_->setMinimumWidth(0);
     sourcePath_->setReadOnly(true);
     sourcePath_->setAcceptDrops(false);
-    sourcePath_->setPlaceholderText(QStringLiteral("尚未选择视频"));
+    sourcePath_->setPlaceholderText(QStringLiteral("选择或拖入视频"));
+    fileInput_->setMinimumWidth(120);
+    fileInput_->setMaximumWidth(320);
+    fileInput_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
     auto *inputRow = new QHBoxLayout;
     sourceFilter_ = new QComboBox(this);
     sourceFilter_->hide();
@@ -665,7 +670,7 @@ QWidget *MainWindow::buildTransport()
 {
     auto *transport = new QWidget(this);
     transport->setObjectName(QStringLiteral("rendererTransport"));
-    transport->setMinimumHeight(112);
+    transport->setMinimumHeight(76);
     transport->setStyleSheet(QStringLiteral("background:#f9f9f9;border-top:1px solid #d1d1d1;"));
     auto *layout = new QVBoxLayout(transport);
     layout->setContentsMargins(8, 2, 8, 2);
@@ -682,15 +687,14 @@ QWidget *MainWindow::buildTransport()
     timeline_->setObjectName(QStringLiteral("rendererTimeline"));
     timeline_->setRange(0, 100000);
     timelineRow->addWidget(positionLabel_);
-    timelineRow->addStretch();
+    timelineRow->addWidget(timeline_,1);
     timelineRow->addWidget(durationLabel_);
 
-    auto *controlRow = new QGridLayout;
+    auto *controlRow = new QHBoxLayout;
     controlRow->setContentsMargins(0, 0, 0, 0);
-    controlRow->setColumnStretch(0, 1);
-    controlRow->setColumnStretch(2, 1);
     auto *mode = new QComboBox(transport);
     mode->setObjectName(QStringLiteral("rendererCompareMode"));
+    mode->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Preferred);
     mode->addItems({QStringLiteral("并排"), QStringLiteral("A/B 滑块")});
     auto *previous = compactButton(QStringLiteral("◀ 帧"), transport);
     playButton_ = compactButton(QStringLiteral("播放"), transport);
@@ -711,15 +715,18 @@ QWidget *MainWindow::buildTransport()
     frameControls->setObjectName(QStringLiteral("rendererFrameControls"));
     auto *frames = new QHBoxLayout(frameControls);
     frames->setContentsMargins(0, 0, 0, 0);
+    frameControls->setSizePolicy(QSizePolicy::Maximum,QSizePolicy::Preferred);
     frames->addWidget(previous); frames->addWidget(playButton_); frames->addWidget(next);
-    controlRow->addWidget(mode, 0, 0, Qt::AlignLeft);
-    controlRow->addWidget(frameControls, 0, 1);
-    controlRow->addWidget(scaler, 0, 2, Qt::AlignRight);
+    controlRow->addWidget(fileInput_,1);
+    controlRow->addStretch(1);
+    controlRow->addWidget(frameControls);
+    controlRow->addWidget(mode);
+    scaler->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    scaler->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Preferred);
+    controlRow->addWidget(scaler);
 
-    layout->addWidget(timeline_);
     layout->addLayout(timelineRow);
     layout->addLayout(controlRow);
-    layout->addWidget(fileInput_);
 
     connect(mode, &QComboBox::currentIndexChanged, this, [this](int index) {
         compareView_->setMode(index == 1 ? CompareMode::Slider : CompareMode::SideBySide);

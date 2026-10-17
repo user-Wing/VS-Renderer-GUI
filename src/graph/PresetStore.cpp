@@ -30,7 +30,7 @@ QJsonObject PresetStore::metadata(const QString &script)
 }
 QJsonObject PresetStore::metadata(const QList<FilterTimeGroup> &groups,SourceFilter filter,const QString &source,const QString &note) {
     auto data=metadata(groups.isEmpty()?FilterGraph():groups.first().graph,filter,source,note);
-    QJsonArray entries;for(const auto &group:groups){auto entry=metadata(group.graph,filter,{},{});entry.insert("name",group.name);entry.insert("startSeconds",group.startSeconds);entries<<entry;}
+    QJsonArray entries;for(const auto &group:groups){auto entry=metadata(group.graph,filter,{},{});entry.insert("name",group.name);entry.insert("startSeconds",group.startSeconds);if(!group.script.isEmpty())entry.insert("script",group.script);entries<<entry;}
     data.insert("schema",2);data.insert("timeGroups",entries);return data;
 }
 QString PresetStore::create(const QList<FilterTimeGroup> &groups,SourceFilter filter,const QString &source,const QString &note) {
@@ -39,7 +39,7 @@ QString PresetStore::create(const QList<FilterTimeGroup> &groups,SourceFilter fi
 }
 QList<FilterTimeGroup> PresetStore::timeGroups(const QJsonObject &data) {
     QList<FilterTimeGroup> groups;
-    for(const auto &entry:data.value("timeGroups").toArray()){const auto item=entry.toObject();groups.append({item.value("name").toString(),qint64(item.value("startSeconds").toDouble()),graph(item)});}
+    for(const auto &entry:data.value("timeGroups").toArray()){const auto item=entry.toObject();groups.append({item.value("name").toString(),qint64(item.value("startSeconds").toDouble()),graph(item),item.value("script").toString()});}
     if(groups.isEmpty())groups.append({QStringLiteral("全片"),0,graph(data)});
     return groups;
 }

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.0.10 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.0.11 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -221,6 +221,7 @@ if(BUILD_TESTING)
     add_test(NAME cap-precision COMMAND vsr_cap_tests)
     qt_add_executable(vsr_cap_workflow_tests tests/TestCapWorkflow.cpp src/cap/DesktopCapture.cpp src/cap/UiAccess.cpp)
     target_include_directories(vsr_cap_workflow_tests PRIVATE src)
+    target_compile_definitions(vsr_cap_workflow_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     target_link_libraries(vsr_cap_workflow_tests PRIVATE Qt6::Widgets Qt6::Test d3d11 dxgi dwmapi advapi32 shell32 user32)
     add_test(NAME cap-workflow COMMAND vsr_cap_workflow_tests)
     qt_add_executable(vsr_bluray_tests tests/TestBluray.cpp)
