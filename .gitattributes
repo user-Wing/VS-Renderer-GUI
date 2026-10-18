@@ -2,3 +2,4 @@ assets/mpv-shaders/** -text -whitespace
 patches/3fp-api18-vsrenderer-1.0.*.patch text eol=lf -whitespace
 patches/3fp-api20-vsrenderer-1.0.10.patch text eol=lf
 development/history.md -text -whitespace
+development/evidence/player-sync-20261018/** -text -whitespace

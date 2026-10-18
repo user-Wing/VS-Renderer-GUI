@@ -1,6 +1,6 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-10-17。源码版本 **1.0.12**，以 `CMakeLists.txt` 为准；Native 固定 API20 / PR23，提交 `ce195ebd06e9cbb8352a443f0c874cf569a60733`。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
+核对日期：2026-10-18。源码版本 **1.0.12**，以 `CMakeLists.txt` 为准；Native 固定 API20 / PR23，提交 `ce195ebd06e9cbb8352a443f0c874cf569a60733`。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
 
 ## 1. 发心与边界
 
@@ -28,6 +28,7 @@
 | 专用时间轴与请求代次 | 管理 seek、补帧和源/输出 FPS | 不使用 seek 后局部帧号直接推算全局源帧 |
 | 查看与编辑解耦 | PhotoCraft 独立进程保留未保存工作 | 旧 Qt 编辑器仍有源码/测试，不作为生产编辑入口 |
 | 固定上游 + 完整 Native 补丁 | 保留本地扩展并可重新构建 | 不拼装 API14/18/20 不同版本 DLL 或补丁 |
+| 软件播放同步与内存预算 | `PlayerSession.cpp` 按帧字节约束在途深度与队列；`WasapiRenderer.cpp` 欠载补静音保持时间推进，8K AV1 恒帧率落后时在关键包切换参考帧追赶 | 不任意丢弃编码参考包或靠慢放保帧；暂停定位恢复完整解码，实际性能按素材验收 |
 
 ## 4. 目录地图与改动入口
 
@@ -113,7 +114,7 @@
 
 当前仍未完成：
 
-1. 在7940HX上的8K48 软件解码实时播放（指定 7940HX 样本约 40.53 fps，仍有音频欠载）
+1. 在7940HX上的8K48 软件解码逐帧实时播放（本轮以丢帧追赶墙钟为目标，不视为逐帧实时通过；新一轮结果见测试台账）
 
 2. 在7840HS/780M核显上的Anime4K CNN 24F 1080p--2160p（NO CNN模式已经通过）
 

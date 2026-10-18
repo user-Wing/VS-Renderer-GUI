@@ -1,0 +1,41 @@
+{
+  "artifacts": [
+    {
+      "folder": "VS-GUI-Full",
+      "manifest_files": 1069,
+      "native_sha256": "0c5be410c1496ce6217346ba53d1546b6db2fbc1cb5f9129e36723b3daaa4580",
+      "only_current_guides": true
+    },
+    {
+      "folder": "1.0.12-PlayerLite",
+      "manifest_files": 107,
+      "native_sha256": "0c5be410c1496ce6217346ba53d1546b6db2fbc1cb5f9129e36723b3daaa4580",
+      "only_current_guides": true
+    }
+  ],
+  "single_file": {
+    "version": "1.0.12",
+    "bytes": 35803905,
+    "sha256": "6827df174731cc1988f1fbb6bdf19308aa25db864086f4d5b30551b8b92b383f",
+    "payload": "64a105cb32e257d0d528ad17",
+    "zipCRC": true,
+    "externalFFmpeg": true,
+    "iconResource101": true,
+    "matchesDeployedLiteExceptPETimestampAndChecksum": true,
+    "launcherChildImport": {
+      "bits": 8,
+      "height": 1254,
+      "icc": false,
+      "name": "I1.png",
+      "temporary": true,
+      "version": 1,
+      "width": 1254
+    },
+    "settingsUnchanged": true,
+    "originalDiscIndexesUnchanged": true
+  },
+  "settings_preservation": true,
+  "canonical_full_updated_after_user_exited_vscap": true,
+  "legacy_runtime_development_records_preserved_in_local_build_backup": true,
+  "published_release_assets_modified": false
+}

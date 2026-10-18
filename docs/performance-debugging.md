@@ -28,14 +28,22 @@
 
 | 环境变量 | 当前默认 | 用途 |
 | --- | --- | --- |
-| `FFF_DAV1D_WORKERS` / `FFF_DAV1D_DELAY` | 按素材；8K420p10 为 8/8 | 1–64 的工作线程/帧上下文覆盖 |
-| `VSR_SW_HANDOFF` | 8K 软件 2，其余 1 | 8K 交接槽 1–3 |
-| `VSR_SW_UPLOAD_PIPELINE` | 1 | 0 回退原 UpdateSubresource |
+| `FFF_DAV1D_WORKERS` / `FFF_DAV1D_DELAY` | 按帧字节；指定8K为8/6、4K444高位深为24/24 | 1–64 的工作线程/帧上下文覆盖 |
+| `VSR_SW_HANDOFF` | 1 | 8K 交接槽 1–3 |
+| `VSR_SW_UPLOAD_PIPELINE` | 0 | 1 测试双DEFAULT／双STAGING上传环，默认使用原UpdateSubresource |
+| `VSR_SW_REALTIME_CATCHUP` | 1 | 0 禁用8K恒帧率AV1的参考帧追赶，排查用 |
+| `VSR_SW_REALTIME_TRACE` | 未设置 | 1 输出追赶切换与解码失败诊断 |
 | `VSR_SW_CCD` | 2 | 0 交还系统；2 软提示；1 强绑定，仅作排查 |
 | `VSR_MMCSS` | 0 | 1 尝试为关键线程注册 MMCSS |
 | `VSR_DXGI_WAITABLE` | 0 | 1 尝试等待对象交换链，不支持时回退 |
 
 性能结果按实际开关记录，不能把开关开启时的测量写成默认模式表现。P/E 或多 CCD 策略需在对应设备实测。
+
+## 内存与同步采样注意
+
+`software8kPlaybackMeasurement` 同时记录墙钟、媒体位置、画面PTS、CPU时间、私有内存、工作集及进程DXGI本地／非本地显存用量。字幕信号只计数，不保留每次更新的QImage；用QSignalSpy收集图像会让测试本身持续占内存。以同一片段的墙钟和画面进度判断同步，不能只看媒体时钟或Present次数。
+
+软件路径按帧字节估算在途解码、交接、保留帧和显示队列；默认只保留一组上传纹理。预算不等同于整个进程RSS硬上限，解码器参考帧、驱动、字幕和VS缓存需另测。新追赶仅用于大于等于8K的CPU AV1恒帧率持续落后场景；在关键包边界切换，仅省略非参考帧，暂停定位恢复完整解码。该8K路径的压缩视频包上限为32 MiB、64包，其余保持16 MiB，避免一个慢GOP长期堵住后续音频读取。静音填补和丢帧都应记入结果，不能将其表述为无损逐帧实时。
 
 ## 结果记录
 

@@ -1,7 +1,7 @@
 {
   "  VS 处理：未启用 · 原生直通": "  VS processing: disabled · native playback",
   "  VS 请求耗时：%1 ms · 同步偏移：%2 ms · 平均呈现等待：%3 ms · 预解码：%4 帧": "  VS request: %1 ms · sync offset: %2 ms · average present wait: %3 ms · predecode: %4 frames",
-  "  已提交：%1 · 丢帧：%2(VS 跳过 %3 / 渲染丢弃 %4 / 合并 %5)": "  Submitted: %1 · dropped: %2 (VS skipped %3 / renderer dropped %4 / coalesced %5)",
+  "  已提交：%1 · 丢帧：%2(VS 跳过 %3 / 原生丢弃 %4 / 合并 %5)": "  Submitted: %1 · dropped: %2 (VS skipped %3 / native dropped %4 / coalesced %5)",
   "  帧与丢帧统计：由 madVR 控制器提供": "  Frame and drop statistics: available in the madVR controller",
   "  缓冲时间：%1 ms · 同步偏移：%2 ms · 时间戳抖动帧：%3": "  Buffer: %1 ms · sync offset: %2 ms · timestamp jitter frames: %3",
   "  缓冲时间：未提供 · 同步偏移：未提供": "  Buffer: unavailable · sync offset: unavailable",

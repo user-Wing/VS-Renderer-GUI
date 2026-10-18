@@ -104,7 +104,7 @@ void PlayerWindow::updateInfo() {
              .arg(madvrMode()?tr("LAV / madVR 协商"):direct_?video.value("pixelFormat").toString():settings_->value("decode/output").toString().isEmpty()?clip_.formatName:settings_->value("decode/output").toString()).arg(clip_.width).arg(clip_.height).arg(fps*speed_,0,'f',3).arg(madvrMode()?QString():QString::number(rendered.videoOutputBitDepth)).arg(madvrMode()?QString():rendered.actualColorMode ? "HDR" : "SDR")
           << (madvrMode()?tr("视频渲染器：madshi video renderer"):tr("视频渲染器：VS Real-Time Video Renderer"))
           << tr("  设备：%1").arg(gpu)
-          << (madvrMode()?tr("  帧与丢帧统计：由 madVR 控制器提供"):tr("  已提交：%1 · 丢帧：%2(VS 跳过 %3 / 渲染丢弃 %4 / 合并 %5)")
+          << (madvrMode()?tr("  帧与丢帧统计：由 madVR 控制器提供"):tr("  已提交：%1 · 丢帧：%2(VS 跳过 %3 / 原生丢弃 %4 / 合并 %5)")
               .arg(direct_?rendered.presentedVideoFrames:submittedFrames_).arg(skippedFrames_+rendered.droppedVideoFrames+rendered.coalescedVideoFrames).arg(skippedFrames_).arg(rendered.droppedVideoFrames).arg(rendered.coalescedVideoFrames))
           << tr("  实时帧率缺口：%1 fps · 视频落后时钟：%2 ms")
               .arg(playing_?qMax(0.0,fps*speed_-infoCurrentFps_):0,0,'f',2)
