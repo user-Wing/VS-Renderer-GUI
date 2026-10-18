@@ -12,7 +12,7 @@
 | L-SMASH Works、FFMS2 | VapourSynth 源滤镜 | 通过 VSRepo 获取；许可证及源码链接见各 VSRepo 包元数据 |
 | fmtconv、RemoveGrain、AddGrain、VSZip、nlm-ispc、CAS、Zsmooth、Deblock、ZNEDI3、EEDI3、SangNom、Bwdif、VIVTC | VapourSynth 处理插件 | 通过 PyPI/VSRepo 获取；许可证及源码链接见各项目包元数据 |
 | vs-placebo 2.0.4 / libplacebo | VapourSynth 中执行 Anime4K 等 mpv GLSL | [vs-placebo](https://github.com/Lypheo/vs-placebo)、[libplacebo](https://github.com/haasn/libplacebo)；LGPL-2.1+ |
-| AWJimage 1.1.0 | 独立原生图片压缩转换CLI | [AWJimage](https://github.com/Dominic485649/AWJimage/releases/tag/1.1.0)；AGPL-3.0，随包保留许可证、完整上游NOTICE和固定修订对应源码；不链接进本项目 |
+| AWJimage 1.2.1 | 独立原生图片压缩转换CLI | [AWJimage](https://github.com/Dominic485649/AWJimage/releases/tag/1.2.1)；AGPL-3.0，随包保留许可证、完整上游NOTICE和固定修订对应源码；不链接进本项目 |
 
 发布包内同时保留 Qt、Python、VapourSynth 等组件随附的许可证文件。重新分发前请核对你所替换的 FFmpeg 和 VapourSynth 插件构建配置。
 

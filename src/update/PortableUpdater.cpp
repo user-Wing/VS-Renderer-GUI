@@ -31,7 +31,7 @@ PortableUpdater::PortableUpdater(QWidget *parent) : QDialog(parent), network_(ne
     setObjectName("portableUpdater");setWindowTitle(tr("软件更新"));resize(570,220);
     auto *layout=new QVBoxLayout(this);status_=new QLabel(tr("当前版本：%1").arg(VSR_VERSION),this);status_->setWordWrap(true);layout->addWidget(status_);
     progress_=new QProgressBar(this);progress_->hide();layout->addWidget(progress_);
-    auto *note=new QLabel(tr("完整更新 Renderer 和 Player；保留配置与自定义 VPY，旧目录作为备份。安装前请关闭另一个程序窗口。"),this);note->setWordWrap(true);layout->addWidget(note);
+    auto *note=new QLabel(tr("完整更新 Renderer 和 Player；安装时关闭本目录的所有程序（含 VSCap），保留配置与自定义 VPY，成功后清理旧备份和下载包。"),this);note->setWordWrap(true);layout->addWidget(note);
     action_=new QPushButton(tr("检查更新"),this);action_->setObjectName("updateAction");layout->addWidget(action_);
     connect(action_,&QPushButton::clicked,this,[this]{if(!payload_.isEmpty())install();else if(!selected_.version.isEmpty())prepare(selected_);else check();});
     auto *close=new QPushButton(tr("关闭"),this);layout->addWidget(close);connect(close,&QPushButton::clicked,this,&PortableUpdater::reject);
@@ -81,7 +81,7 @@ void PortableUpdater::prepare(const PortableRelease &release) {
     if(busy_)return;
     if(!QRegularExpression("^[a-fA-F0-9]{64}$").match(release.sha256).hasMatch() || release.size<=0 || (release.url.scheme()!="https" && release.url.scheme()!="http")){fail(tr("更新包缺少有效大小或 SHA-256，停止安装。"));return;}
     for(const auto &name:QStringList{"aria2-next.exe","7z.exe","7z.dll","apply-update.ps1"})if(!QFileInfo::exists(tool(name))){fail(tr("缺少更新工具：%1").arg(name));return;}
-    selected_=release;payload_.clear();cancelled_=false;work_=std::make_unique<QTemporaryDir>(QDir::tempPath()+"/vs-gui-update-XXXXXX");if(!work_->isValid()){fail(tr("无法创建更新暂存目录。"));return;}
+    selected_=release;payload_.clear();downloadedArchive_.clear();cancelled_=false;work_=std::make_unique<QTemporaryDir>(QDir::tempPath()+"/vs-gui-update-XXXXXX");if(!work_->isValid()){fail(tr("无法创建更新暂存目录。"));return;}
     busy_=true;action_->setEnabled(false);progress_->setRange(0,100);progress_->setValue(0);progress_->show();status_->setText(tr("正在下载版本 %1…").arg(release.version));
     process_->disconnect(this);
     connect(process_,&QProcess::readyReadStandardOutput,this,[this]{const auto text=QString::fromLocal8Bit(process_->readAllStandardOutput());const auto match=QRegularExpression("\\((\\d+)%\\)").match(text);if(match.hasMatch())progress_->setValue(match.captured(1).toInt());});
@@ -102,7 +102,7 @@ void PortableUpdater::prepareLocal(const PortableRelease &release,const QString 
     if(busy_)return;
     if(!newer(release.version,VSR_VERSION)){fail(tr("本体只允许安装更高版本；下载缓存保留，不会降级。"));return;}
     if(!QRegularExpression("^[a-fA-F0-9]{64}$").match(release.sha256).hasMatch() || release.size<=0 || QFileInfo(path).size()!=release.size){fail(tr("缓存更新包大小或 SHA-256 无效"));return;}
-    selected_=release;payload_.clear();cancelled_=false;work_=std::make_unique<QTemporaryDir>(QDir::tempPath()+"/vs-gui-update-XXXXXX");if(!work_->isValid() || !QFile::copy(path,work_->filePath("update.7z"))){fail(tr("无法准备本地更新包"));return;}
+    selected_=release;payload_.clear();downloadedArchive_=QFileInfo(path).absoluteFilePath();cancelled_=false;work_=std::make_unique<QTemporaryDir>(QDir::tempPath()+"/vs-gui-update-XXXXXX");if(!work_->isValid() || !QFile::copy(path,work_->filePath("update.7z"))){fail(tr("无法准备本地更新包"));return;}
     archive_=std::make_unique<QFile>(work_->filePath("update.7z"));if(!archive_->open(QIODevice::ReadOnly)){fail(archive_->errorString());return;}busy_=true;action_->setEnabled(false);progress_->setRange(0,100);progress_->show();hash_=std::make_unique<QCryptographicHash>(QCryptographicHash::Sha256);verifyChunk();
 }
 bool PortableUpdater::safeArchiveListing(const QString &listing) {
@@ -144,7 +144,7 @@ void PortableUpdater::verifyPayload() {
     if(directory.isEmpty()){fail(tr("更新包顶层或下一层必须包含唯一完整便携目录。"));return;}
     const QDir payload(directory);
     QFile manifest(payload.filePath("release.json"));if(!manifest.open(QIODevice::ReadOnly) || QJsonDocument::fromJson(manifest.readAll()).object().value("version").toString()!=selected_.version){fail(tr("更新包内部版本不匹配。"));return;}
-    payload_=payload.path();busy_=false;progress_->hide();status_->setText(tr("版本 %1 已验证。安装将关闭本程序，完成后重新打开；旧目录保留备份。").arg(selected_.version));action_->setEnabled(true);action_->setText(tr("安装并重启"));emit prepared(payload_);
+    payload_=payload.path();busy_=false;progress_->hide();status_->setText(tr("版本 %1 已验证。安装将关闭本目录的所有程序，完成后重新打开；成功后清理旧备份和下载包。").arg(selected_.version));action_->setEnabled(true);action_->setText(tr("安装并重启"));emit prepared(payload_);
 }
 void PortableUpdater::install() {
     if(!newer(selected_.version,VSR_VERSION)){fail(tr("不会降级安装旧本体，下载缓存保留。"));return;}
@@ -153,7 +153,9 @@ void PortableUpdater::install() {
 #ifdef Q_OS_WIN
     installer.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args){args->flags|=CREATE_NO_WINDOW;});
 #endif
-    installer.setProgram("powershell.exe");installer.setArguments({"-NoProfile","-ExecutionPolicy","Bypass","-WindowStyle","Hidden","-File",helper,"-ParentPid",QString::number(QCoreApplication::applicationPid()),"-Source",payload_,"-Target",QCoreApplication::applicationDirPath(),"-Launch",QFileInfo(QCoreApplication::applicationFilePath()).fileName()});
+    installer.setProgram("powershell.exe");QStringList arguments{"-NoProfile","-ExecutionPolicy","Bypass","-WindowStyle","Hidden","-File",helper,"-ParentPid",QString::number(QCoreApplication::applicationPid()),"-Source",payload_,"-Target",QCoreApplication::applicationDirPath(),"-Launch",QFileInfo(QCoreApplication::applicationFilePath()).fileName()};
+    if(!downloadedArchive_.isEmpty())arguments<<"-DownloadedArchive"<<downloadedArchive_<<"-ArchiveSha256"<<selected_.sha256;
+    installer.setArguments(arguments);
     installer.setWorkingDirectory(work_->path());if(!installer.startDetached()){fail(tr("无法启动更新安装。"));return;}work_->setAutoRemove(false);qApp->closeAllWindows();qApp->quit();
 }
 }

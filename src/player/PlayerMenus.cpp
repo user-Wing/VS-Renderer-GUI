@@ -75,17 +75,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     menu->addAction(tr("打开 BD 文件夹…"),this,&PlayerWindow::chooseBluRay);
     menu->addAction(tr("打开 BD 光盘镜像…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("打开 BD 光盘镜像用于播放"),{},"Disc image (*.iso *.img *.vhd *.vhdx)");if(!path.isEmpty())openBluRay(path);});
     menu->addAction(tr("打开链接…"),this,&PlayerWindow::chooseLink);
-#ifdef VSR_LITE_PLAYER
-    if(!discRoot_.isEmpty()) {
-        auto *titles=PlayerMenu::add(menu,tr("BD 原生节目菜单"));
-        for(const auto &path:files_) {
-            const auto name=blurayLabels_.value(path,QFileInfo(path).fileName());
-            titles->addAction(name,this,[this,path]{openFile(path);});
-        }
-    }
-#else
     if(!discRoot_.isEmpty())menu->addAction(tr("BD 主菜单 / 弹出菜单"),this,&PlayerWindow::returnToDiscMenu);
-#endif
     if(discMenu_ && discMenu_->active()){menu->addAction(tr("切回节目列表模式 (3FP)"),this,[this]{if(!files_.isEmpty())openFile(files_.first());});
         for(bool audio:{true,false}){auto *tracks=PlayerMenu::add(menu,audio?tr("音轨"):tr("字幕"));for(const auto &track:discMenu_->tracks(audio))tracks->addAction(track.second,this,[this,audio,id=track.first]{discMenu_->selectTrack(audio,id);});}
         menu->addAction(tr("设置…"),this,&PlayerWindow::showSettings);menu->addAction(tr("全屏 / 退出全屏"),this,&PlayerWindow::toggleFullscreen);menu->popup(position);return;

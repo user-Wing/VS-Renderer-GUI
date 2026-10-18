@@ -1,6 +1,6 @@
 # 版本测试台账
 
-核对日期：2026-10-18。历史轮次整理自仓库已留存报告；10月18日的软件同步/内存续修为本轮实际执行，单独列出。当前源码为 1.0.12；旧版本、旧 DLL、不同设备或不同输出尺寸的结果不自动继承到当前产物。
+核对日期：2026-10-18。历史轮次整理自仓库已留存报告；10月18日的软件同步/内存续修为本轮实际执行，单独列出。当前源码为 1.0.13；旧版本、旧 DLL、不同设备或不同输出尺寸的结果不自动继承到当前产物。
 
 ## 如何读结论
 
@@ -16,6 +16,7 @@
 
 | 版本 / 基线 | 留存测试范围与结果 | 未通过、未测与解释 | 原始依据 |
 | --- | --- | --- | --- |
+| 1.0.13 / API20 PR23 | 更新器进程/清理/可见重启、压缩工具、实盘BD与AVIF专项，详见本轮记录 | Full一条旧控件身份断言在原库同样失败；未做全量回归或重跑8K性能 | [本轮证据](evidence/release-1.0.13/summary.json) |
 | 1.0.12 / API20 PR23 | BD整卷定位/按段索引/菜单续播；Jinc/无音轨VS；Anime预取；软件内核/像素/生命周期聚焦回归，详见下表 | 未运行全量Full播放器套件；8K48软件仍非实时；P/E调度等未测 | [BD](history.md#record-docs-update-1-0-12-md)、[内核](history.md#record-docs-player-kernel-performance-1-0-12-md) |
 | 1.0.11 / API20，后续固定PR23 | 菜单/章节、时间组/社区、R81插件、JXL/白位、单文件FFmpeg外置和图标；VSCap工作流16 passed，窗口/全屏/底栏5 passed | 8K软件约31.03fps（4K输出）；桌面合成有跳过；HDR热键端到端、UIAccess/多DPI人工验收未完 | [更新](history.md#record-docs-update-1-0-11-md)、[JXL](history.md#record-docs-jpeg-xl-1-0-11-md)、[HDR](history.md#record-docs-vscap-hdr-1-0-11-md) |
 | 1.0.10 / API18；10-16同版迁移API20 | 色彩4 passed；VSCap原生5、工作流先7后扩至14；Lite5；HEVC/AV1合成生命周期4；文字/选区/贴图分轮通过 | 8K AV1 AAC+ASS约33.16fps、61次欠载；迁移PR22当轮按要求未跑其测试；长盘跨段拖动当时失败，至1.0.12才有覆盖性验证 | [验收](history.md#record-docs-validation-1-0-10-md)、[交互](history.md#record-docs-vscap-interaction-1-0-10-md)、[迁移](history.md#record-docs-update-20261016-md) |
@@ -29,6 +30,24 @@
 | 1.0.2 | Release构建；CTest8/8；便携Player27/27，更新7/7；移除测试依赖后两正式程序启动/退出 | 历史不同轮次另有6/6、7/7等，不能相加；HDR面板、多DPI、长片未全面人工验收 | [发行记录](history.md#record-docs-release-1-0-2-md) |
 | 1.0.1 | Release构建、CTest五组；真实原生解码/像素、VS桥及导出 | Qt布局截图不等于完整人工画面验收；九路4K/VFR长片/多DPI未穷举 | [发行记录](history.md#record-docs-release-1-0-1-draft-md) |
 | 1.0.0 | 留存基础Renderer功能记录 | 没有独立、可对应本版的完整测试结论，标记未确认，不倒填后版结果 | [早期原文](history.md#record-docs-history-development-records-through-2026-10-03-md) |
+
+## 1.0.13：更新器、单文件BD与运行时精简
+
+2026-10-18实际执行；构建为Qt 6.10.2 / MinGW Release，Native保持前轮DLL `0c5be410c1496ce6217346ba53d1546b6db2fbc1cb5f9129e36723b3daaa4580`，没有修改解码/渲染内核。1.0.12的8K/Y412性能数字属于前轮，不视为1.0.13重新测量；仍不保证8K48逐帧实时。日志留本机 `build/release-1.0.13/`，精选结果在 [summary.json](evidence/release-1.0.13/summary.json)。
+
+| 专项 | 实际结果 | 范围与限制 |
+| --- | --- | --- |
+| 更新器 | 14 passed / 0 failed / 2 skipped | 隔离安装目录内关闭模拟VSCap、保留另一安装的进程；成功后备份/已验证下载包/临时目录清理、可见重启、ICC/配置保留；压缩MKV更新仍压缩；本地HTTP下载/验证/取消通过。跳过真实ModelScope在线下载及既有发布包审计 |
+| 单文件后端 | 独立长卷前后跳转3 passed；之后两轮串行各9 passed / 0 failed / 0 skipped，退出码0 | MyGO下卷真实菜单/长卷、暂停恢复、硬件直通、进度目标保持。首轮串行日志未写完且未留退出码，不能计为通过；单次退出原因未定位，保留日志 |
+| 单文件菜单续修 | 组合11 passed / 0 failed；终版两轮窗口级各4 passed / 0 failed，均退出码0 | 实盘菜单时间轴禁用/恢复、列表双击与右键返回、去除铺屏节目子菜单、每轮12次同盘返回、长卷列表播放后重新打开菜单、切回普通文件。候选构建曾捕获一次0xC0000005，调试器下未复现，未断言其精确崩溃点；终版移除原生关闭时的嵌套事件循环，并复用同盘信息，避免重复拆建。最终验证覆盖所述工作流，不代表穷举所有盘型 |
+| Full精简VLC与图片 | 15 passed / 1 failed / 0 skipped | 六集菜单选择、返回主菜单和SDR/HDR PNG/AVIF/JXL通过。失败为旧 `bdMenuFromEmptyWindow` 要求重建surface的断言；使用未精简原VLC插件同样复现（2 passed / 1 failed），与当前复用surface的实现不符；未修改该无关测试，也不报告全套通过 |
+| Full菜单续修回归 | 10 passed / 0 failed / 0 skipped，退出码0 | 精简VLC下返回菜单、六集选集、选集后交接3FP；不是上面含图片套件的重跑 |
+| VSCap AWJ | 3 passed / 0 failed / 0 skipped | 真实HDR AVIF输出；Full截图另覆盖10/12-bit及CICP；不是全显示器色准验收 |
+| MKV压缩CLI | 四个工具均能输出102.0版本，小样本Remux与识别成功 | 保留AVC/AAC轨道类型；未重跑长片/全盘Remux，不能外推所有媒体 |
+
+以上QtTest计数含init/cleanup，独立运行计数不相加。AWJ 1.2.1二进制和对应源码按官方SHA-256固定，只分发 `AWJ.com` CLI、许可/NOTICE与对应源码；不分发AWJ GUI。VLC只按BD职责保留插件，不能当作完整VLC播放器使用。MKV保留四个CLI、许可证和英文文档，不分发GUI及其辅助程序；归档首次使用会在用户缓存占用展开空间，后续复用。组件更新保留压缩形式；旧受管工具路径迁移到当前缓存，外部用户指定路径保留。
+
+版本、最终Full/单文件哈希、配置保护和体积见同目录 [artifacts.json](evidence/release-1.0.13/artifacts.json)。从本版起dist不再生成PlayerLite目录；其依赖暂存于build，只交付Full目录及 `VS-Player.exe`。本轮不制作Full压缩包，不上传Release附件。
 
 ## 1.0.12：按续修轮次区分
 

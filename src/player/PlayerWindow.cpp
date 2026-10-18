@@ -258,7 +258,9 @@ PlayerWindow::PlayerWindow() {
 PlayerWindow::~PlayerWindow() { qApp->removeEventFilter(this); timer_->stop();stopDiscIndexing();timelinePreview_->stop();savePosition(); settings_->sync(); network_->cancel(); discMenu_.reset(); subtitles_.reset(); lav_.reset(); clock_->stop(); server_.reset(); network_.reset(); output_.reset(); clock_.reset(); }
 void PlayerWindow::moveEvent(QMoveEvent *event){QMainWindow::moveEvent(event);if(chromeTimer_){layoutChrome();layoutInfoPanels();}}
 bool PlayerWindow::openFile(const QString &input) {
+    if(blurayGroups_.value(input)=="menu" && !discRoot_.isEmpty()){returnToDiscMenu();return true;}
     if(discMenu_ && discMenu_->active()){discMenu_->close(discSurface_);discSurface_=nullptr;}
+    timeline_->setEnabled(true);
     decoderBadge_->setEnabled(true);decoderBadge_->setToolTip(tr("切换 3FP 硬件 / 软件解码"));
     const QUrl url(input);const bool remote=url.scheme()=="http" || url.scheme()=="https";
     const QString path=url.isLocalFile()?url.toLocalFile():remote?url.toString(QUrl::FullyEncoded):input;
@@ -439,7 +441,7 @@ qint64 PlayerWindow::position() const { if(discMenu_ && discMenu_->active())retu
 ThreeFpSnapshot PlayerWindow::snapshot() const { return clock_->snapshot(); }
 ThreeFpSnapshot PlayerWindow::outputSnapshot() const { return direct_?clock_->snapshot():output_->snapshot(); }
 void PlayerWindow::seekTime(qint64 time) {
-    if(discMenu_ && discMenu_->active()){discMenu_->seek(time);return;}
+    if(discMenu_ && discMenu_->active()){if(!discMenu_->programme().value("menu").toBool())discMenu_->seek(time);return;}
     if(imageMode_)return;
     frameJumpTarget_=-1;
     if(!direct_ && !lav_ && playing_){togglePlayback();autoPlay_=true;}
@@ -513,13 +515,14 @@ void PlayerWindow::updateState() {
     if(!pendingMediaOpen_.isEmpty() && clock_->snapshot().state!=ThreeFpState::Opening){const auto path=pendingMediaOpen_;pendingMediaOpen_.clear();openFile(path);return;}
     if(discMenu_ && discMenu_->active()){
         const auto programme=discMenu_->programme();if(handoffDiscProgramme(programme))return;
-        QJsonArray chapters;for(const auto &entry:programme.value("chapters").toArray()){
+        const bool menu=programme.value("menu").toBool();timeline_->setEnabled(!menu);
+        QJsonArray chapters;for(const auto &entry:(menu?QJsonArray():programme.value("chapters").toArray())){
             if(entry.isObject())chapters.append(entry);
             else chapters.append(QJsonObject{{"start100ns",entry},{"title",tr("章节 %1").arg(chapters.size()+1)}});
         }
         timeline_->setProperty("chapters",chapters);
         discSurface_->setGeometry(pane_->surface()->rect());const auto state=discMenu_->state();if(state==7){setError(tr("BD 播放失败：%1").arg(discMenu_->error()));playing_=false;play_->setText("▶");}
-        if(!timelineDragging_){QSignalBlocker blocker(timeline_);const auto length=discMenu_->duration(),at=discMenu_->position();timeline_->setProperty("duration",length);timeline_->setValue(length>0?int(double(at)/length*100000):0);time_->setText(timeText(at));duration_->setText("/ "+timeText(length));}
+        if(menu || !timelineDragging_){QSignalBlocker blocker(timeline_);const auto length=menu?0:discMenu_->duration(),at=menu?0:discMenu_->position();timeline_->setProperty("duration",length);timeline_->setValue(length>0?int(double(at)/length*100000):0);time_->setText(timeText(at));duration_->setText("/ "+timeText(length));}
         discMenu_->volume(volume_->value(),mute_->isChecked());if(infoVisible_ && ++infoTick_>=50){infoTick_=0;updateInfo();}return;
     }
     if(imageMode_){if(infoVisible_ && ++infoTick_>=50){infoTick_=0;updateInfo();}return;}

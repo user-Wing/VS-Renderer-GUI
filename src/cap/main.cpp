@@ -1,3 +1,4 @@
+#include "runtime/OptionalRuntime.h"
 #include <QtWidgets>
 #include <QtGui/qscreen_platform.h>
 #include <QAbstractNativeEventFilter>
@@ -698,15 +699,9 @@ private:
         if(!savePng(cap::pngPixels(image),input)){
             QDir(work).removeRecursively();tray_.showMessage("VS Cap",QStringLiteral("AVIF 输入图像写入失败"));return false;
         }
-        const QString app=QCoreApplication::applicationDirPath();
-        QString encoder=QDir(app).filePath("runtime/awj/AWJ.exe");
-        if(!QFileInfo::exists(encoder))encoder=QDir(app).filePath("AWJ.exe");
-        if(!QFileInfo::exists(encoder)){
-            // Source-tree builds use the same pinned AWJimage 1.1.0 as Player.
-            encoder=QDir(app).filePath("../../.deps/awj/1.1.0/AWJ.exe");
-        }
-        if(!QFileInfo::exists(encoder)){
-            QDir(work).removeRecursively();tray_.showMessage("VS Cap",QStringLiteral("未找到 AWJ.exe（runtime/awj）"));return false;
+        QString backendError;const auto encoder=vsr::optionalRuntimeExecutable("awj","AWJ.com",true,&backendError);
+        if(encoder.isEmpty()){
+            QDir(work).removeRecursively();tray_.showMessage("VS Cap",QStringLiteral("无法准备 AWJ.com：")+backendError);return false;
         }
         const bool hdr=image.text("capHdr")=="scRGB-FP16";
         QStringList args{"-i",input,"-o",work,"--format","avif","--template","result",

@@ -1,6 +1,6 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-10-18。源码版本 **1.0.12**，以 `CMakeLists.txt` 为准；Native 固定 API20 / PR23，提交 `ce195ebd06e9cbb8352a443f0c874cf569a60733`。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
+核对日期：2026-10-18。源码版本 **1.0.13**，以 `CMakeLists.txt` 为准；Native 固定 API20 / PR23，提交 `ce195ebd06e9cbb8352a443f0c874cf569a60733`。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
 
 ## 1. 发心与边界
 
@@ -102,15 +102,15 @@
 
 1. 明确变更范围，复现问题；修改相关模块，构建并运行对应测试。测试选择与结果写入 [版本测试台账](development/validation.md)，步骤见 [构建](docs/dependencies.md) / [测量](docs/performance-debugging.md)。
 2. Native 用 API20 固定脚本和补丁；历史 API14/18 脚本只用于对应基线。GUI 使用 CMake preset。
-3. 当前 Full 固定运行目录 `dist/VS-GUI-Full`，目录式 PlayerLite 为 `dist/1.0.12-PlayerLite`，单文件为 `dist/VS-Player.exe`。`tools/deploy-local-runtime.py` 增量部署并核对 INI/VPY/ICC/LUT 哈希；它会修改运行目录，文档整理时不运行。
-4. 打包前明确 Full、历史 Lite 或当前 PlayerLite；`package-portable.ps1 -Edition Lite` 是历史 Full 删减版，不能充当当前 PlayerLite。单文件用 `package-playerlite-single.ps1`；完整流程见 [便携更新](docs/portable-updates.md)。
+3. 当前 Full 固定运行目录 `dist/VS-GUI-Full`，单文件为 `dist/VS-Player.exe`；精简播放器仅暂存在 `build/playerlite-runtime`，不再生成 PlayerLite 发行目录。`tools/deploy-local-runtime.py` 增量部署并核对 INI/VPY/ICC/LUT 哈希；它会修改运行目录，文档整理时不运行。
+4. 打包前明确 Full、历史 Lite 或当前 PlayerLite；`package-portable.ps1 -Edition Lite` 是历史 Full 删减版，不能充当当前 PlayerLite。单文件从构建暂存用 `package-playerlite-single.ps1` 生成；完整流程见 [便携更新](docs/portable-updates.md)。
 5. 解压、依赖、启动、配置和清单验证后才可报告包完成；源码推送、草稿、附件上传、正式发布分别记录，需要相应任务授权。
 
 文档纪律：结构/决策变化当天更新本地图；操作变化只改对应 docs 指南；用户可见变化写 changelog；测试按版本与轮次更新同一台账，不新建 `docs/update-版本.md`、`validation-版本.md`。原始日志留 `build/`，必要证据放 `development/evidence/`；不携带用户媒体。README、本地测试数据和开发记录不得混入上游 PR。
 
 ## 10. 当前状态与下一步
 
-1.0.12 已有 BD 全卷定位/按段索引、Jinc 色彩、无音轨 VS 时钟、Anime 预取与软件内核的聚焦测试记录；**未运行全量 Full 播放器套件**。后轮结果只覆盖其实际测试范围，不能把同版多个 passed 数字相加为一次总回归。
+1.0.13 增加安装进程清理、压缩运行时按需展开与单文件BD定位显示保持；列表/右键共用返回菜单入口，原生菜单页禁用时间轴，同盘重开复用盘信息，原生会话同步销毁后再替换窗口。具体测试见台账。此前1.0.12 已有 BD 全卷定位/按段索引、Jinc 色彩、无音轨 VS 时钟、Anime 预取与软件内核的聚焦测试记录；**未运行全量 Full 播放器套件**。后轮结果只覆盖其实际测试范围，不能把同版多个 passed 数字相加为一次总回归。
 
 当前仍未完成：
 

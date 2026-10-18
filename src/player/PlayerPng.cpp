@@ -1,3 +1,4 @@
+#include "runtime/OptionalRuntime.h"
 #include "player/PlayerPng.h"
 #include "image/ImageJxl.h"
 #include <QFile>
@@ -50,7 +51,7 @@ QString writeScreenshot(const QString &path,const QImage &input,QJsonObject meta
     QTemporaryDir temporary;if(!temporary.isValid())return QStringLiteral("Cannot create AVIF temporary directory");
     const auto staged=temporary.filePath("input.png"),encoded=temporary.filePath("result.avif");
     const QDir app(QCoreApplication::applicationDirPath());QProcess process;process.setProcessChannelMode(QProcess::MergedChannels);
-    const auto awj=app.filePath("runtime/awj/AWJ.exe");
+    const auto awj=optionalRuntimeExecutable("awj","AWJ.com");
     const bool hdr=image.colorSpace().transferFunction()==QColorSpace::TransferFunction::St2084 || image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Hlg;
     const auto primaries=image.colorSpace().primaries()==QColorSpace::Primaries::Bt2020?"9":image.colorSpace().primaries()==QColorSpace::Primaries::DciP3D65?"12":"1";
     const auto transfer=hdr?(image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Hlg?"18":"16"):image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Linear?"8":image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Bt2020?"1":"13";

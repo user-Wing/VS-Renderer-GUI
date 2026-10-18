@@ -1,0 +1,22 @@
+********* Start testing of TestUpdates *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestUpdates::initTestCase()
+PASS   : TestUpdates::componentVersionsAndLayouts()
+PASS   : TestUpdates::componentInstallPreservesPaths()
+SKIP   : TestUpdates::liveComponentDownload() Set VSR_COMPONENT_LIVE for real ModelScope GUI download
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestUpdates.cpp(40) : failure location
+PASS   : TestUpdates::versionsAndDiscovery()
+PASS   : TestUpdates::archivePaths()
+SKIP   : TestUpdates::releasedPackageCompatibility() Set VSR_TEST_UPDATE_ARCHIVE to audit a release package
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestUpdates.cpp(51) : failure location
+PASS   : TestUpdates::payloadLayouts()
+PASS   : TestUpdates::downloadVerifyAndCancel(flat)
+PASS   : TestUpdates::downloadVerifyAndCancel(arbitrary-wrapper)
+PASS   : TestUpdates::fullDirectoryReplacement()
+PASS   : TestUpdates::packedMkvUpdateStaysPacked()
+PASS   : TestUpdates::lazyOptionalRuntime()
+PASS   : TestUpdates::stopsLocalTrayCleansAndRestartsVisible()
+PASS   : TestUpdates::blockedInstallKeepsOldDirectory()
+PASS   : TestUpdates::cleanupTestCase()
+Totals: 14 passed, 0 failed, 2 skipped, 0 blacklisted, 5368ms
+********* Finished testing of TestUpdates *********

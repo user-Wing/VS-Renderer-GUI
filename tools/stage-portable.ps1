@@ -32,15 +32,25 @@ if (Test-Path -LiteralPath (Join-Path $buildRoot 'color/vsr-color.dll')) {
 }
 Copy-Item -LiteralPath (Join-Path $buildRoot "runtime/python") -Destination (Join-Path $output "runtime") -Recurse -Force
 & (Join-Path $PSScriptRoot 'stage-ffmpeg.ps1') -OutputDirectory $output
-if (-not (Test-Path -LiteralPath (Join-Path $buildRoot 'runtime/awj/AWJ.exe'))) { throw 'Missing AWJimage backend; build VSPlayer before staging.' }
-Copy-Item -LiteralPath (Join-Path $buildRoot 'runtime/awj') -Destination (Join-Path $output 'runtime') -Recurse -Force
+$runtimeBackup = Join-Path $projectRoot ('build/portable-runtime-backups/' + [guid]::NewGuid().ToString('N'))
+foreach ($component in @('awj','mkvtoolnix','vlc')) {
+    $oldRuntime = [IO.Path]::GetFullPath((Join-Path $output "runtime/$component"))
+    if (!$oldRuntime.StartsWith([IO.Path]::GetFullPath($output) + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Runtime path escapes staging output' }
+    if (Test-Path -LiteralPath $oldRuntime) {
+        New-Item -ItemType Directory -Path $runtimeBackup -Force | Out-Null
+        Move-Item -LiteralPath $oldRuntime -Destination (Join-Path $runtimeBackup $component)
+    }
+}
+if (-not (Test-Path -LiteralPath (Join-Path $buildRoot 'runtime/awj.zip'))) { throw 'Missing AWJimage backend; build VSPlayer before staging.' }
+Copy-Item -LiteralPath (Join-Path $buildRoot 'runtime/awj.zip') -Destination (Join-Path $output 'runtime') -Force
+Copy-Item -LiteralPath (Join-Path $buildRoot 'runtime/awj-source') -Destination (Join-Path $output 'runtime') -Recurse -Force
 & (Join-Path $PSScriptRoot 'stage-bd-menu.ps1') -SourceDirectory (Join-Path $buildRoot 'runtime/vlc') -OutputDirectory (Join-Path $output 'runtime/vlc')
 New-Item -ItemType Directory -Path (Join-Path $output "shaders"), (Join-Path $output "vpy") -Force | Out-Null
 Get-ChildItem -LiteralPath $ShaderDirectory -Filter "*Anime4K*.glsl" -File | Copy-Item -Destination (Join-Path $output "shaders") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets/anime4k-a-fast.glsl"), (Join-Path $projectRoot "assets/anime4k-no-cnn.glsl") -Destination (Join-Path $output "shaders") -Force
 & (Join-Path $PSScriptRoot 'stage-shaders.ps1') -OutputDirectory (Join-Path $output 'shaders') -SevenZip (Join-Path $output 'runtime/tools/7z.exe')
 & (Join-Path $PSScriptRoot 'stage-update-tools.ps1') -OutputDirectory (Join-Path $output 'runtime/tools')
-& (Join-Path $PSScriptRoot 'stage-mkvtoolnix.ps1') -SourceDirectory $MkvtoolnixDirectory -OutputDirectory (Join-Path $output 'runtime/mkvtoolnix')
+& (Join-Path $PSScriptRoot 'stage-mkvtoolnix.ps1') -SourceDirectory $MkvtoolnixDirectory -OutputDirectory (Join-Path $output 'runtime')
 if (!(Test-Path -LiteralPath (Join-Path $output 'components.json'))) { Copy-Item -LiteralPath (Join-Path $projectRoot 'assets/full-components.json') -Destination (Join-Path $output 'components.json') }
 @{version=$version;schema=1;platform='windows-x64'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release.json') -Encoding UTF8
 New-Item -ItemType Directory -Path (Join-Path $output "languages") -Force | Out-Null

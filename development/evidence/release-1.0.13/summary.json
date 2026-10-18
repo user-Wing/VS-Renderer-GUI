@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-18",
+  "version": "1.0.13",
+  "native_sha256": "0c5be410c1496ce6217346ba53d1546b6db2fbc1cb5f9129e36723b3daaa4580",
+  "native_unchanged": true,
+  "counts_include_init_cleanup": true,
+  "updater": {
+    "passed": 14,
+    "failed": 0,
+    "skipped": 2
+  },
+  "single_backend_final": {
+    "passed": 9,
+    "failed": 0,
+    "skipped": 0,
+    "exit_code": 0,
+    "consecutive_completed_runs": 2
+  },
+  "full_focused": {
+    "passed": 15,
+    "failed": 1,
+    "skipped": 0,
+    "existing_failure": "bdMenuFromEmptyWindow asserts a different surface when current return-to-menu reuses it; same failure with original untrimmed plugins"
+  },
+  "vscap_hdr_avif": {
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0
+  },
+  "awj": {
+    "version": "1.2.1",
+    "binary_archive_sha256": "4b4431afc8f3b54a164a697fabe3589bf93bbb4388321a9459f0be0a40196fca",
+    "source_archive_sha256": "fb77311ea822ff4425c013dfc0e4400ea859e2ae5ffd1c0f4ca765472deeb66f",
+    "cli": "AWJ.com",
+    "gui_included": false
+  },
+  "limits": [
+    "No full-suite or new 8K performance run.",
+    "Initial single-backend aggregate log ended without totals or captured exit code; cause not established. Standalone seek and two later aggregate runs completed successfully.",
+    "Live ModelScope transfer and a released Full archive were not tested.",
+    "Content-addressed optional-tool caches expand only when used and consume additional disk space.",
+    "Full archive and release assets are left to the maintainer."
+  ],
+  "single_navigation": {
+    "combined_passed": 11,
+    "combined_failed": 0,
+    "final_window_runs": 2,
+    "each_passed": 4,
+    "each_failed": 0,
+    "exit_code": 0,
+    "same_disc_returns_per_window_run": 12,
+    "includes_reopen_after_continuous_playlist": true
+  },
+  "full_navigation": {
+    "passed": 10,
+    "failed": 0,
+    "skipped": 0,
+    "exit_code": 0
+  },
+  "interim_access_violation": {
+    "exit_code": -1073741819,
+    "exact_crash_site_established": false,
+    "debugger_run_reproduced": false,
+    "mitigation": "Serialize native teardown without a nested Qt event loop; reuse same-disc menu navigation instead of rescan and session replacement. Final combined and two window runs completed."
+  },
+  "language_check": {
+    "baseline_missing_per_pack": 9,
+    "new_missing": 0
+  }
+}

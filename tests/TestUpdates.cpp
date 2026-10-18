@@ -1,3 +1,7 @@
+#include "runtime/OptionalRuntime.h"
+#include <QScopeGuard>
+#include <QUuid>
+#include <windows.h>
 #include "update/PortableUpdater.h"
 #include "update/ComponentDownloads.h"
 #include <QTreeWidget>
@@ -69,7 +73,49 @@ private slots:
     void fullDirectoryReplacement(){QTemporaryDir dir;const auto target=dir.filePath("portable with space"),source=dir.filePath("payload");payload(source);write(target+"/vs-player.exe","old");write(target+"/obsolete.dll","old");write(target+"/player.ini","user settings");write(target+"/vpy/custom.vpy","user vpy");write(target+"/vpy/builtin/Anime.vpy","old builtin");write(target+"/cache/indexes/x.lwi","old cache");write(source+"/vpy/builtin/Anime.vpy","new builtin");
         QProcess apply;apply.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-update.ps1"),"-ParentPid","0","-Source",source,"-Target",target,"-NoLaunch"});QVERIFY(apply.waitForFinished(20000));QVERIFY2(apply.exitCode()==0,apply.readAllStandardError().constData());
         QVERIFY(!QFile::exists(target+"/obsolete.dll"));QVERIFY(!QFile::exists(target+"/cache/indexes/x.lwi"));QFile ini(target+"/player.ini");QVERIFY(ini.open(QIODevice::ReadOnly));QCOMPARE(ini.readAll(),QByteArray("user settings"));QFile vpy(target+"/vpy/custom.vpy");QVERIFY(vpy.open(QIODevice::ReadOnly));QCOMPARE(vpy.readAll(),QByteArray("user vpy"));QFile builtin(target+"/vpy/builtin/Anime.vpy");QVERIFY(builtin.open(QIODevice::ReadOnly));QCOMPARE(builtin.readAll(),QByteArray("new builtin"));
-        const auto backups=QDir(dir.path()).entryList({"portable with space.previous-*"},QDir::Dirs);QCOMPARE(backups.size(),1);QVERIFY(QFile::exists(dir.filePath(backups.first()+"/obsolete.dll")));
+        const auto backups=QDir(dir.path()).entryList({"portable with space.previous-*"},QDir::Dirs);QCOMPARE(backups.size(),0);
+    }
+    void packedMkvUpdateStaysPacked(){
+        QTemporaryDir temp;const auto target=temp.filePath("portable"),cache=temp.filePath("cache"),source=cache+"/staging/component";
+        write(target+"/vs-player.exe","player");write(target+"/runtime/mkvtoolnix.zip","old archive");write(target+"/runtime/mkvtoolnix/user.ini","user");
+        for(const auto &name:QStringList{"mkvmerge.exe","mkvextract.exe","mkvinfo.exe","mkvpropedit.exe"})write(source+"/"+name,"new-cli");
+        write(source+"/mkvtoolnix-gui.exe","not shipped");write(source+"/doc/licenses/COPYING","license");write(source+"/doc/en/mkvmerge.html","guide");
+        const auto plan=cache+"/plan.json";write(plan,QJsonDocument(QJsonArray{QJsonObject{{"id","mkvtoolnix"},{"version","102.0"},{"source",source}}}).toJson());
+        QProcess helper;helper.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-components.ps1"),"-ParentPid","0","-Plan",plan,"-Target",target,"-NoLaunch"});QVERIFY(helper.waitForFinished(20000));QVERIFY2(helper.exitCode()==0,helper.readAllStandardError().constData());
+        QVERIFY(QFileInfo::exists(target+"/runtime/mkvtoolnix.zip"));QVERIFY(!QFileInfo::exists(target+"/runtime/mkvtoolnix/mkvmerge.exe"));QVERIFY(QFileInfo::exists(target+"/runtime/mkvtoolnix/user.ini"));
+        QProcess list;list.start(tool("7z.exe"),{"l",target+"/runtime/mkvtoolnix.zip"});QVERIFY(list.waitForFinished());const auto listing=list.readAllStandardOutput();QVERIFY(listing.contains("mkvmerge.exe"));QVERIFY(!listing.contains("mkvtoolnix-gui.exe"));
+        QCOMPARE(QDir(cache).entryList({"backup-*","packed-*"},QDir::Dirs).size(),0);
+    }
+    void lazyOptionalRuntime(){
+        const auto component="test-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const auto archive=QDir(QCoreApplication::applicationDirPath()).filePath("runtime/"+component+".zip");
+        QTemporaryDir source;write(source.filePath("probe.exe"),"optional-cli");QProcess zip;zip.setWorkingDirectory(source.path());
+        zip.start(tool("7z.exe"),{"a","-tzip",archive,"probe.exe"});QVERIFY(zip.waitForFinished(10000));QCOMPARE(zip.exitCode(),0);
+        const auto cleanup=qScopeGuard([&]{QFile::remove(archive);});
+        const auto pending=optionalRuntimeExecutable(component,"probe.exe",false);QVERIFY(!pending.isEmpty());QVERIFY(!QFileInfo::exists(pending));
+        QString error;const auto ready=optionalRuntimeExecutable(component,"probe.exe",true,&error);QVERIFY2(!ready.isEmpty(),qPrintable(error));QCOMPARE(ready,pending);
+        QFile extracted(ready);QVERIFY(extracted.open(QIODevice::ReadOnly));QCOMPARE(extracted.readAll(),QByteArray("optional-cli"));extracted.close();
+        const auto modified=QFileInfo(ready).lastModified();QCOMPARE(optionalRuntimeExecutable(component,"probe.exe"),ready);QCOMPARE(QFileInfo(ready).lastModified(),modified);
+        QDir(QFileInfo(ready).absolutePath()).removeRecursively();
+    }
+    void stopsLocalTrayCleansAndRestartsVisible(){
+        QTemporaryDir directory;const auto target=directory.filePath("portable with space"),outside=directory.filePath("other installation");
+        QTemporaryDir work(QDir::tempPath()+"/vs-gui-update-XXXXXX");work.setAutoRemove(false);const auto source=work.filePath("payload");payload(source);
+        const auto probe=QDir(QCoreApplication::applicationDirPath()).filePath("vsr_update_probe.exe");
+        write(target+"/vs-player.exe","old");QFile::remove(source+"/vs-player.exe");QVERIFY(QFile::copy(probe,source+"/vs-player.exe"));
+        QDir().mkpath(outside);QVERIFY(QFile::copy(probe,target+"/vs-cap.exe"));QVERIFY(QFile::copy(probe,outside+"/vs-cap.exe"));
+        write(target+"/player.ini","user");write(target+"/color/custom.icc","profile");
+        write(target+".previous-"+QString(32,'a')+"/old.dll","backup");
+        const auto download=directory.filePath("download.7z");write(download,"verified-archive");const auto sha=QString::fromLatin1(QCryptographicHash::hash("verified-archive",QCryptographicHash::Sha256).toHex());
+        QProcess tray,other;tray.start(target+"/vs-cap.exe",{"--background"});other.start(outside+"/vs-cap.exe",{"--background"});QVERIFY(tray.waitForStarted());QVERIFY(other.waitForStarted());
+        HWND restarted=nullptr;const auto cleanup=qScopeGuard([&]{tray.kill();tray.waitForFinished();other.kill();other.waitForFinished();if(restarted){DWORD pid=0;GetWindowThreadProcessId(restarted,&pid);auto process=OpenProcess(SYNCHRONIZE,FALSE,pid);PostMessageW(restarted,WM_CLOSE,0,0);if(process){WaitForSingleObject(process,5000);CloseHandle(process);}}QDir(work.path()).removeRecursively();});
+        const auto script=work.filePath("apply-update.ps1");QVERIFY(QFile::copy(tool("apply-update.ps1"),script));
+        QProcess apply;apply.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",script,"-ParentPid","0","-Source",source,"-Target",target,"-DownloadedArchive",download,"-ArchiveSha256",sha});
+        QVERIFY(apply.waitForFinished(30000));QVERIFY2(apply.exitCode()==0,apply.readAllStandardError().constData());QVERIFY(tray.waitForFinished(5000));QCOMPARE(other.state(),QProcess::Running);
+        QVERIFY(!QFileInfo::exists(work.path()));QVERIFY(!QFileInfo::exists(download));QCOMPARE(QDir(directory.path()).entryList({"*.previous-*"},QDir::Dirs).size(),0);QVERIFY(QFileInfo::exists(target+"/color/custom.icc"));
+        struct Search {QString file;HWND result=nullptr;} search{QDir::toNativeSeparators(target+"/vs-player.exe")};
+        const auto find=[&]{EnumWindows([](HWND window,LPARAM data)->BOOL{auto &search=*reinterpret_cast<Search*>(data);DWORD pid=0;GetWindowThreadProcessId(window,&pid);auto process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid);if(process){wchar_t path[32768];DWORD size=32768;wchar_t type[64]{};GetClassNameW(window,type,64);if(QueryFullProcessImageNameW(process,0,path,&size) && QString::fromWCharArray(path).compare(search.file,Qt::CaseInsensitive)==0 && QString::fromWCharArray(type)=="VSRendererUpdateProbe")search.result=window;CloseHandle(process);}return TRUE;},reinterpret_cast<LPARAM>(&search));restarted=search.result;return restarted!=nullptr && IsWindowVisible(restarted);};
+        QTRY_VERIFY_WITH_TIMEOUT(find(),5000);
     }
     void blockedInstallKeepsOldDirectory(){QTemporaryDir dir;const auto target=dir.filePath("portable"),source=dir.filePath("payload");payload(source);write(target+"/vs-player.exe","old");QProcess apply;apply.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-update.ps1"),"-ParentPid",QString::number(QCoreApplication::applicationPid()),"-Source",source,"-Target",target,"-WaitSeconds","0","-NoLaunch"});QVERIFY(apply.waitForFinished(10000));QCOMPARE(apply.exitCode(),1);QFile old(target+"/vs-player.exe");QVERIFY(old.open(QIODevice::ReadOnly));QCOMPARE(old.readAll(),QByteArray("old"));QCOMPARE(QDir(dir.path()).entryList({"*.previous-*"},QDir::Dirs).size(),0);}
 };

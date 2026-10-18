@@ -62,10 +62,10 @@ def closure(target, seeds, skip_ffmpeg=False):
     return seen
 
 # RIFE/ncnn's model loader uses narrow Windows paths. Keep the shipping path ASCII.
-for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', f'{version}-PlayerLite')]:
+for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', 'playerlite-runtime')]:
     if a.edition not in (edition, 'Both'):
         continue
-    target = dist / folder
+    target = dist / folder if edition == 'Full' else root / 'build' / folder
     target.mkdir(parents=True, exist_ok=True)
     if any(target.iterdir()):
         raise RuntimeError(f'Staging directory must be empty: {target}')
@@ -76,7 +76,10 @@ for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', f'{version}-PlayerLite
                           'networkinformation']:
             source = runtime / directory
             if source.is_dir():
-                shutil.copytree(source, target / directory, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '*.log', '*.ini', '*.lwi', '*.ffindex', 'cache', 'data', 'screenshots', 'shader-cache', 'user', 'PhotoCraftData'))
+                ignored = ['__pycache__', '*.pyc', '*.log', '*.ini', '*.lwi', '*.ffindex', 'cache', 'data', 'screenshots', 'shader-cache', 'user', 'PhotoCraftData']
+                if directory == 'runtime':
+                    ignored += [name for name in ('awj', 'mkvtoolnix') if (source / (name + '.zip')).is_file()]
+                shutil.copytree(source, target / directory, ignore=shutil.ignore_patterns(*ignored))
         for source in runtime.glob('*.dll'):
             if source.name != 'FFF.Native.dll':
                 copy(source, target / source.name)

@@ -14,6 +14,11 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QSlider>
+#include <QTreeWidget>
+#include <QLineEdit>
+#include <QMenu>
 #include <windows.h>
 using namespace vsr;
 class TestPlayer final : public QObject {
@@ -21,6 +26,47 @@ class TestPlayer final : public QObject {
     QByteArray previous_;bool existed_=false;
     QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
 private slots:
+    void nativeDiscMenuControls(){
+        const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");
+        PlayerWindow player;player.resize(1100,760);player.show();QVERIFY(player.openBluRay(root,true));
+        QTRY_VERIFY_WITH_TIMEOUT(player.discMenu_ && player.discMenu_->active() && player.discMenu_->programme().value("menu").toBool() && player.discMenu_->presentedFrames()>0,30000);
+        player.updateState();QVERIFY(!player.timeline_->isEnabled());QCOMPARE(player.timeline_->value(),0);
+        const auto time=player.time_->text();QTest::qWait(1100);QCOMPARE(player.time_->text(),time);
+        QVERIFY(player.timeline_->property("chapters").toJsonArray().isEmpty());
+        const auto playEpisode=[&]{const auto surface=player.discSurface_->size(),video=QSize(960,540).scaled(surface,Qt::KeepAspectRatio);player.discMenu_->pointer(QPoint((surface.width()-video.width())/2+video.width()*575/960,(surface.height()-video.height())/2+video.height()*99/540),surface,true);};
+        playEpisode();QTRY_VERIFY_WITH_TIMEOUT(!player.discMenu_->programme().value("menu").toBool() && player.discMenu_->position()>10000000,15000);
+        player.updateState();QVERIFY(player.timeline_->isEnabled());QVERIFY(!player.timeline_->property("chapters").toJsonArray().isEmpty());
+        QTreeWidgetItem *graphics=nullptr;for(int i=0;i<player.playlist_->topLevelItemCount();++i){auto *item=player.playlist_->topLevelItem(i);if(player.blurayGroups_.value(item->data(0,Qt::UserRole).toString())=="menu"){graphics=item;break;}}
+        QVERIFY(graphics);QVERIFY(graphics->flags().testFlag(Qt::ItemIsEnabled));
+        player.playlist_->itemDoubleClicked(graphics,0);
+        QTRY_VERIFY_WITH_TIMEOUT(player.discMenu_->programme().value("menu").toBool(),15000);
+        playEpisode();QTRY_VERIFY_WITH_TIMEOUT(!player.discMenu_->programme().value("menu").toBool() && player.discMenu_->position()>10000000,15000);
+        player.showContextMenu(player.mapToGlobal(QPoint(80,80)));auto *menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);
+        QAction *back=nullptr;for(auto *action:menu->actions()){QVERIFY(action->text()!=QStringLiteral("BD 原生节目菜单"));if(action->text()==QStringLiteral("BD 主菜单 / 弹出菜单"))back=action;}
+        QVERIFY(back);back->trigger();menu->close();
+        QTRY_VERIFY_WITH_TIMEOUT(player.discMenu_->programme().value("menu").toBool(),15000);
+        player.updateState();QVERIFY(!player.timeline_->isEnabled());
+        QTemporaryDir directory;const auto file=directory.filePath("normal.mkv");QVERIFY(QFile::copy(":/startup/warmup.mkv",file));
+        QVERIFY(player.openFile(file));QVERIFY(player.timeline_->isEnabled());QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>2,15000);
+    }
+    void nativeDiscReopenWhilePlaying(){
+        const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");
+        PlayerWindow player;player.resize(1100,760);player.show();
+        for(int cycle=0;cycle<12;++cycle){
+            qInfo()<<"open menu cycle"<<cycle;QVERIFY(player.openBluRay(root,true));
+            if(cycle%2)QVERIFY(player.openBluRay(root,true));
+            QTRY_VERIFY_WITH_TIMEOUT(player.discMenu_ && player.discMenu_->active() && player.discMenu_->programme().value("menu").toBool(),30000);
+            const auto surface=player.discSurface_->size(),video=QSize(960,540).scaled(surface,Qt::KeepAspectRatio);
+            player.discMenu_->pointer(QPoint((surface.width()-video.width())/2+video.width()*575/960,(surface.height()-video.height())/2+video.height()*99/540),surface,true);
+            QTRY_VERIFY_WITH_TIMEOUT(!player.discMenu_->programme().value("menu").toBool() && player.discMenu_->position()>10000000,15000);
+            qInfo()<<"programme playing"<<cycle;
+        }
+        QString continuous;for(const auto &file:player.files_)if(player.blurayLabels_.value(file).startsWith(QStringLiteral("整卷连续播放")))continuous=file;
+        QVERIFY(!continuous.isEmpty());QVERIFY(player.openFile(continuous));
+        QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>3,30000);
+        qInfo()<<"reopen from continuous playlist";QVERIFY(player.openBluRay(root,true));
+        QTRY_VERIFY_WITH_TIMEOUT(player.discMenu_->active() && player.discMenu_->programme().value("menu").toBool(),30000);
+    }
     void nativeDiscFirstPlay(){
         const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");
         QWidget surface;surface.resize(960,540);surface.show();PlayerDiscMenu menu;
@@ -45,6 +91,22 @@ private slots:
         menu.pause(true);menu.pause(false);QTest::qWait(100);QTRY_COMPARE_WITH_TIMEOUT(menu.state(),3,5000);
         const auto target=menu.duration()/2;QVERIFY(target>0);menu.seek(target);
         QTRY_VERIFY_WITH_TIMEOUT(menu.position()>=target,5000);QTRY_VERIFY(menu.presentedFrames()>0);
+    }
+    void nativeDiscSeekKeepsRequestedPosition(){
+        const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");
+        QWidget surface;surface.resize(960,540);surface.show();PlayerDiscMenu menu;
+        QVERIFY(menu.open(root,reinterpret_cast<void*>(surface.winId())));
+        QTRY_VERIFY_WITH_TIMEOUT((menu.state(),menu.programme().value("menu").toBool()),20000);
+        menu.pointer(QPoint(575,99),surface.size(),true);
+        QTRY_VERIFY_WITH_TIMEOUT((menu.state(),!menu.programme().value("menu").toBool() && menu.position()>10000000),15000);
+        QVERIFY(menu.duration()>36000000000LL);
+        for(const qint64 target:{menu.duration()*3/4,menu.duration()/4}){
+            const auto presents=menu.presentedFrames();menu.seek(target);QCOMPARE(menu.position(),target);
+            QElapsedTimer elapsed;elapsed.start();
+            while(elapsed.elapsed()<1500){QTest::qWait(10);QVERIFY2(qAbs(menu.position()-target)<30000000,"BD timeline bounced to the pre-seek clock");}
+            QTRY_VERIFY_WITH_TIMEOUT(menu.presentedFrames()>presents,15000);
+            QTRY_VERIFY_WITH_TIMEOUT(menu.position()>target+1000000,15000);
+        }
     }
     void initTestCase(){QCoreApplication::setOrganizationName("VSRendererLiteTests");QCoreApplication::setApplicationName("VSPlayerLiteTests");QFile file(config());existed_=file.exists();if(file.open(QIODevice::ReadOnly))previous_=file.readAll();}
     void init(){QSettings settings(config(),QSettings::IniFormat);settings.clear();settings.setValue("playback/remember",false);settings.setValue("basic/autoplay",true);settings.sync();}

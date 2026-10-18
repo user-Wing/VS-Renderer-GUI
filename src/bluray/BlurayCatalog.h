@@ -46,7 +46,7 @@ public:
     static QJsonObject feedback(const BlurayScan &scan);
     static QJsonObject metadata(const QString &playlist);
     static QString playbackInput(const QString &playlist,QString *error);
-    static QString mkvmerge();
+    static QString mkvmerge(bool extract = false);
     static QString time(qint64 ticks);
     static QString clipPlaybackIssue(const QString &path);
     static QString prepareMenu(const QString &root, QString *error, bool directTopMenu = false);

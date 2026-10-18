@@ -1,3 +1,4 @@
+#include "runtime/OptionalRuntime.h"
 #include "bluray/BlurayCatalog.h"
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -263,8 +264,9 @@ QJsonObject BlurayCatalog::feedback(const BlurayScan &scan) {
     for(const auto &w:scan.warnings)warnings<<w;
     return {{"schemaVersion",1},{"source",scan.source},{"titles",titles},{"metadata",metadata},{"warnings",warnings}};
 }
-QString BlurayCatalog::mkvmerge() {
+QString BlurayCatalog::mkvmerge(bool extract) {
     const QDir app(QCoreApplication::applicationDirPath());
+    const auto bundled=optionalRuntimeExecutable("mkvtoolnix","mkvmerge.exe",extract);if(!bundled.isEmpty())return bundled;
     for(const auto &file:QStringList{app.filePath("runtime/mkvtoolnix/mkvmerge.exe"),app.filePath("mkvmerge.exe"),QStandardPaths::findExecutable("mkvmerge"),QStringLiteral("C:/PortableSoft/Mkvtoolnix/mkvmerge.exe")})if(QFileInfo(file).isFile())return file;
     return {};
 }

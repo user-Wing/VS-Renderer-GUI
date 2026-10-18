@@ -1,10 +1,12 @@
-param(
+﻿param(
     [string]$SourceDirectory = "",
     [string]$OutputFile = ""
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-if (-not $SourceDirectory) { $SourceDirectory = Join-Path $root 'dist\1.0.12-PlayerLite' }
+$version = [regex]::Match((Get-Content -LiteralPath (Join-Path $root 'CMakeLists.txt') -Raw), 'project\(VSRenderer VERSION ([0-9.]+)').Groups[1].Value
+if (!$version) { throw 'Project version not found' }
+if (-not $SourceDirectory) { $SourceDirectory = Join-Path $root 'build\playerlite-runtime' }
 if (-not $OutputFile) { $OutputFile = Join-Path $root 'dist\VS-Player.exe' }
 $built = Join-Path $root 'build\mingw-release\lite\vs-player.exe'
 if (!(Test-Path -LiteralPath $built)) { throw "Rebuild VSPlayerLite first: $built" }
@@ -38,6 +40,8 @@ if ($forbidden.Count) { throw "FFmpeg unexpectedly embedded: $($forbidden.FullNa
 $releasePath = Join-Path $stage 'release.json'
 $release = Get-Content -LiteralPath $releasePath -Raw | ConvertFrom-Json
 $files = @(Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $_.Name -notin @('release.json','resource-manifest.json') })
+$release.version = $version
+$release.edition = "SinglePlayer"
 $release.ffmpegOnlyFiles = @()
 $release | Add-Member -NotePropertyName externalFFmpeg -NotePropertyValue @('ffmpeg.exe','ffprobe.exe','avcodec-63.dll','avformat-63.dll','avutil-61.dll','swresample-7.dll','swscale-10.dll','avfilter-12.dll') -Force
 $release.totalBytes = ($files | Measure-Object Length -Sum).Sum
@@ -54,7 +58,32 @@ Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Compression
 $resource = Join-Path $work 'launcher-icons.rc'
 $resourceObject = Join-Path $work 'launcher-icons.o'
 $iconPath = (Join-Path $root 'assets\icons\player.ico').Replace('\','/')
-[IO.File]::WriteAllText($resource, ('101 ICON "{0}"' -f $iconPath), [Text.Encoding]::UTF8)
+$numericVersion = $version.Replace('.', ',') + ',0'
+$resourceText = @"
+#include <windows.h>
+101 ICON "$iconPath"
+1 VERSIONINFO
+FILEVERSION $numericVersion
+PRODUCTVERSION $numericVersion
+FILETYPE VFT_APP
+BEGIN
+ BLOCK "StringFileInfo"
+ BEGIN
+  BLOCK "040904b0"
+  BEGIN
+   VALUE "FileDescription", "VS Player"
+   VALUE "FileVersion", "$version"
+   VALUE "ProductName", "VS Player"
+   VALUE "ProductVersion", "$version"
+  END
+ END
+ BLOCK "VarFileInfo"
+ BEGIN
+  VALUE "Translation", 0x409, 1200
+ END
+END
+"@
+[IO.File]::WriteAllText($resource, $resourceText, [Text.Encoding]::UTF8)
 & (Join-Path (Split-Path $compiler) 'windres.exe') -i $resource -o $resourceObject -O coff
 if ($LASTEXITCODE -ne 0) { throw 'Player icon resource compilation failed' }
 & $compiler -std=c11 -Os -s -municode -mwindows -static-libgcc (Join-Path $PSScriptRoot 'playerlite-launcher.c') $resourceObject -o $runner -luser32

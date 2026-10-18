@@ -1,12 +1,12 @@
 # VS Renderer / VS Player / VS Cap
 
-![源码版本 1.0.12](https://img.shields.io/badge/source-1.0.12-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
+![源码版本 1.0.13](https://img.shields.io/badge/source-1.0.13-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
 
 Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片，用 **VSCap** 截图与标注。
 
 [下载便携包](https://github.com/user-Wing/VS-Renderer-GUI/releases) · [ModelScope 下载源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) · [操作指南](docs/README.md) · [更新日志](changelog.md)
 
-源码版本：**1.0.12**。这是工作区版本，不代表下载源已有同版本附件；下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
+源码版本：**1.0.13**。这是工作区版本，不代表下载源已有同版本附件；下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
 
 ## 功能介绍
 
@@ -30,10 +30,9 @@ VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处�
 | 分发形式 | 功能与运行要求 |
 | --- | --- |
 | Full | Renderer、Player、VSCap、VS 滤镜及完整编辑/可选后端；以所下载包的组件清单为准 |
-| 当前 PlayerLite | 独立播放器，仅 3FP、D3D11/Jinc、音视频字幕和图片查看；不含 Renderer、VS/RIFE、PhotoCraft、libVLC/LAV/madVR 或高级色彩运行时 |
-| 单文件 `VS-Player.exe` | 遵循 PlayerLite 边界；首次启动展开缓存，同目录保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
+| 单文件 `VS-Player.exe` | 独立播放器，仅 3FP、D3D11/Jinc、音视频字幕及图片查看；首次启动展开缓存，同目录保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
 
-早期名为 Lite 的包只是 Full 删减部分组件，与当前 PlayerLite 不同。
+从 1.0.13 起仅提供 Full 目录与单文件播放器，不再生成 PlayerLite 发行目录。早期 Lite 包仍按其对应说明使用。
 
 ## 快速上手
 
@@ -43,18 +42,18 @@ VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处�
 
 **截图与图片**：在 VSCap 中设置截图/贴图热键，框选后调整选区并标注；“✓”复制到剪贴板，保存按钮选择格式与路径。播放器的图片工具栏可打开 PhotoCraft 或格式转换，见 [截图与图片指南](docs/capture-images.md)。
 
-**蓝光**：Player 打开 BD 文件夹后选择节目或菜单模式；需要无重编码封装时使用 Renderer 的 BD Remux 页面，见 [蓝光指南](docs/bluray.md)。
+**蓝光**：Player 打开 BD 文件夹后选择节目或菜单模式；右键或列表可返回主菜单。需要无重编码封装时使用 Renderer 的 BD Remux 页面，见 [蓝光指南](docs/bluray.md)。
 
 ## 使用边界与配置
 
 - **8K48 AV1 软件播放不保证逐帧实时**；持续算力不足时优先跟随播放时间，必要时跳过部分画面，避免整段明显慢放，实际范围见[测试台账](development/validation.md)。增强/补帧也没有通用实时保证。
 - 原始高度超过 2160p 时禁用内置自动 Anime 和四档 Anime4K；D3D11/Jinc 可用，自定义 VPY 需自行评估负载。
-- Full 新配置在 HDR→SDR 时自动使用高级色彩映射；已有配置保留。PlayerLite 不含该运行时，见 [色彩设置](docs/color-management.md)。
+- Full 新配置在 HDR→SDR 时自动使用高级色彩映射；已有配置保留。单文件播放器不含该运行时，见 [色彩设置](docs/color-management.md)。
 - 图片使用 CPU 解码，动图当前显示首帧；复杂 PSD/RAW 支持以编辑器实际能力为准。
 - Player 配置保存在程序旁 `player.ini`；Renderer 使用独立设置。更新前保留自定义 VPY、项目、截图及配置，按 [更新说明](docs/portable-updates.md) 操作。
 
 ## 开发与反馈
 
-[项目地图](project.md) 说明架构和改动入口，[构建指南](docs/dependencies.md) 说明开发环境，[性能排查](docs/performance-debugging.md) 说明如何复测。反馈问题请提供软件/包版本、Full 或 PlayerLite、实际解码与输出模式、素材元数据、复现步骤和日志。
+[项目地图](project.md) 说明架构和改动入口，[构建指南](docs/dependencies.md) 说明开发环境，[性能排查](docs/performance-debugging.md) 说明如何复测。反馈问题请提供软件/包版本、Full 或单文件播放器、实际解码与输出模式、素材元数据、复现步骤和日志。
 
 源码采用 [MIT License](LICENSE)，第三方组件按各自许可证分发，见 [第三方声明](THIRD_PARTY_NOTICES.md)。

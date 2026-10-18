@@ -1,0 +1,21 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+PASS   : TestPlayer::bdReturnToTopMenu()
+QINFO  : TestPlayer::bdMenuEpisodeSelection(8) BD menu selected 8 actual seconds 1.04895 source "C:/Users/ARXChem/AppData/Local/VSRendererTests/VSPlayerTests/cache/bluray/758a1f543128180eeabecc80b256e66c95626ad3803c4cf0c593d9de85833a42/BDMV/player.ffconcat"
+PASS   : TestPlayer::bdMenuEpisodeSelection(8)
+QINFO  : TestPlayer::bdMenuEpisodeSelection(9) BD menu selected 9 actual seconds 1421.54 source "C:/Users/ARXChem/AppData/Local/VSRendererTests/VSPlayerTests/cache/bluray/758a1f543128180eeabecc80b256e66c95626ad3803c4cf0c593d9de85833a42/BDMV/player.ffconcat"
+PASS   : TestPlayer::bdMenuEpisodeSelection(9)
+QINFO  : TestPlayer::bdMenuEpisodeSelection(10) BD menu selected 10 actual seconds 2842.98 source "C:/Users/ARXChem/AppData/Local/VSRendererTests/VSPlayerTests/cache/bluray/758a1f543128180eeabecc80b256e66c95626ad3803c4cf0c593d9de85833a42/BDMV/player.ffconcat"
+PASS   : TestPlayer::bdMenuEpisodeSelection(10)
+QINFO  : TestPlayer::bdMenuEpisodeSelection(11) BD menu selected 11 actual seconds 4264.4 source "C:/Users/ARXChem/AppData/Local/VSRendererTests/VSPlayerTests/cache/bluray/758a1f543128180eeabecc80b256e66c95626ad3803c4cf0c593d9de85833a42/BDMV/player.ffconcat"
+PASS   : TestPlayer::bdMenuEpisodeSelection(11)
+QINFO  : TestPlayer::bdMenuEpisodeSelection(12) BD menu selected 12 actual seconds 5685.77 source "C:/Users/ARXChem/AppData/Local/VSRendererTests/VSPlayerTests/cache/bluray/758a1f543128180eeabecc80b256e66c95626ad3803c4cf0c593d9de85833a42/BDMV/player.ffconcat"
+PASS   : TestPlayer::bdMenuEpisodeSelection(12)
+QINFO  : TestPlayer::bdMenuEpisodeSelection(13) BD menu selected 13 actual seconds 7107.38 source "C:/Users/ARXChem/AppData/Local/VSRendererTests/VSPlayerTests/cache/bluray/758a1f543128180eeabecc80b256e66c95626ad3803c4cf0c593d9de85833a42/BDMV/player.ffconcat"
+PASS   : TestPlayer::bdMenuEpisodeSelection(13)
+QINFO  : TestPlayer::discMenuProgrammeRestoresProcessing() menu programme QJsonObject({"audio":4352,"chapter":0,"chapters":[0],"duration100ns":0,"firstPlay":false,"fps":23.976024627685547,"height":1080,"subtitle":-1,"title":3,"width":1920})
+PASS   : TestPlayer::discMenuProgrammeRestoresProcessing()
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 10 passed, 0 failed, 0 skipped, 0 blacklisted, 31233ms
+********* Finished testing of TestPlayer *********

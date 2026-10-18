@@ -101,6 +101,11 @@ void PlayerWindow::applyBlurayMetadata() {
     media_.insert("streams",streams);
 }
 bool PlayerWindow::openBluRay(const QString &path, bool menus) {
+    const auto directory=QFileInfo(path).canonicalFilePath();
+    if(menus && !directory.isEmpty() && !discRoot_.isEmpty() && !files_.isEmpty() && blurayProgrammes_.contains(files_.first()) &&
+       (directory==QFileInfo(discRoot_).canonicalFilePath() || directory==QFileInfo(QDir(discRoot_).filePath("BDMV")).canonicalFilePath())){
+        returnToDiscMenu();return true;
+    }
     if(QFileInfo(path).isFile()){
         auto image=QDir::toNativeSeparators(path);image.replace("'","''");const auto script=QString("$ErrorActionPreference='Stop'; Mount-DiskImage -ImagePath '%1' -PassThru | Get-Volume | Where-Object DriveLetter | ForEach-Object { $_.DriveLetter + ':\\' }").arg(image);
         auto *mount=new QProcess(this);connect(mount,&QProcess::finished,this,[this,mount,menus](int code){const auto root=QString::fromUtf8(mount->readAllStandardOutput()).trimmed();if(code==0 && QFileInfo(root).isDir())openBluRay(root,menus);else setError(tr("装载 BD 镜像失败：%1").arg(QString::fromUtf8(mount->readAllStandardError())));mount->deleteLater();});
@@ -208,7 +213,7 @@ void PlayerWindow::updatePlaylist() {
         else {QTreeWidgetItem *audio=nullptr;bool separated=false;for(const auto &file:files_) {
             const auto group=blurayGroups_.value(file);if(!separated && (group=="extra" || group=="menu" || group=="audio")){auto *separator=new QTreeWidgetItem(playlist_);separator->setText(0,"────────────────────");separator->setFlags(Qt::NoItemFlags);separated=true;}
             if(group=="audio" && !audio){audio=new QTreeWidgetItem(playlist_);audio->setText(0,tr("音频"));audio->setData(0,Qt::UserRole+1,true);audio->setExpanded(false);}
-            auto *item=group=="audio"?new QTreeWidgetItem(audio):new QTreeWidgetItem(playlist_);const QUrl url(file);item->setText(0,blurayLabels_.contains(file)?blurayLabels_.value(file):url.scheme()=="http" || url.scheme()=="https"?url.fileName():QFileInfo(file).fileName());item->setData(0,Qt::UserRole,file);item->setToolTip(0,group=="menu"?file+"\n"+BlurayCatalog::clipPlaybackIssue(file):file);if(group=="menu")item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+            auto *item=group=="audio"?new QTreeWidgetItem(audio):new QTreeWidgetItem(playlist_);const QUrl url(file);item->setText(0,blurayLabels_.contains(file)?blurayLabels_.value(file):url.scheme()=="http" || url.scheme()=="https"?url.fileName():QFileInfo(file).fileName());item->setData(0,Qt::UserRole,file);item->setToolTip(0,group=="menu"?file+"\n"+BlurayCatalog::clipPlaybackIssue(file):file);
         }}
     }
     for(QTreeWidgetItemIterator it(playlist_);*it;++it) {const bool current=(*it)->data(0,Qt::UserRole).toString()==source_;QFont font=(*it)->font(0);font.setBold(current);(*it)->setFont(0,font);if(current)playlist_->setCurrentItem(*it);}

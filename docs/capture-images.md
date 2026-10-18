@@ -26,7 +26,7 @@ HDR 截图先显示界面，再后台按所选格式保存到“截图默认保�
 
 “视频 → 图像截取”可保存源画面或包含字幕/显示效果的实画面；“截图到指定路径…”也支持 PNG/AVIF/JXL。默认目录在程序旁 `screenshots/`，可在基本设置修改。
 
-PNG/JXL 使用每通道 16 位无损编码；JXL 原生保存 HDR。AVIF 质量 70，SDR 10 位、HDR 12 位，属于有损编码：Full 使用 AWJ，独立版使用外部支持 libaom-av1 的 FFmpeg。Player PNG 仍保留其 HDR/SDR 与浮点附件流程，不能与 VSCap 的默认附件规则混用。
+PNG/JXL 使用每通道 16 位无损编码；JXL 原生保存 HDR。AVIF 质量 70，SDR 10 位、HDR 12 位，属于有损编码：Full 按需展开并调用AWJ 1.2.1的独立AWJ.com，独立版使用外部支持 libaom-av1 的 FFmpeg。Player PNG 仍保留其 HDR/SDR 与浮点附件流程，不能与 VSCap 的默认附件规则混用。
 
 ## 图片查看、转换与 PhotoCraft
 

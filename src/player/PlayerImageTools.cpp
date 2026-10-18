@@ -1,3 +1,4 @@
+#include "runtime/OptionalRuntime.h"
 #include "player/PlayerImageTools.h"
 #include "ui/PreviewPane.h"
 #include "player/PhotoCraftEditor.h"
@@ -140,7 +141,7 @@ QString PlayerImageTools::writeEditorImport(const QImage &image,const QString &p
     return {};
 }
 ImageOutput PlayerImageTools::currentOutput() const {ImageOutput output;output.source=source_;output.image=pane_->image();output.transform=pane_->imageTransform();return output;}
-QString PlayerImageTools::backendPath() {return QDir(QCoreApplication::applicationDirPath()).filePath("runtime/awj/AWJ.exe");}
+QString PlayerImageTools::backendPath() {return optionalRuntimeExecutable("awj","AWJ.com");}
 QStringList PlayerImageTools::conversionArguments(const ImageOutput &o,const QString &input,const QString &directory) {
     QStringList args{"-i",input,"-o",directory,"--format",o.format,"--template","result",o.visualQuality?"--visual-quality":"--quality",QString::number(o.quality),"--alpha",o.alpha,"--image-size-limit","none","--keep-metadata","--no-summary","--no-log"};
     if(o.format=="avif"){int bits=o.image.text("sourceBitDepth").toInt();if(bits<=0)bits=o.image.depth()>32?16:8;const auto depth=o.bitDepth=="auto"?QString::number(bits<=10?10:12):o.bitDepth;args<<"--avif-encoder"<<"aom"<<"--avif-color-representation"<<"yuv"<<"--chroma"<<o.chroma<<"--bit-depth"<<depth;}

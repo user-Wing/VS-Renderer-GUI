@@ -12,6 +12,7 @@
 #include <QPushButton>
 #include <QSaveFile>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 #include <QCoreApplication>
@@ -41,7 +42,10 @@ BlurayWidget::BlurayWidget(QWidget *parent):QWidget(parent) {
     const auto play=[this]{const auto items=selected();if(items.isEmpty()){status_->setText(tr("先勾选需要播放的节目"));return;}emit playRequested(items,0);};
     connect(table_,&QTreeWidget::itemDoubleClicked,this,[this](QTreeWidgetItem *item,int column){if(column==0)return;auto titles=selected();auto t=scan_.titles.at(item->data(0,Qt::UserRole).toInt());t.label=item->text(0);int index=-1;for(int i=0;i<titles.size();++i)if(titles[i].playlist==t.playlist && titles[i].firstItem==t.firstItem && titles[i].itemCount==t.itemCount)index=i;if(index<0){titles={t};index=0;}emit playRequested(titles,index);});
     auto *dest=new QHBoxLayout;dest->addWidget(new QLabel(tr("输出目录"),this));output_=new QLineEdit(QSettings().value("bluray/output").toString(),this);output_->setObjectName("blurayOutput");dest->addWidget(output_,1);auto *pick=new QPushButton(tr("浏览…"),this);dest->addWidget(pick);layout->addLayout(dest);connect(pick,&QPushButton::clicked,this,[this]{const auto dir=QFileDialog::getExistingDirectory(this,tr("MKV 输出目录"),output_->text());if(!dir.isEmpty())output_->setText(dir);});
-    auto *tools=new QHBoxLayout;tools->addWidget(new QLabel("mkvmerge",this));tool_=new QLineEdit(QSettings().value("bluray/mkvmerge",BlurayCatalog::mkvmerge()).toString(),this);tools->addWidget(tool_,1);auto *browse=new QPushButton(tr("选择工具…"),this);tools->addWidget(browse);layout->addLayout(tools);connect(browse,&QPushButton::clicked,this,[this]{const auto file=QFileDialog::getOpenFileName(this,tr("选择 mkvmerge"),tool_->text(),"mkvmerge (mkvmerge.exe)");if(!file.isEmpty())tool_->setText(file);});
+    auto *tools=new QHBoxLayout;tools->addWidget(new QLabel("mkvmerge",this));auto configuredTool=QSettings().value("bluray/mkvmerge",BlurayCatalog::mkvmerge()).toString();
+    const auto managed=QDir::fromNativeSeparators(configuredTool);
+    if(configuredTool=="bundled" || managed==QDir(QCoreApplication::applicationDirPath()).filePath("runtime/mkvtoolnix/mkvmerge.exe") || managed.startsWith(QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation)+"/VSRenderer/runtime/mkvtoolnix/"))configuredTool=BlurayCatalog::mkvmerge();
+    tool_=new QLineEdit(configuredTool,this);tools->addWidget(tool_,1);auto *browse=new QPushButton(tr("选择工具…"),this);tools->addWidget(browse);layout->addLayout(tools);connect(browse,&QPushButton::clicked,this,[this]{const auto file=QFileDialog::getOpenFileName(this,tr("选择 mkvmerge"),tool_->text(),"mkvmerge (mkvmerge.exe)");if(!file.isEmpty())tool_->setText(file);});
     auto *actions=new QHBoxLayout;auto *preview=new QPushButton(tr("播放所选节目"),this);actions->addWidget(preview);connect(preview,&QPushButton::clicked,this,play);run_=new QPushButton(tr("一键 Remux 所选节目"),this);run_->setObjectName("blurayRemuxStart");actions->addWidget(run_);connect(run_,&QPushButton::clicked,this,&BlurayWidget::remux);stop_=new QPushButton(tr("停止队列"),this);stop_->setEnabled(false);actions->addWidget(stop_);connect(stop_,&QPushButton::clicked,this,[this]{stopped_=true;queue_.clear();process_.terminate();});auto *download=new QPushButton(tr("通过 ModelScope Manager 下载 BD…"),this);actions->addWidget(download);connect(download,&QPushButton::clicked,this,&BlurayWidget::download);actions->addStretch();layout->addLayout(actions);
     status_=new QLabel(tr("请选择 BD 文件夹。支持无加密 BDMV；加密盘、多角度与 BD-J 菜单需另外处理。"),this);status_->setWordWrap(true);layout->addWidget(status_);log_=new QPlainTextEdit(this);log_->setReadOnly(true);log_->setMaximumBlockCount(1500);log_->setMaximumHeight(140);layout->addWidget(log_);
     process_.setProcessChannelMode(QProcess::MergedChannels);connect(&process_,&QProcess::readyReadStandardOutput,this,[this]{log_->appendPlainText(QString::fromUtf8(process_.readAllStandardOutput()));});
@@ -70,8 +74,9 @@ QVector<BlurayTitle> BlurayWidget::selected()const{QVector<BlurayTitle> titles;f
 void BlurayWidget::remux(){
     if(process_.state()!=QProcess::NotRunning)return;
     queue_=selected();if(queue_.isEmpty()){status_->setText(tr("请勾选节目"));return;}
+    if(tool_->text().isEmpty() || tool_->text()==BlurayCatalog::mkvmerge(false))tool_->setText(BlurayCatalog::mkvmerge(true));
     if(!QFileInfo(tool_->text()).isFile() || output_->text().trimmed().isEmpty() || !QDir().mkpath(output_->text())){status_->setText(tr("请选择可用 mkvmerge 与输出目录"));queue_.clear();return;}
-    queueOutput_=output_->text();queueTool_=tool_->text();QSettings().setValue("bluray/output",queueOutput_);QSettings().setValue("bluray/mkvmerge",queueTool_);pending_=0;stopped_=false;run_->setEnabled(false);stop_->setEnabled(true);next();
+    queueOutput_=output_->text();queueTool_=tool_->text();QSettings().setValue("bluray/output",queueOutput_);QSettings().setValue("bluray/mkvmerge",queueTool_==BlurayCatalog::mkvmerge(false)?QString("bundled"):queueTool_);pending_=0;stopped_=false;run_->setEnabled(false);stop_->setEnabled(true);next();
 }
 void BlurayWidget::next(){
     if(pending_>=queue_.size()){status_->setText(tr("Remux 队列已完成；音视频未重新编码，轨道与章节保留。"));queue_.clear();run_->setEnabled(true);stop_->setEnabled(false);return;}

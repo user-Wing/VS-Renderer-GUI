@@ -1,0 +1,63 @@
+{
+  "version": "1.0.13",
+  "full": {
+    "path": "dist/VS-GUI-Full",
+    "total_bytes": 828922961,
+    "excluding_ffmpeg_bytes": 685735745,
+    "manifest_sha256": "d1a21c2cbaefb29c29fe38196c350217a6fd381009be616314f8328eabee3ee4",
+    "manifest_verified": true,
+    "protected_files_verified": 24,
+    "deployment_user_files_unchanged": true,
+    "changed_between_deployments": [
+      "player.ini"
+    ],
+    "programs": {
+      "VSRenderer.exe": "6a0d3848a582bd1987915b477f787988e9ff8c85bd9e0af7af769f8f3e142e96",
+      "vs-player.exe": "2c636462c319e8c20560b64491abcbff4b90806d32645a6188180967c783a50c",
+      "vs-cap.exe": "1b3e7c03a63e3a9674893847e40d7d081307fd317df66719940f75201e6c2632",
+      "FFF.Native.dll": "0c5be410c1496ce6217346ba53d1546b6db2fbc1cb5f9129e36723b3daaa4580"
+    }
+  },
+  "single": {
+    "version": "1.0.13",
+    "bytes": 35809383,
+    "sha256": "13118e80c9e522a10bc0024550189fcd99bb892e9ef66cf40ec38a5529c36dc0",
+    "payload": "f569b4e29d01bae6312839ba",
+    "zipCRC": true,
+    "externalFFmpeg": true,
+    "iconResource101": true,
+    "matchesInternalStageExceptPETimestampAndChecksum": true,
+    "launcherChildImport": {
+      "bits": 8,
+      "height": 1254,
+      "icc": false,
+      "name": "I1.png",
+      "temporary": true,
+      "version": 1,
+      "width": 1254
+    },
+    "settingsUnchanged": true,
+    "originalDiscIndexesUnchanged": true
+  },
+  "components": {
+    "awj": {
+      "before_bytes": 45129647,
+      "after_bytes": 19191400,
+      "saved_bytes": 25938247
+    },
+    "mkvtoolnix": {
+      "before_bytes": 219567805,
+      "after_bytes": 29133824,
+      "saved_bytes": 190433981
+    },
+    "vlc": {
+      "before_bytes": 142188751,
+      "after_bytes": 39443218,
+      "saved_bytes": 102745533
+    }
+  },
+  "components_saved_bytes": 319117761,
+  "dist_playerlite_directory": false,
+  "full_archive_created": false,
+  "release_assets_uploaded": false
+}

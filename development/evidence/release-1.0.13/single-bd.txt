@@ -1,0 +1,10 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+PASS   : TestPlayer::allowedModes()
+PASS   : TestPlayer::settingsRejectFullBackends()
+PASS   : TestPlayer::ffprobeFromRuntimeOrPath()
+PASS   : TestPlayer::softwarePlaybackWithoutVs()
+PASS   : TestPlayer::nativeMenuRapidResume()
+QINFO  : TestPlayer::nativeDiscFirstPlay() authored FirstPlay QJsonObject({"aspect":1.77778,"chapter":1,"chapterStarts100ns":[0],"chapters":[0],"duration100ns":90090000,"height":0,"kind":"bluray","menu":false,"nativeDisc":true,"overlaySequence":4,"playlist":2,"title":65535,"titles":2,"waiting":false,"width":0}) 0
+PASS   : TestPlayer::nativeDiscFirstPlay()

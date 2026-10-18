@@ -55,7 +55,7 @@ private:
     std::unique_ptr<QCryptographicHash> hash_;
     QList<PortableRelease> candidates_;
     PortableRelease selected_;
-    QString payload_;
+    QString payload_, downloadedArchive_;
     bool busy_ = false, cancelled_ = false;
 };
 }

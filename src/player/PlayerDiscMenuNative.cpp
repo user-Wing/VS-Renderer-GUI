@@ -3,16 +3,14 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QWidget>
-#include <QEventLoop>
-#include <QFutureWatcher>
-#include <QtConcurrentRun>
 
 namespace vsr {
 struct PlayerDiscMenu::Impl {
     ThreeFpApi api;
     void *handle=nullptr;
     bool pausePending=false,resumeRequested=false;
-    QVector<QFuture<void>> retiring;
+    qint64 seekTarget=-1;
+    quint64 seekGeneration=0,seekPresents=0;
     QString failure;
     using Navigate=ThreeFpResult(*)(void*,int,int,int);
     using Status=ThreeFpResult(*)(void*,char*,uint32_t,uint32_t*);
@@ -41,14 +39,13 @@ bool PlayerDiscMenu::open(const QString &root,void *window,bool) {
     return true;
 }
 void PlayerDiscMenu::close(QWidget *retiredSurface) {
-    impl_->pausePending=impl_->resumeRequested=false;
+    impl_->pausePending=impl_->resumeRequested=false;impl_->seekTarget=-1;
     auto *handle=impl_->handle;impl_->handle=nullptr;
-    for(int i=impl_->retiring.size()-1;i>=0;--i)if(impl_->retiring[i].isFinished())impl_->retiring.removeAt(i);
-    if(handle){
-        const auto stopped=QtConcurrent::run([this,handle]{impl_->api.stop(handle);impl_->api.destroy(handle);});impl_->retiring.append(stopped);
-        if(retiredSurface){retiredSurface->hide();auto *watcher=new QFutureWatcher<void>(retiredSurface);QObject::connect(watcher,&QFutureWatcher<void>::finished,retiredSurface,&QObject::deleteLater);watcher->setFuture(stopped);return;}
-    }else if(retiredSurface)retiredSurface->deleteLater();
-    for(const auto &stopped:impl_->retiring){if(stopped.isFinished())continue;QFutureWatcher<void> watcher;QEventLoop wait;QObject::connect(&watcher,&QFutureWatcher<void>::finished,&wait,&QEventLoop::quit);watcher.setFuture(stopped);if(!watcher.isFinished())wait.exec(QEventLoop::ExcludeUserInputEvents);}impl_->retiring.clear();
+    if(retiredSurface)retiredSurface->hide();
+    // Match ThreeFpPlayer: finish the native session before replacing its HWND.
+    // Pumping Qt events here can re-enter openDiscMenu while it replaces the surface.
+    if(handle){impl_->api.stop(handle);impl_->api.destroy(handle);}
+    if(retiredSurface)retiredSurface->deleteLater();
 }
 bool PlayerDiscMenu::active() const { return impl_->handle!=nullptr; }
 QString PlayerDiscMenu::error() const { const auto text=impl_->api.sessionError(impl_->handle);return text.isEmpty()?impl_->failure:text; }
@@ -69,7 +66,7 @@ void PlayerDiscMenu::navigate(unsigned command) {
     const int commands[]{4,0,1,2,3,6};
     if(active() && command<6)impl_->navigate(impl_->handle,commands[command],0,0);
 }
-void PlayerDiscMenu::topMenu() { if(active())impl_->navigate(impl_->handle,5,0,0); }
+void PlayerDiscMenu::topMenu() { impl_->seekTarget=-1;if(active())impl_->navigate(impl_->handle,5,0,0); }
 void PlayerDiscMenu::pointer(const QPoint &position,const QSize &surface,bool activate) {
     if(!active() || surface.isEmpty())return;
     const auto s=impl_->snapshot();const QSize video(s.videoWidth,s.videoHeight);if(video.isEmpty())return;
@@ -80,10 +77,21 @@ void PlayerDiscMenu::pointer(const QPoint &position,const QSize &surface,bool ac
     impl_->navigate(impl_->handle,activate?9:8,point.x()*video.width()/fitted.width(),point.y()*video.height()/fitted.height());
 }
 void PlayerDiscMenu::pause(bool paused) { if(active()){if(paused){impl_->resumeRequested=false;impl_->pausePending=impl_->api.pause(impl_->handle)==ThreeFpResult::Success;}else{impl_->resumeRequested=true;state();}} }
-void PlayerDiscMenu::seek(qint64 ticks) { if(active())impl_->api.seek(impl_->handle,ticks); }
+void PlayerDiscMenu::seek(qint64 ticks) {
+    if(!active())return;const auto s=impl_->snapshot();
+    if(impl_->api.seek(impl_->handle,ticks)==ThreeFpResult::Success){impl_->seekTarget=qBound(qint64(0),ticks,s.duration100ns);impl_->seekGeneration=s.timelineGeneration;impl_->seekPresents=s.presentedVideoFrames;}
+}
 void PlayerDiscMenu::volume(int value,bool muted) { if(active())impl_->api.setVolume(impl_->handle,value/100.f,muted); }
 void PlayerDiscMenu::rate(float value) { if(active())impl_->api.setPlaybackRate(impl_->handle,value); }
-qint64 PlayerDiscMenu::position() const { return impl_->snapshot().position100ns; }
+qint64 PlayerDiscMenu::position() const {
+    const auto s=impl_->snapshot();
+    if(impl_->seekTarget>=0){
+        if(s.state==ThreeFpState::Failed || s.state==ThreeFpState::Ended ||
+            (s.timelineGeneration!=impl_->seekGeneration && s.presentedVideoFrames>impl_->seekPresents && qAbs(s.position100ns-impl_->seekTarget)<10000000))impl_->seekTarget=-1;
+        else return impl_->seekTarget;
+    }
+    return s.position100ns;
+}
 qint64 PlayerDiscMenu::duration() const { return impl_->snapshot().duration100ns; }
 quint64 PlayerDiscMenu::presentedFrames() const { return impl_->snapshot().swapChainPresents; }
 QVector<QPair<int,QString>> PlayerDiscMenu::tracks(bool audio) const {

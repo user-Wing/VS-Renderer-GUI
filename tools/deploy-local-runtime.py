@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -53,20 +54,22 @@ def main():
     backup = ROOT / 'build' / ('deployment-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
     report = {'upstream': 'ce195ebd06e9cbb8352a443f0c874cf569a60733', 'editions': {}}
     editions = {
-        'VS-GUI-Full': {'VSRenderer.exe': BUILD / 'VSRenderer.exe', 'vs-player.exe': BUILD / 'vs-player.exe', 'vs-cap.exe': BUILD / 'vs-cap.exe'},
-        '1.0.12-PlayerLite': {'vs-player.exe': BUILD / 'lite/vs-player.exe'},
+        ROOT / 'dist/VS-GUI-Full': {'VSRenderer.exe': BUILD / 'VSRenderer.exe', 'vs-player.exe': BUILD / 'vs-player.exe', 'vs-cap.exe': BUILD / 'vs-cap.exe'},
+        ROOT / 'build/playerlite-runtime': {'vs-player.exe': BUILD / 'lite/vs-player.exe'},
     }
-    for folder, programs in editions.items():
-        target = ROOT / 'dist' / folder
+    for target, programs in editions.items():
+        folder = target.name
         if not (target / 'release.json').is_file():
             raise RuntimeError(f'Existing runtime required: {target}')
         for source in [*programs.values(), NATIVE]:
             if not source.is_file():
                 raise FileNotFoundError(source)
-    for folder, programs in editions.items():
-        target = ROOT / 'dist' / folder
+    for target, programs in editions.items():
+        folder = target.name
         before = settings(target)
         sources = {**programs, 'FFF.Native.dll': NATIVE, 'THIRD_PARTY_NOTICES.md': ROOT / 'THIRD_PARTY_NOTICES.md'}
+        for language in ('zh_CN', 'en_US'):
+            sources['languages/' + language + '.json'] = ROOT / 'assets/languages' / (language + '.json')
         sources['licenses/jpeg-xl-LICENSE.txt'] = ROOT / 'assets/jpeg-xl-LICENSE.txt'
         for source in (ROOT / 'third_party/native-api20').iterdir():
             if source.is_file():
@@ -77,6 +80,15 @@ def main():
         for source in (ROOT / 'docs').glob('*.md'):
             sources[source.relative_to(ROOT).as_posix()] = source
         if folder == 'VS-GUI-Full':
+            for source in (BUILD / 'runtime/tools').glob('apply-*.ps1'):
+                sources['runtime/tools/' + source.name] = source
+            for source in [*(BUILD / 'runtime').glob('*.zip'), *(BUILD / 'runtime').glob('*.version')]:
+                sources['runtime/' + source.name] = source
+            for source in (BUILD / 'runtime/vlc').rglob('*'):
+                if source.is_file():
+                    sources['runtime/vlc/' + source.relative_to(BUILD / 'runtime/vlc').as_posix()] = source
+            for source in (BUILD / 'runtime/awj-source').glob('*'):
+                sources['runtime/awj-source/' + source.name] = source
             package = BUILD / 'runtime/python/Lib/site-packages/vapoursynth'
             for source in package.rglob('*'):
                 if source.is_file() and (source.suffix in ('.dll', '.pyd', '.py', '.pyi', '.exe') or 'licenses' in source.parts or source.name == 'runtime-components.json'):
@@ -90,6 +102,19 @@ def main():
                 shutil.copy2(destination, saved)
             replace(source, destination, relative in programs)
             changed[relative] = digest(destination)
+        if folder == 'VS-GUI-Full':
+            # Superseded loose tools/plugins must not shadow the new bundles.
+            protected = {'.ini', '.vpy', '.cube', '.icc', '.icm'}
+            for component in ('awj', 'mkvtoolnix', 'vlc'):
+                directory = target / 'runtime' / component
+                if component != 'vlc' and not (BUILD / 'runtime' / (component + '.zip')).is_file():
+                    continue
+                for file in directory.rglob('*'):
+                    relative = file.relative_to(target).as_posix()
+                    if file.is_file() and relative not in sources and file.suffix.lower() not in protected and file.name != 'settings.bin':
+                        saved = backup / folder / relative
+                        saved.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.move(str(file), saved)
         after = settings(target)
         if before != after:
             raise RuntimeError(f'Settings/source data changed unexpectedly: {folder}')
@@ -98,7 +123,7 @@ def main():
         release['totalBytes'] = sum(p.stat().st_size for p in files)
         ffmpeg = set(release['ffmpegOnlyFiles'])
         release['excludingFFmpegBytes'] = sum(p.stat().st_size for p in files if p.name not in ffmpeg)
-        release['version'] = '1.0.12'
+        release['version'] = re.search(r'project\(VSRenderer VERSION ([0-9.]+)', (ROOT / 'CMakeLists.txt').read_text(encoding='utf-8')).group(1)
         release['nativeApi'] = 20
         release['nativeUpstream'] = report['upstream']
         write_json(target / 'release.json', release)
@@ -108,7 +133,7 @@ def main():
         report['editions'][folder] = {'files': changed, 'preservedSettings': before, 'settingsUnchanged': True}
     backup.mkdir(parents=True, exist_ok=True)
     write_json(backup / 'deployment.json', report)
-    print(json.dumps({'backup': str(backup), 'editions': list(editions), 'settingsUnchanged': True}))
+    print(json.dumps({'backup': str(backup), 'editions': [str(p.relative_to(ROOT)) for p in editions], 'settingsUnchanged': True}))
 
 
 if __name__ == '__main__':
