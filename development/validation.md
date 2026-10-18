@@ -49,6 +49,17 @@
 
 版本、最终Full/单文件哈希、配置保护和体积见同目录 [artifacts.json](evidence/release-1.0.13/artifacts.json)。从本版起dist不再生成PlayerLite目录；其依赖暂存于build，只交付Full目录及 `VS-Player.exe`。本轮不制作Full压缩包，不上传Release附件。
 
+### VSCap颜色窗口续修
+
+2026-10-18：贴图“拖动”模式点击“颜色”后无法交互。原颜色窗口以QGraphicsProxyWidget中的画布为父级，拖动视图接管鼠标事件；改为归属真实工具栏窗口的独立Qt颜色对话框。
+
+- 旧实现的窗口归属回归为3 passed / 2 failed：贴图拖动、画笔两行失败，普通截图行通过；为检查旧对话框结构，基线强制使用Qt对话框。
+- 修复后按默认对话框环境运行三种场景，专项5 passed / 0 failed；验证真实窗口获得焦点、确认/取消、恢复拖动，以及导出线条仍保持确认的蓝色，取消选绿不改变颜色。
+- 整套VSCap工作流20 passed / 0 failed / 0 skipped，退出码0；含初始化/清理，不与专项相加。期间有系统剪贴板占用告警，相关断言最终通过；不是多屏/混合DPI的人工验收。
+- 证据见 [vscap-color](evidence/release-1.0.13/vscap-color/summary.json)。只部署Full的VSCap和对应指南，保留配置、Player和单文件播放器；新Full哈希以本次 [artifacts](evidence/release-1.0.13/vscap-color/artifacts.json) 为准，上方首轮artifacts保留历史值。
+
+核对时1.0.13已正式发布且维护者已上传附件；本次不修改Release、tag或附件，不制作压缩包。源码/本地Full续修不代表既有1.0.13下载包已包含修复。
+
 ## 1.0.12：按续修轮次区分
 
 | 轮次 / 场景 | 已测与结论 | 保留的限制 / 证据 |

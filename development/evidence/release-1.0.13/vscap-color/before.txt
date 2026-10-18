@@ -1,0 +1,19 @@
+********* Start testing of TestCapWorkflow *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestCapWorkflow::initTestCase()
+FAIL!  : TestCapWorkflow::colorDialogUsesToolWindow(pin-pan) Compared QObject pointers are not the same
+   Actual   (dialog->parentWidget()): QWidget/"capPinCanvas"
+   Expected (bar->window())         : QWidget/"capToolBar"
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestCapWorkflow.cpp(36) : failure location
+FAIL!  : TestCapWorkflow::colorDialogUsesToolWindow(pin-pan) 'interacted' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestCapWorkflow.cpp(41) : failure location
+FAIL!  : TestCapWorkflow::colorDialogUsesToolWindow(pin-pen) Compared QObject pointers are not the same
+   Actual   (dialog->parentWidget()): QWidget/"capPinCanvas"
+   Expected (bar->window())         : QWidget/"capToolBar"
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestCapWorkflow.cpp(36) : failure location
+FAIL!  : TestCapWorkflow::colorDialogUsesToolWindow(pin-pen) 'interacted' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestCapWorkflow.cpp(41) : failure location
+PASS   : TestCapWorkflow::colorDialogUsesToolWindow(capture)
+PASS   : TestCapWorkflow::cleanupTestCase()
+Totals: 3 passed, 2 failed, 0 skipped, 0 blacklisted, 887ms
+********* Finished testing of TestCapWorkflow *********

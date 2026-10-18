@@ -1,0 +1,23 @@
+{
+  "version": "1.0.13",
+  "cap_sha256": "667627ef6cac9411e19b9ca7e6e58fb3eb5f73b3a593f961b8a22d9f034fe9db",
+  "full_manifest_sha256": "c9dad2b1ffe0b3e52cf59e40c45956a233cfa01727cb06c405842de8c2524ee4",
+  "protected_files": 24,
+  "settings_unchanged": true,
+  "player_unchanged": true,
+  "native_unchanged": true,
+  "single_unchanged": true,
+  "single_sha256": "13118e80c9e522a10bc0024550189fcd99bb892e9ef66cf40ec38a5529c36dc0",
+  "full_bytes": 828923435,
+  "changed_files": [
+    "vs-cap.exe",
+    "project.md",
+    "changelog.md",
+    "docs/capture-images.md"
+  ],
+  "release_modified": false,
+  "release_assets_modified": false,
+  "archive_created": false,
+  "deployed_self_test_exit": 0,
+  "full_manifest_verified": true
+}

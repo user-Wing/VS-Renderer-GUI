@@ -194,7 +194,8 @@ public:
             return button;
         };
         colorButton_=add(QStringLiteral("颜色"), [this] {
-            const auto c = QColorDialog::getColor(color_, this);
+            // A proxy-embedded dialog cannot receive view input while the pin is in Pan mode.
+            const auto c = QColorDialog::getColor(color_, bar_->window(), QStringLiteral("颜色"), QColorDialog::DontUseNativeDialog);
             if(c.isValid()){if(tool_==Text && activeText_)rememberText(activeText_);color_=c;if(tool_==Text && activeText_){activeText_->setInk(c);textStates_[activeText_]=textState(activeText_);}updateColor();}
         });
         options_=new QComboBox(bar_);options_->setObjectName("capToolOptions");layout->addWidget(options_);

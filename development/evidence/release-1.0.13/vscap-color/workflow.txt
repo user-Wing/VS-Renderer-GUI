@@ -1,0 +1,34 @@
+********* Start testing of TestCapWorkflow *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestCapWorkflow::initTestCase()
+PASS   : TestCapWorkflow::colorDialogUsesToolWindow(pin-pan)
+PASS   : TestCapWorkflow::colorDialogUsesToolWindow(pin-pen)
+PASS   : TestCapWorkflow::colorDialogUsesToolWindow(capture)
+PASS   : TestCapWorkflow::defaultJxlCaptureAndPin()
+PASS   : TestCapWorkflow::captureWhileSettingsModal()
+PASS   : TestCapWorkflow::shapeFillAndWheelWidth()
+QINFO  : TestCapWorkflow::desktopPixelsAndOverlay() marker QColor(ARGB 1, 1, 1, 1) preview QColor(ARGB 1, 1, 1, 1) format QImage::Format_RGB32
+PASS   : TestCapWorkflow::desktopPixelsAndOverlay()
+PASS   : TestCapWorkflow::selectAnnotateAndCopy()
+QWARN  : TestCapWorkflow::selectedToolsLineAndUndo() OleSetClipboard: Failed to set mime data (application/x-qt-image, image/png, application/x-vscap-scrgb, application/x-vscap-sdr-white-nits) on clipboard: COM error 0x800401d0: OpenClipboard ??? (操作成功完成。)
+PASS   : TestCapWorkflow::selectedToolsLineAndUndo()
+QWARN  : TestCapWorkflow::selectionHandlesAndFinalCrop() OleSetClipboard: Failed to set mime data (application/x-qt-image, image/png) on clipboard: COM error 0x800401d0: OpenClipboard ??? (操作成功完成。)
+PASS   : TestCapWorkflow::selectionHandlesAndFinalCrop()
+PASS   : TestCapWorkflow::clipboardAndSaveDirectories()
+QWARN  : TestCapWorkflow::editableTextObjects() OleSetClipboard: Failed to set mime data (application/x-qt-image, image/png, application/x-vscap-scrgb, application/x-vscap-sdr-white-nits) on clipboard: COM error 0x800401d0: OpenClipboard ??? (操作成功完成。)
+PASS   : TestCapWorkflow::editableTextObjects()
+QWARN  : TestCapWorkflow::textAndDrawingUndo() OleSetClipboard: Failed to set mime data (application/x-qt-image, image/png, application/x-vscap-scrgb, application/x-vscap-sdr-white-nits) on clipboard: COM error 0x800401d0: OpenClipboard ??? (操作成功完成。)
+PASS   : TestCapWorkflow::textAndDrawingUndo()
+PASS   : TestCapWorkflow::toolbarShapesAndTextFrames()
+QWARN  : TestCapWorkflow::pinAspectZoomAndEditing() OleSetClipboard: Failed to set mime data (application/x-qt-image, image/png) on clipboard: COM error 0x800401d0: OpenClipboard ??? (操作成功完成。)
+QWARN  : TestCapWorkflow::pinAspectZoomAndEditing() qt.qpa.mime: Retrying to obtain clipboard.
+QWARN  : TestCapWorkflow::pinAspectZoomAndEditing() qt.qpa.mime: Retrying to obtain clipboard.
+QWARN  : TestCapWorkflow::pinAspectZoomAndEditing() qt.qpa.mime: Unable to obtain clipboard.
+QWARN  : TestCapWorkflow::pinAspectZoomAndEditing() OleSetClipboard: Failed to set mime data (application/x-qt-image, image/png) on clipboard: COM error 0x800401d0: OpenClipboard ??? (操作成功完成。)
+PASS   : TestCapWorkflow::pinAspectZoomAndEditing()
+PASS   : TestCapWorkflow::pinScreenFitAndBorders()
+PASS   : TestCapWorkflow::hdrClipboardAndPin()
+PASS   : TestCapWorkflow::realHdrAvif()
+PASS   : TestCapWorkflow::cleanupTestCase()
+Totals: 20 passed, 0 failed, 0 skipped, 0 blacklisted, 11322ms
+********* Finished testing of TestCapWorkflow *********

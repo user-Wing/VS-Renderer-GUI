@@ -6,6 +6,46 @@
 class TestCapWorkflow : public QObject {
     Q_OBJECT
 private slots:
+    void colorDialogUsesToolWindow_data(){
+        QTest::addColumn<bool>("pin");QTest::addColumn<QString>("tool");
+        QTest::newRow("pin-pan")<<true<<QStringLiteral("拖动");
+        QTest::newRow("pin-pen")<<true<<QStringLiteral("画笔");
+        QTest::newRow("capture")<<false<<QStringLiteral("画笔");
+    }
+    void colorDialogUsesToolWindow(){
+        QFETCH(bool,pin);QFETCH(QString,tool);
+        QImage source(640,480,QImage::Format_RGB32);source.fill(Qt::white);QImage delivered;
+        const auto output=[&](QImage image,bool,QString,bool){delivered=image;return false;};
+        QPointer<QWidget> owner=pin?static_cast<QWidget*>(new PinWindow(source,output)):static_cast<QWidget*>(new CaptureOverlay(qApp->primaryScreen(),source,output));
+        const auto close=qScopeGuard([&]{if(owner)delete owner;});QVERIFY(QTest::qWaitForWindowExposed(owner));
+        CaptureOverlay *canvas=nullptr;
+        if(pin){static_cast<PinWindow*>(owner.data())->showToolBar();auto *view=owner->findChild<QGraphicsView*>("capPinView");canvas=static_cast<CaptureOverlay*>(static_cast<QGraphicsProxyWidget*>(view->scene()->items().first())->widget());}
+        else{canvas=static_cast<CaptureOverlay*>(owner.data());canvas->resize(source.size());QTest::mousePress(canvas,Qt::LeftButton,Qt::NoModifier,{20,20});QTest::mouseRelease(canvas,Qt::LeftButton,Qt::NoModifier,{500,350});}
+        auto *bar=owner->findChild<QWidget*>("capToolBar");QVERIFY(bar && canvas);
+        const auto button=[&](const QString &text){for(auto *b:bar->findChildren<QPushButton*>())if(b->text()==text)return b;return static_cast<QPushButton*>(nullptr);};
+        QVERIFY(button(tool));button(tool)->click();auto *color=button(QStringLiteral("颜色"));QVERIFY(color);
+        for(bool accept:{true,false}){
+            bool interacted=false;
+            QTimer watchdog;watchdog.setSingleShot(true);connect(&watchdog,&QTimer::timeout,qApp,[]{for(auto *widget:qApp->allWidgets())if(auto *dialog=qobject_cast<QColorDialog*>(widget))dialog->reject();});watchdog.start(2500);
+            QTimer::singleShot(50,owner,[&]{
+                QColorDialog *dialog=nullptr;for(auto *widget:qApp->allWidgets())if(auto *candidate=qobject_cast<QColorDialog*>(widget);candidate && candidate->isVisible()){dialog=candidate;break;}
+                QVERIFY(dialog);const auto dismiss=qScopeGuard([&]{if(dialog->isVisible())dialog->reject();});
+                QCOMPARE(dialog->parentWidget(),bar->window());QVERIFY(!dialog->graphicsProxyWidget());QVERIFY(dialog->windowHandle());QVERIFY(dialog->testOption(QColorDialog::DontUseNativeDialog));
+                QVERIFY(QTest::qWaitForWindowActive(dialog));dialog->setCurrentColor(accept?QColor(Qt::blue):QColor(Qt::green));
+                auto *buttons=dialog->findChild<QDialogButtonBox*>();QVERIFY(buttons);auto *action=buttons->button(accept?QDialogButtonBox::Ok:QDialogButtonBox::Cancel);QVERIFY(action);
+                QTest::mouseClick(dialog->windowHandle(),Qt::LeftButton,Qt::NoModifier,action->mapTo(dialog,action->rect().center()));QTRY_VERIFY(!dialog->isVisible());interacted=true;
+            });
+            color->click();watchdog.stop();QVERIFY(interacted);QVERIFY(!qApp->activeModalWidget());
+        }
+        if(pin){
+            button(QStringLiteral("拖动"))->click();auto *view=owner->findChild<QGraphicsView*>("capPinView");const auto before=owner->pos();
+            QTest::mousePress(view->viewport(),Qt::LeftButton,Qt::NoModifier,{30,30});QTest::mouseMove(view->viewport(),{60,50});QTest::mouseRelease(view->viewport(),Qt::LeftButton,Qt::NoModifier,{60,50});
+            QTRY_VERIFY(owner->pos()!=before);
+        }
+        button(QStringLiteral("线"))->click();
+        QTest::mousePress(canvas,Qt::LeftButton,Qt::NoModifier,{100,100});QTest::mouseRelease(canvas,Qt::LeftButton,Qt::NoModifier,{250,100});
+        canvas->exportImage(false,"png");QVERIFY(!delivered.isNull());QCOMPARE(delivered.pixelColor(pin?150:130,pin?100:80),QColor(Qt::blue));
+    }
     void defaultJxlCaptureAndPin(){
         const auto path=QCoreApplication::applicationDirPath()+"/vs-cap.ini";QFile originalFile(path);const bool existed=originalFile.exists();QByteArray original;
         if(existed){QVERIFY(originalFile.open(QIODevice::ReadOnly));original=originalFile.readAll();originalFile.close();}

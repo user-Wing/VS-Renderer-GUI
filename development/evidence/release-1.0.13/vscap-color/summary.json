@@ -1,0 +1,27 @@
+{
+  "version": "1.0.13",
+  "baseline": {
+    "passed": 3,
+    "failed": 2,
+    "exit_code": 2,
+    "native_dialogs_forced_off_for_structure_inspection": true
+  },
+  "focused": {
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0,
+    "exit_code": 0
+  },
+  "workflow": {
+    "passed": 20,
+    "failed": 0,
+    "skipped": 0,
+    "exit_code": 0
+  },
+  "counts_include_init_cleanup": true,
+  "limitations": [
+    "Transient system clipboard contention warnings; associated assertions passed.",
+    "No multi-monitor or mixed-DPI manual acceptance.",
+    "Published 1.0.13 assets were not replaced."
+  ]
+}
