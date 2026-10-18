@@ -1711,6 +1711,62 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         }
         qInfo()<<"neutral-color max algorithm delta"<<maximum;QVERIFY(levels);QVERIFY(maximum<.03);
     }
+    void requestedHdrUsesNativeColor_data(){
+        QTest::addColumn<int>("decode");QTest::addColumn<int>("stage");QTest::addColumn<int>("storedEngine");
+        for(int stage:{4,5})for(int decode:{1,2})QTest::newRow(qPrintable(QString("default-%1-%2").arg(decode).arg(stage)))<<decode<<stage<<-1;
+        for(int stage:{4,5})for(int engine:{0,2})QTest::newRow(qPrintable(QString("software-stored-%1-%2").arg(engine).arg(stage)))<<1<<stage<<engine;
+    }
+    void requestedHdrUsesNativeColor(){
+        QFETCH(int,decode);QFETCH(int,stage);QFETCH(int,storedEngine);
+        const auto source=qEnvironmentVariable("VSR_HDR_SOFTWARE_SOURCE");if(source.isEmpty())QSKIP("Set VSR_HDR_SOFTWARE_SOURCE");
+        QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",false);settings.setValue("playback/remember",false);settings.setValue("player/muted",true);settings.setValue("decode/mode",decode);if(storedEngine>=0)settings.setValue("color/engine",storedEngine);settings.sync();
+        PlayerWindow player;player.resize(960,640);player.show();player.loadPreset(QDir(PresetStore::directory()).filePath(stage==4?"builtin/Anime-4-Jinc.vpy":"builtin/Anime-5-D3D11.vpy"));QVERIFY(player.openFile(source));
+        QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.outputSnapshot().presentedVideoFrames>0,20000);QVERIFY(player.direct_);
+        player.seekTime(100000000);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && qAbs(player.position()-100000000)<500000,20000);
+        const auto image=player.clock_->capture();QVERIFY(!image.isNull());QSet<QRgb> colors;int green=0,count=0;double red=0,blue=0,g=0;
+        for(int y=image.height()/10;y<image.height()*9/10;y+=qMax(1,image.height()/40))for(int x=image.width()/10;x<image.width()*9/10;x+=qMax(1,image.width()/40)){
+            const auto pixel=image.pixelColor(x,y);colors.insert(pixel.rgb());red+=pixel.redF();g+=pixel.greenF();blue+=pixel.blueF();++count;if(pixel.greenF()>.5 && pixel.redF()<.05 && pixel.blueF()<.05)++green;
+        }
+        const auto color=player.clock_->colorStatus();qInfo()<<"requested-HDR"<<decode<<stage<<storedEngine<<"requested/active"<<color.requestedEngine<<color.activeEngine<<"transfer"<<color.sourceTransfer<<"output"<<player.snapshot().actualColorMode<<"RGB"<<red/count<<g/count<<blue/count<<"colors"<<colors.size()<<"greenFraction"<<double(green)/count<<"fallback"<<color.fallback;
+        const auto directory=qEnvironmentVariable("VSR_HDR_SCREENSHOTS");if(!directory.isEmpty()){QDir().mkpath(directory);QVERIFY(image.save(QDir(directory).filePath(QString::fromLatin1(QTest::currentDataTag())+".png")));}
+        QVERIFY2(colors.size()>20 && green<count*.9,"HDR software output is a solid green image");QCOMPARE(color.requestedEngine,0u);QCOMPARE(color.activeEngine,0u);
+    }
+    void hdrDirectoryNativeColor_data(){
+        QTest::addColumn<QString>("source");const auto root=qEnvironmentVariable("VSR_HDR_COLOR_DIRECTORY");
+        const auto files=QDir(root).entryList({"*.mkv","*.mp4"},QDir::Files,QDir::Name);
+        if(root.isEmpty() || files.isEmpty()){QTest::newRow("missing-fixtures")<<QString();return;}
+        for(const auto &file:files)QTest::newRow(qPrintable(file))<<QDir(root).filePath(file);
+    }
+    void hdrDirectoryNativeColor(){
+        QFETCH(QString,source);if(source.isEmpty())QSKIP("Set VSR_HDR_COLOR_DIRECTORY");
+        QWidget surface;surface.resize(640,360);surface.show();QVERIFY(QTest::qWaitForWindowExposed(&surface));ThreeFpApi api;QVector<QImage> rendered;
+        for(int decode:{1,2})for(uint algorithm:{4u,7u}){
+            ThreeFpPlayer player(api,&surface);QVERIFY(player.setDecodeMode(decode));player.setMuted(true);QVERIFY(player.setColorSettings(VsrColorDefaultSettings()));
+            QVERIFY(player.setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(algorithm),static_cast<ThreeFpScalingAlgorithm>(algorithm)));QVERIFY(player.openFile(source));QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Ready,20000);
+            const auto generation=player.snapshot().timelineGeneration,presents=player.snapshot().presentedVideoFrames;QVERIFY(player.seekFrame(48));
+            QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().timelineGeneration!=generation && player.snapshot().presentedVideoFrames>presents && player.snapshot().frameIndex==48,15000);
+            const auto image=player.capture();QVERIFY(!image.isNull());const auto color=player.colorStatus();QCOMPARE(color.requestedEngine,0u);QCOMPARE(color.activeEngine,0u);
+            QSet<QRgb> colors;double red=0,green=0,blue=0;int samples=0;
+            for(int y=image.height()/10;y<image.height()*9/10;y+=qMax(1,image.height()/40))for(int x=image.width()/10;x<image.width()*9/10;x+=qMax(1,image.width()/40)){const auto p=image.pixelColor(x,y);colors.insert(p.rgb());red+=p.redF();green+=p.greenF();blue+=p.blueF();++samples;}
+            qInfo()<<"HDR-fixture"<<QFileInfo(source).fileName()<<decode<<algorithm<<"frame"<<player.snapshot().frameIndex<<"output"<<player.snapshot().actualColorMode<<"RGB"<<red/samples<<green/samples<<blue/samples<<"colors"<<colors.size();QVERIFY(colors.size()>20);
+            rendered<<image;const auto directory=qEnvironmentVariable("VSR_HDR_SCREENSHOTS");if(!directory.isEmpty()){QDir().mkpath(directory);QVERIFY(image.save(QDir(directory).filePath(QFileInfo(source).completeBaseName()+QString("-%1-%2.png").arg(decode).arg(algorithm))));}
+        }
+        for(int algorithm=0;algorithm<2;++algorithm){
+            const auto software=rendered[algorithm].scaled(64,36,Qt::IgnoreAspectRatio,Qt::SmoothTransformation),hardware=rendered[algorithm+2].scaled(64,36,Qt::IgnoreAspectRatio,Qt::SmoothTransformation);double error=0;int maximum=0;
+            for(int y=0;y<software.height();++y)for(int x=0;x<software.width();++x){const auto a=software.pixelColor(x,y),b=hardware.pixelColor(x,y);for(int delta:{qAbs(a.red()-b.red()),qAbs(a.green()-b.green()),qAbs(a.blue()-b.blue())}){error+=delta;maximum=qMax(maximum,delta);}}
+            error/=software.width()*software.height()*3*255.;qInfo()<<"HDR-match"<<QFileInfo(source).fileName()<<algorithm<<"meanRGBError"<<error<<"maximum8bit"<<maximum;QVERIFY2(error<.02,"Software/hardware color output differs by more than 2% mean RGB");
+        }
+    }
+    void colorEngineDefaultsAndMigration_data(){
+        QTest::addColumn<int>("storedEngine");for(int engine:{-1,0,1,2})QTest::newRow(qPrintable(QString::number(engine)))<<engine;
+    }
+    void colorEngineDefaultsAndMigration(){
+        QFETCH(int,storedEngine);QSettings settings(configPath(),QSettings::IniFormat);if(storedEngine>=0)settings.setValue("color/engine",storedEngine);
+        settings.setValue("color/iccPath","keep.icc");settings.setValue("color/lutPath","keep.cube");settings.sync();
+        PlayerWindow player;const int expected=storedEngine==1?1:0;QCOMPARE(player.settings_->value("color/engine",0).toInt(),expected);
+        QCOMPARE(player.settings_->value("color/iccPath").toString(),QString("keep.icc"));QCOMPARE(player.settings_->value("color/lutPath").toString(),QString("keep.cube"));
+        bool checked=false;QTimer::singleShot(100,&player,[&]{auto *dialog=player.findChild<QDialog*>("playerColorSettings");QVERIFY(dialog);const auto close=qScopeGuard([&]{dialog->reject();});auto *engine=dialog->findChild<QComboBox*>("colorEngine");QVERIFY(engine);QCOMPARE(engine->count(),2);QCOMPARE(engine->currentData().toInt(),expected);QCOMPARE(engine->findData(2),-1);QCOMPARE(dialog->findChild<QComboBox*>("color_tone")->isEnabled(),expected==1);checked=true;});player.showColorSettings();QVERIFY(checked);
+    }
     void colorSettingsPreserveVsChain() {
         QTemporaryDir dir;const auto video=dir.filePath("color.mkv");QVERIFY(QFile::copy(":/startup/warmup.mkv",video));
         QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",false);settings.setValue("playback/remember",false);settings.sync();
@@ -1720,7 +1776,7 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         bool edited=false;QTimer::singleShot(100,&player,[&]{
             auto *dialog=player.findChild<QDialog *>("playerColorSettings");QVERIFY(dialog);const auto close=qScopeGuard([dialog]{dialog->reject();});
             auto *engine=dialog->findChild<QComboBox *>("colorEngine");auto *icc=dialog->findChild<QComboBox *>("color_icc");auto *tone=dialog->findChild<QComboBox *>("color_tone");QVERIFY(engine && icc && tone);
-            QCOMPARE(engine->currentData().toInt(),2);QVERIFY(tone->isEnabled());engine->setCurrentIndex(engine->findData(0));QVERIFY(!tone->isEnabled());engine->setCurrentIndex(engine->findData(1));QVERIFY(tone->isEnabled());icc->setCurrentIndex(0);
+            QCOMPARE(engine->currentData().toInt(),0);QVERIFY(!tone->isEnabled());QCOMPARE(engine->findData(2),-1);engine->setCurrentIndex(engine->findData(1));QVERIFY(tone->isEnabled());icc->setCurrentIndex(0);
             auto *buttons=dialog->findChild<QDialogButtonBox *>();QCOMPARE(buttons->button(QDialogButtonBox::Ok)->text(),QStringLiteral("确定"));QCOMPARE(buttons->button(QDialogButtonBox::Cancel)->text(),QStringLiteral("取消"));QCOMPARE(buttons->button(QDialogButtonBox::Apply)->text(),QStringLiteral("应用"));
             dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Apply)->click();
             QTest::qWait(500);qInfo()<<"color engine"<<player.output_->colorStatus().engine<<"fallback"<<player.output_->colorStatus().fallback;

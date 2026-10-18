@@ -1,0 +1,32 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(default-1-4) requested-HDR 1 4 -1 requested/active 2 1 transfer 18 output 0 RGB 0 0.341839 0 colors 2 greenFraction 0 fallback 
+FAIL!  : TestPlayer::requestedHdrUsesNativeColor(default-1-4) 'colors.size()>20 && green<count*.9' returned FALSE. (HDR software output is a solid green image)
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1732) : failure location
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(default-2-4) requested-HDR 2 4 -1 requested/active 2 1 transfer 18 output 0 RGB 0.75046 0.601776 0.566495 colors 336 greenFraction 0 fallback 
+FAIL!  : TestPlayer::requestedHdrUsesNativeColor(default-2-4) Compared values are not the same
+   Actual   (color.requestedEngine): 2
+   Expected (0u)                   : 0
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1732) : failure location
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(default-1-5) requested-HDR 1 5 -1 requested/active 2 1 transfer 18 output 0 RGB 0 0.341872 0 colors 2 greenFraction 0 fallback 
+FAIL!  : TestPlayer::requestedHdrUsesNativeColor(default-1-5) 'colors.size()>20 && green<count*.9' returned FALSE. (HDR software output is a solid green image)
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1732) : failure location
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(default-2-5) requested-HDR 2 5 -1 requested/active 2 1 transfer 18 output 0 RGB 0.750519 0.601989 0.56682 colors 330 greenFraction 0 fallback 
+FAIL!  : TestPlayer::requestedHdrUsesNativeColor(default-2-5) Compared values are not the same
+   Actual   (color.requestedEngine): 2
+   Expected (0u)                   : 0
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1732) : failure location
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(software-stored-0-4) requested-HDR 1 4 0 requested/active 0 0 transfer 0 output 0 RGB 0.837769 0.744825 0.62614 colors 276 greenFraction 0 fallback 
+PASS   : TestPlayer::requestedHdrUsesNativeColor(software-stored-0-4)
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(software-stored-2-4) requested-HDR 1 4 2 requested/active 2 1 transfer 18 output 0 RGB 0 0.341839 0 colors 2 greenFraction 0 fallback 
+FAIL!  : TestPlayer::requestedHdrUsesNativeColor(software-stored-2-4) 'colors.size()>20 && green<count*.9' returned FALSE. (HDR software output is a solid green image)
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1732) : failure location
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(software-stored-0-5) requested-HDR 1 5 0 requested/active 0 0 transfer 0 output 0 RGB 0.839417 0.745206 0.627163 colors 269 greenFraction 0 fallback 
+PASS   : TestPlayer::requestedHdrUsesNativeColor(software-stored-0-5)
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(software-stored-2-5) requested-HDR 1 5 2 requested/active 2 1 transfer 18 output 0 RGB 0 0.341778 0 colors 2 greenFraction 0 fallback 
+FAIL!  : TestPlayer::requestedHdrUsesNativeColor(software-stored-2-5) 'colors.size()>20 && green<count*.9' returned FALSE. (HDR software output is a solid green image)
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1732) : failure location
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 4 passed, 6 failed, 0 skipped, 0 blacklisted, 19952ms
+********* Finished testing of TestPlayer *********

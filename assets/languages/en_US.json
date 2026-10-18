@@ -607,5 +607,8 @@
   "源视频超过 2160p；Anime4K 专门测试请使用自定义预设。": "The source exceeds 2160p; use a custom preset for dedicated Anime4K tests.",
   "底部不透明度": "Bottom opacity",
   "100% 为完全不透明。": "100% is fully opaque.",
-  "右键及倍速菜单不透明度": "Context and speed menu opacity"
+  "右键及倍速菜单不透明度": "Context and speed menu opacity",
+  "3FP 原生（默认）": "3FP native (default)",
+  "libplacebo（mpv 对照，仅手动启用）": "libplacebo (mpv comparison, manual only)",
+  "默认使用 3FP 原生色彩处理。libplacebo 仅用于手动对照 mpv，不会自动启用；只处理解码 / VS 输出后的显示色彩，不修改 VPY 或滤镜链。madVR 模式由 madVR 管理颜色。": "3FP native color processing is the default. libplacebo is enabled manually for comparison with mpv; it only manages display colors after decoding / VS output, without changing VPY or the filter chain. madVR manages its own colors."
 }

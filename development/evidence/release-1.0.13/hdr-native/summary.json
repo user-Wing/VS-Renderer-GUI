@@ -1,0 +1,52 @@
+{
+  "version": "1.0.13",
+  "native_unchanged": true,
+  "native_sha256": "0c5be410c1496ce6217346ba53d1546b6db2fbc1cb5f9129e36723b3daaa4580",
+  "baseline": {
+    "passed": 4,
+    "failed": 6,
+    "exit": 6,
+    "software_green_cases": 4,
+    "hardware_policy_only_failures": 2
+  },
+  "hlg_and_configuration": {
+    "passed": 15,
+    "failed": 0,
+    "skipped": 0,
+    "exit": 0
+  },
+  "directory_and_neutral": {
+    "passed": 22,
+    "failed": 0,
+    "skipped": 0,
+    "exit": 0,
+    "files": 19,
+    "render_routes": 76,
+    "paired_comparisons": 38,
+    "comparison_resolution": [
+      64,
+      36
+    ],
+    "max_mean_absolute_rgb_error": 0.00019744,
+    "max_8bit_channel_difference": 2,
+    "neutral_jinc_max_channel_difference": 0.000977516,
+    "pq_bt2020_files": 9,
+    "missing_transfer_files": 10,
+    "fixture_hashes_unchanged": true
+  },
+  "single_backend": {
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0,
+    "exit": 0
+  },
+  "counts_include_init_cleanup": true,
+  "limits": [
+    "Measured actual output was SDR; physical HDR-display and colorimeter validation were not performed.",
+    "Untagged samples were checked for decoder/render consistency, not certified as correctly tagged HDR.",
+    "The optional libplacebo path itself was not repaired; it remains manual only.",
+    "No native tone mapping, shader coefficients, or exposure adjustment was changed.",
+    "User media/screenshots were not uploaded; source-media images remain only under build.",
+    "Published release assets and tag were not changed."
+  ]
+}

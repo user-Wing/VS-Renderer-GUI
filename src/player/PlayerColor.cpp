@@ -18,16 +18,12 @@
 
 namespace vsr {
 namespace {
-#ifdef VSR_LITE_PLAYER
 constexpr int defaultColorEngine=0;
-#else
-constexpr int defaultColorEngine=2;
-#endif
 }
 void PlayerWindow::applyColorSettings() {
     auto c=VsrColorDefaultSettings();
     const auto integer=[&](const char* key,uint32_t fallback,uint32_t maximum){return qBound(0,settings_->value(QString("color/")+key,fallback).toInt(),int(maximum));};
-    c.engine=integer("engine",defaultColorEngine,2);c.output=integer("output",0,2);c.tone=integer("tone",0,5);
+    c.engine=settings_->value("color/engine",defaultColorEngine).toInt()==1?1:0;c.output=integer("output",0,2);c.tone=integer("tone",0,5);
     c.gamut=integer("gamut",0,4);c.quality=integer("quality",1,1);c.icc=integer("icc",1,2);
     c.peakDetect=settings_->value("color/peakDetect",true).toBool();c.dither=settings_->value("color/dither",true).toBool();
     c.inverseTone=settings_->value("color/inverseTone",false).toBool();
@@ -44,14 +40,12 @@ void PlayerWindow::showColorSettings() {
     QDialog dialog(this);dialog.setObjectName("playerColorSettings");dialog.setWindowTitle(tr("3FP 解码配置 · 色彩管理"));dialog.resize(720,650);
     auto *outer=new QVBoxLayout(&dialog);auto *scroll=new QScrollArea(&dialog);scroll->setWidgetResizable(true);auto *content=new QWidget(scroll);scroll->setWidget(content);outer->addWidget(scroll,1);auto *form=new QFormLayout(content);form->setVerticalSpacing(10);
     auto *engine=new QComboBox(&dialog);engine->setObjectName("colorEngine");
-    engine->addItem(tr("自动：HDR 映射 SDR 使用高级色彩管理"),2);
-    engine->addItem(tr("原始：3FP 原生(709 / 2020 简易模式)"),0);
-    engine->addItem(tr("自定义：libplacebo 高级色彩管理"),1);
-#ifdef VSR_LITE_PLAYER
-    engine->removeItem(2);engine->removeItem(0);settings_->setValue("color/engine",0);
+    engine->addItem(tr("3FP 原生（默认）"),0);
+#ifndef VSR_LITE_PLAYER
+    engine->addItem(tr("libplacebo（mpv 对照，仅手动启用）"),1);
 #endif
     engine->setCurrentIndex(qMax(0,engine->findData(settings_->value("color/engine",defaultColorEngine).toInt())));form->addRow(tr("色彩引擎"),engine);
-    auto *explanation=new QLabel(tr("高级模式只处理解码 / VS 输出后的显示色彩，不修改 VPY、滤镜顺序或 VS 输出。\n默认自动映射目标显示器，自动色域映射、动态峰值检测与末端抖动；失败继续使用原生输出。madVR 模式由 madVR 管理颜色。"),&dialog);
+    auto *explanation=new QLabel(tr("默认使用 3FP 原生色彩处理。libplacebo 仅用于手动对照 mpv，不会自动启用；只处理解码 / VS 输出后的显示色彩，不修改 VPY 或滤镜链。madVR 模式由 madVR 管理颜色。"),&dialog);
     explanation->setWordWrap(true);form->addRow(explanation);
     auto *advanced=new QWidget(&dialog);auto *a=new QFormLayout(advanced);a->setContentsMargins(0,0,0,0);a->setVerticalSpacing(10);form->addRow(advanced);
     const auto combo=[&](const char* key,const QString& label,const QStringList& options,int fallback){auto *w=new QComboBox(advanced);w->setObjectName(QString("color_")+key);w->addItems(options);w->setCurrentIndex(qBound(0,settings_->value(QString("color/")+key,fallback).toInt(),int(options.size())-1));a->addRow(label,w);return w;};

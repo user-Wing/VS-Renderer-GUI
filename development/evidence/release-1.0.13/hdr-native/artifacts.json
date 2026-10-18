@@ -1,0 +1,49 @@
+{
+  "version": "1.0.13",
+  "deployment": {
+    "VS-GUI-Full": {
+      "settings_unchanged": true,
+      "protected_files": 24,
+      "native_sha256": "0c5be410c1496ce6217346ba53d1546b6db2fbc1cb5f9129e36723b3daaa4580",
+      "cap_sha256": "667627ef6cac9411e19b9ca7e6e58fb3eb5f73b3a593f961b8a22d9f034fe9db",
+      "player_sha256": "2b312758e901ff9b29263a27b25e50a584b0537086015b7534b21c45ac62f990",
+      "manifest_sha256": "46393f814e0ccd3d1779c45076fcb00593706ba3d4f11c4cc2a08892f95f543e",
+      "total_bytes": 828926497
+    },
+    "playerlite-runtime": {
+      "settings_unchanged": true,
+      "protected_files": 1,
+      "native_sha256": "0c5be410c1496ce6217346ba53d1546b6db2fbc1cb5f9129e36723b3daaa4580",
+      "cap_sha256": null,
+      "player_sha256": "054f793964b4c98c171dfbda1bb184e04d2a0e1b4698c7d686fdd5b5e5c58076",
+      "manifest_sha256": "40258cd838bf4d28916b9f78624564387c5ab2625e99ca97b85e5adef8b2c666",
+      "total_bytes": 206759823
+    }
+  },
+  "single": {
+    "version": "1.0.13",
+    "bytes": 35810694,
+    "sha256": "72dae7d45a9ada6b8fa4f1f05f951b13f24264585bdb17c47ab862cafef30ff1",
+    "payload": "8f79204e5c05f256d20cbbe6",
+    "zipCRC": true,
+    "externalFFmpeg": true,
+    "iconResource101": true,
+    "matchesInternalStageExceptPETimestampAndChecksum": true,
+    "launcherChildImport": {
+      "bits": 8,
+      "height": 1254,
+      "icc": false,
+      "name": "I1.png",
+      "temporary": true,
+      "version": 1,
+      "width": 1254
+    },
+    "settingsUnchanged": true,
+    "originalDiscIndexesUnchanged": true
+  },
+  "manifests_verified": true,
+  "full_archive_created": false,
+  "release_modified": false,
+  "release_assets_modified": false,
+  "tag_modified": false
+}
