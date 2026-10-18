@@ -1,0 +1,11 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+FAIL!  : TestPlayer::realVideoFrameStepping() 'player.ready_ && player.positionRestored_' returned FALSE. (ready=1 restored=0 state=0 error=)
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayerLite.cpp(33) : failure location
+PASS   : TestPlayer::allowedModes()
+PASS   : TestPlayer::settingsRejectFullBackends()
+PASS   : TestPlayer::softwarePlaybackWithoutVs()
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 5 passed, 1 failed, 0 skipped, 0 blacklisted, 52599ms
+********* Finished testing of TestPlayer *********

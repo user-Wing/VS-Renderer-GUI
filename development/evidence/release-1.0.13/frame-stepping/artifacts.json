@@ -1,0 +1,78 @@
+{
+  "version": "1.0.13",
+  "editions": {
+    "VS-GUI-Full": {
+      "settings_unchanged": true,
+      "protected_files": 24,
+      "native_sha256": "3fd4737c9e455fa2ba62d31579f80098df42a80546d8a85d2cffc6e81f724c24",
+      "cap_sha256": "667627ef6cac9411e19b9ca7e6e58fb3eb5f73b3a593f961b8a22d9f034fe9db",
+      "player_sha256": "74b7ae9b72429c9f95cc32e022863bd938368f45920c694cdf5647227a6e5aa5",
+      "manifest_sha256": "1bb356a043fc8dd6e0b93d2086d01a3259f1ebfd61b93982e697f99e802c2e3f",
+      "total_bytes": 828927396
+    },
+    "playerlite-runtime": {
+      "settings_unchanged": true,
+      "protected_files": 1,
+      "native_sha256": "3fd4737c9e455fa2ba62d31579f80098df42a80546d8a85d2cffc6e81f724c24",
+      "cap_sha256": null,
+      "player_sha256": "dcbec4fe88ec70027815f9db6b697e5330b5da90b14ca5c78d40aed2e8186681",
+      "manifest_sha256": "38b267890a789e1d598af28f89900b8b60a58db94fb5161d5eda134058d4b28a",
+      "total_bytes": 206759547
+    }
+  },
+  "single": {
+    "version": "1.0.13",
+    "bytes": 35809965,
+    "sha256": "513e1bfc468467d30eeee702b002dddb4ef2bbb521b133136cb99bd4740b6e97",
+    "payload": "aeac9bde562c85683cf9a5bc",
+    "zipCRC": true,
+    "externalFFmpeg": true,
+    "iconResource101": true,
+    "matchesInternalStageExceptPETimestampAndChecksum": true,
+    "launcherChildImport": {
+      "bits": 8,
+      "height": 1254,
+      "icc": false,
+      "name": "I1.png",
+      "temporary": true,
+      "version": 1,
+      "width": 1254
+    },
+    "settingsUnchanged": true,
+    "originalDiscIndexesUnchanged": true
+  },
+  "publishedReleaseUnchanged": true,
+  "release": {
+    "assets": [
+      {
+        "apiUrl": "https://api.github.com/repos/user-Wing/VS-Renderer-GUI/releases/assets/652216044",
+        "contentType": "application/x-compressed",
+        "createdAt": "2026-10-18T02:17:22Z",
+        "digest": "sha256:82da12dd8ab5ad3fd9fc8c3fab9d72c6619efc587158fc09a1708c294d0b6325",
+        "id": "RA_kwDOUXxl2s4m4Abs",
+        "label": "",
+        "name": "1.0.13.7z",
+        "size": 310311528,
+        "state": "uploaded",
+        "updatedAt": "2026-10-18T02:19:21Z",
+        "url": "https://github.com/user-Wing/VS-Renderer-GUI/releases/download/v1.0.13/1.0.13.7z"
+      },
+      {
+        "apiUrl": "https://api.github.com/repos/user-Wing/VS-Renderer-GUI/releases/assets/652219436",
+        "contentType": "application/x-msdownload",
+        "createdAt": "2026-10-18T02:19:21Z",
+        "digest": "sha256:13118e80c9e522a10bc0024550189fcd99bb892e9ef66cf40ec38a5529c36dc0",
+        "id": "RA_kwDOUXxl2s4m4BQs",
+        "label": "",
+        "name": "VS-Player.exe",
+        "size": 35809383,
+        "state": "uploaded",
+        "updatedAt": "2026-10-18T02:19:30Z",
+        "url": "https://github.com/user-Wing/VS-Renderer-GUI/releases/download/v1.0.13/VS-Player.exe"
+      }
+    ],
+    "isDraft": false,
+    "tagName": "v1.0.13",
+    "targetCommitish": "bba3fdcf4596158031e7e4048f22c9dab5f16f49"
+  }
+}

@@ -327,7 +327,11 @@ bool PlayerWindow::openFile(const QString &input) {
     return openMedia();
 }
 bool PlayerWindow::openMedia() {
+#ifdef VSR_LITE_PLAYER
+    setDirectMode(true);
+#else
     setDirectMode(mediaInput_.startsWith("bluray:") || networkSource() || (!madvrMode() && (preset_.isEmpty() || (!profile().isEmpty() && interpolationStage()<0) || playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower()))));
+#endif
     clock_->setClockOnly(audioMode_ || (!direct_ && !madvrMode()));
     if (!clock_->openFile(mediaInput_)) { setError(clock_->lastError()); return false; }
     applyBlurayMetadata();
@@ -465,6 +469,20 @@ void PlayerWindow::seekFrame(qint64 frame) {
     else seekTime(static_cast<qint64>(std::llround(bounded * 10000000.0 * clip_.fpsDenominator / clip_.fpsNumerator)));
     manualFrame_ = static_cast<int>(bounded);
 }
+void PlayerWindow::stepFrame(int direction) {
+    if (clip_.fpsNumerator <= 0 || !ready_) return;
+    if (!direct_) { seekFrame(lastFrame_ + direction); return; }
+    if (imageMode_ || (discMenu_ && discMenu_->active())) return;
+    if (playing_) togglePlayback();
+    const auto snap=clock_->snapshot();
+    if ((direction<0 && snap.position100ns<=0) || (direction>0 && snap.duration100ns>0 && snap.position100ns>=snap.duration100ns)) return;
+    autoPlay_=false;manualFrame_=-1;frameJumpTarget_=-1;resumeAt_=-1;seekUiTarget_=-1;suspendQualityCheck();
+    generation_=snap.timelineGeneration;seekPresented_=snap.presentedVideoFrames;
+    lavKeyPending_=bool(lav_);
+    // Relative stepping follows the current PTS; an absolute frame seek may
+    // rebuild its rolling ordinal index by decoding the entire stream prefix.
+    seekPending_=clock_->stepFrame(direction);
+}
 bool PlayerWindow::commitFrameEdit() {
     if(!frameEditPending_)return false;
     bool ok=false;const auto frame=frame_->text().toLongLong(&ok);
@@ -601,7 +619,7 @@ bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
             const int direction=key->key()==Qt::Key_Left?-1:1;
             if(imageMode_){nextFile(direction);return true;}
             if(key->modifiers() & Qt::ControlModifier)seekTime(position()+qint64(settings_->value(key->modifiers() & Qt::AltModifier?"playback/ctrlAltSeconds":"playback/ctrlSeconds",key->modifiers() & Qt::AltModifier?60:10).toInt())*10000000*direction);
-            else {const auto mode=settings_->value("playback/arrows","seconds").toString();if(mode=="frame")seekFrame(lastFrame_+direction);else if(mode=="keyframe"){suspendQualityCheck();manualFrame_=-1;if(lav_){clock_->seek(position());lavKeyPending_=true;}generation_=clock_->snapshot().timelineGeneration;seekPending_=clock_->stepKeyframe(direction);}else seekTime(position()+direction*10000000);}
+            else {const auto mode=settings_->value("playback/arrows","seconds").toString();if(mode=="frame")stepFrame(direction);else if(mode=="keyframe"){suspendQualityCheck();manualFrame_=-1;if(lav_){clock_->seek(position());lavKeyPending_=true;}generation_=clock_->snapshot().timelineGeneration;seekPending_=clock_->stepKeyframe(direction);}else seekTime(position()+direction*10000000);}
             return true;
         }
         if (!editing && key->key() == Qt::Key_Space) { togglePlayback(); return true; }

@@ -96,6 +96,40 @@ class TestPlayer final : public QObject {
     QString configPath() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
     Q_OBJECT
 private slots:
+    void frameButtonsAfterTimeSeek_data(){QTest::addColumn<uint>("mode");QTest::addColumn<int>("stage");for(uint mode:{1u,2u})for(int stage:{4,5})QTest::newRow(qPrintable(QString("%1-%2").arg(mode==1?"SW":"HW").arg(stage==4?"Jinc":"D3D11")))<<mode<<stage;}
+    void frameButtonsAfterTimeSeek(){
+        QFETCH(uint,mode);QFETCH(int,stage);const auto source=qEnvironmentVariable("VSR_FRAME_STEP_SOURCE");if(source.isEmpty())QSKIP("Set VSR_FRAME_STEP_SOURCE to the reported long video");
+        QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",false);settings.setValue("playback/remember",false);settings.setValue("decode/mode",mode);settings.setValue("player/muted",true);settings.sync();
+        PlayerWindow player;player.resize(1000,700);player.show();player.loadPreset(QDir(PresetStore::directory()).filePath(QString("builtin/Anime-%1-%2.vpy").arg(stage).arg(stage==4?"Jinc":"D3D11")));QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.positionRestored_,20000);QVERIFY(player.direct_);
+        const auto button=[&](const QString &text){for(auto *b:player.findChildren<QPushButton *>())if(b->text()==text)return b;return static_cast<QPushButton *>(nullptr);};
+        QSet<QByteArray> images;
+        for(const qint64 target:{600000000LL,6000000000LL,12000000000LL}){
+        player.seekTime(target);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && qAbs(player.position()-target)<500000,10000);QVERIFY(button("+1s"));button("+1s")->click();QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.position()>=target+10000000,10000);
+        for(int direction:{1,-1,1,1,-1}){
+            const auto before=player.outputSnapshot();const auto beforeFrame=player.lastFrame_;QElapsedTimer elapsed;elapsed.start();auto *step=button(direction>0?QStringLiteral("›|"):QStringLiteral("|‹"));QVERIFY(step);step->click();
+            QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.outputSnapshot().frameIndex>=0 && player.outputSnapshot().framePts!=before.framePts && player.outputSnapshot().presentedVideoFrames>before.presentedVideoFrames,5000);const auto after=player.outputSnapshot();
+            qInfo()<<"frame-button"<<direction<<"ms"<<elapsed.elapsed()<<"position"<<before.position100ns<<after.position100ns<<"frame"<<beforeFrame<<player.lastFrame_<<"native-index"<<after.frameIndex<<"pending"<<player.seekPending_;
+            QVERIFY((after.position100ns-before.position100ns)*direction>0);QVERIFY(qAbs(qAbs(after.position100ns-before.position100ns)-208542)<20000);QTRY_COMPARE(player.lastFrame_,beforeFrame+direction);QVERIFY(!player.playing_);
+            const auto image=player.clock_->capture().scaled(128,72);QVERIFY(!image.isNull());images.insert(QByteArray(reinterpret_cast<const char *>(image.constBits()),image.sizeInBytes()));
+        }
+        auto *play=player.findChild<QPushButton *>("playerPlay");QVERIFY(play);const auto at=player.outputSnapshot().position100ns;play->click();QTRY_VERIFY_WITH_TIMEOUT(player.playing_ && player.outputSnapshot().position100ns>at+5000000,5000);play->click();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
+        auto *key=button(QStringLiteral("›K"));QVERIFY(key);key->click();QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.outputSnapshot().position100ns>at,10000);
+        const auto keyAt=player.outputSnapshot().position100ns;button(QStringLiteral("|‹"))->click();QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.outputSnapshot().frameIndex>=0 && player.outputSnapshot().position100ns<keyAt,5000);QVERIFY(qAbs(keyAt-player.outputSnapshot().position100ns-208542)<20000);
+        }
+        QVERIFY(images.size()>3);
+        player.activateWindow();player.pane_->surface()->setFocus();QTRY_VERIFY(player.isActiveWindow());player.settings_->setValue("playback/arrows","frame");
+        for(const auto key:{Qt::Key_Right,Qt::Key_Left}){const auto at=player.outputSnapshot().position100ns;QTest::keyClick(player.pane_->surface(),key);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.outputSnapshot().position100ns!=at,5000);QVERIFY(qAbs(qAbs(player.outputSnapshot().position100ns-at)-208542)<20000);}
+        player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Playing);button(QStringLiteral("›|"))->click();QTRY_VERIFY_WITH_TIMEOUT(!player.playing_ && !player.seekPending_,5000);QCOMPARE(player.snapshot().state,ThreeFpState::Paused);player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Playing);
+        player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);player.seekTime(0);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.outputSnapshot().position100ns==0,10000);button(QStringLiteral("|‹"))->click();QTest::qWait(100);QVERIFY(!player.seekPending_);player.togglePlayback();QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().position100ns>5000000,5000);
+    }
+    void nativeVfrSteppingAcrossIndexGaps(){
+        QTemporaryDir dir;const auto source=dir.filePath("vfr.mkv");QProcess ffmpeg;ffmpeg.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),{"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=50:duration=4","-vf","select=if(lt(t\\,2)\\,not(mod(n\\,2))\\,1)","-fps_mode","vfr","-c:v","ffv1","-y",source});QVERIFY(ffmpeg.waitForFinished(10000));QCOMPARE(ffmpeg.exitCode(),0);
+        QWidget surface;surface.resize(640,360);surface.show();ThreeFpApi api;ThreeFpPlayer player(api,&surface);player.setMuted(true);player.setDecodeMode(1);QVERIFY(player.openFile(source));QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Ready,10000);
+        for(const qint64 at:{10000000LL,26000000LL,16000000LL,30000000LL}){
+            const auto generation=player.snapshot().timelineGeneration;QVERIFY(player.seek(at));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().timelineGeneration>generation && player.snapshot().frameIndex>=0 && player.snapshot().position100ns==at,5000);
+            for(int direction:{-1,1}){const auto before=player.snapshot();QVERIFY(player.stepFrame(direction));const qint64 expected=at+(direction<0?-(at<20000000?400000:200000):0);QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().framePts!=before.framePts && player.snapshot().frameIndex>=0 && player.snapshot().position100ns==expected,5000);}
+        }
+    }
     void desktopHdrPreviewUsesWhite(){
         for(double white:{80.0,203.0,480.0}){
             const double linear=std::pow((.5+.055)/1.055,2.4),p=std::pow(linear*white/10000,2610.0/16384.0);
@@ -1375,6 +1409,7 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         player.togglePlayback(); QTRY_COMPARE(player.snapshot().state, ThreeFpState::Paused);
         player.seekFrame(37); QTRY_VERIFY_WITH_TIMEOUT(std::abs(player.position() - 15416667) < 1000, 5000);
         QTRY_COMPARE_WITH_TIMEOUT(player.outputSnapshot().frameIndex, 37, 5000);
+        for(const auto &[text,expected]:{std::pair{QStringLiteral("›|"),38},std::pair{QStringLiteral("|‹"),37}}){QPushButton *step=nullptr;for(auto *button:player.findChildren<QPushButton *>())if(button->text()==text)step=button;QVERIFY(step);step->click();QTRY_COMPARE_WITH_TIMEOUT(player.outputSnapshot().frameIndex,expected,5000);QVERIFY(!player.playing_);}
         auto *time = player.findChild<QLineEdit *>("playerPosition"); time->setText("00:00:03.000"); QTest::keyClick(time, Qt::Key_Return);
         QTRY_VERIFY_WITH_TIMEOUT(std::abs(player.position() - 30000000) < 500000, 5000);
         QCOMPARE(PlayerWindow::normalizedRate(.03), .1); QCOMPARE(PlayerWindow::normalizedRate(20), 16.); QCOMPARE(PlayerWindow::normalizedRate(1.126), 1.15);

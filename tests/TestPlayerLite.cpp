@@ -18,6 +18,7 @@
 #include <QSlider>
 #include <QTreeWidget>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QMenu>
 #include <windows.h>
 using namespace vsr;
@@ -26,6 +27,16 @@ class TestPlayer final : public QObject {
     QByteArray previous_;bool existed_=false;
     QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
 private slots:
+    void realVideoFrameStepping(){
+        const auto source=qEnvironmentVariable("VSR_FRAME_STEP_SOURCE");if(source.isEmpty())QSKIP("Set VSR_FRAME_STEP_SOURCE to the reported long video");
+        QSettings settings(config(),QSettings::IniFormat);settings.setValue("basic/autoplay",false);settings.setValue("player/muted",true);settings.sync();
+        for(uint mode:{1u,2u}){settings.setValue("decode/mode",mode);settings.sync();PlayerWindow player;player.show();player.loadPreset("Anime-5-D3D11.vpy");QVERIFY(player.openFile(source));QCOMPARE(player.source_,QFileInfo(source).absoluteFilePath());QTRY_VERIFY2_WITH_TIMEOUT(player.ready_ && player.positionRestored_,qPrintable(QString("ready=%1 restored=%2 state=%3 error=%4").arg(player.ready_).arg(player.positionRestored_).arg(int(player.snapshot().state)).arg(player.clock_->lastError())),15000);QVERIFY(player.direct_);
+            for(int stage:{4,5}){player.loadPreset(stage==4?"Anime-4-Jinc.vpy":"Anime-5-D3D11.vpy");QTRY_VERIFY_WITH_TIMEOUT(player.ready_,10000);player.seekTime(6000000000LL);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.outputSnapshot().position100ns>=6000000000LL,10000);
+                for(const QString text:{QStringLiteral("›|"),QStringLiteral("|‹")}){const auto before=player.outputSnapshot();QPushButton *button=nullptr;for(auto *b:player.findChildren<QPushButton *>())if(b->text()==text)button=b;QVERIFY(button);button->click();QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.outputSnapshot().framePts!=before.framePts && player.outputSnapshot().frameIndex>=0,5000);QVERIFY(qAbs(qAbs(player.outputSnapshot().position100ns-before.position100ns)-208542)<20000);}
+                const auto at=player.outputSnapshot().position100ns;player.togglePlayback();QTRY_VERIFY_WITH_TIMEOUT(player.playing_ && player.outputSnapshot().position100ns>at+5000000,5000);player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
+            }QVERIFY(!player.server_->available());QVERIFY(!GetModuleHandleW(L"VapourSynth.dll"));
+        }
+    }
     void nativeDiscMenuControls(){
         const auto root=qEnvironmentVariable("VSR_FULL_BD_SOURCE");if(root.isEmpty())QSKIP("Set VSR_FULL_BD_SOURCE");
         PlayerWindow player;player.resize(1100,760);player.show();QVERIFY(player.openBluRay(root,true));

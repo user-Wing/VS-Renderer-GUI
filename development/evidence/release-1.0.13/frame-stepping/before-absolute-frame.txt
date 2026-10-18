@@ -1,0 +1,8 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+FAIL!  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) QTestLib: This test case check ("!player.seekPending_ && player.outputSnapshot().presentedVideoFrames>before.presentedVideoFrames") failed because the requested timeout (5000 ms) was too short, 5050 ms would have been sufficient this time.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(108) : failure location
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 2 passed, 1 failed, 0 skipped, 0 blacklisted, 7147ms
+********* Finished testing of TestPlayer *********

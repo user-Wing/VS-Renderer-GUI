@@ -1,0 +1,477 @@
+{
+  "date": "2026-10-18",
+  "version": "1.0.13",
+  "source": "D:\\Animation Enhance\\Girls Band Cry\\216048 y210 CRF44\\Girls.Band.Cry.S01E01.2160p48F.SVTAV1-CRF44.yuv420p10le.RealESRGAN.opus.96k.SC-JP_TC-JP_SC_EN.mkv",
+  "fps": "7001/146",
+  "timebase": "1/1000",
+  "positionsSeconds": [
+    60,
+    600,
+    1200
+  ],
+  "before": {
+    "passed": 2,
+    "failed": 1,
+    "skipped": 0
+  },
+  "fullMatrix": {
+    "passed": 7,
+    "failed": 0,
+    "skipped": 0
+  },
+  "fullMatrixNative": "1fc2385a4ed4ea2bf54d24fa12518f4106b46194646490e8cda5cde0328d8706",
+  "finalNative": "3fd4737c9e455fa2ba62d31579f80098df42a80546d8a85d2cffc6e81f724c24",
+  "finalFull": {
+    "passed": 7,
+    "failed": 1,
+    "skipped": 0
+  },
+  "finalLite": {
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0
+  },
+  "baselineFocus": {
+    "passed": 2,
+    "failed": 1,
+    "skipped": 0
+  },
+  "focusFailure": "Existing frameEditTakesPriorityAndPrefetchKeepsGpuBusy programmatic focus-out assertion also fails with HEAD PlayerWindow/PlayerControls and original Native; not changed.",
+  "matrixNativeNote": "Only three comment lines changed before the final Native rebuild. Final DLL reran Full HW-D3D11 at all three positions, VFR, VS output stepping, AV1/HEVC lifecycle, and all four Lite real-video routes.",
+  "scope": [
+    "relative buttons and frame arrow keys",
+    "previous frame after keyframe and sparse seeks",
+    "first-frame boundary and playback resume",
+    "actual captured images differ",
+    "VFR 25/50 fps strict neighbours",
+    "VS output ordinal stepping",
+    "Lite relative/stale preset path opens directly"
+  ],
+  "limits": [
+    "No full-suite pass is claimed",
+    "Absolute ordinal input can still rebuild a long prefix",
+    "Stepping decodes the local GOP and is not guaranteed instantaneous"
+  ],
+  "samples": [
+    {
+      "route": "SW-Jinc",
+      "direction": 1,
+      "milliseconds": 174,
+      "from100ns": 610190000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": -1,
+      "milliseconds": 337,
+      "from100ns": 610400000,
+      "to100ns": 610190000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": 1,
+      "milliseconds": 167,
+      "from100ns": 610190000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": 1,
+      "milliseconds": 224,
+      "from100ns": 610400000,
+      "to100ns": 610610000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": -1,
+      "milliseconds": 339,
+      "from100ns": 610610000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": 1,
+      "milliseconds": 610,
+      "from100ns": 6010170000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": -1,
+      "milliseconds": 1163,
+      "from100ns": 6010380000,
+      "to100ns": 6010170000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": 1,
+      "milliseconds": 611,
+      "from100ns": 6010170000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": 1,
+      "milliseconds": 634,
+      "from100ns": 6010380000,
+      "to100ns": 6010590000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": -1,
+      "milliseconds": 1179,
+      "from100ns": 6010590000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": 1,
+      "milliseconds": 754,
+      "from100ns": 12010120000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": -1,
+      "milliseconds": 1436,
+      "from100ns": 12010330000,
+      "to100ns": 12010120000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": 1,
+      "milliseconds": 723,
+      "from100ns": 12010120000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": 1,
+      "milliseconds": 738,
+      "from100ns": 12010330000,
+      "to100ns": 12010540000
+    },
+    {
+      "route": "SW-Jinc",
+      "direction": -1,
+      "milliseconds": 1438,
+      "from100ns": 12010540000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": 1,
+      "milliseconds": 236,
+      "from100ns": 610190000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": -1,
+      "milliseconds": 338,
+      "from100ns": 610400000,
+      "to100ns": 610190000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": 1,
+      "milliseconds": 209,
+      "from100ns": 610190000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": 1,
+      "milliseconds": 180,
+      "from100ns": 610400000,
+      "to100ns": 610610000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": -1,
+      "milliseconds": 335,
+      "from100ns": 610610000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": 1,
+      "milliseconds": 638,
+      "from100ns": 6010170000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": -1,
+      "milliseconds": 1169,
+      "from100ns": 6010380000,
+      "to100ns": 6010170000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": 1,
+      "milliseconds": 615,
+      "from100ns": 6010170000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": 1,
+      "milliseconds": 623,
+      "from100ns": 6010380000,
+      "to100ns": 6010590000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": -1,
+      "milliseconds": 1191,
+      "from100ns": 6010590000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": 1,
+      "milliseconds": 725,
+      "from100ns": 12010120000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": -1,
+      "milliseconds": 1412,
+      "from100ns": 12010330000,
+      "to100ns": 12010120000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": 1,
+      "milliseconds": 723,
+      "from100ns": 12010120000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": 1,
+      "milliseconds": 711,
+      "from100ns": 12010330000,
+      "to100ns": 12010540000
+    },
+    {
+      "route": "SW-D3D11",
+      "direction": -1,
+      "milliseconds": 1480,
+      "from100ns": 12010540000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": 1,
+      "milliseconds": 63,
+      "from100ns": 610190000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": -1,
+      "milliseconds": 51,
+      "from100ns": 610400000,
+      "to100ns": 610190000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": 1,
+      "milliseconds": 55,
+      "from100ns": 610190000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": 1,
+      "milliseconds": 60,
+      "from100ns": 610400000,
+      "to100ns": 610610000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": -1,
+      "milliseconds": 112,
+      "from100ns": 610610000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": 1,
+      "milliseconds": 218,
+      "from100ns": 6010170000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": -1,
+      "milliseconds": 454,
+      "from100ns": 6010380000,
+      "to100ns": 6010170000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": 1,
+      "milliseconds": 225,
+      "from100ns": 6010170000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": 1,
+      "milliseconds": 219,
+      "from100ns": 6010380000,
+      "to100ns": 6010590000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": -1,
+      "milliseconds": 443,
+      "from100ns": 6010590000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": 1,
+      "milliseconds": 290,
+      "from100ns": 12010120000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": -1,
+      "milliseconds": 568,
+      "from100ns": 12010330000,
+      "to100ns": 12010120000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": 1,
+      "milliseconds": 270,
+      "from100ns": 12010120000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": 1,
+      "milliseconds": 271,
+      "from100ns": 12010330000,
+      "to100ns": 12010540000
+    },
+    {
+      "route": "HW-Jinc",
+      "direction": -1,
+      "milliseconds": 562,
+      "from100ns": 12010540000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": 1,
+      "milliseconds": 60,
+      "from100ns": 610190000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": -1,
+      "milliseconds": 50,
+      "from100ns": 610400000,
+      "to100ns": 610190000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": 1,
+      "milliseconds": 51,
+      "from100ns": 610190000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": 1,
+      "milliseconds": 53,
+      "from100ns": 610400000,
+      "to100ns": 610610000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": -1,
+      "milliseconds": 115,
+      "from100ns": 610610000,
+      "to100ns": 610400000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": 1,
+      "milliseconds": 229,
+      "from100ns": 6010170000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": -1,
+      "milliseconds": 432,
+      "from100ns": 6010380000,
+      "to100ns": 6010170000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": 1,
+      "milliseconds": 232,
+      "from100ns": 6010170000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": 1,
+      "milliseconds": 226,
+      "from100ns": 6010380000,
+      "to100ns": 6010590000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": -1,
+      "milliseconds": 461,
+      "from100ns": 6010590000,
+      "to100ns": 6010380000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": 1,
+      "milliseconds": 280,
+      "from100ns": 12010120000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": -1,
+      "milliseconds": 568,
+      "from100ns": 12010330000,
+      "to100ns": 12010120000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": 1,
+      "milliseconds": 284,
+      "from100ns": 12010120000,
+      "to100ns": 12010330000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": 1,
+      "milliseconds": 279,
+      "from100ns": 12010330000,
+      "to100ns": 12010540000
+    },
+    {
+      "route": "HW-D3D11",
+      "direction": -1,
+      "milliseconds": 553,
+      "from100ns": 12010540000,
+      "to100ns": 12010330000
+    }
+  ]
+}

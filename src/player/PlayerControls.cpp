@@ -79,8 +79,8 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
         auto *b = new QPushButton(text, this); b->setToolTip(tooltip); b->setFixedWidth(34); row->addWidget(b); connect(b, &QPushButton::clicked, this, action); return b;
     };
     play_ = button(QStringLiteral("▶"), tr("播放 / 暂停 · Space"), [this] { togglePlayback(); }); play_->setObjectName("playerPlay");
-    button("|‹", tr("退一帧"), [this] { seekFrame(lastFrame_ - 1); });
-    button("›|", tr("进一帧"), [this] { seekFrame(lastFrame_ + 1); });
+    button("|‹", tr("退一帧"), [this] { stepFrame(-1); });
+    button("›|", tr("进一帧"), [this] { stepFrame(1); });
     button("−1s", tr("退一秒"), [this] { seekTime(position() - 10000000); });
     button("+1s", tr("进一秒"), [this] { seekTime(position() + 10000000); });
     const auto keyframe = [this](int direction) {

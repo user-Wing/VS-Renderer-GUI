@@ -72,6 +72,17 @@
 
 证据见 [hdr-native](evidence/release-1.0.13/hdr-native/summary.json)，部署与单文件信息见 [artifacts](evidence/release-1.0.13/hdr-native/artifacts.json)。版本保持1.0.13，更新本地Full和单文件；已发布tag、Release及附件不修改，Full压缩包仍由维护者制作。
 
+### 10月18日：长视频相对逐帧与单文件打开
+
+指定《Girls Band Cry》2160p48 AV1/Opus MKV，实际帧率7001/146、时间基1/1000。在60秒定位并按+1秒后，旧按钮调用绝对帧号定位，会从片头重建索引；HW-D3D11旧例2 passed / 1 failed，单次进帧超过5秒。改走相对PTS后又发现关键帧跳转留下的稀疏缓存不能直接视为相邻帧，已改为解码当前PTS附近的GOP确认严格前后帧，并处理片头继续退帧的无操作边界。单文件相对预设路径还暴露首次打开先用clock-only再切直通丢失会话的问题，现打开时固定直通；没有新增帧池或修改解码/色彩参数。
+
+- Full四条实片路径（软/硬解×Jinc/D3D11）在1、10、20分钟位置，双向逐帧、关键帧后退帧、方向键、播放中逐帧暂停、片头边界和续播通过；GPU截图缩略内容确实变化，每次媒体时间移动20或21毫秒。连同25/50fps可变帧率相邻帧测试，7 passed / 0 failed / 0 skipped。60次按钮样本为50–1480ms；仍需解码局部GOP，不保证瞬时逐帧。
+- 最终DLL的Full聚焦回归7 passed / 1 failed / 0 skipped，退出码1：指定实片HW-D3D11三位置、可变帧率、VS输出帧号进退、HEVC/AV1生命周期通过；失败为既有 `frameEditTakesPriorityAndPrefetchKeepsGpuBusy` 程序化移焦断言。用HEAD的 `PlayerWindow.cpp`、`PlayerControls.cpp` 与旧生产DLL重链同一测试，独立对照仍2 passed / 1 failed，同位置失败；未修改该用例或相关焦点逻辑，不报告全量回归通过。
+- 最终单文件后端实片软/硬解×Jinc/D3D11、相对预设打开、逐帧后续播及既有模式/软解基础回归6 passed / 0 failed / 0 skipped，退出码0；确认未初始化VS。
+- 全矩阵初测Native为 `1fc2385a4ed4ea2bf54d24fa12518f4106b46194646490e8cda5cde0328d8706`；随后只更新三行注释重建，最终Native为 `3fd4737c9e455fa2ba62d31579f80098df42a80546d8a85d2cffc6e81f724c24`，完成上述最终Full/Lite回归。完整补丁对固定上游PR23可应用，生产源码逆向检查通过，API布局不变。
+
+证据见 [frame-stepping](evidence/release-1.0.13/frame-stepping/summary.json)，本地Full与单文件已更新；[产物校验](evidence/release-1.0.13/frame-stepping/artifacts.json)涵盖相同Native、ZIP CRC、图标、实际启动器子进程、外置FFmpeg、24份Full/1份内部单文件配置与预设等保护文件哈希保持不变，VSCap二进制保持不变。单文件35,809,965字节；版本仍1.0.13，已发布tag、Release及附件保持不变，Full压缩包由维护者制作。绝对帧号输入仍可能因未建立索引而需要较长等待，本轮修复的是相对逐帧。
+
 ## 1.0.12：按续修轮次区分
 
 | 轮次 / 场景 | 已测与结论 | 保留的限制 / 证据 |

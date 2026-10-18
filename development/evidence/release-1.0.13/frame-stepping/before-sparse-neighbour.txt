@@ -1,0 +1,34 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 181 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 173 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 161 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 231 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 158 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+FAIL!  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) 'qAbs(keyAt-player.outputSnapshot().position100ns-208542)<20000' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(117) : failure location
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 167 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 165 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 168 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 170 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 170 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+FAIL!  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) 'qAbs(keyAt-player.outputSnapshot().position100ns-208542)<20000' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(117) : failure location
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 60 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 64 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 61 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 52 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 51 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+FAIL!  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) 'qAbs(keyAt-player.outputSnapshot().position100ns-208542)<20000' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(117) : failure location
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 60 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 52 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 50 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 61 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 51 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+FAIL!  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) 'qAbs(keyAt-player.outputSnapshot().position100ns-208542)<20000' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(117) : failure location
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 2 passed, 4 failed, 0 skipped, 0 blacklisted, 10195ms
+********* Finished testing of TestPlayer *********
