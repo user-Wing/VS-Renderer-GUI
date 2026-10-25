@@ -26,6 +26,8 @@ D3D11/Jinc 和无预设原画使用 3FP 直通，不建立 VS 索引。Full 右�
 
 “VapourSynth 预设”只显示用户与社区预设。用户说明来自 Renderer 预设管理的备注；开发者说明由 `vpy/preset-descriptions.json` 的 `builtin/文件名.vpy` 键填写。程序只补缺失的空键，保留已写说明，不内置推荐文案。
 
+完整便携版的说明文件位于 `VS-GUI-Full/vpy/preset-descriptions.json`。只修改冒号右侧双引号内的说明，例如 `"builtin/Anime-0-CNN-Enhanced.vpy": "这里写你的说明"`；保留左侧路径、双引号与条目间逗号，保存为 UTF-8。保存后重新打开右键菜单即可读取。开发运行读取 `build/mingw-release/vpy/preset-descriptions.json`，这是另一份文件。
+
 Full“图像处理 → 补帧”提供 Jinc/D3D11 自动入口以及 RIFE、RIFE 半宽高、MVTools HQ/LQ 的固定组合。渲染设置用 Jinc/D3D11 两排复选框分别控制自动补帧参与档位；未勾选的档位会跳过，到最后一档仍超载时显示提示。旧配置的补帧起始档位会转换为从该档起参与。关闭补帧后恢复 Anime 自动超分。PlayerLite 只提供原生直通能力。
 
 “超分补帧组合”的前三项先 Anime4K 到 2160，再把**整帧**降到 960×540 补帧，最后选择 Anime4K/Jinc/D3D11 输出；原帧细节也会下降。第四项只用半尺寸 RIFE 推理，保留 1080 原帧，再 Anime4K 到 2160。前者的流畅不代表保留了前一级超分细节。4070 Laptop 的指定样本中，Jinc/D3D11 末端达标；另外两项未达标，详见性能台账。

@@ -47,6 +47,8 @@
 
 已部署本地 Full 的 Player/Renderer 及 Lite Player，更新语言和操作文档；配置、VPY、ICC/LUT 的前后哈希一致。备份与逐文件哈希在 `build/ui-deployment-20261025-084535/deployment.json`。
 
+后续按用户要求重新封装单文件 Player 1.0.14：版本资源、内嵌 ZIP CRC、66 项清单哈希、Lite/Native 与当前构建匹配均通过；隔离缓存首次启动成功并由子进程完成图片导入，既有 INI 与 Full 滤镜说明文件保持原哈希。单文件仍使用 Lite 原生播放内核、FFmpeg shared 外置；此冒烟不等于重新跑过播放矩阵。原包备份与封装审计位于 `build/single-update-1.0.14`。
+
 本轮原始日志和截图保留在本地 `build/ui-fixes-1.0.14-*` 与 `build/player-*-1.0.14.png`、`build/mingw-release/renderer-parameters-*.png`。以上为专项验证，未运行全量 Full 播放器回归；不重新声称 AI 推理、目标 Intel/1650 Super 或上一轮性能矩阵已验收。
 
 ## 1.0.14：本地功能更新与设备性能检查

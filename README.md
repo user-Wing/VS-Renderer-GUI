@@ -6,7 +6,7 @@ Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS
 
 [下载便携包](https://github.com/user-Wing/VS-Renderer-GUI/releases) · [ModelScope 下载源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) · [操作指南](docs/README.md) · [更新日志](changelog.md)
 
-源码版本：**1.0.14**。本轮更新源码，不制作压缩包或更新外部附件；下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
+源码版本：**1.0.14**。本轮更新源码及本地单文件 Player，不制作发行压缩包或更新外部附件；下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
 
 1.0.14 新增 Renderer 即时深色主题、八档图像处理、组合补帧、外置 AI 字幕入口、3FUI 命令桥和 Cap 设置改进。AI 模型需手动准备；组合链路的画质取舍与实测边界见 [Player 指南](docs/player.md)。
 

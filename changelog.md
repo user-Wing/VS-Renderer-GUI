@@ -28,7 +28,7 @@
 - 同步上游 Native 音频采集、字幕 HDR 与 RTX 增强接口，保留 VSP 的帧桥、定位、缩放和音频效果扩展。
 - Cap 快捷键增加确认/移除与 Win 组合支持，记住画笔颜色、线型和粗细，默认保存到系统图片目录。
 
-验证范围及未达标项见 [测试台账](development/validation.md)；本轮未发布，不生成 Release 链接或发布日期。
+单文件 Player 本地产物同步为 1.0.14；验证范围及未达标项见 [测试台账](development/validation.md)；本轮未发布，不生成 Release 链接或发布日期。
 
 ## 1.0.13
 
