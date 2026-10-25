@@ -1,0 +1,147 @@
+{
+  "date": "2026-10-24",
+  "version": "1.0.13",
+  "nativeApi": 20,
+  "upstream": "922e4b70268fcbc83f0deb06d9e2c1b62e7a33b2",
+  "aiSubtitles": {
+    "checkout": ".deps/fff-ai-subtitles",
+    "head": "edf533155727f681eefa771082702bab275bca48",
+    "includedInRuntime": false,
+    "audioTapExportsPresent": false
+  },
+  "nativeSha256": "490d4cd7f7e0cbc95d2ad93b573497557aeeb3b692d91ccf73963a2192c87bbb",
+  "nativeReproductionBuildPassed": true,
+  "guiBuildPassed": true,
+  "countsIncludeInitCleanup": true,
+  "tests": {
+    "color-focused.txt": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "color-baseline.txt": {
+      "passed": 3,
+      "failed": 2,
+      "skipped": 0
+    },
+    "telemetry-baseline.txt": {
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0
+    },
+    "player-core.txt": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "frame-bridge.txt": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    },
+    "real-frame-stepping.txt": {
+      "passed": 2,
+      "failed": 4,
+      "skipped": 0
+    },
+    "real-frame-stepping-baseline.txt": {
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0
+    },
+    "real-frame-stepping-enhanced.txt": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full-bd.txt": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "lite-bd.txt": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "deployed-native-smoke.txt": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "performance": {
+    "4k-sw": {
+      "userEnhancedMode": true,
+      "warmupSeconds": 5,
+      "steadyWindowSeconds": 15.0026,
+      "presentedFps": 47.92502632876968,
+      "sourceFps": 48,
+      "pipelineDrops": 0.0,
+      "audioUnderruns": 0.0,
+      "bytesPerUpload": 49766400.0,
+      "copyMsPerUpload": 3.629353963838665,
+      "copyGBps": 13.71219244412399,
+      "copyTimingMeaning": "CPU upload memory copy",
+      "uploadPath": 2,
+      "decodeMode": 1,
+      "swapSize": [
+        3840,
+        2160
+      ],
+      "finalFrameClockLagMs": 17.514999999999503,
+      "maxSampledFrameClockLagMs": 22.7409999999999
+    },
+    "8k-sw": {
+      "userEnhancedMode": true,
+      "warmupSeconds": 5,
+      "steadyWindowSeconds": 15.000483999999998,
+      "presentedFps": 33.86557393748095,
+      "sourceFps": 48,
+      "pipelineDrops": 250.0,
+      "audioUnderruns": 3.0,
+      "bytesPerUpload": 99532800.0,
+      "copyMsPerUpload": 8.268499803149606,
+      "copyGBps": 12.037588724630112,
+      "copyTimingMeaning": "CPU upload memory copy",
+      "uploadPath": 2,
+      "decodeMode": 1,
+      "swapSize": [
+        3840,
+        2160
+      ],
+      "finalFrameClockLagMs": 30.718000000000245,
+      "maxSampledFrameClockLagMs": 1207.6670000000008
+    },
+    "8k-hw": {
+      "userEnhancedMode": true,
+      "warmupSeconds": 5,
+      "steadyWindowSeconds": 14.998972,
+      "presentedFps": 47.936618589594005,
+      "sourceFps": 48,
+      "pipelineDrops": 0.0,
+      "audioUnderruns": 0.0,
+      "bytesPerUpload": 99532800.0,
+      "copyMsPerUpload": 0.0025275382475660637,
+      "copyGBps": null,
+      "copyTimingMeaning": "CPU time to enqueue GPU copy, not GPU execution time or physical bandwidth",
+      "uploadPath": 7,
+      "decodeMode": 2,
+      "swapSize": [
+        3840,
+        2160
+      ],
+      "finalFrameClockLagMs": 7.258000000000209,
+      "maxSampledFrameClockLagMs": 21.516000000001867
+    }
+  },
+  "limits": [
+    "No complete Full regression; two old first-frame colour-readback failures reproduced with the original DLL.",
+    "Seven new pixel formats, RTX enhancement, external audio plug and AVIF image-mode additions are not fully tested on this machine.",
+    "IAMF/OBR listening and Intel hybrid CPU placement were not tested.",
+    "Only one short steady-state window per performance arm; no before/after speedup claim.",
+    "Enhanced mode was confirmed by the user; earlier samples are retained separately."
+  ],
+  "beforeEnhancedProbeLimit": "The earlier probe used render-target version 1 instead of 20 and returned zero target fields. Those CSVs are diagnostic only, not an output-size-verified performance comparison.",
+  "artifacts": "artifacts.json"
+}

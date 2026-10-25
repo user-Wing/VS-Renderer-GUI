@@ -1,0 +1,21 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+SKIP   : TestPlayer::realVideoFrameStepping() Set VSR_FRAME_STEP_SOURCE to the reported long video
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayerLite.cpp(31) : failure location
+SKIP   : TestPlayer::nativeDiscMenuControls() Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayerLite.cpp(41) : failure location
+SKIP   : TestPlayer::nativeDiscReopenWhilePlaying() Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayerLite.cpp(64) : failure location
+SKIP   : TestPlayer::nativeDiscFirstPlay() Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayerLite.cpp(82) : failure location
+PASS   : TestPlayer::nativeMenuRapidResume()
+SKIP   : TestPlayer::nativeDiscSeekKeepsRequestedPosition() Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayerLite.cpp(107) : failure location
+PASS   : TestPlayer::allowedModes()
+PASS   : TestPlayer::settingsRejectFullBackends()
+PASS   : TestPlayer::ffprobeFromRuntimeOrPath()
+PASS   : TestPlayer::softwarePlaybackWithoutVs()
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 7 passed, 0 failed, 5 skipped, 0 blacklisted, 1741ms
+********* Finished testing of TestPlayer *********

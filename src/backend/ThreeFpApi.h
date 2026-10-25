@@ -5,8 +5,10 @@
 #include <QString>
 #include <QImage>
 #include "backend/SubtitleAbi.h"
+#include "backend/AudioTapAbi.h"
 
 #include <cstdint>
+#include <cstddef>
 
 namespace vsr {
 struct ThreeFpAudioLevels {
@@ -63,7 +65,7 @@ struct ThreeFpConfiguration {
     std::uint32_t videoScalingQuality;
     std::uint32_t forceHdrOutput;
     std::int32_t preferredAdapterIndex = -1;
-    std::uint32_t sdrScRgbMode = 0;
+    std::uint32_t sdrScRgbMode = 1;
     std::uint32_t adaptiveDownscaleBeforeUpload = 0;
     std::uint32_t adaptiveDownscaleDropPercent = 20;
     std::uint32_t adaptiveDecoderThreads = 0;
@@ -145,7 +147,20 @@ struct ThreeFpSnapshot {
     std::uint32_t iamfBinaural;
     std::uint32_t audioBinaural;
     std::int64_t audioDelay100ns;
+    std::uint64_t uploadMapWait100ns;
+    std::uint64_t uploadCopy100ns;
+    std::uint64_t downscaleResample100ns;
+    std::uint64_t scalePassCount;
+    std::uint64_t uploadCount;
+    std::uint64_t uploadCopyBytes;
+    std::uint32_t uploadPath;
 };
+
+static_assert(sizeof(ThreeFpConfiguration) == 112);
+static_assert(sizeof(ThreeFpSnapshot) == 464);
+static_assert(offsetof(ThreeFpSnapshot, audioDelay100ns) == 400);
+static_assert(offsetof(ThreeFpSnapshot, uploadCount) == 440);
+static_assert(offsetof(ThreeFpSnapshot, uploadPath) == 456);
 
 struct ThreeFpPixelProbe {
     std::uint32_t size;
@@ -242,6 +257,10 @@ public:
     ThreeFpResult submitExternalVideoFrame(void *handle, const ThreeFpExternalVideoFrame *frame) const;
     ThreeFpResult setExternalOutputFormat(void *handle, const char *format) const;
     ThreeFpResult setSubtitleLayer(void *handle, const TimedTextLayer *layer) const;
+    ThreeFpResult enableAudioTap(void *handle, bool enabled) const;
+    ThreeFpResult readAudioTap(void *handle, void *pcm, std::uint32_t capacity, AudioTapBlock *block) const;
+    ThreeFpResult setVideoEnhancement(void *handle, bool hdr, bool enabled) const;
+    VideoEnhancementStatus videoEnhancementStatus(void *handle, bool hdr) const;
     QImage capture(void *handle, int width, int height) const;
     QImage captureFloat(void *handle, int width, int height) const;
     ThreeFpResult redraw(void *handle) const;

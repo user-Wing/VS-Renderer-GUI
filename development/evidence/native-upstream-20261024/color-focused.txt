@@ -1,0 +1,14 @@
+********* Start testing of TestColor *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestColor::initTestCase()
+PASS   : TestColor::nativeUploadTelemetry()
+QINFO  : TestColor::nativeDefaultAndPausedColorSwitch() 709 gray 0.521569 0.521569 0.521569
+PASS   : TestColor::nativeDefaultAndPausedColorSwitch()
+PASS   : TestColor::automaticHdrToSdr()
+PASS   : TestColor::invalidProfileFallsBackAndRecovers()
+QINFO  : TestColor::decodedHardwareNoReadback() Decode mode 2
+PASS   : TestColor::decodedHardwareNoReadback()
+PASS   : TestColor::realVsOutputPreserved()
+PASS   : TestColor::cleanupTestCase()
+Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 3446ms
+********* Finished testing of TestColor *********

@@ -1,4 +1,8 @@
 #include "app/MainWindow.h"
+#include "app/Style.h"
+#include "player/PlayerLanguage.h"
+#include "ui/About.h"
+#include "update/ComponentDownloads.h"
 
 #include "backend/FrameTimeline.h"
 #include "ui/ExportWindow.h"
@@ -110,6 +114,7 @@ QPushButton *compactButton(const QString &text, QWidget *parent)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    language_=std::make_unique<PlayerLanguage>(QSettings().value("appearance/language","zh_CN").toString());
     setWindowTitle(QStringLiteral("VS Renderer — VapourSynth 实时滤镜工作台"));
     setAcceptDrops(true);
     resize(1800, 900);
@@ -289,6 +294,7 @@ MainWindow::MainWindow(QWidget *parent)
         pendingPreview_ = false;
         if (ok) validateScript();else setStatus(frameServer_->errorString(),true);
     });
+    language_->updateWidgets(this);
 }
 
 MainWindow::~MainWindow() = default;
@@ -365,11 +371,16 @@ void MainWindow::showSettings()
 
 QWidget *MainWindow::buildSettingsPage()
 {
-    auto *page = new QWidget(this);
-    page->setObjectName(QStringLiteral("rendererSettingsPage"));
+    auto *scroll = new QScrollArea(this);
+    scroll->setObjectName(QStringLiteral("rendererSettingsPage"));
+    scroll->setWidgetResizable(true);
+    auto *page = new QWidget(scroll);
+    scroll->setWidget(page);
+    page->setObjectName(QStringLiteral("rendererSettingsContent"));
     auto *layout = new QVBoxLayout(page);
     layout->setContentsMargins(20, 16, 20, 16);
-    layout->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    layout->setAlignment(Qt::AlignTop);
+    layout->setSpacing(14);
     layout->addWidget(new QLabel(QStringLiteral("设置"), page));
     auto *label = new QLabel(QStringLiteral("VapourSynth 源滤镜"), page);
     layout->addWidget(label);
@@ -381,6 +392,18 @@ QWidget *MainWindow::buildSettingsPage()
     layout->addWidget(source);
     auto *hint = new QLabel(QStringLiteral("用于 VS 预览与导出。更改后重新生成并验证脚本生效。"), page);
     hint->setWordWrap(true); layout->addWidget(hint);
+    layout->addWidget(new QLabel(QStringLiteral("语言和主题"), page));
+    auto *language=new QComboBox(page);language->setObjectName("rendererLanguage");language->addItem(QStringLiteral("中文"),"zh_CN");language->addItem("English","en_US");language->setCurrentIndex(qMax(0,language->findData(QSettings().value("appearance/language","zh_CN"))));layout->addWidget(language);
+    connect(language,&QComboBox::currentIndexChanged,this,[this,language]{const auto name=language->currentData().toString();QSettings().setValue("appearance/language",name);language_->setLanguage(name);language_->updateWidgets(this);});
+    auto *theme = new QComboBox(page);
+    theme->setObjectName("rendererTheme");
+    theme->addItems({QStringLiteral("浅色"),QStringLiteral("深色")});
+    theme->setCurrentIndex(QSettings().value("appearance/dark",false).toBool()?1:0);
+    layout->addWidget(theme);
+    connect(theme,&QComboBox::currentIndexChanged,page,[](int index){
+        QSettings().setValue("appearance/dark",index==1);
+        qApp->setStyleSheet(applicationStyleSheet(index==1));
+    });
     auto *apply = new QPushButton(QStringLiteral("应用"), page);
     apply->setObjectName(QStringLiteral("rendererApplySettings"));
     layout->addWidget(apply);
@@ -389,6 +412,7 @@ QWidget *MainWindow::buildSettingsPage()
     auto communityUrl=QSettings().value("community/sourceUrl",PresetCommunityDialog::defaultSource()).toString();
     if(communityUrl.contains("/api/v1/datasets/ARXChem/Software-List/repo/tree"))communityUrl=PresetCommunityDialog::defaultSource();
     communitySource->setText(communityUrl);layout->addWidget(communitySource);
+    layout->removeWidget(apply);layout->addWidget(apply);
     connect(apply, &QPushButton::clicked, this, [this, source,communitySource] {
         const QUrl url(communitySource->text().trimmed());if(!url.isValid() || (url.scheme()!="http" && url.scheme()!="https")){setStatus(QStringLiteral("预设源必须是有效 HTTP / HTTPS 地址。"),true);return;}
         QSettings().setValue("community/sourceUrl",url.toString());
@@ -400,7 +424,11 @@ QWidget *MainWindow::buildSettingsPage()
     auto *updates = new QPushButton(QStringLiteral("检查更新"), page);
     layout->addWidget(updates);
     connect(updates, &QPushButton::clicked, page, [page] { PortableUpdater updater(page); updater.check(); updater.exec(); });
-    return page;
+    layout->addWidget(new QLabel(QStringLiteral("组件更新"),page));
+    auto *components = new ComponentDownloads(page);
+    components->setMinimumHeight(360);
+    layout->addWidget(components);
+    return scroll;
 }
 
 void MainWindow::buildToolbar()
@@ -426,6 +454,11 @@ void MainWindow::buildToolbar()
     auto *presetsAction = bar->addAction(QStringLiteral("预设管理"));
     presetsAction->setObjectName("presetManagement");
     auto *communityAction=bar->addAction(QStringLiteral("预设社区"));connect(communityAction,&QAction::triggered,this,&MainWindow::showCommunity);
+    auto *about = bar->addAction(QStringLiteral("关于"));
+    connect(about,&QAction::triggered,this,[this]{
+        QDialog dialog(this);dialog.setWindowTitle(QStringLiteral("关于 VS Renderer"));
+        QVBoxLayout layout(&dialog);layout.addWidget(aboutLabel("VS Renderer",&dialog));dialog.exec();
+    });
     for(int index=0;index<2;++index){
         auto *toggle=bar->addAction(QStringLiteral("隐藏功能区%1").arg(index+1));toggle->setCheckable(true);toggle->setChecked(true);toggle->setObjectName(QString("rendererToggleArea%1").arg(index+1));
         connect(toggle,&QAction::triggered,this,[this,toggle,index](bool visible){
@@ -472,7 +505,6 @@ QWidget *MainWindow::buildSidebar()
     sidebar->setMinimumWidth(250);
 
     sidebar->setObjectName(QStringLiteral("processingSidebar"));
-    sidebar->setStyleSheet(QStringLiteral("#processingSidebar{background:#ffffff;border-right:1px solid #d1d1d1;}"));
     auto *layout = new QVBoxLayout(sidebar);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(1);
@@ -579,21 +611,19 @@ QWidget *MainWindow::buildParameterPanel()
     auto *parameters = new QWidget(this);
     parameters->setObjectName(QStringLiteral("rendererParameterPanel"));
     parameters->setMinimumWidth(260);
-    parameters->setStyleSheet(QStringLiteral("#rendererParameterPanel{background:#ffffff;}"));
     auto *parameterLayout = new QVBoxLayout(parameters);
     parameterLayout->setContentsMargins(0, 0, 0, 0);
     parameterLayout->setSpacing(0);
     auto *header = new QLabel(QStringLiteral("高级参数"), parameters);
     header->setFixedHeight(32);
-    header->setStyleSheet(QStringLiteral("background:#eaeaea;font-weight:600;padding:0 8px;"));
+    header->setStyleSheet(QStringLiteral("font-weight:600;padding:0 8px;"));
     parameterLayout->addWidget(header);
     parameterEditor_ = new ParameterEditor(parameters);
     auto *parameterScroll = new QScrollArea(parameters);
     parameterScroll->setObjectName(QStringLiteral("rendererParameters"));
     parameterScroll->setWidgetResizable(true);
     parameterScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    parameterScroll->setStyleSheet(QStringLiteral("QScrollArea#rendererParameters{background:#ffffff;border:0;}"));
-    parameterScroll->viewport()->setStyleSheet(QStringLiteral("background:#ffffff;"));
+    parameterScroll->setStyleSheet(QStringLiteral("QScrollArea#rendererParameters{border:0;}"));
     parameterScroll->setWidget(parameterEditor_);
     parameterLayout->addWidget(parameterScroll, 1);
     connect(parameterEditor_, &ParameterEditor::parameterChanged, this,
@@ -619,14 +649,13 @@ QWidget *MainWindow::buildWorkspace()
 
     auto *compareBar = new QWidget(workspace);
     compareBar->setFixedHeight(36);
-    compareBar->setStyleSheet(QStringLiteral("background:#f9f9f9;border-bottom:1px solid #d1d1d1;"));
     auto *compareLayout = new QHBoxLayout(compareBar);
     compareLayout->setContentsMargins(8, 2, 8, 2);
     compareLayout->setSpacing(12);
     compareLayout->addWidget(new QLabel(QStringLiteral("双路对比 · 左侧播放时钟 / 右侧 VS 同帧"), compareBar));
     runtimeStatus_ = new QLabel(QStringLiteral("就绪"), compareBar);
     runtimeStatus_->setObjectName(QStringLiteral("rendererWarmupState"));
-    runtimeStatus_->setStyleSheet(QStringLiteral("color:#5c5c5c;border:0;"));
+    runtimeStatus_->setStyleSheet(QStringLiteral("border:0;"));
     compareLayout->addWidget(runtimeStatus_);
     compareLayout->addStretch();
     syncView_ = new QCheckBox(QStringLiteral("同步视图"), compareBar);
@@ -671,7 +700,6 @@ QWidget *MainWindow::buildTransport()
     auto *transport = new QWidget(this);
     transport->setObjectName(QStringLiteral("rendererTransport"));
     transport->setMinimumHeight(76);
-    transport->setStyleSheet(QStringLiteral("background:#f9f9f9;border-top:1px solid #d1d1d1;"));
     auto *layout = new QVBoxLayout(transport);
     layout->setContentsMargins(8, 2, 8, 2);
     layout->setSpacing(2);

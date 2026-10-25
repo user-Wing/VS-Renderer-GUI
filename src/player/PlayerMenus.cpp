@@ -1,4 +1,5 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerAiSubtitles.h"
 #include "player/PlayerMenu.h"
 #include "player/PlayerDiscMenu.h"
 #include "player/PlayerTracks.h"
@@ -14,6 +15,7 @@
 #include <QActionGroup>
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QDateTime>
 #include <QFileDialog>
@@ -35,6 +37,7 @@
 #include <QColorDialog>
 #include <QPushButton>
 #include <QSlider>
+#include <QMessageBox>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <algorithm>
@@ -89,21 +92,76 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     passThrough->addAction(tr("D3D11 原生"),this,[this]{loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));});
 #else
     auto *presets=PlayerMenu::add(menu,tr("VapourSynth 预设"));
-    const auto presetMenu=[&](const QString &title,const QString &directory) {auto *list=PlayerMenu::add(presets,title);const QDir dir(directory);auto names=dir.entryList({"*.vpy"},QDir::Files,QDir::Name);if(directory.endsWith("/builtin")){names.removeAll("Anime.vpy");names.removeAll("Realistic.vpy");names.prepend("Realistic.vpy");names.prepend("Anime.vpy");}for(const auto &name:names){if(directory.endsWith("/builtin") && name!="Anime.vpy" && name!="Realistic.vpy" && !name.startsWith("Anime-"))continue;auto label=name;if(directory.endsWith("/builtin")){if(name=="Anime.vpy")label=tr("Anime · 自动切换");else if(name.startsWith("Anime-")){const int stage=name.mid(6,1).toInt();if(stage>=0 && stage<6)label=tr("手动 · %1").arg(qualityNames().at(stage));}}auto *action=list->addAction(label,this,[this,path=dir.filePath(name)]{loadPreset(path);});action->setCheckable(true);action->setChecked(QFileInfo(preset_).absoluteFilePath()==QFileInfo(dir.filePath(name)).absoluteFilePath());if(directory.endsWith("/builtin") && (name=="Anime.vpy" || (name.startsWith("Anime-") && name.mid(6,1).toInt()<4)) && !animeSourceSupported()){action->setEnabled(false);action->setToolTip(tr("源视频超过 2160p；Anime4K 专门测试请使用自定义预设。"));}}if(list->isEmpty()){auto *empty=list->addAction(tr("暂无预设"));empty->setEnabled(false);}return list;};
-    presetMenu(tr("开发者内置"),QDir(PresetStore::directory()).filePath("builtin"));auto *user=presetMenu(tr("用户自定义"),PresetStore::directory());user->addSeparator();user->addAction(tr("加载 VPY 文件…"),this,[this]{const auto file=QFileDialog::getOpenFileName(this,tr("加载 VPY"),PresetStore::directory(),"VapourSynth (*.vpy)");if(!file.isEmpty())loadPreset(file);});
-    presets->addAction(tr("停用渲染 · Jinc 直通"),this,[this]{loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-4-Jinc.vpy"));});
-    presets->addAction(tr("停用渲染 · D3D11 直通"),this,[this]{loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));});presets->setEnabled(!imageMode_);
+    const auto presetMenu=[&](const QString &title,const QString &directory) {
+        auto *list=PlayerMenu::add(presets,title);
+        QDirIterator files(directory,{"*.vpy"},QDir::Files|QDir::NoSymLinks,QDirIterator::Subdirectories);
+        while(files.hasNext()) {
+            const auto path=files.next();const auto relative=QDir(directory).relativeFilePath(path);
+            if(relative.startsWith("builtin/") || relative.startsWith("Community/",Qt::CaseInsensitive))continue;
+            auto *action=list->addAction(relative,this,[this,path]{loadPreset(path);});
+            action->setToolTip(PresetStore::description(path));
+            action->setCheckable(true);action->setChecked(QFileInfo(preset_)==QFileInfo(path));
+        }
+        if(list->isEmpty())list->addAction(tr("暂无预设"))->setEnabled(false);
+        return list;
+    };
+    auto *user=presetMenu(tr("用户自定义"),PresetStore::directory());
+    presetMenu(tr("社区下载"),QDir(PresetStore::directory()).filePath("Community"));
+    user->addSeparator();user->addAction(tr("加载 VPY 文件…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("加载 VPY"),PresetStore::directory(),"VapourSynth (*.vpy)");if(!path.isEmpty())loadPreset(path);});
+    presets->setEnabled(!imageMode_);
 #endif
+    auto *processing=PlayerMenu::add(menu,tr("图像处理"));
+    auto *scalingFilters=PlayerMenu::add(processing,tr("缩放滤镜"));
+    auto *scalingGroup=new QActionGroup(scalingFilters);
+    const QStringList animeFiles{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
+    const auto scaleChoice=[&](QMenu *folder,int stage){
+        const auto path=QDir(PresetStore::directory()).filePath("builtin/"+animeFiles[stage]);
+        auto *action=folder->addAction(qualityNames().at(stage),this,[this,path]{loadPreset(path);});
+        action->setToolTip(PresetStore::description(path));action->setCheckable(true);
+        action->setChecked(fixedAnimeStage()==stage);scalingGroup->addAction(action);
+        if(stage!=4 && stage!=5 && !animeSourceSupported())action->setEnabled(false);
+    };
 #ifndef VSR_LITE_PLAYER
-    auto *processing=PlayerMenu::add(menu,tr("图像处理"));auto *interpolation=PlayerMenu::add(processing,tr("补帧"));
-    auto *interpolationGroup=new QActionGroup(interpolation);
-    const auto interpolationChoice=[&](const QString &name,int stage,bool automatic,int renderer=0){auto *action=interpolation->addAction(name,this,[this,stage,automatic,renderer]{setInterpolation(stage,automatic,renderer);});action->setCheckable(true);action->setChecked(automatic?(interpolationAuto_ && interpolationRenderer()==renderer):(stage<0?interpolationStage()<0:!interpolationAuto_ && interpolationStage()==stage%4 && interpolationRenderer()==stage/4));interpolationGroup->addAction(action);};
-    interpolationChoice(tr("自动补帧 · Jinc"),std::clamp(settings_->value("player/interpolationStart",0).toInt(),0,3),true,0);interpolationChoice(tr("自动补帧 · D3D11"),std::clamp(settings_->value("player/interpolationStart",0).toInt(),0,3),true,1);interpolation->addSeparator();
-    for(int stage=0;stage<8;++stage)interpolationChoice(interpolationNames().at(stage%4)+(stage<4?tr(" · Jinc"):tr(" · D3D11")),stage,false);
-    interpolation->addSeparator();interpolationChoice(tr("关闭"),-1,false);
+    const auto autoPath=QDir(PresetStore::directory()).filePath("builtin/Anime.vpy");
+    auto *automatic=scalingFilters->addAction(tr("自动切换（推荐）"),this,[this,autoPath]{loadPreset(autoPath);});
+    automatic->setToolTip(PresetStore::description(autoPath));automatic->setCheckable(true);automatic->setChecked(profile()=="Anime" && fixedAnimeStage()<0);scalingGroup->addAction(automatic);
+    const QStringList groups{tr("CNN 模式"),tr("no CNN 模式"),tr("1X 直通模式")};
+    const QList<QList<int>> stages{{0,1},{2,3},{6,7}};
+    for(int n=0;n<groups.size();++n){scalingFilters->addSeparator();auto *folder=PlayerMenu::add(scalingFilters,groups[n]);for(int stage:stages[n])scaleChoice(folder,stage);}
+#endif
+    scalingFilters->addSeparator();auto *passThroughFilters=PlayerMenu::add(scalingFilters,tr("常规直通模式"));
+    scaleChoice(passThroughFilters,4);scaleChoice(passThroughFilters,5);
+#ifndef VSR_LITE_PLAYER
+    auto *interpolation=PlayerMenu::add(processing,tr("补帧"));auto *interpolationGroup=new QActionGroup(interpolation);
+    const auto interpolationChoice=[&](QMenu *folder,const QString &name,int stage,bool automatic,int renderer){
+        auto *action=folder->addAction(name,this,[this,stage,automatic,renderer]{setInterpolation(stage,automatic,renderer);});
+        action->setCheckable(true);action->setChecked(interpolationStage()==stage && interpolationAuto_==automatic && interpolationRenderer()==renderer);interpolationGroup->addAction(action);
+        const QStringList files{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};
+        auto nameFile=files[stage];if(renderer)nameFile.replace(".vpy","-D3D11.vpy");action->setToolTip(PresetStore::description(QDir(PresetStore::directory()).filePath("builtin/"+nameFile)));return action;
+    };
+    auto *autoInterpolation=PlayerMenu::add(interpolation,tr("自动切换"));
+    for(int renderer=0;renderer<2;++renderer)interpolationChoice(autoInterpolation,renderer?tr("D3D11 模式"):tr("Jinc 模式"),0,true,renderer)->setEnabled(!interpolationStages(renderer).isEmpty());
+    for(int renderer=0;renderer<2;++renderer){interpolation->addSeparator();auto *folder=PlayerMenu::add(interpolation,renderer?tr("D3D11 模式"):tr("Jinc 模式"));for(int stage=0;stage<4;++stage)interpolationChoice(folder,interpolationNames().at(stage),stage,false,renderer);}
+    interpolation->addSeparator();interpolation->addAction(tr("关闭"),this,[this]{setInterpolation(-1,false);});
+    auto *super=PlayerMenu::add(processing,tr("超分补帧组合"));
+    const QStringList superFiles{"Super-0-A4K-RIFE-A4K.vpy","Super-1-A4K-RIFE-Jinc.vpy","Super-2-A4K-RIFE-D3D11.vpy","Super-3-RIFE-A4K.vpy"};
+    const QStringList superNames{tr("Anime4K 2160 → RIFE 整帧540p → Anime4K 2160"),tr("Anime4K 2160 → RIFE 整帧540p → Jinc 2160"),tr("Anime4K 2160 → RIFE 整帧540p → D3D11 2160"),tr("1080 → RIFE 半尺寸推理/保留原帧 → Anime4K 2160")};
+    for(int stage=0;stage<superFiles.size();++stage){const auto path=QDir(PresetStore::directory()).filePath("builtin/"+superFiles[stage]);auto *action=super->addAction(superNames[stage],this,[this,path]{loadPreset(path);});action->setCheckable(true);action->setChecked(superInterpolationStage()==stage);action->setToolTip(PresetStore::description(path));}
+#endif
     bool hasVideo=false;for(const auto &entry:media_.value("streams").toArray())if(entry.toObject().value("type").toString()=="video")hasVideo=true;
     processing->setEnabled(!imageMode_ && !madvrMode() && !networkSource() && (source_.isEmpty() || hasVideo));
-#endif
+    auto *hdrMapping=PlayerMenu::add(processing,tr("HDR 映射"));
+    auto *hdrEnable=hdrMapping->addAction(tr("RTX TrueHDR · SDR→HDR"));hdrEnable->setCheckable(true);hdrEnable->setChecked(settings_->value("render/trueHdr",false).toBool());
+    connect(hdrEnable,&QAction::triggered,this,[this](bool enabled){
+        if(enabled && (!direct_ || scalingAlgorithm()!=7)){QMessageBox::information(this,tr("HDR 映射"),tr("请切换到d3d11模式"));return;}
+        settings_->setValue("render/trueHdr",enabled);applyScaling();(direct_?clock_:output_)->redraw();
+    });
+    const auto hdrState=(direct_?clock_:output_)->videoEnhancementStatus(true);
+    const QStringList hdrReasons{tr("已就绪"),tr("尚未请求"),tr("当前显卡不是 NVIDIA"),tr("驱动不支持"),tr("源视频不是 SDR"),tr("当前输出不是 HDR"),tr("源像素格式不支持"),tr("驱动拒绝处理")};
+    auto *hdrStatus=hdrMapping->addAction(hdrState.active?tr("状态：内核已启用"):tr("状态：未生效 · %1").arg(hdrReasons.value(int(hdrState.reason),tr("未知状态"))));hdrStatus->setEnabled(false);
+    hdrMapping->addAction(tr("详细配置…"),this,[this]{setProperty("settingsPage",5);showSettings();});
+    auto *vsr=processing->addAction(tr("RTX Video Super Resolution"));vsr->setCheckable(true);vsr->setChecked(settings_->value("render/rtxVsr",false).toBool());
+    connect(vsr,&QAction::triggered,this,[this](bool enabled){settings_->setValue("render/rtxVsr",enabled);applyScaling();(direct_?clock_:output_)->redraw();});
     auto *audio=PlayerMenu::add(menu,tr("音频设置"));audio->setEnabled(!imageMode_ && !source_.isEmpty());
     auto *audioTracks=PlayerMenu::add(audio,tr("声音轨道"));auto *audioGroup=new QActionGroup(audioTracks);
     const auto selected=clock_->snapshot().selectedAudioStream;
@@ -115,6 +173,21 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     auto *muted=audio->addAction(tr("静音"));muted->setCheckable(true);muted->setChecked(mute_->isChecked());connect(muted,&QAction::toggled,mute_,&QPushButton::setChecked);
     audio->addAction(tr("均衡器…"),this,&PlayerWindow::showEqualizer);
     auto *subtitles=PlayerMenu::add(menu,tr("字幕设置"));
+#ifndef VSR_LITE_PLAYER
+    auto *ai=subtitles->addAction(tr("AI 实时字幕"));ai->setCheckable(true);ai->setChecked(aiSubtitles_ && aiSubtitles_->active());
+    ai->setEnabled(!source_.isEmpty() && !madvrMode());
+    connect(ai,&QAction::triggered,this,[this](bool enabled){
+        if(!aiSubtitles_){
+            aiSubtitles_=new PlayerAiSubtitles(this);
+            aiCaption_=new QLabel(pane_->surface());aiCaption_->setObjectName("playerAiCaption");aiCaption_->setAttribute(Qt::WA_NativeWindow);aiCaption_->setAttribute(Qt::WA_TransparentForMouseEvents);aiCaption_->setTextFormat(Qt::PlainText);aiCaption_->setWordWrap(true);aiCaption_->setAlignment(Qt::AlignCenter);aiCaption_->setStyleSheet("background:rgba(0,0,0,170);color:white;font-size:24px;padding:8px;");aiCaption_->hide();
+            connect(aiSubtitles_,&PlayerAiSubtitles::status,message_,&QLabel::setText);
+            connect(aiSubtitles_,&PlayerAiSubtitles::caption,this,[this](const QString &text){const auto size=pane_->surface()->size();aiCaption_->setGeometry(24,qMax(0,size.height()-180),qMax(1,size.width()-48),120);aiCaption_->setText(text);aiCaption_->setVisible(!text.isEmpty() && subtitleVisible_);aiCaption_->raise();});
+        }
+        if(!enabled){aiSubtitles_->stop();return;}
+        const auto error=aiSubtitles_->start(clock_.get(),settings_->value("ai/package").toString());
+        if(!error.isEmpty()){setError(error);setProperty("settingsPage",8);showSettings();}
+    });
+#endif
     const auto matchedSubtitles=networkSource() || imageMode_ || audioMode_ || source_.isEmpty()?QStringList{}:playerMatchingSubtitles(source_);
     const auto tracks=[&](const QString &title,int slot) {auto *list=PlayerMenu::add(subtitles,title);auto *group=new QActionGroup(list);group->setExclusive(true);auto *off=list->addAction(tr("无"),this,[this,slot]{selectSubtitle(slot,-1);});off->setCheckable(true);off->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==-1);group->addAction(off);
         const auto external=slot==0?externalSubtitle_:externalSecondarySubtitle_;
@@ -125,7 +198,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
         for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()!="subtitle")continue;const int index=stream.value("index").toInt();auto *action=list->addAction(playerTrackLabel(stream,ordinal++),this,[this,slot,index]{selectSubtitle(slot,index);});action->setToolTip(QString("%1 · stream 0:%2").arg(stream.value("codec").toString()).arg(index));action->setCheckable(true);action->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==index);group->addAction(action);}
     };
     tracks(tr("选择字幕 · 底部"),0);tracks(tr("选择次字幕 · 顶部"),1);
-    auto *visible=subtitles->addAction(tr("显示字幕"));visible->setCheckable(true);visible->setChecked(subtitleVisible_);connect(visible,&QAction::toggled,this,[this](bool on){subtitleVisible_=on;settings_->setValue("subtitle/visible",on);});
+    auto *visible=subtitles->addAction(tr("显示字幕"));visible->setCheckable(true);visible->setChecked(subtitleVisible_);connect(visible,&QAction::toggled,this,[this](bool on){subtitleVisible_=on;settings_->setValue("subtitle/visible",on);if(aiCaption_)aiCaption_->setVisible(on && !aiCaption_->text().isEmpty());});
     subtitles->addAction(tr("切换首 / 次字幕"),this,[this]{{const auto primary=primarySubtitle_;std::swap(externalSubtitle_,externalSecondarySubtitle_);std::swap(externalSubtitleTracks_[0],externalSubtitleTracks_[1]);std::swap(externalSubtitleIndex_[0],externalSubtitleIndex_[1]);selectSubtitle(0,secondarySubtitle_);selectSubtitle(1,primary);}});
     subtitles->addAction(tr("挂载字幕文件…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("挂载字幕"),{},"Subtitles (*.ass *.ssa *.srt *.sup *.mks)");if(!path.isEmpty())attachSubtitle(path);});
     subtitles->addAction(tr("卸载挂载字幕，恢复内置选择"),this,[this]{externalSubtitle_.clear();externalSecondarySubtitle_.clear();externalSubtitleTracks_[0]={};externalSubtitleTracks_[1]={};externalSubtitleIndex_[0]=externalSubtitleIndex_[1]=-1;externalChapters_={};media_=QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();applyBlurayMetadata();timeline_->setProperty("chapters",media_.value("chapters").toArray());audioSubtitle_->hide();selectSubtitle(0,-1);selectSubtitle(1,-1);})->setEnabled(!externalSubtitle_.isEmpty() || !externalSecondarySubtitle_.isEmpty());
@@ -143,14 +216,18 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
             specified->addAction(text,this,[this,source,format]{const auto directory=QFileDialog::getExistingDirectory(this,tr("选择截图保存文件夹"),screenshotDirectory());if(!directory.isEmpty())captureImage(source,directory,format);})->setEnabled(!source || !madvrMode() || imageMode_);
         }
     }
-    auto *scaling=PlayerMenu::add(menu,tr("缩放算法"));const QStringList algorithms{"Nearest","Bilinear","Cubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11 Native","Lanczos4(4 taps)"};
-    for(int side=0;side<2;++side){auto *list=PlayerMenu::add(scaling,side?tr("缩小"):tr("放大"));auto *group=new QActionGroup(list);const QString key=side?"render/downscale":"render/upscale";for(int n=0;n<algorithms.size();++n){
+    auto *scaling=PlayerMenu::add(passThroughFilters,tr("其他缩放算法"));const QStringList algorithms{"Nearest","Bilinear","Cubic","Lanczos (3 Taps)","Jinc","Spline36","Super-XBR","D3D11 Native","Lanczos (4 Taps)"};
+    for(int side=0;side<2;++side){auto *list=PlayerMenu::add(scaling,side?tr("缩小"):tr("放大"));auto *group=new QActionGroup(list);const QString key=side?"render/d3d11Downscale":"render/d3d11Upscale";for(int n:{0,1,2,4,5,6,7,3,8}){
 #ifdef VSR_LITE_PLAYER
         if(n != 4 && n != 7) continue;
 #endif
-        auto *action=list->addAction(algorithms[n]);action->setCheckable(true);action->setChecked((interpolationStage()>=0?(interpolationRenderer()?7:4):fixedAnimeStage()>=4?(fixedAnimeStage()==4?4:7):settings_->value(key,4).toInt())==n);group->addAction(action);connect(action,&QAction::triggered,this,[this,key,n]{settings_->setValue(key,n);if(fixedAnimeStage()<0)qualityStage_=n==7?5:direct_?4:qualityStage_;suspendQualityCheck();if(n==7 && fixedAnimeStage()<0 && !profile().isEmpty() && !source_.isEmpty())refreshScript();else applyScaling();(direct_?clock_:output_)->redraw();});}list->setEnabled(!madvrMode() && fixedAnimeStage()<4 && interpolationStage()<0);}
+        auto *action=list->addAction(algorithms[n]);action->setCheckable(true);action->setChecked(scalingAlgorithm(side)==n);group->addAction(action);
+        connect(action,&QAction::triggered,this,[this,key,n]{
+            if(!direct_ || qualityStage_!=5)return;settings_->setValue(key,n);
+            suspendQualityCheck();applyScaling();updateAlgorithmBadges();(direct_?clock_:output_)->redraw();
+        });}list->setEnabled(!madvrMode() && direct_ && qualityStage_==5);}
     auto *ring=scaling->addAction(tr("Anti-ringing · relaxed(仅 Jinc)"));ring->setCheckable(true);ring->setChecked(settings_->value("render/antiring",true).toBool());ring->setEnabled(!madvrMode() && fixedAnimeStage()!=5);connect(ring,&QAction::toggled,this,[this](bool enabled){settings_->setValue("render/antiring",enabled);(direct_?clock_:output_)->setAntiRinging(enabled);(direct_?clock_:output_)->redraw();});
-    scaling->setEnabled(!imageMode_);
+    scaling->setEnabled(!imageMode_ && !madvrMode() && direct_ && qualityStage_==5);
     menu->addSeparator();menu->addAction(isFullScreen()?tr("退出全屏 · Enter / Esc"):tr("全屏 · Enter"),this,&PlayerWindow::toggleFullscreen);menu->addAction(tr("设置…"),this,&PlayerWindow::showSettings);menu->popup(position);
 }
 void PlayerWindow::showSubtitleStyle() {

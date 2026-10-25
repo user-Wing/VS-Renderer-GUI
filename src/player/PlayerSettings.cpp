@@ -1,4 +1,6 @@
 #include "player/PlayerWindow.h"
+#include "ui/About.h"
+#include "player/PlayerAiSubtitles.h"
 #include "player/PlayerChromePanel.h"
 #include "player/PlayerDiscMenu.h"
 #include "backend/ThreeFpPlayer.h"
@@ -26,6 +28,7 @@
 #include <QListWidget>
 #include <QStackedWidget>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QComboBox>
@@ -117,7 +120,7 @@ bool PlayerWindow::loadConfiguration(const QString &path) {
 }
 void PlayerWindow::showSettings() {
     QDialog dialog(this); dialog.setObjectName("playerSettings");dialog.setWindowTitle(tr("VS Player 设置 · %1").arg(VSR_VERSION));dialog.resize(880,620);
-    auto *outer=new QVBoxLayout(&dialog);auto *body=new QHBoxLayout;outer->addLayout(body,1);auto *categories=new QListWidget(&dialog);categories->addItems({tr("基本设置"),tr("主题设置"),tr("播放设置"),tr("性能设置"),tr("解码设置"),tr("渲染设置"),tr("缓存设置"),tr("文件关联"),tr("组件下载")});categories->setFixedWidth(145);body->addWidget(categories);
+    auto *outer=new QVBoxLayout(&dialog);auto *body=new QHBoxLayout;outer->addLayout(body,1);auto *categories=new QListWidget(&dialog);categories->addItems({tr("基本设置"),tr("主题设置"),tr("播放设置"),tr("性能设置"),tr("解码设置"),tr("渲染设置"),tr("缓存设置"),tr("文件关联"),tr("字幕设置"),tr("组件下载")});categories->setFixedWidth(145);body->addWidget(categories);
     categories->ensurePolished();int categoryWidth=145;for(int i=0;i<categories->count();++i)categoryWidth=qMax(categoryWidth,categories->fontMetrics().horizontalAdvance(categories->item(i)->text())+32);categories->setFixedWidth(categoryWidth);
     auto *stack=new QStackedWidget(&dialog);body->addWidget(stack,1);connect(categories,&QListWidget::currentRowChanged,stack,&QStackedWidget::setCurrentIndex);
     const auto page=[&] {auto *scroll=new QScrollArea(stack);scroll->setWidgetResizable(true);auto *widget=new QWidget(scroll);scroll->setWidget(widget);stack->addWidget(scroll);auto *form=new QFormLayout(widget);form->setVerticalSpacing(14);form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);return form;};
@@ -185,10 +188,19 @@ void PlayerWindow::showSettings() {
 #endif
     auto *decodeInfo=new QLabel(tr("VS 源解码仍由 VPY 定义；LAV 视频选项用于本地文件播放时钟图。音频可独立使用 LAVAudio.ax。网络固定 3FP；内置原生视频路径使用 3FP。倍速音频使用 3FP / atempo。madVR 视频固定 LAV。"),&dialog);decodeInfo->setWordWrap(true);decode->addRow(decodeInfo);
     auto *render=page();auto *renderer=new QComboBox(&dialog);renderer->addItems({"VS","madVR"});renderer->setCurrentText(settings_->value("player/renderer","VS").toString());render->addRow(tr("视频渲染器"),renderer);
+    auto *hdrInfo=new QLabel(tr("RTX TrueHDR：按上游的 SDR→HDR 方案处理，仅在 D3D11 直通启用。源像素格式、NVIDIA 驱动和 Windows HDR 输出需满足内核条件。NV Video HDR 的中灰参数不适用于此接口。"),&dialog);hdrInfo->setObjectName("playerHdrMapping");hdrInfo->setWordWrap(true);render->addRow(tr("HDR 映射"),hdrInfo);
+    auto *hdrDetails=new QPushButton(tr("打开 HDR / 色彩输出配置…"),&dialog);render->addRow(hdrDetails);connect(hdrDetails,&QPushButton::clicked,this,&PlayerWindow::showColorSettings);
     auto *stableViewport=new QCheckBox(tr("划出播放列表/底部控制时不改变渲染分辨率"),&dialog);stableViewport->setObjectName("playerStableViewport");stableViewport->setChecked(settings_->value("render/stableViewport",true).toBool());stableViewport->setToolTip(tr("控制界面覆盖视频，保持视频视口和渲染分辨率，避免重新分配渲染资源及重建增强链。"));render->addRow(stableViewport);
-    auto *animeStage=new QComboBox(&dialog);animeStage->setObjectName("playerAnimeStage");animeStage->addItems(qualityNames());animeStage->setCurrentIndex(std::clamp(settings_->value("player/animeStage",0).toInt(),0,5));render->addRow(tr("Anime 起始档位"),animeStage);
-    auto *interpolationStart=new QComboBox(&dialog);interpolationStart->setObjectName("playerInterpolationStart");interpolationStart->addItems(interpolationNames().mid(0,4));interpolationStart->setCurrentIndex(std::clamp(settings_->value("player/interpolationStart",0).toInt(),0,3));render->addRow(tr("补帧起始档位"),interpolationStart);
-    auto *animeInfo=new QLabel(tr("仅作用于自动 Anime 预设；持续丢帧超过 5% 按列表顺序降载。开发者内置的六个手动版本固定档位，不自动切换。no CNN 使用梯度 / DoG 线条处理，不执行神经网络。"),&dialog);animeInfo->setWordWrap(true);render->addRow(animeInfo);
+    auto *animeStages=new QListWidget(&dialog);animeStages->setObjectName("playerAnimeStages");
+    const auto allowed=settings_->value("player/animeStages",QStringList{"0","1","2","3","6","7","4","5"}).toStringList();
+    for(int stage:{0,1,2,3,6,7,4,5}){auto *item=new QListWidgetItem(qualityNames().at(stage),animeStages);item->setData(Qt::UserRole,stage);item->setCheckState(stage==5 || allowed.contains(QString::number(stage))?Qt::Checked:Qt::Unchecked);if(stage==5)item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);if(stage==settings_->value("player/animeStage",0).toInt())animeStages->setCurrentItem(item);}
+    animeStages->ensurePolished();animeStages->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);animeStages->setFixedHeight(animeStages->count()*qMax(animeStages->sizeHintForRow(0),animeStages->fontMetrics().height()+12)+2*animeStages->frameWidth()+4);
+    render->addRow(tr("自动切换参与档位"),animeStages);
+    auto *interpolationStages=new QWidget(&dialog);interpolationStages->setObjectName("playerInterpolationStages");auto *stageGrid=new QGridLayout(interpolationStages);stageGrid->setContentsMargins(0,0,0,0);
+    QList<QCheckBox*> interpolationChoices;const QStringList stageLabels{tr("RIFE"),tr("RIFE 半尺寸"),"MVTools HQ","MVTools LQ"};
+    for(int output=0;output<2;++output){stageGrid->addWidget(new QLabel(output?"D3D11":"Jinc",interpolationStages),output,0);const auto allowedStages=this->interpolationStages(output);for(int stage=0;stage<4;++stage){auto *choice=new QCheckBox(stageLabels[stage],interpolationStages);choice->setObjectName(QString("playerInterpolationStage%1_%2").arg(output).arg(stage));choice->setToolTip(interpolationNames().at(stage));choice->setChecked(allowedStages.contains(QString::number(stage)));stageGrid->addWidget(choice,output,stage+1);interpolationChoices<<choice;}}
+    render->addRow(tr("补帧自动切换档位"),interpolationStages);
+    auto *animeInfo=new QLabel(tr("单击列表选择起始档位；勾选参与自动降载，D3D11 必选。补帧按各行勾选顺序降载。\n分辨率≥2160p时，禁用内置Anime4k滤镜。手动启用请使用自定义Vapoursynth预设。"),&dialog);animeInfo->setWordWrap(true);render->addRow(animeInfo);
     auto *antiring=new QCheckBox(tr("Anti-ringing · relaxed(仅 Jinc，强度 0.5)"),&dialog);antiring->setChecked(settings_->value("render/antiring",true).toBool());render->addRow(antiring);
     auto *renderInfo=new QLabel(tr("VS：VPY 实时滤镜及原生 D3D11 呈现。\nmadVR：直接加载随附 madVR64.ax，处理设置交给 madVR；VS 预设不生效。\n默认放大/缩小采用 Jinc，同尺寸跳过缩放。\n抗振铃采用开放的局部范围约束，不宣称复刻 madVR 专有实现。"),&dialog);renderInfo->setWordWrap(true);render->addRow(renderInfo);
 #ifdef VSR_LITE_PLAYER
@@ -196,12 +208,12 @@ void PlayerWindow::showSettings() {
     core->setEnabled(false);audioCore->setEnabled(false);
     decodeInfo->setText(tr("3FP 原生解码与显示，支持 D3D11 硬解和 FFmpeg 软解。"));
     output->setItemText(0,tr("保持原生输出(默认)"));
-    render->labelForField(animeStage)->setVisible(false);animeStage->hide();
-    render->labelForField(interpolationStart)->setVisible(false);interpolationStart->hide();animeInfo->hide();
+    render->labelForField(animeStages)->setVisible(false);animeStages->hide();
+    render->labelForField(interpolationStages)->setVisible(false);interpolationStages->hide();animeInfo->hide();
     resizeFirst->hide();resizeExplanation->hide();frames->hide();performance->labelForField(frames)->hide();
     limitInfo->setText(tr("原生解码器使用自身的有界缓冲队列。"));
     renderInfo->setText(tr("Jinc / D3D11 两档；默认 D3D11 原生直通。"));
-    delete categories->takeItem(8);
+    delete categories->takeItem(9);
 #endif
     auto *cache=page();auto *cacheMode=new QComboBox(&dialog);cacheMode->setObjectName("playerCacheMode");cacheMode->addItem(tr("软件目录(默认)"),"default");cacheMode->addItem(tr("自定义目录"),"custom");cacheMode->setCurrentIndex(settings_->value("cache/path").toString().isEmpty()?0:1);cache->addRow(tr("索引缓存位置"),cacheMode);
     auto *cachePath=new QLineEdit(playerCacheDirectory(*settings_),&dialog);cachePath->setObjectName("playerCachePath");cache->addRow(tr("存储路径"),cachePath);auto *browse=new QPushButton(tr("浏览…"),&dialog);cache->addRow(browse);connect(browse,&QPushButton::clicked,&dialog,[&]{const auto directory=QFileDialog::getExistingDirectory(&dialog,tr("选择索引缓存目录"),cachePath->text());if(!directory.isEmpty()){cachePath->setText(directory);cacheMode->setCurrentIndex(1);}});
@@ -215,10 +227,23 @@ void PlayerWindow::showSettings() {
     auto *registerButton=new QPushButton(tr("注册所选格式到当前用户"),&dialog);registerButton->setObjectName("playerRegisterAssociations");associations->addRow(registerButton);connect(registerButton,&QPushButton::clicked,&dialog,[&]{QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();if(registerPlayerAssociations(extensions,QDir(QCoreApplication::applicationDirPath()).filePath("vs-player.exe"))){settings_->setValue("associations/extensions",extensions);setError(tr("格式已注册；请在 Windows 默认应用中选择 VS Player。"));}else setError(tr("文件关联注册失败。"));});
     auto *defaultsButton=new QPushButton(tr("打开 Windows 默认应用…"),&dialog);associations->addRow(defaultsButton);connect(defaultsButton,&QPushButton::clicked,&dialog,[]{QDesktopServices::openUrl(QUrl("ms-settings:defaultapps"));});
     auto *associationInfo=new QLabel(tr("注册到当前用户，无需管理员权限。Windows 最终默认程序由用户选择；取消选择会移除 VS Player 的打开方式入口，不改写其他程序的默认关联。"),&dialog);associationInfo->setWordWrap(true);associations->addRow(associationInfo);
+    auto *subtitlePage=page();
+    auto *srtStyle=new QPushButton(tr("SRT 字幕样式设置…"),&dialog);srtStyle->setObjectName("playerSrtStyle");subtitlePage->addRow(srtStyle);connect(srtStyle,&QPushButton::clicked,this,&PlayerWindow::showSubtitleStyle);
 #ifndef VSR_LITE_PLAYER
-    stack->addWidget(new ComponentDownloads(stack));
+    auto *aiPackage=new QLineEdit(settings_->value("ai/package").toString(),&dialog);aiPackage->setObjectName("playerAiPackage");subtitlePage->addRow(tr("AI 字幕扩展包目录"),aiPackage);
+    auto *aiBrowse=new QPushButton(tr("选择 AI 字幕扩展包…"),&dialog);subtitlePage->addRow(aiBrowse);
+    connect(aiBrowse,&QPushButton::clicked,&dialog,[&]{const auto path=QFileDialog::getExistingDirectory(&dialog,tr("选择含 ai-subtitles.json 的目录"),aiPackage->text());if(!path.isEmpty())aiPackage->setText(path);});
+    connect(aiPackage,&QLineEdit::editingFinished,&dialog,[&]{settings_->setValue("ai/package",aiPackage->text().trimmed());});
+    auto *aiInfo=new QLabel(tr("AI 字幕模型与推理运行时需手动下载，不随软件打包。扩展包需配置 worker、python、llamaServer、model、mmproj；启动后检查推理后端和实时速度。"),&dialog);aiInfo->setWordWrap(true);subtitlePage->addRow(aiInfo);
+    auto *aiGuide=new QPushButton(tr("打开 AI 字幕组件准备指南"),&dialog);subtitlePage->addRow(aiGuide);
+    connect(aiGuide,&QPushButton::clicked,&dialog,[]{QDesktopServices::openUrl(QUrl::fromLocalFile(QDir(QCoreApplication::applicationDirPath()).filePath("runtime/ai-subtitles/README.md")));});
+    auto *aiModels=new QPushButton(tr("手动下载模型与 mmproj…"),&dialog);subtitlePage->addRow(aiModels);connect(aiModels,&QPushButton::clicked,&dialog,[]{QDesktopServices::openUrl(QUrl("https://huggingface.co/ggml-org/Qwen3-ASR-0.6B-GGUF/tree/main"));});
+    auto *aiRuntime=new QPushButton(tr("手动下载 llama.cpp 推理运行时…"),&dialog);subtitlePage->addRow(aiRuntime);connect(aiRuntime,&QPushButton::clicked,&dialog,[]{QDesktopServices::openUrl(QUrl("https://github.com/ggml-org/llama.cpp/releases"));});
+    page()->addRow(new ComponentDownloads(stack));
 #endif
-    categories->setCurrentRow(0);
+    categories->addItem(tr("关于"));
+    page()->addRow(aboutLabel("VS Player",&dialog));
+    const int requestedPage=property("settingsPage").isValid()?property("settingsPage").toInt():0;setProperty("settingsPage",QVariant());categories->setCurrentRow(qBound(0,requestedPage,categories->count()-1));
     auto *footer=new QHBoxLayout;auto *load=new QPushButton(tr("加载预设…"),&dialog);load->setObjectName("playerLoadSettings");auto *save=new QPushButton(tr("保存预设…"),&dialog);save->setObjectName("playerSaveSettings");footer->addWidget(load);footer->addWidget(save);footer->addStretch();
     auto *cancel=new QPushButton(tr("取消(&N)"),&dialog);cancel->setObjectName("playerCancelSettings");auto *ok=new QPushButton(tr("确定(&Y)"),&dialog);ok->setObjectName("playerConfirmSettings");ok->setDefault(true);auto *apply=new QPushButton(tr("应用(&A)"),&dialog);apply->setObjectName("playerApplySettings");footer->addWidget(cancel);footer->addWidget(ok);footer->addWidget(apply);outer->addLayout(footer);
     const auto store=[&]{settings_->setValue("decode/softwarePreScaleHeight",preScale->currentData());settings_->setValue("screenshot/path",screenshotPath->text().trimmed());settings_->setValue("basic/language",language->currentData());settings_->setValue("basic/autoplay",autoplay->isChecked());settings_->setValue("theme/chineseFont",chineseFont->currentFont().family());settings_->setValue("theme/latinFont",latinFont->currentFont().family());settings_->setValue("theme/background",background->text());settings_->setValue("theme/opacity",opacity->value());settings_->setValue("theme/bottomTransparency",100-bottomTransparency->value());settings_->setValue("theme/menuOpacity",menuOpacity->value());settings_->setValue("theme/playlistTransparency",playlistTransparency->value());settings_->setValue("playback/remember",remember->isChecked());settings_->setValue("playback/multithread",multithread->isChecked());settings_->setValue("playback/arrows",arrows->currentData());settings_->setValue("playback/ctrlSeconds",ctrl->value());settings_->setValue("playback/ctrlAltSeconds",ctrlAlt->value());settings_->setValue("cache/path",cacheMode->currentIndex()==0?QString():QFileInfo(cachePath->text()).absoluteFilePath());settings_->setValue("player/volume",volume->value());settings_->setValue("subtitle/visible",subtitles->isChecked());settings_->setValue("performance/predecode",predecode->isChecked());settings_->setValue("performance/frames",frames->value());settings_->setValue("performance/resizeBeforeEnhance",resizeFirst->isChecked());for(int n=0;n<4;++n)settings_->setValue("performance/"+keys[n],limits[n]->value());settings_->setValue("player/core",core->currentData());settings_->setValue("decode/video",core->currentData());settings_->setValue("decode/audio",audioCore->currentData());settings_->setValue("decode/mode",hardware->currentData());settings_->setValue("decode/output",output->currentData());settings_->setValue("player/renderer",
@@ -227,12 +252,17 @@ void PlayerWindow::showSettings() {
 #else
         renderer->currentText()
 #endif
-    );settings_->setValue("render/antiring",antiring->isChecked());settings_->setValue("render/stableViewport",stableViewport->isChecked());settings_->setValue("player/animeStage",animeStage->currentIndex());settings_->setValue("player/interpolationStart",interpolationStart->currentIndex());QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();settings_->setValue("associations/extensions",extensions);};
-    connect(apply,&QPushButton::clicked,&dialog,[&]{store();applySettings(true);language_->updateWidgets(&dialog);});
-    connect(save,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getSaveFileName(&dialog,tr("保存完整配置"),"vs-player.ini","INI (*.ini)");if(!file.isEmpty()){store();if(!saveConfiguration(file))setError(tr("配置保存失败。"));}});
+    );settings_->setValue("render/antiring",antiring->isChecked());settings_->setValue("render/stableViewport",stableViewport->isChecked());if(animeStages->currentItem())settings_->setValue("player/animeStage",animeStages->currentItem()->data(Qt::UserRole));QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();settings_->setValue("associations/extensions",extensions);};
+    const auto storeStages=[&]{QStringList values;for(int row=0;row<animeStages->count();++row){const auto *item=animeStages->item(row);if(item->checkState()==Qt::Checked)values<<QString::number(item->data(Qt::UserRole).toInt());}settings_->setValue("player/animeStages",values);for(int output=0;output<2;++output){QStringList stages;for(int stage=0;stage<4;++stage)if(interpolationChoices[output*4+stage]->isChecked())stages<<QString::number(stage);settings_->setValue(output?"player/interpolationStagesD3D11":"player/interpolationStagesJinc",stages);}};
+    connect(apply,&QPushButton::clicked,&dialog,[&]{storeStages();store();applySettings(true);language_->updateWidgets(&dialog);});
+    connect(save,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getSaveFileName(&dialog,tr("保存完整配置"),"vs-player.ini","INI (*.ini)");if(!file.isEmpty()){storeStages();store();if(!saveConfiguration(file))setError(tr("配置保存失败。"));}});
     connect(load,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getOpenFileName(&dialog,tr("加载完整配置"),{},"INI (*.ini)");if(!file.isEmpty()){if(loadConfiguration(file))dialog.reject();else setError(tr("配置文件无效。"));}});
     connect(ok,&QPushButton::clicked,&dialog,&QDialog::accept);connect(cancel,&QPushButton::clicked,&dialog,&QDialog::reject);
     language_->updateWidgets(&dialog);
-    if(dialog.exec()==QDialog::Accepted){store();applySettings(true);}
+    if(dialog.exec()==QDialog::Accepted){
+#ifndef VSR_LITE_PLAYER
+        settings_->setValue("ai/package",aiPackage->text().trimmed());
+#endif
+        storeStages();store();applySettings(true);}
 }
 }

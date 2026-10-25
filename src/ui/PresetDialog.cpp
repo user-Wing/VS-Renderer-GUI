@@ -61,7 +61,7 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
                 parent=folders.value(relative);
             }
             auto *item=parent?new QTreeWidgetItem(parent,{QFileInfo(file).completeBaseName()}):new QTreeWidgetItem(list,{QFileInfo(file).completeBaseName()});
-            item->setData(0,Qt::UserRole, dir.filePath(file)); item->setToolTip(0,dir.filePath(file));
+            item->setData(0,Qt::UserRole, dir.filePath(file)); item->setToolTip(0,PresetStore::description(dir.filePath(file)));
             item->setFlags(item->flags() & ~Qt::ItemIsDropEnabled);
             if (dir.filePath(file) == previous) {list->setCurrentItem(item);for(auto *p=parent;p;p=p->parent())p->setExpanded(true);}
         }
@@ -141,7 +141,7 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
         if (data.isEmpty()) { error(QStringLiteral("外部 VPY 没有预设元数据。")); return; }
         data.insert("note", note->text()); QStringList lines = text.split('\n');
         for (auto &line : lines) if (line.startsWith("# VSR_PRESET ")) line = "# VSR_PRESET " + QString::fromLatin1(QJsonDocument(data).toJson(QJsonDocument::Compact).toBase64());
-        QString message; if (!PresetStore::write(selected(), lines.join('\n'), &message)) error(message);
+        QString message; if (!PresetStore::write(selected(), lines.join('\n'), &message)) error(message); else refresh();
     });
     const auto remove = [=] { if (selected().isEmpty()) return; if (!QFile::moveToTrash(selected())) error(QStringLiteral("移入回收站失败。")); else refresh(); };
     button(QStringLiteral("删除"), remove); auto *del = new QShortcut(QKeySequence::Delete, list); connect(del, &QShortcut::activated, this, remove);

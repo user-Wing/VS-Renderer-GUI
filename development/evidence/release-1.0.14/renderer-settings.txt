@@ -1,0 +1,7 @@
+********* Start testing of TestAnalysis *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestAnalysis::initTestCase()
+PASS   : TestAnalysis::rendererSettingsPageAndVpyWarning()
+PASS   : TestAnalysis::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 1695ms
+********* Finished testing of TestAnalysis *********

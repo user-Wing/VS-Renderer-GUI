@@ -1,6 +1,6 @@
 # 版本测试台账
 
-核对日期：2026-10-18。历史轮次整理自仓库已留存报告；10月18日的软件同步/内存续修为本轮实际执行，单独列出。当前源码为 1.0.13；旧版本、旧 DLL、不同设备或不同输出尺寸的结果不自动继承到当前产物。
+核对日期：2026-10-25。历史轮次整理自仓库已留存报告；本轮上游内核同步单独列出。当前源码为 1.0.14；旧版本、旧 DLL、不同设备、电源状态或不同输出尺寸的结果不自动继承到当前产物。
 
 ## 如何读结论
 
@@ -16,6 +16,8 @@
 
 | 版本 / 基线 | 留存测试范围与结果 | 未通过、未测与解释 | 原始依据 |
 | --- | --- | --- | --- |
+| 1.0.14 / API20 main 922e4b7 + AI Native 补丁 | 帧桥10、导出9、播放器新项5、Renderer设置3、Cap新项4及扩展专项8通过；4070指定链路与NuxBox对照均有实际数据 | 非全量回归；色彩9通过1既有失败；Lite7通过5跳过；AI模型/真实3FUI/UAC/目标Intel与1650s未验收；仅部分组合达2160p48 | [本轮证据](evidence/release-1.0.14/README.md) |
+| 1.0.13续修 / API20 main 922e4b7 | 上游非AI内核、464字节快照、干净checkout构建；VS帧桥10、色彩专项8、播放生命周期9、增强模式长片逐帧6、Full BD4、Lite5 passed | 非全量回归；8K软件约33.87fps且有欠载，色彩套件两项旧首帧断言失败；AI仅单独拉取 | [本轮证据](evidence/native-upstream-20261024/summary.json) |
 | 1.0.13 / API20 PR23 | 更新器进程/清理/可见重启、压缩工具、实盘BD与AVIF专项，详见本轮记录 | Full一条旧控件身份断言在原库同样失败；未做全量回归或重跑8K性能 | [本轮证据](evidence/release-1.0.13/summary.json) |
 | 1.0.12 / API20 PR23 | BD整卷定位/按段索引/菜单续播；Jinc/无音轨VS；Anime预取；软件内核/像素/生命周期聚焦回归，详见下表 | 未运行全量Full播放器套件；8K48软件仍非实时；P/E调度等未测 | [BD](history.md#record-docs-update-1-0-12-md)、[内核](history.md#record-docs-player-kernel-performance-1-0-12-md) |
 | 1.0.11 / API20，后续固定PR23 | 菜单/章节、时间组/社区、R81插件、JXL/白位、单文件FFmpeg外置和图标；VSCap工作流16 passed，窗口/全屏/底栏5 passed | 8K软件约31.03fps（4K输出）；桌面合成有跳过；HDR热键端到端、UIAccess/多DPI人工验收未完 | [更新](history.md#record-docs-update-1-0-11-md)、[JXL](history.md#record-docs-jpeg-xl-1-0-11-md)、[HDR](history.md#record-docs-vscap-hdr-1-0-11-md) |
@@ -30,6 +32,63 @@
 | 1.0.2 | Release构建；CTest8/8；便携Player27/27，更新7/7；移除测试依赖后两正式程序启动/退出 | 历史不同轮次另有6/6、7/7等，不能相加；HDR面板、多DPI、长片未全面人工验收 | [发行记录](history.md#record-docs-release-1-0-2-md) |
 | 1.0.1 | Release构建、CTest五组；真实原生解码/像素、VS桥及导出 | Qt布局截图不等于完整人工画面验收；九路4K/VFR长片/多DPI未穷举 | [发行记录](history.md#record-docs-release-1-0-1-draft-md) |
 | 1.0.0 | 留存基础Renderer功能记录 | 没有独立、可对应本版的完整测试结论，标记未确认，不倒填后版结果 | [早期原文](history.md#record-docs-history-development-records-through-2026-10-03-md) |
+
+## 1.0.14：Player 设置与缩放显示续修（2026-10-25）
+
+本轮保持版本 1.0.14，更新 Player/Renderer 的设置布局、实际缩放状态与主题；源码同步到本项目仓库，不制作压缩包、不更新远端 Release 附件。上轮不上传代码的边界属于当轮记录。
+
+| 专项 | 本轮结果 | 覆盖与边界 |
+| --- | --- | --- |
+| Qt Release 构建 | Full / Lite / Renderer / Cap 及对应专项测试目标成功 | About 共用头与语言资源均纳入构建；未重封装单文件 EXE |
+| Player 设置与缩放 | 10 passed / 0 failed / 0 skipped | 含 init/cleanup；字幕页与 SRT 样式入口、AI 迁移、关于作者链接、八档全列表、双排独立补帧档位、Lanczos 顺序与 D3D11 限制、切 Jinc 后徽标/Tab、跳过未勾选档位、实际 2160p FFV1 原生回退；设置应用保持播放/暂停状态 |
+| Renderer 深色主题 | 4 passed / 0 failed / 0 skipped | 含 init/cleanup；参数编辑器深/浅色像素与文字颜色、既有设置页，实际抓图检查可读性 |
+| 参数编辑器 | 4 passed / 0 failed / 0 skipped | 含 init/cleanup；Shader 分类、路径及宽高联动 |
+| 语言资源 | 589 条通过 | 中英文键与占位符一致 |
+
+已部署本地 Full 的 Player/Renderer 及 Lite Player，更新语言和操作文档；配置、VPY、ICC/LUT 的前后哈希一致。备份与逐文件哈希在 `build/ui-deployment-20261025-084535/deployment.json`。
+
+本轮原始日志和截图保留在本地 `build/ui-fixes-1.0.14-*` 与 `build/player-*-1.0.14.png`、`build/mingw-release/renderer-parameters-*.png`。以上为专项验证，未运行全量 Full 播放器回归；不重新声称 AI 推理、目标 Intel/1650 Super 或上一轮性能矩阵已验收。
+
+## 1.0.14：本地功能更新与设备性能检查
+
+更新清单逐项状态、精确链路和能力边界见 [本轮记录](evidence/release-1.0.14/README.md)，NuxBox 原始数值见 [JSON](evidence/release-1.0.14/nuxbox.json)。
+
+- 本机4070增强模式，用户指定1080p23.976样本：整帧540p RIFE后走Jinc/D3D11，3840×2160物理输出面30秒约47.933/47.967fps，跳帧/Native丢弃/合并均0；末端A4K仅22.161fps。保留1080原帧的半尺寸推理→A4K约42.700fps，未达标。
+- 780M真实VS no CNN+额外增强：1080输出40.826→59.561fps、2160输出17.446→38.509fps；不含Native上传/呈现。
+- 7840HS dav1d同编译器CLI三轮配对约+4.2%，1087帧像素MD5相同，仍低于48fps；独立FFmpeg已编译但端到端无稳定收益，未替换原软件。
+- 色彩初次采样测试增加等待后，RGB/ICC测试通过；原生BT.2020 CL仍失败，在部署前旧Native相同位置复现。保留失败，不将其写成新修复。
+- Native补丁可应用到固定main的干净索引，19个文件仅在FFF.Native；没有把Qt页面、模型或测试文件混入Native补丁。Shader生成头保留上游尾随空格，普通源码单独检查。
+- 本次只做本地构建与目录部署，配置/VPY/ICC/LUT哈希部署及冒烟后核对一致；不封装压缩包、不上传代码、不更新外部Release。旧单文件EXE未重封装。
+
+## 1.0.13续修：上游非AI内核同步（2026-10-24）
+
+固定 `Lake1059/FFF_Project:main` 的 `922e4b70268fcbc83f0deb06d9e2c1b62e7a33b2`；完整[PR清单](evidence/native-upstream-20261024/pr-inventory.json)与[测试/采样汇总](evidence/native-upstream-20261024/summary.json)独立保存。API仍为20，配置112字节，snapshot由408扩到464字节并同步Qt镜像。保留VS外部帧、BD/concat、相对逐帧、clock-only、音频效果与可选色彩桥；Jinc权重从t5移到t8，避免与上游辅助视频层冲突，两个着色器字节码头已重编。
+
+AI字幕#36、#37仅拉取在`.deps/fff-ai-subtitles`，停在#37的`edf5331`；不参与构建或分发。已实际检查DLL存在VS输入、clock-only、音频效果、流级side-data、RTX和外部声床渲染接口，缺少`FFF3FP_EnableAudioTap`/`FFF3FP_ReadAudioTap`。上游VB设置页、弹幕泵、外部授权模块没有搬入Qt。
+
+| 专项 | 实际结果 | 覆盖与限制 |
+| --- | --- | --- |
+| Native与宿主构建 | Release x64 Native及Qt Full/Lite/Renderer成功 | 在另一个干净checkout用现行脚本重新应用完整补丁并构建；两个构建路径的DLL不要求字节相同，实际测试与部署的哈希见summary/artifacts |
+| 上传与色彩聚焦 | 8 passed / 0 failed / 0 skipped | 新增上传次数/精确字节/重绘不重复上传/回读像素断言；原DLL在快照408≠464处失败，证明测试能识别旧库。默认色彩、手动色彩桥、硬解、VS输出通过 |
+| 旧色彩完整套件 | 保留两项基线失败 | `constantLuminanceAndHdr`、`customIccLutAndRgbOrder`的首帧回读在原DLL同样失败（3 passed / 2 failed）；没有改动这些无关断言。初轮新增快照version错误已修复，初轮另一即时Present断言在专项复跑通过；不宣称全色彩套件全绿 |
+| 播放生命周期/时钟 | 9 passed / 0 failed / 0 skipped | HEVC/AV1软件暂停、seek、EOF、关闭重开；VFR相对逐帧；三种直通启动/定位/恢复时钟及音频信息。小帧线程断言改为1～4起步，10-bit输出允许按显示条件选择10/16-bit |
+| VS帧桥全套 | 10 passed / 0 failed / 0 skipped | 真实VS脚本、两路渲染、原生表面替换、请求合并、缩放/布局/全屏与像素回读 |
+| 真实长片逐帧，增强模式开启后 | 6 passed / 0 failed / 0 skipped | GBC第1集4K48 444p12，SW/HW优先×Jinc/D3D11四组，约1/10/20分钟定位、进退帧、关键帧跳转及恢复；本机AV1 444p12硬件优先最终回退CPU，不能当成该格式硬解通过 |
+| 增强模式开启前逐帧 | 2 passed / 4 failed；原DLL选取同位置2 passed / 1 failed | 关键帧后退一帧5秒断言超时，旧库同样复现；用户随后确认此前未开增强模式，开启后重新运行四组全部通过。两种电源状态不合并计数或比较性能 |
+| Full BD拖动 | 4 passed / 0 failed / 0 skipped | MyGO下卷，播放与暂停状态均只在松开时提交一次定位，约220～235ms完成 |
+| Lite原生路径 | 5 passed / 0 failed / 0 skipped | 同盘原生菜单控件、长卷前后跳转位置保持、无VS软件播放 |
+
+增强模式由用户确认开启；采样时没有同时运行编译或其他播放测试。原生探针每臂先预热5秒，之后约15秒稳定窗口，输出交换链实际验证为3840×2160，D3D11缩放；单轮短窗口不构成严格A/B收益或长片稳定性结论。音频启用、静音播放，未加载VSP宿主字幕。
+
+| 素材/模式 | 新画面呈现fps | 窗口新增丢帧/欠载 | 上传与同步 |
+| --- | --- | --- | --- |
+| OP 4K48 444p12 / CPU | 47.93 | 0 / 0 | 动态纹理，49,766,400字节/次；CPU复制3.63ms/次、约13.71GB/s；末端画面落后约17.5ms |
+| 辉夜姬8K48 420p10 / CPU | 33.87 | 250 / 3 | 动态纹理，99,532,800字节/次；CPU复制8.27ms/次、约12.04GB/s；采样中最大画面落后约1.21秒，末端追到约30.7ms；**仍未达到逐帧实时** |
+| 同一8K48 / GPU | 47.94 | 0 / 0 | 实际decodeMode=2、uploadPath=7；GPU本地复制，末端画面落后约7.3ms。快照复制计时为CPU提交耗时，不能据此计算真实GPU带宽 |
+
+开启增强前的两份CSV仅保留诊断：早期探针误用render-target version1，目标尺寸字段为0；已改为version20且要求调用成功后重新测量，旧CSV不用于输出尺寸已验证的性能横比。所有QtTest计数含init/cleanup，不能相加视为一次全量回归。新七格式半平面、RTX增强、外部声床模块、原生AVIF、Intel P/E域和空间音频听感未做完整实机矩阵。
+
+已部署本地`dist/VS-GUI-Full`的Renderer/Player/Native，并同步`build/playerlite-runtime`、重新生成`dist/VS-Player.exe`（约34.21MiB）。三处Native SHA-256均为`490d4cd7f7e0cbc95d2ad93b573497557aeeb3b692d91ccf73963a2192c87bbb`；单文件内嵌ZIP CRC、payload哈希和DLL内容一致，未嵌入player.ini或AI worker。Full/Lite配置、VPY、ICC/LUT前后哈希一致；VSCap运行时遇占用后改为只部署本轮文件，未替换其程序。备份在`build/pr-integration-20261024/deployment`，旧单文件另存于同轮`baseline`；[产物清单](evidence/native-upstream-20261024/artifacts.json)记录对应关系。这轮没有发布新版本或上传附件。
 
 ## 1.0.13：更新器、单文件BD与运行时精简
 

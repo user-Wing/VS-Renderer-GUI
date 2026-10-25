@@ -1,0 +1,8 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::superInterpolationPerformance() {"acceptedFps":42.7,"coalesced":0,"dropped":0,"format":"YUV420P16","fpsDen":1001,"fpsNum":48000,"frameHeight":2160,"frameMilliseconds":15.755503897713583,"frameWidth":3840,"modules":{"python315.dll":"c:\\users\\arxchem\\documents\\open source projects\\vs-renderer-gui\\build\\mingw-release\\runtime\\python\\python315.DLL","v3_placebo-360.dll":"C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\mingw-release\\color\\v3_placebo-360.dll","vsrplacebo.dll":"c:\\users\\arxchem\\documents\\open source projects\\vs-renderer-gui\\build\\mingw-release\\runtime\\python\\Lib\\site-packages\\vapoursynth\\plugins\\vsrplacebo.dll","vsscript.dll":"C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\mingw-release\\runtime\\python\\Lib\\site-packages\\vapoursynth\\vsscript.dll"},"nativeAccepted":1281,"prefetch":8,"realtime":false,"seconds":30,"skipped":160,"stage":3,"submitted":1281,"surfaceHeight":2160,"surfaceWidth":3840}
+PASS   : TestPlayer::superInterpolationPerformance()
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 40591ms
+********* Finished testing of TestPlayer *********

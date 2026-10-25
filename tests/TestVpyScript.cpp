@@ -121,7 +121,7 @@ private slots:
             {"sangnom", "sangnom", "core.sangnom.SangNom"},
             {"bwdif", "bwdif", "core.bwdif.Bwdif"},
             {"vivtc", "vivtc", "core.vivtc.VFM"},
-            {"anime4k", "placebo", "core.placebo.Shader"},
+            {"anime4k", "placebo", "getattr(core, 'vsrplacebo', core.placebo).Shader"},
         };
 
         for (const auto &plugin : cases) {
@@ -173,7 +173,8 @@ private slots:
         QVERIFY(result.requiredNamespaces.contains(QStringLiteral("placebo")));
         QVERIFY(result.script.contains(QStringLiteral("clip.format.replace(bits_per_sample=16, sample_type=vs.INTEGER)")));
         QVERIFY(!result.script.contains(QStringLiteral("format=vs.YUV420P16")));
-        QVERIFY(result.script.contains(QStringLiteral("open(\"D:\\\\Shaders\\\\Anime4K.glsl\"")));
+        QVERIFY(result.script.contains(QStringLiteral("_shader_path = \"D:\\\\Shaders\\\\Anime4K.glsl\"")));
+        QVERIFY(result.script.contains(QStringLiteral("open(_shader_path, encoding='utf-8')")));
         QVERIFY(result.script.contains(QStringLiteral("width=max(2, int(clip.width * 3)), height=max(2, int(clip.height * 3))")));
     }
 

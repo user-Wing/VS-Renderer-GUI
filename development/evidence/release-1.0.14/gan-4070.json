@@ -1,0 +1,10 @@
+{
+  "coldSeconds": 7.7002988000003825,
+  "frames": 6,
+  "seconds": 1.0586253000001307,
+  "fps": 5.667727759764724,
+  "width": 3840,
+  "height": 2160,
+  "format": "YUV420P16",
+  "backend": "vsrplacebo planar420"
+}

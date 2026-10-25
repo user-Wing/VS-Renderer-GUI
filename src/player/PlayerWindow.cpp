@@ -1,4 +1,5 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerAiSubtitles.h"
 #include "bluray/BlurayCatalog.h"
 #include "player/PlayerInfoPanel.h"
 #include "player/PlayerChromePanel.h"
@@ -247,7 +248,7 @@ PlayerWindow::PlayerWindow() {
     });
     connect(pane_, &PreviewPane::viewChanged, this, [this](float z, float x, float y) { resetZoom_->setVisible(z!=1 || x!=0 || y!=0);if(resetZoom_->isVisible())resetZoom_->raise();if(imageMode_){pane_->adoptView(z,x,y);updateInfo();return;}suspendQualityCheck();if(!madvrMode()) (direct_?clock_:output_)->setView(z, x, y); });
     connect(pane_, &PreviewPane::redrawRequested, this, [this] { if(imageMode_){pane_->surface()->update();return;}if(madvrMode()) { if(lav_) { const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height()); } } else (direct_?clock_:output_)->redraw();
-        if(ready_)suspendQualityCheck();if(!direct_ && !profile().isEmpty() && interpolationStage()<0 && ready_ && !networkSource())profileResize_->start(); });
+        if(ready_)suspendQualityCheck();if(!direct_ && !profile().isEmpty() && interpolationStage()<0 && superInterpolationStage()<0 && ready_ && !networkSource())profileResize_->start(); });
     ensureProfiles();
     profileResize_=new QTimer(this);profileResize_->setSingleShot(true);profileResize_->setInterval(350);
     connect(profileResize_,&QTimer::timeout,this,[this]{if(!direct_ && !source_.isEmpty() && !profile().isEmpty() && !media_.isEmpty() && profileTarget()!=profileSize_) {resumeAt_=position();autoPlay_=playing_ || autoPlay_;refreshScript();}});
@@ -256,7 +257,7 @@ PlayerWindow::PlayerWindow() {
     qApp->installEventFilter(this);
     timer_ = new QTimer(this); timer_->setTimerType(Qt::PreciseTimer);timer_->setInterval(interpolationStage()>=0?4:10); connect(timer_, &QTimer::timeout, this, &PlayerWindow::updateState); timer_->start();
 }
-PlayerWindow::~PlayerWindow() { qApp->removeEventFilter(this); timer_->stop();stopDiscIndexing();timelinePreview_->stop();savePosition(); settings_->sync(); network_->cancel(); discMenu_.reset(); subtitles_.reset(); lav_.reset(); clock_->stop(); server_.reset(); network_.reset(); output_.reset(); clock_.reset(); }
+PlayerWindow::~PlayerWindow() { if(aiSubtitles_)aiSubtitles_->stop();qApp->removeEventFilter(this); timer_->stop();stopDiscIndexing();timelinePreview_->stop();savePosition(); settings_->sync(); network_->cancel(); discMenu_.reset(); subtitles_.reset(); lav_.reset(); clock_->stop(); server_.reset(); network_.reset(); output_.reset(); clock_.reset(); }
 void PlayerWindow::moveEvent(QMoveEvent *event){QMainWindow::moveEvent(event);if(chromeTimer_){layoutChrome();layoutInfoPanels();}}
 bool PlayerWindow::openFile(const QString &input) {
     if(blurayGroups_.value(input)=="menu" && !discRoot_.isEmpty()){returnToDiscMenu();return true;}
@@ -286,12 +287,14 @@ bool PlayerWindow::openFile(const QString &input) {
     seekUiTarget_=queuedSeek_=-1;
     if (suffix!="mpls" && !playerAudioExtensions().contains(suffix) && !image && !remote && !madvrMode() && !preset_.isEmpty() && profile()!="Realistic" && fixedAnimeStage()<4 && server_->initializing()) { deferred_ = path; deferredSubtitle_.clear();deferredAudio_.clear(); message_->setText(tr("正在初始化 VS，完成后自动打开。")); return true; }
     stopDiscIndexing();discIndexParts_.clear();
+    if(aiSubtitles_)aiSubtitles_->stop();
     savePosition(); imageLoader_->cancel();deferred_.clear();deferredAudio_.clear();network_->cancel(); server_->unloadScript();
     imageMode_=image;audioMode_=!image && playerAudioExtensions().contains(suffix);audioMetadataLoaded_=false;audioMetadata_={};setProperty("audioOnly",audioMode_);setProperty("lyricCount",0);lyricLabel_->clear();lyricLabel_->hide();pane_->setImage({});pane_->adoptView(1,0,0);resetZoom_->hide();
     imageTools_->setSource(image?QFileInfo(path).absoluteFilePath():QString());
     for(auto *control:QList<QWidget *>{timeline_,play_,time_,frame_,rate_,speedButton_})control->setEnabled(!image);
     lav_.reset(); clock_->pause(); playing_ = false; autoPlay_ = settings_->value("basic/autoplay",true).toBool(); ready_ = pending_ = seekPending_ = rateApplied_ = false;
-    if(interpolationAuto_){const QStringList stages{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};preset_=QDir(PresetStore::directory()).filePath("builtin/"+stages[std::clamp(settings_->value("player/interpolationStart",0).toInt(),0,3)]);if(settings_->value("player/interpolationRenderer",0).toInt()==1)preset_.replace(".vpy","-D3D11.vpy");}
+    if(interpolationAuto_ && interpolationStages(settings_->value("player/interpolationRenderer",0).toInt()).isEmpty())interpolationAuto_=false;
+    if(interpolationAuto_){const QStringList stages{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};preset_=QDir(PresetStore::directory()).filePath("builtin/"+stages[std::clamp(interpolationStages(settings_->value("player/interpolationRenderer",0).toInt()).value(0,"3").toInt(),0,3)]);if(settings_->value("player/interpolationRenderer",0).toInt()==1)preset_.replace(".vpy","-D3D11.vpy");}
     frameEditPending_=false;frameJumpTarget_=-1;profileFallback_=false;profileStartup_.invalidate();
     manualFrame_ = -1;clip_={};positionRestored_=false;qualityStage_=initialQualityStage();resumeAt_=settingsPosition_=-1;profileSize_={};resetStatistics(); displayedFrame_={};
     const auto actual=remote?path:QFileInfo(path).absoluteFilePath();
@@ -367,8 +370,8 @@ void PlayerWindow::refreshScript() {
 #ifdef VSR_LITE_PLAYER
         true ||
 #endif
-        mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic" || (mode=="Anime" && (!animeSourceSupported() || (high && fixedAnimeStage()<0) || qualityStage_>=4));
-    if(native && qualityStage_<4)qualityStage_=4;
+        mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic" || (mode=="Anime" && (!animeSourceSupported() || (high && fixedAnimeStage()<0) || qualityStage_==4 || qualityStage_==5));
+    if(native && mode=="Anime" && (qualityStage_<4 || qualityStage_>=6))qualityStage_=4;
     setDirectMode(native);
     applyScaling();
     profileSize_=profileTarget();autoPlay_=resume;
@@ -377,7 +380,9 @@ void PlayerWindow::refreshScript() {
     if(server_->initializing()){message_->setText(tr("正在初始化 VS，完成后加载滤镜。"));return;}
     output_->resetVideoOutput(); output_->setMuted(true);
     const auto vsSource=mediaInput_;
-    auto result = preset_.isEmpty() ? VpyScriptBuilder::build(vsSource, SourceFilter::Ffms2, FilterGraph()) : PresetStore::load(preset_, vsSource);
+    const auto activePreset=mode=="Anime" && qualityStage_>=6?QDir(PresetStore::directory()).filePath(qualityStage_==6?"builtin/Anime-6-1X-Jinc.vpy":"builtin/Anime-7-1X-D3D11.vpy"):preset_;
+    auto result = activePreset.isEmpty() ? VpyScriptBuilder::build(vsSource, SourceFilter::Ffms2, FilterGraph()) : PresetStore::load(activePreset, vsSource);
+    if(!mode.isEmpty())result.script.replace("core.placebo.Shader(","getattr(core, 'vsrplacebo', core.placebo).Shader(");
     if (!result.errors.isEmpty()) { setError(result.errors.join('\n')); autoPlay_ = false; return; }
     result.script.replace(QRegularExpression("(?<![A-Za-z_])(?:vs\\.)?core\\.ffms2\\.Source\\("),"_vsr_player_ffms(");
     result.script.replace(QRegularExpression("(?<![A-Za-z_])(?:vs\\.)?core\\.lsmas\\.LWLibavSource\\("),"_vsr_player_lsmas(");
@@ -427,8 +432,8 @@ void PlayerWindow::loadPreset(const QString &path) {
 #endif
     if(madvrMode()) { const auto text=tr("工作在 madVR 模式下，VS 预设不生效。");setError(text);QToolTip::showText(pane_->mapToGlobal(QPoint(20,20)),text,pane_,QRect(),4000);return; }
     const auto previous=preset_;preset_=path;
-    if(profile()=="Anime" && fixedAnimeStage()<4 && !animeSourceSupported()){
-        preset_=previous;message_->setText(tr("源视频超过 2160p，内置 Anime4K 已禁用；专门测试请使用自定义预设。"));return;
+    if(profile()=="Anime" && fixedAnimeStage()!=4 && fixedAnimeStage()!=5 && !animeSourceSupported()){
+        preset_=previous;message_->setText(tr("源视频分辨率≥2160p，内置 Anime4K 已禁用；手动启用请使用自定义 VapourSynth 预设。"));return;
     }
     interpolationAuto_=false;settings_->setValue("player/interpolationAuto",false);
     profileFallback_=false;profileStartup_.invalidate();preset_ = path; qualityStage_=initialQualityStage();settings_->setValue("player/preset",path); if (!source_.isEmpty() && !imageMode_) refreshScript();
@@ -598,6 +603,7 @@ void PlayerWindow::updateState() {
     if(!positionTimer_.isValid() || positionTimer_.elapsed()>=5000){positionTimer_.restart();savePosition();}
 }
 bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
+    if(event->type()==QEvent::Resize && object==pane_->surface() && aiCaption_){const auto size=pane_->surface()->size();aiCaption_->setGeometry(24,qMax(0,size.height()-180),qMax(1,size.width()-48),120);}
     if(object==discSurface_ && discMenu_ && discMenu_->active() &&
        (event->type()==QEvent::MouseMove || event->type()==QEvent::MouseButtonRelease)){
         auto *mouse=static_cast<QMouseEvent *>(event);

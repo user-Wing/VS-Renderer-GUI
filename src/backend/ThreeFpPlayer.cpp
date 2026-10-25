@@ -55,6 +55,8 @@ bool ThreeFpPlayer::createSession()
     check(api_.setVolume(handle_, volume_, muted_ ? 1u : 0u), QStringLiteral("音量"));
     if (!outputFormat_.isEmpty()) api_.setExternalOutputFormat(handle_, outputFormat_.toUtf8().constData());
     if (customColorSettings_) api_.setColorSettings(handle_, &colorSettings_);
+    if(videoSuperResolution_)api_.setVideoEnhancement(handle_,false,true);
+    if(videoAutoHdr_)api_.setVideoEnhancement(handle_,true,true);
     if (vrrPresent_)
         api_.setPresentConfig(handle_, true);
     if (vrrPacing_)
@@ -72,6 +74,20 @@ ThreeFpPlayer::~ThreeFpPlayer()
     }
 }
 bool ThreeFpPlayer::setClockOnly(bool enabled) { clockOnly_=enabled;return !handle_ || api_.setClockOnly(handle_,enabled)==ThreeFpResult::Success; }
+bool ThreeFpPlayer::enableAudioTap(bool enabled){return handle_ && api_.enableAudioTap(handle_,enabled)==ThreeFpResult::Success;}
+QByteArray ThreeFpPlayer::readAudioTap(AudioTapBlock &block){
+    QByteArray pcm(256*1024,Qt::Uninitialized);
+    if(!handle_)return {};
+    auto result=api_.readAudioTap(handle_,pcm.data(),pcm.size(),&block);
+    if(result==ThreeFpResult::BufferTooSmall && block.requiredBytes<=1024*1024){pcm.resize(block.requiredBytes);block=AudioTapBlock{};result=api_.readAudioTap(handle_,pcm.data(),pcm.size(),&block);}
+    if(result!=ThreeFpResult::Success)return {};
+    pcm.resize(block.bytesWritten);return pcm;
+}
+bool ThreeFpPlayer::setVideoEnhancement(bool hdr,bool enabled){
+    (hdr?videoAutoHdr_:videoSuperResolution_)=enabled;
+    return !handle_ || api_.setVideoEnhancement(handle_,hdr,enabled)==ThreeFpResult::Success;
+}
+VideoEnhancementStatus ThreeFpPlayer::videoEnhancementStatus(bool hdr) const{return api_.videoEnhancementStatus(handle_,hdr);}
 bool ThreeFpPlayer::setSoftwarePreScale(int height) { if(height!=0 && height!=720 && height!=1080 && height!=2160)return false;softwarePreScaleHeight_=height;return !handle_ || api_.setSoftwarePreScale(handle_,height)==ThreeFpResult::Success; }
 
 bool ThreeFpPlayer::ready() const { return const_cast<ThreeFpPlayer *>(this)->createSession(); }

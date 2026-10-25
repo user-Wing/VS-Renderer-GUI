@@ -53,4 +53,8 @@ Player 的 `vs-player-playback`、Lite 的 `lite-native-playback`、色彩的 `d
 
 ## 部署
 
+准备现有 color 运行时后执行 `tools/prepare-planar-shader.ps1`，再配置 CMake；Vulkan-Headers 固定为 `73814d006638aa00bd553215b054f0f02e457e22`。依赖齐全时构建 `vsr_planar_shader`，将处理过导入名的 `vsrplacebo.dll` 放入 VS plugins；缺少时继续使用标准 placebo，性能结果不能沿用平面后端的测量。
+
+修改源码、固定上游修订与 LGPL 许可在 `third_party/vsr-placebo`。`tools/stage-planar-shader.py` 将导入名对齐到隔离的 color DLL；不能直接部署未处理的 DLL。`tools/check-planar-shader.py --source <视频> --output <JSON>` 对照原 Shader 像素；`tools/benchmark-super-interpolation.py` 只测 VS 出帧，Native 上传与呈现另测。
+
 构建目录不等于本地运行目录。部署前关闭相关测试程序，核对目标 Full/PlayerLite 和配置备份，按 [便携更新](portable-updates.md) 操作；不要用历史 API14/18 脚本替换当前 API20 DLL。

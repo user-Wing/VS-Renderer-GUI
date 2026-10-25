@@ -18,6 +18,9 @@
 #include <vector>
 #include <map>
 #include <chrono>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 namespace vsr {
 namespace {
@@ -150,6 +153,13 @@ struct VapourSynthFrameServer::Impl {
 
     bool initialize(const QString &path)
     {
+#ifdef Q_OS_WIN
+        // Keep the isolated Vulkan dependency tree resident for VS plugin autoload.
+        const auto planarPath=QDir::toNativeSeparators(QDir(QCoreApplication::applicationDirPath()).filePath("color/v3_placebo-360.dll")).toStdWString();
+        static HMODULE planarDependencies=LoadLibraryExW(planarPath.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+        if(!planarDependencies)qWarning("Planar Shader dependency load failed: %lu",GetLastError());
+        Q_UNUSED(planarDependencies);
+#endif
         library = std::make_unique<QLibrary>(path);
         library->setLoadHints(QLibrary::ResolveAllSymbolsHint | QLibrary::PreventUnloadHint);
         if (!library->load()) {

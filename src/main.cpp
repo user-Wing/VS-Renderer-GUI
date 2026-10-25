@@ -5,6 +5,7 @@
 #include <QFont>
 #include <QFontDatabase>
 #include <QIcon>
+#include <QSettings>
 
 int main(int argc, char *argv[])
 {
@@ -18,7 +19,7 @@ int main(int argc, char *argv[])
     font.setPixelSize(13);
     QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han,{"Microsoft YaHei UI"});
     app.setFont(font);
-    app.setStyleSheet(vsr::applicationStyleSheet());
+    app.setStyleSheet(vsr::applicationStyleSheet(QSettings().value("appearance/dark",false).toBool()));
 
     vsr::MainWindow window;
     window.show();

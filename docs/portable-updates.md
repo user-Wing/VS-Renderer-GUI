@@ -21,6 +21,10 @@ Renderer 设置或 Player“设置 → 基本设置”中检查更新。完整�
 
 ## 维护者部署
 
+从 1.0.14 的单文件代码起，启动后检查 GitHub 上游版本；发现可验证的新单文件附件时提示下载，核对大小与 SHA-256 后等待播放器退出，只替换启动器原 EXE 并重启。失败保留旧文件或备份；不使用 Full 更新包、不更新外置 FFmpeg。只有由单文件启动器传入原始路径的进程才启用此检查，普通 Lite 缓存 EXE 不执行替换。
+
+单文件构建工具按 CMake 版本生成 FileVersion/ProductVersion 资源。本次只验证代码和隔离替换脚本，不重封装现有 `dist/VS-Player.exe`，该文件仍为旧版本；未进行真实网络更新安装。
+
 当前Full固定为 `dist/VS-GUI-Full`；精简播放器只暂存在 `build/playerlite-runtime`，最终输出 `dist/VS-Player.exe`。`tools/deploy-local-runtime.py` 面向已存在的这两套运行目录，更新产物、备份旧文件并核对 INI/VPY/ICC/LUT 哈希；执行前先读脚本里的源目录与目标。`tools/stage-portable.ps1` 是较早的环境组装入口，默认目录和本机路径也必须显式核对。
 
 只同步当前 guides 和许可，不部署 `development/` 历史测试数据。旧运行目录可能已有历史报告，本轮脚本调整不会自动清理这些既存文件；清理须另行核对，不能删除配置或媒体。`aria2-next.exe` 是有效依赖，不能按 `-next` 后缀一并清除。

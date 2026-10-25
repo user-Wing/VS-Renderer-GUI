@@ -1,11 +1,17 @@
 #include "app/Style.h"
+#include <utility>
 
 namespace vsr {
 
-QString applicationStyleSheet()
+QString applicationStyleSheet(bool dark)
 {
-    return QStringLiteral(R"(
+    auto sheet = QStringLiteral(R"(
         QMainWindow, QWidget { background: #f3f3f3; color: #1b1b1b; }
+        QWidget#processingSidebar, QWidget#rendererParameterPanel { background: #ffffff; }
+        QWidget#processingSidebar { border-right: 1px solid #d1d1d1; }
+        QWidget#parameterEditor, QWidget#parameterEditor QWidget { background: #ffffff; }
+        QWidget#parameterEditor QComboBox, QWidget#parameterEditor QSpinBox, QWidget#parameterEditor QDoubleSpinBox, QWidget#parameterEditor QLineEdit { background: #f3f3f3; }
+        QWidget#parameterEditor QComboBox:hover { background: #f0f0f0; }
         QToolBar { background: #f9f9f9; border: 0; border-bottom: 1px solid #d1d1d1; spacing: 4px; padding: 5px 8px; }
         QToolButton, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit {
             min-height: 28px; border: 1px solid #c8c8c8; border-radius: 3px; background: #ffffff; padding: 0 8px;
@@ -31,6 +37,19 @@ QString applicationStyleSheet()
         QStatusBar { background: #f9f9f9; border-top: 1px solid #d1d1d1; }
         QToolTip { color: #111111; background: #ffffff; border: 1px solid #8a8a8a; padding: 4px; }
     )");
+    if (dark) {
+        const std::pair<const char *, const char *> colors[] = {
+            {"#f3f3f3", "#202124"}, {"#1b1b1b", "#e8eaed"},
+            {"#f9f9f9", "#292b30"}, {"#d1d1d1", "#50535a"},
+            {"#c8c8c8", "#555860"}, {"#ffffff", "#292b30"},
+            {"#f0f0f0", "#35383e"}, {"#a8a8a8", "#737780"},
+            {"#e5e5e5", "#40444c"}, {"#eeeeee", "#25272b"},
+            {"#e5f1fb", "#304761"}, {"#111111", "#e8eaed"},
+            {"#d9ebf7", "#304761"}, {"#727272", "#969ba5"}
+        };
+        for (const auto &color : colors) sheet.replace(color.first, color.second);
+    }
+    return sheet;
 }
 
 }

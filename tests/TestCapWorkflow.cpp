@@ -5,7 +5,28 @@
 
 class TestCapWorkflow : public QObject {
     Q_OBJECT
+    QByteArray savedIni_;bool hadIni_=false;
 private slots:
+    void init(){QFile file(QCoreApplication::applicationDirPath()+"/vs-cap.ini");hadIni_=file.exists();savedIni_.clear();if(file.open(QIODevice::ReadOnly)){savedIni_=file.readAll();file.close();}if(hadIni_)QVERIFY(file.remove());}
+    void cleanup(){QFile file(QCoreApplication::applicationDirPath()+"/vs-cap.ini");if(hadIni_){QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));QCOMPARE(file.write(savedIni_),savedIni_.size());}else if(file.exists())QVERIFY(file.remove());}
+    void hotkeyConfirmationAndReservedKeys(){
+        QVERIFY(!cap::allowedHotkey(QKeySequence("Ctrl+C")));QVERIFY(!cap::allowedHotkey(QKeySequence("Ctrl+V")));QVERIFY(!cap::allowedHotkey(QKeySequence("Ctrl+S")));
+        cap::HotkeyEdit editor(QKeySequence("Alt+A"));editor.show();
+        auto *record=editor.findChild<QKeySequenceEdit*>();QVERIFY(record);QTest::keyClick(record,Qt::Key_F9,Qt::MetaModifier|Qt::ShiftModifier);
+        QCOMPARE(editor.keySequence(),QKeySequence("Alt+A"));
+        for(auto *button:editor.findChildren<QPushButton*>())if(button->text()==QStringLiteral("✓"))button->click();
+        QCOMPARE(editor.keySequence(),QKeySequence("Meta+Shift+F9"));
+        for(auto *button:editor.findChildren<QPushButton*>())if(button->text()==QStringLiteral("×"))button->click();
+        QVERIFY(editor.keySequence().isEmpty());
+    }
+    void brushSettingsSurviveOverlay(){
+        const auto path=QCoreApplication::applicationDirPath()+"/vs-cap.ini";QFile before(path);const bool existed=before.exists();QByteArray saved;if(before.open(QIODevice::ReadOnly)){saved=before.readAll();before.close();}
+        const auto restore=qScopeGuard([&]{if(existed){QFile f(path);if(f.open(QIODevice::WriteOnly|QIODevice::Truncate))f.write(saved);}else QFile::remove(path);});
+        {QSettings settings(path,QSettings::IniFormat);settings.setValue("editor/color","#ff336699");settings.setValue("editor/lineMode",2);settings.setValue("editor/penWidth",7);}
+        QImage image(640,480,QImage::Format_RGB32);image.fill(Qt::white);
+        {CaptureOverlay overlay(qApp->primaryScreen(),image,[](QImage,bool,QString,bool){return false;},true);auto *width=overlay.findChild<QSpinBox*>("capPenWidth");QVERIFY(width);QCOMPARE(width->value(),7);width->setValue(9);}
+        QSettings settings(path,QSettings::IniFormat);QCOMPARE(settings.value("editor/color").toString(),QString("#ff336699"));QCOMPARE(settings.value("editor/lineMode").toInt(),2);QCOMPARE(settings.value("editor/penWidth").toInt(),9);
+    }
     void colorDialogUsesToolWindow_data(){
         QTest::addColumn<bool>("pin");QTest::addColumn<QString>("tool");
         QTest::newRow("pin-pan")<<true<<QStringLiteral("拖动");

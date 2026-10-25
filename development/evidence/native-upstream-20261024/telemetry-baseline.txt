@@ -1,0 +1,10 @@
+********* Start testing of TestColor *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestColor::initTestCase()
+FAIL!  : TestColor::nativeUploadTelemetry() Compared values are not the same
+   Actual   (first.size)                            : 408
+   Expected (std::uint32_t(sizeof(ThreeFpSnapshot))): 464
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestColor.cpp(30) : failure location
+PASS   : TestColor::cleanupTestCase()
+Totals: 2 passed, 1 failed, 0 skipped, 0 blacklisted, 479ms
+********* Finished testing of TestColor *********

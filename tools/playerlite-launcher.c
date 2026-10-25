@@ -141,6 +141,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show
     wchar_t config[4096];
     swprintf_s(config, 4096, L"%ls\\player.ini", originalDir);
     SetEnvironmentVariableW(L"VSR_PLAYER_CONFIG", config);
+    SetEnvironmentVariableW(L"VSR_SINGLE_PLAYER_PATH", self);
     if (!exists(config)) {
         HANDLE settings = CreateFileW(config, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW,
                                       FILE_ATTRIBUTE_NORMAL, NULL);

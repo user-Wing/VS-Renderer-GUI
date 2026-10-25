@@ -58,6 +58,8 @@ private:
     void togglePause();
     void removeWaiting();
     void restartStopped();
+    void rememberCommand();
+    QComboBox *history_=nullptr;
     std::shared_ptr<Job> jobFor(QTreeWidgetItem *item) const;
     ExportPipeline pipeline_;
     QHash<quint64, std::shared_ptr<Job>> jobs_;

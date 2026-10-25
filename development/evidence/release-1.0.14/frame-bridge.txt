@@ -1,0 +1,16 @@
+********* Start testing of TestFrameBridge *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestFrameBridge::initTestCase()
+QINFO  : TestFrameBridge::startupWarmsDecodeAndBothRenderers() Startup warmup ms: 459 UI maximum heartbeat gap ms: 195
+QINFO  : TestFrameBridge::startupWarmsDecodeAndBothRenderers() First import after warmup ms: 112
+PASS   : TestFrameBridge::startupWarmsDecodeAndBothRenderers()
+PASS   : TestFrameBridge::mapsDisplayedTimeToAbsoluteFrame()
+PASS   : TestFrameBridge::loadsSourceAndProcessedTimingsSeparately()
+PASS   : TestFrameBridge::rendersWhenNativeSurfaceReplacesPlaceholder()
+PASS   : TestFrameBridge::rendersBundledFilterChain()
+PASS   : TestFrameBridge::coalescesFrameRequestsToNewest()
+PASS   : TestFrameBridge::reportsMissingNamespacePrecisely()
+PASS   : TestFrameBridge::rendersVapourSynthFrameThroughThreeFp()
+PASS   : TestFrameBridge::cleanupTestCase()
+Totals: 10 passed, 0 failed, 0 skipped, 0 blacklisted, 4113ms
+********* Finished testing of TestFrameBridge *********

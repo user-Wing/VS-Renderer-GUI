@@ -4,8 +4,25 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #include <shellapi.h>
+#include <QProcess>
+#include <QCryptographicHash>
 
 namespace cap {
+int runStartupTaskCommand(bool enabled,const QString &user){
+    const auto id=QString::fromLatin1(QCryptographicHash::hash(user.toUtf8(),QCryptographicHash::Sha256).toHex().left(12));
+    const auto name="VSRenderer-VSCap-"+id;QProcess task;
+    QStringList args=enabled?QStringList{"/Create","/TN",name,"/SC","ONLOGON","/RL","HIGHEST","/IT","/RU",user,"/TR","\""+QDir::toNativeSeparators(QCoreApplication::applicationFilePath())+"\"","/F"}:QStringList{"/Delete","/TN",name,"/F"};
+    task.start("schtasks.exe",args);if(!task.waitForFinished(30000))return 1;return task.exitCode();
+}
+bool configureElevatedStartup(bool enabled,QString *error){
+    const auto executable=QDir::toNativeSeparators(QCoreApplication::applicationFilePath()).toStdWString();
+    const auto user=qEnvironmentVariable("USERDOMAIN")+"\\"+qEnvironmentVariable("USERNAME");
+    const auto arguments=QString("--startup-task %1 \"%2\"").arg(enabled?"enable":"disable",user).toStdWString();
+    SHELLEXECUTEINFOW launch{};launch.cbSize=sizeof(launch);launch.fMask=SEE_MASK_NOCLOSEPROCESS;launch.lpVerb=L"runas";launch.lpFile=executable.c_str();launch.lpParameters=arguments.c_str();launch.nShow=SW_HIDE;
+    if(!ShellExecuteExW(&launch)){*error=QString::number(GetLastError());return false;}
+    const auto waited=WaitForSingleObject(launch.hProcess,45000);DWORD result=1;if(waited==WAIT_OBJECT_0)GetExitCodeProcess(launch.hProcess,&result);CloseHandle(launch.hProcess);
+    if(result)*error=QStringLiteral("计划任务配置失败（%1）").arg(result);return result==0;
+}
 bool hasUiAccess() {
     HANDLE token=nullptr;if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token))return false;
     DWORD value=0,size=0;const bool granted=GetTokenInformation(token,TokenUIAccess,&value,sizeof(value),&size) && value;

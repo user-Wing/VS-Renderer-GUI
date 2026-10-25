@@ -1,0 +1,70 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 396 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 833 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 461 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 465 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 840 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 1284 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 2505 position 6010380000 6010170000 frame 28821 28820 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 1250 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 1273 position 6010380000 6010590000 frame 28821 28822 native-index 357 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 2494 position 6010590000 6010380000 frame 28822 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 1361 position 12010120000 12010330000 frame 57591 57592 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 2770 position 12010330000 12010120000 frame 57592 57591 native-index 773 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 1368 position 12010120000 12010330000 frame 57591 57592 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 1367 position 12010330000 12010540000 frame 57592 57593 native-index 775 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 2709 position 12010540000 12010330000 frame 57593 57592 native-index 774 pending false
+PASS   : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc)
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 396 position 610190000 610400000 frame 2926 2927 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 757 position 610400000 610190000 frame 2927 2926 native-index 59 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 397 position 610190000 610400000 frame 2926 2927 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 384 position 610400000 610610000 frame 2927 2928 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 732 position 610610000 610400000 frame 2928 2927 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 1290 position 6010170000 6010380000 frame 28820 28821 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 2527 position 6010380000 6010170000 frame 28821 28820 native-index 354 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 1305 position 6010170000 6010380000 frame 28820 28821 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 1289 position 6010380000 6010590000 frame 28821 28822 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 2528 position 6010590000 6010380000 frame 28822 28821 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 1395 position 12010120000 12010330000 frame 57591 57592 native-index 773 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 2826 position 12010330000 12010120000 frame 57592 57591 native-index 772 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 1409 position 12010120000 12010330000 frame 57591 57592 native-index 773 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 1376 position 12010330000 12010540000 frame 57592 57593 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 2725 position 12010540000 12010330000 frame 57593 57592 native-index 773 pending false
+PASS   : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11)
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 401 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 741 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 385 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 398 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 727 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1295 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 2511 position 6010380000 6010170000 frame 28821 28820 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1255 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1285 position 6010380000 6010590000 frame 28821 28822 native-index 357 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 2472 position 6010590000 6010380000 frame 28822 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1544 position 12010120000 12010330000 frame 57591 57592 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 2968 position 12010330000 12010120000 frame 57592 57591 native-index 773 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1509 position 12010120000 12010330000 frame 57591 57592 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1479 position 12010330000 12010540000 frame 57592 57593 native-index 775 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 2817 position 12010540000 12010330000 frame 57593 57592 native-index 774 pending false
+PASS   : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc)
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 388 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 725 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 406 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 405 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 735 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 1312 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 2493 position 6010380000 6010170000 frame 28821 28820 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 1251 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 1275 position 6010380000 6010590000 frame 28821 28822 native-index 357 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 2541 position 6010590000 6010380000 frame 28822 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 1402 position 12010120000 12010330000 frame 57591 57592 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 2838 position 12010330000 12010120000 frame 57592 57591 native-index 773 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 1535 position 12010120000 12010330000 frame 57591 57592 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 1466 position 12010330000 12010540000 frame 57592 57593 native-index 775 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 2857 position 12010540000 12010330000 frame 57593 57592 native-index 774 pending false
+PASS   : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11)
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 6 passed, 0 failed, 0 skipped, 0 blacklisted, 224472ms
+********* Finished testing of TestPlayer *********

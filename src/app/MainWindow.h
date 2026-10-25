@@ -36,6 +36,7 @@ class PreviewPane;
 class ExportWindow;
 class ThreeFpPlayer;
 class VapourSynthFrameServer;
+class PlayerLanguage;
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
@@ -64,6 +65,7 @@ private:
     void buildToolbar();
     void selectPage(int index);
     void showSettings();
+    std::unique_ptr<PlayerLanguage> language_;
     void connectPlayback();
     void populateCatalog();
     void refreshPipeline(int selectRow = -1);

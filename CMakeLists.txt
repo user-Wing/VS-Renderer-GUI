@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.0.13 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.0.14 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,6 +25,7 @@ qt_add_library(vsr_bluray STATIC src/bluray/BlurayCatalog.cpp src/bluray/BlurayC
 target_include_directories(vsr_bluray PUBLIC src)
 target_link_libraries(vsr_bluray PUBLIC vsr_optional_runtime Qt6::Widgets Qt6::Concurrent)
 qt_add_library(vsr_components STATIC src/update/ComponentDownloads.cpp src/update/ComponentDownloads.h src/update/PortableUpdater.cpp src/update/PortableUpdater.h)
+target_sources(vsr_components PRIVATE src/update/SinglePlayerUpdater.cpp src/update/SinglePlayerUpdater.h)
 target_include_directories(vsr_components PUBLIC src)
 target_link_libraries(vsr_components PUBLIC Qt6::Widgets Qt6::Network Qt6::Concurrent)
 target_compile_definitions(vsr_components PRIVATE VSR_VERSION="${PROJECT_VERSION}")
@@ -32,6 +33,7 @@ if(WIN32)
     target_link_libraries(vsr_components PUBLIC version)
 endif()
 include(tools/color-runtime.cmake)
+include(tools/planar-shader.cmake)
 add_library(vsr_image_zlib STATIC
     third_party/image-zlib/adler32.c third_party/image-zlib/crc32.c
     third_party/image-zlib/inflate.c third_party/image-zlib/inffast.c
@@ -75,6 +77,7 @@ qt_add_executable(VSRenderer WIN32
     src/app/MainWindowPresets.cpp
     src/app/MainWindowTimeGroups.cpp
     src/player/PlayerResources.cpp
+    src/player/PlayerLanguage.cpp
     src/app/MainWindow.cpp
     src/app/MainWindow.h
     src/app/Style.cpp
@@ -109,7 +112,7 @@ qt_add_executable(VSRenderer WIN32
 )
 
 target_include_directories(VSRenderer PRIVATE src third_party/vapoursynth/include)
-target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network vsr_bluray pdh psapi dxgi)
+target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network vsr_bluray vsr_components pdh psapi dxgi)
 target_compile_definitions(VSRenderer PRIVATE VSR_VERSION="${PROJECT_VERSION}")
 
 if(WIN32)
@@ -144,6 +147,7 @@ qt_add_executable(VSPlayer WIN32
     src/player/PlayerSettings.cpp src/player/PlayerColor.cpp src/player/PlayerMenus.cpp src/player/PlayerPlaylist.cpp src/player/PlayerAudio.cpp src/player/PlayerMediaMatching.cpp
     src/player/PlayerNetworkInput.cpp src/player/PlayerNetworkInput.h
     src/player/PlayerProfiles.cpp src/player/PlayerCache.cpp src/player/PlayerLanguage.cpp src/player/PlayerAssociations.cpp
+    src/player/PlayerAiSubtitles.cpp src/player/PlayerAiSubtitles.h
     src/player/PlayerResources.cpp src/player/PlayerResources.h
     src/player/PlayerSubtitles.cpp src/player/PlayerSubtitles.h
     src/backend/LavPlayback.cpp src/backend/LavPlayback.h
@@ -152,6 +156,19 @@ qt_add_executable(VSPlayer WIN32
     src/ui/PreviewPane.cpp
 )
 set_target_properties(VSPlayer PROPERTIES OUTPUT_NAME "vs-player")
+foreach(program VSRenderer VSPlayer)
+    if(TARGET vsr_planar_shader)
+        add_dependencies(${program} vsr_planar_shader)
+        add_custom_command(TARGET ${program} POST_BUILD
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/stage-planar-shader.py"
+                --source "$<TARGET_FILE:vsr_planar_shader>"
+                --output "$<TARGET_FILE_DIR:${program}>/runtime/python/Lib/site-packages/vapoursynth/plugins/vsrplacebo.dll"
+                --color "${CMAKE_BINARY_DIR}/color" VERBATIM)
+    endif()
+endforeach()
+foreach(ai_asset asr_worker.py README.md UPSTREAM-LICENSE.txt ai-subtitles.example.json)
+    configure_file("assets/ai-subtitles/${ai_asset}" "runtime/ai-subtitles/${ai_asset}" COPYONLY)
+endforeach()
 foreach(program VSRenderer VSPlayer)
     target_link_libraries(${program} PRIVATE vsr_components)
     add_custom_command(TARGET ${program} POST_BUILD
@@ -345,6 +362,7 @@ if(BUILD_TESTING)
     target_include_directories(vsr_export_tests PRIVATE src)
     target_link_libraries(vsr_export_tests PRIVATE Qt6::Core Qt6::Widgets Qt6::Test)
     add_test(NAME export-command-compatibility COMMAND vsr_export_tests)
+    target_link_libraries(vsr_export_tests PRIVATE Qt6::Network)
 
     get_target_property(analysis_test_sources VSRenderer SOURCES)
     list(FILTER analysis_test_sources EXCLUDE REGEX "src/main.cpp|VSRenderer_autogen")

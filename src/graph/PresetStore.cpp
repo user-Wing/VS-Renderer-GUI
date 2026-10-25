@@ -9,6 +9,19 @@
 
 namespace vsr {
 QString PresetStore::directory() { return QDir(QCoreApplication::applicationDirPath()).filePath("vpy"); }
+QString PresetStore::description(const QString &path)
+{
+    const QDir root(directory());
+    const auto relative = root.relativeFilePath(path);
+    if (relative.startsWith("builtin/")) {
+        QFile descriptions(root.filePath("preset-descriptions.json"));
+        if (descriptions.open(QIODevice::ReadOnly))
+            return QJsonDocument::fromJson(descriptions.readAll()).object().value(relative).toString();
+        return {};
+    }
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? metadata(QString::fromUtf8(file.readAll())).value("note").toString() : QString();
+}
 QJsonObject PresetStore::metadata(const FilterGraph &graph, SourceFilter filter, const QString &source, const QString &note)
 {
     QJsonArray nodes;

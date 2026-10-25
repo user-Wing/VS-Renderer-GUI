@@ -1,12 +1,14 @@
 # VS Renderer / VS Player / VS Cap
 
-![源码版本 1.0.13](https://img.shields.io/badge/source-1.0.13-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
+![源码版本 1.0.14](https://img.shields.io/badge/source-1.0.14-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
 
 Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片，用 **VSCap** 截图与标注。
 
 [下载便携包](https://github.com/user-Wing/VS-Renderer-GUI/releases) · [ModelScope 下载源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) · [操作指南](docs/README.md) · [更新日志](changelog.md)
 
-源码版本：**1.0.13**。这是工作区版本，不代表下载源已有同版本附件；下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
+源码版本：**1.0.14**。本轮更新源码，不制作压缩包或更新外部附件；下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
+
+1.0.14 新增 Renderer 即时深色主题、八档图像处理、组合补帧、外置 AI 字幕入口、3FUI 命令桥和 Cap 设置改进。AI 模型需手动准备；组合链路的画质取舍与实测边界见 [Player 指南](docs/player.md)。
 
 ## 功能介绍
 
@@ -49,6 +51,7 @@ VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处�
 - **8K48 AV1 软件播放不保证逐帧实时**；持续算力不足时优先跟随播放时间，必要时跳过部分画面，避免整段明显慢放，实际范围见[测试台账](development/validation.md)。增强/补帧也没有通用实时保证。
 - 原始高度超过 2160p 时禁用内置自动 Anime 和四档 Anime4K；D3D11/Jinc 可用，自定义 VPY 需自行评估负载。
 - 默认使用3FP原生色彩处理；Full中的libplacebo仅供手动对照mpv，见 [色彩设置](docs/color-management.md)。
+- 当前开发内核已同步3FP的自适应调度、硬解回退和音频缓冲优化；AI 字幕通过外置模型与运行时启用，需在字幕设置中手动准备。适用范围与验证见[内核说明](docs/performance-debugging.md#上游内核优化)。
 - 图片使用 CPU 解码，动图当前显示首帧；复杂 PSD/RAW 支持以编辑器实际能力为准。
 - Player 配置保存在程序旁 `player.ini`；Renderer 使用独立设置。更新前保留自定义 VPY、项目、截图及配置，按 [更新说明](docs/portable-updates.md) 操作。
 

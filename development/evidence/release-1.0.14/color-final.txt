@@ -1,0 +1,22 @@
+********* Start testing of TestColor *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestColor::initTestCase()
+PASS   : TestColor::nativeUploadTelemetry()
+QINFO  : TestColor::nativeDefaultAndPausedColorSwitch() 709 gray 0.521569 0.521569 0.521569
+PASS   : TestColor::nativeDefaultAndPausedColorSwitch()
+PASS   : TestColor::automaticHdrToSdr()
+QINFO  : TestColor::constantLuminanceAndHdr() 2020 NCL 0.796079 0.443137 0.25098 CL 0.717647 0.466667 0.243137
+QINFO  : TestColor::constantLuminanceAndHdr() native CL 0.807843 0.427451 0.235294
+FAIL!  : TestColor::constantLuminanceAndHdr() 'std::abs(nativeCl.green-nativeNcl.green)>.01 || std::abs(nativeCl.red-nativeNcl.red)>.01' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestColor.cpp(98) : failure location
+PASS   : TestColor::invalidProfileFallsBackAndRecovers()
+QINFO  : TestColor::customIccLutAndRgbOrder() RGB source 0.854902 0.0509804 0.0901961
+QINFO  : TestColor::customIccLutAndRgbOrder() RGB without ICC 0.862745 0.0784314 0.0784314
+QINFO  : TestColor::customIccLutAndRgbOrder() RGB native 0.862745 0.0784314 0.0784314
+PASS   : TestColor::customIccLutAndRgbOrder()
+QINFO  : TestColor::decodedHardwareNoReadback() Decode mode 2
+PASS   : TestColor::decodedHardwareNoReadback()
+PASS   : TestColor::realVsOutputPreserved()
+PASS   : TestColor::cleanupTestCase()
+Totals: 9 passed, 1 failed, 0 skipped, 0 blacklisted, 4607ms
+********* Finished testing of TestColor *********

@@ -40,7 +40,7 @@ void PlayerWindow::showColorSettings() {
     QDialog dialog(this);dialog.setObjectName("playerColorSettings");dialog.setWindowTitle(tr("3FP 解码配置 · 色彩管理"));dialog.resize(720,650);
     auto *outer=new QVBoxLayout(&dialog);auto *scroll=new QScrollArea(&dialog);scroll->setWidgetResizable(true);auto *content=new QWidget(scroll);scroll->setWidget(content);outer->addWidget(scroll,1);auto *form=new QFormLayout(content);form->setVerticalSpacing(10);
     auto *engine=new QComboBox(&dialog);engine->setObjectName("colorEngine");
-    engine->addItem(tr("3FP 原生（默认）"),0);
+    engine->addItem(tr("3FP 原生 (默认)"),0);
 #ifndef VSR_LITE_PLAYER
     engine->addItem(tr("libplacebo（mpv 对照，仅手动启用）"),1);
 #endif

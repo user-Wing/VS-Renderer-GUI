@@ -1,0 +1,70 @@
+{
+  "build/mingw-release/VSRenderer.exe": {
+    "bytes": 3621552,
+    "sha256": "9989c198e1a65d31fb7cdce9dda79af89503c9e861987be5e387ec1bd4470a42"
+  },
+  "build/mingw-release/vs-player.exe": {
+    "bytes": 17222451,
+    "sha256": "767b938b59a76787080c211846491428910e48cf6b99a053dcf73524f6994ae7"
+  },
+  "build/mingw-release/vs-cap.exe": {
+    "bytes": 8039130,
+    "sha256": "5317ed6ef050c98ea93a4063cdf0d951323c86f274a6c94f062109531128dd73"
+  },
+  "build/mingw-release/lite/vs-player.exe": {
+    "bytes": 16431201,
+    "sha256": "e5aeb5c1258728d59e8539b2d732eb2631fef296db8ecf5af7b84ceddbd9eca9"
+  },
+  "build/mingw-release/FFF.Native.dll": {
+    "bytes": 6583808,
+    "sha256": "db8cec2b4f4082c4bdf8337e7404a68c58ecac84fa9037c2c83896dcf1b01ac6"
+  },
+  "build/mingw-release/runtime/python/Lib/site-packages/vapoursynth/plugins/vsrplacebo.dll": {
+    "bytes": 89805,
+    "sha256": "5719d245b741babaee4137257cbd6ebaebc42bbb45cdc9428e1add59aa6e8a8f"
+  },
+  "build/release-1.0.14/3fui-plugin/VsrExportBridge.3fui.dll": {
+    "bytes": 13312,
+    "sha256": "65770d7de68ad5b56b606034ef6c87b29dc3cce90de5bca63733b06ee5d2f5db"
+  },
+  "dist/VS-Player.exe": {
+    "bytes": 35872593,
+    "sha256": "38acf3a5ca1db5341b6faa3a51d70388f9d5028a7bfeebc5446bb52db12f05eb"
+  },
+  "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU, 617.42",
+  "singleFileRepacked": false,
+  "dist/VS-GUI-Full/vs-player.exe": {
+    "bytes": 13782031,
+    "sha256": "57ab292221de514e706d26a28f7d8aa3b8cd40303c697fc4efe8294be66b0f4e"
+  },
+  "dist/VS-GUI-Full/FFF.Native.dll": {
+    "bytes": 6583808,
+    "sha256": "db8cec2b4f4082c4bdf8337e7404a68c58ecac84fa9037c2c83896dcf1b01ac6"
+  },
+  "build/playerlite-runtime/vs-player.exe": {
+    "bytes": 12902912,
+    "sha256": "82f12bbdee4e711b9935b665d58938ab90b24e1d2a7671f6110d47f7be696f55"
+  },
+  "build/playerlite-runtime/FFF.Native.dll": {
+    "bytes": 6583808,
+    "sha256": "db8cec2b4f4082c4bdf8337e7404a68c58ecac84fa9037c2c83896dcf1b01ac6"
+  },
+  "deployment": {
+    "backup": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\deployment-20261024-225400",
+    "editions": [
+      "dist\\VS-GUI-Full",
+      "build\\playerlite-runtime"
+    ],
+    "settingsUnchanged": true
+  },
+  "protectedSettingsUnchangedAfterSmoke": true,
+  "deployedShaderSmoke": {
+    "namespace": "vsrplacebo",
+    "frame": "64x36 YUV420P16"
+  },
+  "noArchiveOrCodeUpload": true,
+  "documentationExtras": [
+    "plugins/3fui-export-bridge/README.md",
+    "assets/ai-subtitles/README.md"
+  ]
+}

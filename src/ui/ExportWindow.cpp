@@ -20,10 +20,21 @@
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QSet>
+#include <QSettings>
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QVBoxLayout>
 #include <algorithm>
 
 namespace vsr {
+void ExportWindow::rememberCommand(){
+    const auto command=command_->toPlainText().trimmed();if(command.isEmpty())return;
+    auto commands=QSettings().value("export/commandHistory").toStringList();commands.removeAll(command);commands.prepend(command);
+    while(commands.size()>50)commands.removeLast();QSettings().setValue("export/commandHistory",commands);
+    history_->clear();history_->addItems(commands);
+}
 namespace {
 QString pathKey(const QString &path)
 {
@@ -57,6 +68,30 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     command_->setObjectName(QStringLiteral("exportCommand"));
     command_->setPlaceholderText(QStringLiteral("粘贴包含 -i <输入文件> 与 <输出文件> 的完整 FFmpeg 命令。"));
     form->addWidget(command_, 1);
+    auto *historyRow=new QHBoxLayout;
+    history_=new QComboBox(settings);history_->setObjectName("exportCommandHistory");history_->setMinimumContentsLength(20);history_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    history_->addItems(QSettings().value("export/commandHistory").toStringList());historyRow->addWidget(history_,1);
+    auto *recall=new QPushButton(QStringLiteral("调用历史命令"),settings);historyRow->addWidget(recall);
+    connect(recall,&QPushButton::clicked,this,[this]{if(history_->currentIndex()>=0)command_->setPlainText(history_->currentText());});
+    auto *saveCommand=new QPushButton(QStringLiteral("保存命令"),settings);historyRow->addWidget(saveCommand);
+    connect(saveCommand,&QPushButton::clicked,this,&ExportWindow::rememberCommand);form->addLayout(historyRow);
+    auto *server=new QLocalServer(this);server->setSocketOptions(QLocalServer::UserAccessOption);
+    server->listen("VSRenderer.ExportCommand");
+    connect(server,&QLocalServer::newConnection,this,[this,server]{
+        while(auto *socket=server->nextPendingConnection()){
+            auto *timeout=new QTimer(socket);timeout->setSingleShot(true);timeout->start(3000);connect(timeout,&QTimer::timeout,socket,&QLocalSocket::abort);
+            connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
+            connect(socket,&QLocalSocket::readyRead,this,[this,socket]{
+                auto buffer=socket->property("commandBuffer").toByteArray()+socket->readAll();
+                if(buffer.size()>65536){socket->abort();return;}
+                if(!buffer.contains('\n')){socket->setProperty("commandBuffer",buffer);return;}
+                const auto command=QJsonDocument::fromJson(buffer.left(buffer.indexOf('\n'))).object().value("command").toString();
+                if(!isVisible() || command.trimmed().isEmpty()){socket->write("ERROR: open the export window first\n");socket->disconnectFromServer();return;}
+                command_->setPlainText(command);rememberCommand();tabs_->setCurrentIndex(0);raise();activateWindow();
+                socket->write("OK\n");socket->disconnectFromServer();
+            });
+        }
+    });
     sourceLabel_ = new QLabel(QStringLiteral("当前文件：未导入"), settings);
     sourceLabel_->setWordWrap(true);
     form->addWidget(sourceLabel_);
@@ -266,6 +301,7 @@ void ExportWindow::enqueue(bool batch)
         if (inputPaths.contains(pathKey(output)))
             error = QStringLiteral("输出不能覆盖本批次的任何输入文件，请添加时间戳或选择其他目录。");
         if (error.isEmpty() && addJob(command_->toPlainText(), output, source, script.script, 0, &error)) {
+            rememberCommand();
             ++added;
             reservedOutputs.insert(pathKey(output));
             if (batch) {

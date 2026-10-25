@@ -5,13 +5,14 @@
 | 组件 | 用途 | 来源 / 许可证 |
 | --- | --- | --- |
 | Qt 6.10.2 | GUI 与 Win32 平台插件 | [Qt](https://www.qt.io/)；LGPL-3.0/GPL-3.0/商业多重许可 |
-| VapourSynth R80 | VPY 执行与逐帧处理 | [VapourSynth](https://github.com/vapoursynth/vapoursynth)；LGPL-2.1 |
+| VapourSynth R81 | VPY 执行与逐帧处理 | [VapourSynth](https://github.com/vapoursynth/vapoursynth)；LGPL-2.1 |
 | Python Embedded | VapourSynth Python 环境 | [Python](https://www.python.org/)；PSF License |
 | FFF Project / 3FP | 左右视频呈现 | [FFF Project](https://github.com/Lake1059/FFF_Project)；MIT |
 | FFmpeg shared libraries | 3FP 解码依赖 | [FFmpeg](https://ffmpeg.org/)；以发布包所含构建的配置为准，通常为 LGPL/GPL |
 | L-SMASH Works、FFMS2 | VapourSynth 源滤镜 | 通过 VSRepo 获取；许可证及源码链接见各 VSRepo 包元数据 |
 | fmtconv、RemoveGrain、AddGrain、VSZip、nlm-ispc、CAS、Zsmooth、Deblock、ZNEDI3、EEDI3、SangNom、Bwdif、VIVTC | VapourSynth 处理插件 | 通过 PyPI/VSRepo 获取；许可证及源码链接见各项目包元数据 |
 | vs-placebo 2.0.4 / libplacebo | VapourSynth 中执行 Anime4K 等 mpv GLSL | [vs-placebo](https://github.com/Lypheo/vs-placebo)、[libplacebo](https://github.com/haasn/libplacebo)；LGPL-2.1+ |
+| vsrplacebo 平面 Shader | 减少着色器串联的回读与拆包 | 基于 vs-placebo `06389c9a41abaf668ee2e469dd562231a8af297d`；LGPL-2.1+；修改源码与许可在 `third_party/vsr-placebo`，本地 Full 同附 `licenses/vsr-placebo-source` |
 | AWJimage 1.2.1 | 独立原生图片压缩转换CLI | [AWJimage](https://github.com/Dominic485649/AWJimage/releases/tag/1.2.1)；AGPL-3.0，随包保留许可证、完整上游NOTICE和固定修订对应源码；不链接进本项目 |
 
 发布包内同时保留 Qt、Python、VapourSynth 等组件随附的许可证文件。重新分发前请核对你所替换的 FFmpeg 和 VapourSynth 插件构建配置。

@@ -77,6 +77,22 @@ bool ThreeFpApi::resolve(T &target, const char *name)
     error_ = QStringLiteral("3FP 缺少 ABI：%1").arg(QString::fromLatin1(name));
     return false;
 }
+ThreeFpResult ThreeFpApi::enableAudioTap(void *handle,bool enabled) const {
+    if(enabled){using Fn=ThreeFpResult(*)(void*,const AudioTapConfig*);const auto call=reinterpret_cast<Fn>(library_.resolve("FFF3FP_EnableAudioTap"));AudioTapConfig config;return call?call(handle,&config):ThreeFpResult::NotSupported;}
+    const auto call=reinterpret_cast<HandleFn>(library_.resolve("FFF3FP_DisableAudioTap"));return call?call(handle):ThreeFpResult::NotSupported;
+}
+ThreeFpResult ThreeFpApi::readAudioTap(void *handle,void *pcm,std::uint32_t capacity,AudioTapBlock *block) const {
+    using Fn=ThreeFpResult(*)(void*,void*,std::uint32_t,AudioTapBlock*);const auto call=reinterpret_cast<Fn>(library_.resolve("FFF3FP_ReadAudioTap"));return call?call(handle,pcm,capacity,block):ThreeFpResult::NotSupported;
+}
+ThreeFpResult ThreeFpApi::setVideoEnhancement(void *handle,bool hdr,bool enabled) const {
+    const auto call=reinterpret_cast<StepFn>(library_.resolve(hdr?"FFF3FP_SetVideoAutoHdr":"FFF3FP_SetVideoSuperResolution"));return call?call(handle,enabled?1:0):ThreeFpResult::NotSupported;
+}
+VideoEnhancementStatus ThreeFpApi::videoEnhancementStatus(void *handle,bool hdr) const {
+    VideoEnhancementStatus status;using Fn=ThreeFpResult(*)(void*,VideoEnhancementStatus*);
+    const auto call=reinterpret_cast<Fn>(library_.resolve(hdr?"FFF3FP_GetVideoAutoHdrStatus":"FFF3FP_GetVideoSuperResolutionStatus"));
+    if(!call || call(handle,&status)!=ThreeFpResult::Success)status.reason=0xffffffff;
+    return status;
+}
 
 bool ThreeFpApi::available() const { const_cast<ThreeFpApi *>(this)->initialize();return library_.isLoaded() && error_.isEmpty(); }
 QString ThreeFpApi::libraryPath() const { return QFileInfo(library_.fileName()).absoluteFilePath(); }

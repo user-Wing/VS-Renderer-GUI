@@ -28,9 +28,13 @@
 
 | 环境变量 | 当前默认 | 用途 |
 | --- | --- | --- |
-| `FFF_DAV1D_WORKERS` / `FFF_DAV1D_DELAY` | 按帧字节；指定8K为8/6、4K444高位深为24/24 | 1–64 的工作线程/帧上下文覆盖 |
-| `VSR_SW_HANDOFF` | 1 | 8K 交接槽 1–3 |
-| `VSR_SW_UPLOAD_PIPELINE` | 0 | 1 测试双DEFAULT／双STAGING上传环，默认使用原UpdateSubresource |
+| `VSR_ADAPTIVE_THREADS` | 软件解码开启 | 0 固定线程数；默认按负载递增，重开媒体重新评估 |
+| `FFF_PLACEMENT` | 自动 | `off` / `prefer` / `spill` / `boost` 作为CPU域调度对照 |
+| `FFF_LADDER_TRACE` / `FFF_PLACEMENT_TRACE` | 未设置 | 输出线程、帧池、呈现节奏和CPU落点诊断 |
+| `FFF3FP_UPLOAD_FORCE_STAGING` | 0 | 1 在大帧和显存允许时切回双STAGING环；默认DYNAMIC + WRITE_DISCARD |
+| `FFF3FP_HWCAP_TRIAL` / `FFF3FP_HWCAP_MEMORY` | 1 / 1 | 用首帧试解码确认硬解能力，在会话内记忆流级拒绝 |
+| `FFF3FP_HWCAP_PROBE` / `FFF3FP_HWCAP_TRACE` | 0 / 未设置 | 驱动能力预筛选只作可选诊断，默认不替代实际试解码 |
+| `FFF_AUDIO_TARGET_TRACE` | 未设置 | 输出60～240ms音频目标缓冲的告警与升档原因 |
 | `VSR_SW_REALTIME_CATCHUP` | 1 | 0 禁用8K恒帧率AV1的参考帧追赶，排查用 |
 | `VSR_SW_REALTIME_TRACE` | 未设置 | 1 输出追赶切换与解码失败诊断 |
 | `VSR_SW_CCD` | 2 | 0 交还系统；2 软提示；1 强绑定，仅作排查 |
@@ -38,6 +42,26 @@
 | `VSR_DXGI_WAITABLE` | 0 | 1 尝试等待对象交换链，不支持时回退 |
 
 性能结果按实际开关记录，不能把开关开启时的测量写成默认模式表现。P/E 或多 CCD 策略需在对应设备实测。
+
+`FFF_DAV1D_WORKERS`、`FFF_DAV1D_DELAY`、`VSR_SW_UPLOAD_PIPELINE` 是旧补丁的实验开关，现行上游策略已替代其决策；不要套用旧轮次命令推断当前上传路线或线程数，读取实际快照和日志。
+
+## 上游内核优化
+
+当前固定 main `922e4b7`，API20；[构建与隔离边界](native-api20-build.md)给出完整SHA。以下描述代码机制，上游PR中的机器测量不能当作本机收益。本轮实测单独放在[验证台账](../development/validation.md)。
+
+| 上游更新 | 怎么减少开销或改善稳定性 | 当前VSP中的边界 |
+| --- | --- | --- |
+| [#27](https://github.com/Lake1059/FFF_Project/pull/27)、[#31](https://github.com/Lake1059/FFF_Project/pull/31)：线程、CPU域与帧池阶梯 | 根据实际饥饿和上传饱和情况调整资源；先尝试较合适的CPU域，再扩展或提高优先级。普通软解从低线程数起步，帧池按帧字节选择起点、必要时升档，避免所有片源都付出最大线程/内存成本 | 高负载dav1d保留单独线程策略；帧池是准入预算，不是进程RSS硬上限。P/E机器尚需实测 |
+| [#25](https://github.com/Lake1059/FFF_Project/pull/25)、[#27](https://github.com/Lake1059/FFF_Project/pull/27)、[#31](https://github.com/Lake1059/FFF_Project/pull/31)：上传与计量 | 解码线程与会话交接有界；默认直接Map动态纹理，减少额外GPU拷贝和纹理占用。可选双STAGING环让CPU填充与GPU消费交错，分配失败可回落；记录实际次数、字节、Map等待和复制耗时，区分内存带宽与同步等待 | 默认采用上游后续选择的动态纹理，不能把“有暂存环”理解为所有机器都更快；CPU预缩放默认仍关闭 |
+| [#28](https://github.com/Lake1059/FFF_Project/pull/28)：七种格式直传 | NV16、NV20LE、NV24、P410LE、P416LE、YUV410P、YUV440P直接描述纹理布局，省去整帧CPU sws_scale；按各格式的LSB/MSB对齐缩放采样值 | 不改采样算法；新增半平面格式仍需具体解码器/GPU输出才能覆盖，不用其他格式测试替代 |
+| [#28](https://github.com/Lake1059/FFF_Project/pull/28)、[#33](https://github.com/Lake1059/FFF_Project/pull/33)：高位深输出与明确色彩选择 | >8-bit SDR在支持Advanced Color时优先16-bit scRGB，失败回落10-bit；HDR源明确选择MapToSdr或RawHdrAsSdr时保持该选择，避免下一帧被自动策略反转 | 属于精度和行为修正，16-bit链也可能增加带宽，并非性能免费提升；普通8-bit SDR不提升 |
+| [#32](https://github.com/Lake1059/FFF_Project/pull/32)：GPU优先与首帧能力门 | 独立读入媒体并实际解出首帧，再确认D3D11VA或CUDA路线；硬解拒绝后切CPU，记住流级不支持，避免seek/重开/设备恢复时反复尝试。暂时打开失败不永久缓存 | 用户显式CPU选择保留；不以“4:4:4一律不支持”提前排除GPU；硬解试探本身有首开成本 |
+| [#27](https://github.com/Lake1059/FFF_Project/pull/27)、[#33](https://github.com/Lake1059/FFF_Project/pull/33)：呈现节奏和丢帧归因 | 负载不足时可在250ms容差内降低呈现节奏，超过容差恢复追赶；动态图层刷新独立于片源帧率，仍受面板上限约束。面板本身显示不了的帧单独记账，不再错误触发缩小画面 | VSP没有照搬上游VB弹幕泵；保留Native图层能力。节奏容差不能保证超载解码一直实时或全程音画误差≤250ms |
+| [#34](https://github.com/Lake1059/FFF_Project/pull/34)、[#35](https://github.com/Lake1059/FFF_Project/pull/35)：自适应音频池 | 从60ms或设备实际缓冲时长起步，出现欠载、时间戳抖动、断续、补静音或丢重叠时每批增加30ms，最高240ms；同轮不反复缩回，换文件/音轨重新起算 | 正常轻负载更低延迟，异常片源换取缓冲余量；不等于能补足持续不足的解码算力 |
+| [#34](https://github.com/Lake1059/FFF_Project/pull/34)、[#35](https://github.com/Lake1059/FFF_Project/pull/35)：HDR流级状态 | 分类和输出链选择读取流声明，显示器/目标亮度改变时重算；只有ST2094诊断继续逐帧更新，避免没有SEI的单帧改变HDR分类或输出档 | 实际动态色调映射仍按帧工作；Qt没有照搬VB信息行的打开时锁存逻辑 |
+| [#29](https://github.com/Lake1059/FFF_Project/pull/29)、[#31](https://github.com/Lake1059/FFF_Project/pull/31)、[#32](https://github.com/Lake1059/FFF_Project/pull/32)：附加Native能力 | 流级side-data独立缓存、外部声床渲染插槽、可选辅助视频层、RTX自动HDR，以及AVIF多extent/网格合成均随内核保留 | Qt已增加RTX VSR/TrueHDR入口，外部声床没有新增设置页；VSP图片由自己的图像模块解码，不能把Native AVIF修复直接当成VSP图片模块升级。IAMF/OBR继续保留，普通声床旧代码也未实际接入内置双耳渲染器 |
+
+[#24](https://github.com/Lake1059/FFF_Project/pull/24)主要是中性命名和注释，不能计为性能收益。1.0.14 已迁入 AI 字幕[#36](https://github.com/Lake1059/FFF_Project/pull/36)、[#37](https://github.com/Lake1059/FFF_Project/pull/37) 的音频 tap 与 Native 字幕更新；外置 worker 的配置步骤见 Player 指南。采样与识别队列有上限，设备速度由真实推理 RTF 判断，未装模型时不作识别性能结论。
 
 ## 内存与同步采样注意
 

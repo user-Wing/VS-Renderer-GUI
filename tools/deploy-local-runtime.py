@@ -11,7 +11,7 @@ from datetime import datetime
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / 'build/mingw-release'
-NATIVE = ROOT / 'build/native-api20/FFF.Native/x64/Release/FFF.Native.dll'
+NATIVE = BUILD / 'FFF.Native.dll'
 STRIP = Path('C:/Private/Soft/QT/Tools/mingw1310_64/bin/strip.exe')
 
 
@@ -52,7 +52,7 @@ def write_json(target, data):
 
 def main():
     backup = ROOT / 'build' / ('deployment-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
-    report = {'upstream': 'ce195ebd06e9cbb8352a443f0c874cf569a60733', 'editions': {}}
+    report = {'upstream': '922e4b70268fcbc83f0deb06d9e2c1b62e7a33b2', 'editions': {}}
     editions = {
         ROOT / 'dist/VS-GUI-Full': {'VSRenderer.exe': BUILD / 'VSRenderer.exe', 'vs-player.exe': BUILD / 'vs-player.exe', 'vs-cap.exe': BUILD / 'vs-cap.exe'},
         ROOT / 'build/playerlite-runtime': {'vs-player.exe': BUILD / 'lite/vs-player.exe'},
@@ -80,6 +80,20 @@ def main():
         for source in (ROOT / 'docs').glob('*.md'):
             sources[source.relative_to(ROOT).as_posix()] = source
         if folder == 'VS-GUI-Full':
+            for source in (ROOT / 'assets/ai-subtitles').iterdir():
+                if source.is_file():
+                    sources['runtime/ai-subtitles/' + source.name] = source
+            for source in (BUILD / 'color').iterdir():
+                if source.is_file():
+                    sources['color/' + source.name] = source
+            sources['licenses/vsr-placebo-COPYING.txt'] = ROOT / 'third_party/vsr-placebo/COPYING'
+            for source in (ROOT / 'third_party/vsr-placebo').iterdir():
+                if source.is_file():
+                    sources['licenses/vsr-placebo-source/' + source.name] = source
+            sources['plugins/3FUI/VsrExportBridge.3fui.dll'] = ROOT / 'build/release-1.0.14/3fui-plugin/VsrExportBridge.3fui.dll'
+            sources['plugins/3FUI/README.md'] = ROOT / 'plugins/3fui-export-bridge/README.md'
+            sources['plugins/3fui-export-bridge/README.md'] = ROOT / 'plugins/3fui-export-bridge/README.md'
+            sources['assets/ai-subtitles/README.md'] = ROOT / 'assets/ai-subtitles/README.md'
             for source in (BUILD / 'runtime/tools').glob('apply-*.ps1'):
                 sources['runtime/tools/' + source.name] = source
             for source in [*(BUILD / 'runtime').glob('*.zip'), *(BUILD / 'runtime').glob('*.version')]:

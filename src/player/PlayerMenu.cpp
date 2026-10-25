@@ -7,6 +7,7 @@
 
 namespace vsr {
 PlayerMenu::PlayerMenu(QWidget *parent) : QMenu(parent) {
+    setToolTipsVisible(true);
     QApplication::setEffectEnabled(Qt::UI_AnimateMenu,false);QApplication::setEffectEnabled(Qt::UI_FadeMenu,false);
     setWindowFlags(windowFlags()|Qt::FramelessWindowHint|Qt::NoDropShadowWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);

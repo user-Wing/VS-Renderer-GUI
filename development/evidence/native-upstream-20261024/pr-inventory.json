@@ -1,0 +1,128 @@
+{
+  "checkedOn": "2026-10-24",
+  "upstream": "922e4b70268fcbc83f0deb06d9e2c1b62e7a33b2",
+  "scope": "Native code only; upstream VB UI and external modules are not ported to Qt.",
+  "prs": [
+    {
+      "number": 37,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/37",
+      "title": "AI subtitles settings page: GPU layers dropdown + visible reason when tier is not selectable",
+      "author": "luoye-cpu",
+      "state": "open",
+      "mergedAt": null,
+      "base": "feature/ai-subtitles-qwen3-asr",
+      "head": "edf533155727f681eefa771082702bab275bca48",
+      "integration": "isolated-source-only"
+    },
+    {
+      "number": 36,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/36",
+      "title": "Kernel+Player+Tools: real-time AI subtitles with a llama-server worker",
+      "author": "luoye-cpu",
+      "state": "closed",
+      "mergedAt": "2026-10-23T00:24:27Z",
+      "base": "feature/ai-subtitles-qwen3-asr",
+      "head": "99454bc6294fc6dec6309b109a30bfad07203b41",
+      "integration": "isolated-source-only"
+    },
+    {
+      "number": 35,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/35",
+      "title": "Player+Kernel: HDR readouts latch at open, and the audio pool opens on any warning",
+      "author": "luoye-cpu",
+      "state": "closed",
+      "mergedAt": "2026-10-22T14:44:58Z",
+      "base": "main",
+      "head": "bb1cf51537d46dfdaa2cfc6745fa548f2a63c96d",
+      "integration": "native-parts-from-main"
+    },
+    {
+      "number": 34,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/34",
+      "title": "Player+Kernel: stream-level HDR caliber for info surfaces, and a rise-only audio buffer pool",
+      "author": "luoye-cpu",
+      "state": "closed",
+      "mergedAt": "2026-10-22T11:57:53Z",
+      "base": "main",
+      "head": "39f18c0328941fda20ef2e1aac09db96e48f3682",
+      "integration": "native-parts-from-main"
+    },
+    {
+      "number": 33,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/33",
+      "title": "Player+Kernel: danmaku at a 60 Hz floor, and colour tiers that hold",
+      "author": "luoye-cpu",
+      "state": "closed",
+      "mergedAt": "2026-10-22T09:25:04Z",
+      "base": "main",
+      "head": "e905fbeb7de891ccd15087931c462ba0bba0372f",
+      "integration": "native-parts-from-main"
+    },
+    {
+      "number": 32,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/32",
+      "title": "Kernel+Player: GPU-first decode with a single measured hardware gate, AVIF layered/grid, audio sync telemetry",
+      "author": "luoye-cpu",
+      "state": "closed",
+      "mergedAt": "2026-10-21T13:21:18Z",
+      "base": "main",
+      "head": "1582b7358d7c169ea8a4e5ceb143220a9d8435db",
+      "integration": "native-parts-from-main"
+    },
+    {
+      "number": 31,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/31",
+      "title": "Kernel+Player: image-mode zoom units, TrueHDR, upload byte accounting",
+      "author": "luoye-cpu",
+      "state": "closed",
+      "mergedAt": "2026-10-19T16:20:24Z",
+      "base": "main",
+      "head": "fbd84f71dd50cc31c95a37afa3d2580558b1ab32",
+      "integration": "native-parts-from-main"
+    },
+    {
+      "number": 29,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/29",
+      "title": "Player: stream configuration records, bed-render plug, and a VSR page",
+      "author": "luoye-cpu",
+      "state": "closed",
+      "mergedAt": "2026-10-18T17:30:33Z",
+      "base": "main",
+      "head": "4c9561fbfe4702a611e357bb869e124f12e46420",
+      "integration": "native-parts-from-main"
+    },
+    {
+      "number": 28,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/28",
+      "title": "3FP: direct path for 7 pixel formats, 16-bit output tier, external bed render",
+      "author": "luoye-cpu",
+      "state": "closed",
+      "mergedAt": "2026-10-18T12:04:45Z",
+      "base": "main",
+      "head": "f0d971dbd74e78dd6a09a24952517b5d5e6c8f5f",
+      "integration": "native-parts-from-main"
+    },
+    {
+      "number": 27,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/27",
+      "title": "3FP: adaptive playback placement/pacing + upload byte-count telemetry",
+      "author": "luoye-cpu",
+      "state": "closed",
+      "mergedAt": "2026-10-18T11:43:49Z",
+      "base": "main",
+      "head": "53460887f992f811e24c9243d340788cff2cebea",
+      "integration": "native-parts-from-main"
+    },
+    {
+      "number": 24,
+      "url": "https://github.com/Lake1059/FFF_Project/pull/24",
+      "title": "Colour-transform: rename the external surface and lock its user-visible text",
+      "author": "luoye-cpu",
+      "state": "closed",
+      "mergedAt": "2026-10-17T06:32:32Z",
+      "base": "main",
+      "head": "3ecd21afd1856016d2eedbac35e6a8e8c0755901",
+      "integration": "native-parts-from-main"
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "dav1d": [
+    {
+      "round": 1,
+      "variant": "baseline",
+      "seconds": 26.1087819,
+      "fps": 41.63350110178828
+    },
+    {
+      "round": 1,
+      "variant": "candidate",
+      "seconds": 25.0658913,
+      "fps": 43.36570309789862
+    },
+    {
+      "round": 2,
+      "variant": "baseline",
+      "seconds": 26.8649421,
+      "fps": 40.46165429852164
+    },
+    {
+      "round": 2,
+      "variant": "candidate",
+      "seconds": 26.0426106,
+      "fps": 41.73928707439185
+    },
+    {
+      "round": 3,
+      "variant": "baseline",
+      "seconds": 26.575047,
+      "fps": 40.90303208118503
+    },
+    {
+      "round": 3,
+      "variant": "candidate",
+      "seconds": 25.2758883,
+      "fps": 43.005412395338055
+    }
+  ],
+  "ffmpeg": [
+    {
+      "round": 1,
+      "variant": "baseline",
+      "seconds": 31.2144636,
+      "fps": 34.82360017232524
+    },
+    {
+      "round": 1,
+      "variant": "candidate",
+      "seconds": 32.6191083,
+      "fps": 33.32402559882362
+    },
+    {
+      "round": 2,
+      "variant": "baseline",
+      "seconds": 35.5632952,
+      "fps": 30.565221638966683
+    },
+    {
+      "round": 2,
+      "variant": "candidate",
+      "seconds": 38.3954895,
+      "fps": 28.31061705828754
+    },
+    {
+      "round": 3,
+      "variant": "baseline",
+      "seconds": 38.1552246,
+      "fps": 28.488890090297097
+    },
+    {
+      "round": 3,
+      "variant": "candidate",
+      "seconds": 36.7174525,
+      "fps": 29.604450363216237
+    }
+  ],
+  "pixels": [
+    "65a380176a860c55007ba3ee377ff094",
+    "65a380176a860c55007ba3ee377ff094"
+  ],
+  "shader": [
+    {
+      "mode": "fused",
+      "height": 1080,
+      "frames": 480,
+      "seconds": 8.058969600009732,
+      "fps": 59.56096422046565,
+      "format": "YUV444P16",
+      "targetFps": 48,
+      "scope": "VS output frames; excludes Native presentation"
+    },
+    {
+      "mode": "split",
+      "height": 1080,
+      "frames": 480,
+      "seconds": 11.757138999993913,
+      "fps": 40.8262588373114,
+      "format": "YUV444P16",
+      "targetFps": 48,
+      "scope": "VS output frames; excludes Native presentation"
+    },
+    {
+      "mode": "fused",
+      "height": 2160,
+      "frames": 480,
+      "seconds": 12.464550699922256,
+      "fps": 38.50920996317933,
+      "format": "YUV444P16",
+      "targetFps": 48,
+      "scope": "VS output frames; excludes Native presentation"
+    },
+    {
+      "mode": "split",
+      "height": 2160,
+      "frames": 480,
+      "seconds": 27.513532800017856,
+      "fps": 17.445960265767415,
+      "format": "YUV444P16",
+      "targetFps": 48,
+      "scope": "VS output frames; excludes Native presentation"
+    }
+  ],
+  "candidate": "b8b2d726b4b78a2fb174cb45baff441b5969672c",
+  "baseline": "54706fc6",
+  "frames": 1087,
+  "candidateFFmpegSha256": "6C98130168886FFCF7798A39205BA0B3D8C03726146DF5BE4E5BE530DA77E823"
+}

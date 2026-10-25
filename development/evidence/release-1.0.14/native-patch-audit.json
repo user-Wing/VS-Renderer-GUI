@@ -1,0 +1,25 @@
+{
+  "base": "922e4b70268fcbc83f0deb06d9e2c1b62e7a33b2",
+  "cleanIndexApply": true,
+  "files": [
+    "FFF.Native/3FP/Api/FFF.Player.Api.h",
+    "FFF.Native/3FP/Api/FFF.Player.AudioTap.h",
+    "FFF.Native/3FP/Api/PlayerApi.cpp",
+    "FFF.Native/3FP/Audio/AsrAudioTap.cpp",
+    "FFF.Native/3FP/Audio/AsrAudioTap.h",
+    "FFF.Native/3FP/Audio/WasapiRenderer.cpp",
+    "FFF.Native/3FP/Audio/WasapiRenderer.h",
+    "FFF.Native/3FP/Core/PlaybackScheduling.h",
+    "FFF.Native/3FP/Core/PlayerSession.cpp",
+    "FFF.Native/3FP/Core/PlayerSession.h",
+    "FFF.Native/3FP/Core/PlayerSessionDisc.cpp",
+    "FFF.Native/3FP/Disc/DiscInput.cpp",
+    "FFF.Native/3FP/Render/SdrShaderBytecode.h",
+    "FFF.Native/3FP/Render/ShaderBytecode.h",
+    "FFF.Native/3FP/Render/VideoRenderer.cpp",
+    "FFF.Native/3FP/Render/VideoRenderer.h",
+    "FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp",
+    "FFF.Native/FFF.Native.vcxproj",
+    "FFF.Native/Shared/Ffmpeg/FfmpegRuntime.cpp"
+  ]
+}

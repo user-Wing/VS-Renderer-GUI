@@ -126,7 +126,8 @@ void PlayerWindow::updateInfo() {
           << "" << tr("倍速：%1× · %2").arg(speed_,0,'f',2).arg(preset_.isEmpty() ? tr("原画") : QFileInfo(preset_).fileName());
     lines << tr("补帧：%1").arg(interpolationStage()>=0?interpolationNames().at(interpolationStage())+(interpolationAuto_?tr(" · 自动降档"):tr(" · 手动固定")):tr("未启用"));
     const QStringList algorithms{"Nearest Neighbour","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11","Lanczos4"};
-    lines << tr("缩放滤镜：%1").arg(madvrMode()?QString("madVR"):interpolationStage()>=0?(interpolationRenderer()?tr("D3D11"):tr("Jinc 直通")):profile()=="Anime"||profile()=="Realistic"||preset_.isEmpty()?qualityNames().at(std::clamp(qualityStage_,0,5)):algorithms.value(settings_->value("render/upscale",4).toInt(),tr("自定义")));
+    const QString scalingName=madvrMode()?QString("madVR"):direct_?algorithms.value(scalingAlgorithm()):interpolationStage()>=0?(interpolationRenderer()?tr("D3D11"):tr("Jinc 直通")):profile()=="Anime"?qualityNames().at(std::clamp(qualityStage_,0,7)):algorithms.value(scalingAlgorithm());
+    lines << tr("缩放滤镜：%1").arg(scalingName);
 
     if(madvrMode())lines << tr("色彩引擎：madVR");
     else {

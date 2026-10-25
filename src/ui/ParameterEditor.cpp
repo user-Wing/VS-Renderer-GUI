@@ -28,10 +28,6 @@ ParameterEditor::ParameterEditor(QWidget *parent)
     : QWidget(parent)
 {
     setObjectName(QStringLiteral("parameterEditor"));
-    setStyleSheet(QStringLiteral(
-        "#parameterEditor,#parameterEditor QWidget{background:#ffffff;}"
-        "#parameterEditor QComboBox,#parameterEditor QSpinBox,#parameterEditor QDoubleSpinBox,#parameterEditor QLineEdit{background:#f3f3f3;}"
-        "#parameterEditor QComboBox:hover{background:#e9e9e9;}"));
     form_ = new QGridLayout(this);
     form_->setContentsMargins(8, 8, 8, 8);
     form_->setHorizontalSpacing(8);

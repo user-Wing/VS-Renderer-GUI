@@ -34,6 +34,7 @@ class PlayerImage;
 class PlayerImageTools;
 class PlayerInfoPanel;
 class PlayerDiscMenu;
+class PlayerAiSubtitles;
 class PlayerWindow final : public QMainWindow {
     Q_OBJECT
 public:
@@ -113,10 +114,13 @@ private:
     QString profile() const;
     bool animeSourceSupported() const;
     int fixedAnimeStage() const;
+    int superInterpolationStage() const;
     int initialQualityStage() const;
     QStringList qualityNames() const;
     QStringList interpolationNames() const;
     int interpolationRenderer() const;
+    QStringList interpolationStages(int renderer) const;
+    int scalingAlgorithm(bool downscale=false) const;
     bool advanceInterpolation();
     void showInterpolationWarning(bool visible);
     QSize profileTarget() const;
@@ -124,6 +128,8 @@ private:
     void setPlaylistPinned(bool pinned);
     void dockPlaylist();
     void showSettings();
+    PlayerAiSubtitles *aiSubtitles_=nullptr;
+    QLabel *aiCaption_=nullptr;
     void showColorSettings();
     void applyColorSettings();
     void showSpeedPopup();

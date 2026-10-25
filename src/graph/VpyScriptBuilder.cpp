@@ -120,7 +120,7 @@ QString emitNode(const FilterNode &node, bool gpu = true)
                        "        _shader_text = _shader_process.check_output([_shader_tool, 'x', '-so', '-bd', '-bsp0', '-spd', _shader_archive, _shader_member], creationflags=0x08000000).decode('utf-8').lstrip('\\ufeff')\n"
                        "        _shader_sys._vsr_last_shader = (_shader_key, _shader_text)\n"
                        "    else: _shader_text = _shader_cached[1]\n"
-                       "clip = core.placebo.Shader(clip, shader_s=_shader_text, %2)")
+                       "clip = getattr(core, 'vsrplacebo', core.placebo).Shader(clip, shader_s=_shader_text, %2)")
             .arg((p.value("mode").toString() == QStringLiteral("自定义 GLSL") || !p.value("shader").toString().isEmpty()
                  ? VpyScriptBuilder::pythonString(p.value("shader").toString())
                  : QString("os.path.join(globals().get('_vsr_directory', %1), 'shaders', %2)")

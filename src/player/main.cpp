@@ -9,6 +9,7 @@
 #include "player/PlayerImageTools.h"
 #include <QTimer>
 #include <QFileInfo>
+#include "update/SinglePlayerUpdater.h"
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     if(app.arguments().value(1)=="--photocraft-import" && app.arguments().size()==4){
@@ -36,6 +37,9 @@ int main(int argc, char **argv) {
 #endif
     QFont font("Comic Sans MS"); font.setPixelSize(13); app.setFont(font);
     vsr::PlayerWindow window; window.show();
+#ifdef VSR_LITE_PLAYER
+    auto *updater=new vsr::SinglePlayerUpdater(&window);QTimer::singleShot(5000,&window,[updater]{updater->check();});
+#endif
     const auto arguments = app.arguments();
     QTimer::singleShot(0,&window,[&window,arguments]{
 #ifdef VSR_LITE_PLAYER

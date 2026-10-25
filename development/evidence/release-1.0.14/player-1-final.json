@@ -1,0 +1,26 @@
+{
+    "acceptedFps": 47.93333333333333,
+    "coalesced": 0,
+    "dropped": 0,
+    "format": "YUV444P16",
+    "fpsDen": 1001,
+    "fpsNum": 48000,
+    "frameHeight": 540,
+    "frameMilliseconds": 11.286054880116492,
+    "frameWidth": 960,
+    "modules": {
+        "python315.dll": "c:\\users\\arxchem\\documents\\open source projects\\vs-renderer-gui\\build\\mingw-release\\runtime\\python\\python315.DLL",
+        "v3_placebo-360.dll": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\mingw-release\\color\\v3_placebo-360.dll",
+        "vsrplacebo.dll": "c:\\users\\arxchem\\documents\\open source projects\\vs-renderer-gui\\build\\mingw-release\\runtime\\python\\Lib\\site-packages\\vapoursynth\\plugins\\vsrplacebo.dll",
+        "vsscript.dll": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\mingw-release\\runtime\\python\\Lib\\site-packages\\vapoursynth\\vsscript.dll"
+    },
+    "nativeAccepted": 1438,
+    "prefetch": 8,
+    "realtime": true,
+    "seconds": 30,
+    "skipped": 0,
+    "stage": 1,
+    "submitted": 1438,
+    "surfaceHeight": 2160,
+    "surfaceWidth": 3840
+}

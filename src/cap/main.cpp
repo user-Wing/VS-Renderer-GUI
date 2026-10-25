@@ -19,11 +19,13 @@
 #include <cstring>
 #include "DesktopCapture.h"
 #include "UiAccess.h"
+#include "HotkeyEdit.h"
 #include "image/ImageJxl.h"
+#include "ui/About.h"
 
 static QString defaultDirectory()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + "/VS Cap";
+    return QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
 }
 
 using cap::savePng;
@@ -151,6 +153,10 @@ class CaptureOverlay final : public QWidget {
 public:
     CaptureOverlay(QScreen *screen, QImage shot, std::function<bool(QImage,bool,QString,bool)> output, bool embedded=false)
         : canvas_(std::move(shot)), embedded_(embedded), output_(std::move(output)) {
+        QSettings settings(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);
+        color_=QColor(settings.value("editor/color","#ff0000").toString());
+        lineMode_=qBound(0,settings.value("editor/lineMode",0).toInt(),2);
+        penWidth_=qBound(1,settings.value("editor/penWidth",3).toInt(),512);
         setWindowFlags(embedded_?Qt::Widget:Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
         if(!embedded_ && QApplication::activeModalWidget())setWindowModality(Qt::ApplicationModal);
         setAttribute(Qt::WA_DeleteOnClose,!embedded_);
@@ -200,7 +206,7 @@ public:
         });
         options_=new QComboBox(bar_);options_->setObjectName("capToolOptions");layout->addWidget(options_);
         penWidthInput_=new QSpinBox(bar_);penWidthInput_->setObjectName("capPenWidth");penWidthInput_->setRange(1,512);penWidthInput_->setPrefix(QStringLiteral("粗细 "));penWidthInput_->setSuffix(" px");penWidthInput_->setValue(penWidth_);layout->addWidget(penWidthInput_);
-        connect(penWidthInput_,&QSpinBox::valueChanged,this,[this](int width){penWidth_=width;});
+        connect(penWidthInput_,&QSpinBox::valueChanged,this,[this](int width){penWidth_=width;saveBrush();});
         textFont_.setPointSize(18);
         fontOptions_=new QWidget(bar_);auto *fonts=new QHBoxLayout(fontOptions_);fonts->setContentsMargins(0,0,0,0);fonts->setSpacing(3);
         fontFamily_=new QFontComboBox(fontOptions_);fontFamily_->setObjectName("capFontFamily");fontFamily_->setEditable(true);fontFamily_->setFixedWidth(160);
@@ -230,7 +236,7 @@ public:
         tool(QStringLiteral("矩形"),Rect);
         tool(QStringLiteral("圆形"),Ellipse);tool(QStringLiteral("线"),Line);tool(QStringLiteral("文字"),Text);
         tools_->button(Rect)->setToolTip(QStringLiteral("按住 Ctrl 画正方形"));tools_->button(Ellipse)->setToolTip(QStringLiteral("按住 Ctrl 画圆形"));
-        connect(options_,&QComboBox::currentIndexChanged,this,[this](int index){if(tool_==Line)lineMode_=index;else penWidth_=options_->currentData().toInt();});
+        connect(options_,&QComboBox::currentIndexChanged,this,[this](int index){if(tool_==Line)lineMode_=index;else penWidth_=options_->currentData().toInt();saveBrush();});
         undoButton_=add(QStringLiteral("撤销"),[this]{undo();});undoButton_->setEnabled(false);
         if(!embedded_){auto *undoShortcut=new QShortcut(QKeySequence::Undo,this);connect(undoShortcut,&QShortcut::activated,this,[this]{undo();});}
         add(QStringLiteral("保存"), [this] {
@@ -284,7 +290,8 @@ private:
         Edit edit;edit.text=box;edit.created=true;history_.append(edit);trimHistory();typingText_=nullptr;undoButton_->setEnabled(true);
         box->show();box->raise();bar_->raise();selectText(box);box->editor->setFocus();
     }
-    void updateColor(){colorButton_->setStyleSheet(QString("border-bottom:3px solid %1;").arg(color_.name()));}
+    void updateColor(){colorButton_->setStyleSheet(QString("border-bottom:3px solid %1;").arg(color_.name()));saveBrush();}
+    void saveBrush(){QSettings settings(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);settings.setValue("editor/color",color_.name(QColor::HexArgb));settings.setValue("editor/lineMode",lineMode_);settings.setValue("editor/penWidth",penWidth_);}
     void updateOptions(){
         for(auto *box:texts_)box->setAttribute(Qt::WA_TransparentForMouseEvents,tool_==Selection || tool_==Pan);
         const QSignalBlocker block(options_);options_->clear();
@@ -623,7 +630,7 @@ private:
     }
     static bool sequence(const QString &value, UINT &mod, UINT &key) {
         QKeySequence seq=QKeySequence::fromString(value,QKeySequence::PortableText);
-        if(seq.isEmpty() || seq.count()!=1)return false;
+        if(seq.isEmpty() || !cap::allowedHotkey(seq))return false;
         const auto comb=seq[0];const auto k=comb.key();
         const auto m=comb.keyboardModifiers();
         mod=MOD_NOREPEAT;
@@ -640,10 +647,10 @@ private:
     }
     bool bindHotkeys(const QString &capture, const QString &pin) {
         UINT m1=0,k1=0,m2=0,k2=0;
-        if(!sequence(capture,m1,k1) || !sequence(pin,m2,k2) || (m1==m2 && k1==k2))return false;
+        if((!capture.isEmpty() && !sequence(capture,m1,k1)) || (!pin.isEmpty() && !sequence(pin,m2,k2)) || (!capture.isEmpty() && !pin.isEmpty() && m1==m2 && k1==k2))return false;
         UnregisterHotKey(nullptr,1001);UnregisterHotKey(nullptr,1002);
-        const bool a=RegisterHotKey(nullptr,1001,m1,k1);
-        const bool b=RegisterHotKey(nullptr,1002,m2,k2);
+        const bool a=capture.isEmpty() || RegisterHotKey(nullptr,1001,m1,k1);
+        const bool b=pin.isEmpty() || RegisterHotKey(nullptr,1002,m2,k2);
         if(!a || !b){
             UnregisterHotKey(nullptr,1001);UnregisterHotKey(nullptr,1002);
             tray_.showMessage("VS Cap",QStringLiteral("快捷键冲突或已被占用，请打开设置更换"),QSystemTrayIcon::Warning);
@@ -795,10 +802,19 @@ private:
     void configure() {
         QDialog dialog;
         dialog.setWindowTitle(QStringLiteral("VS Cap 设置"));
-        QFormLayout layout(&dialog);
-        QKeySequenceEdit screenshot(QKeySequence(settings_.value("hotkeys/capture","Alt+A").toString()));
-        QKeySequenceEdit pin(QKeySequence(settings_.value("hotkeys/pin","Alt+T").toString()));
+        QVBoxLayout outer(&dialog);QTabWidget tabs;outer.addWidget(&tabs);
+        QWidget general;tabs.addTab(&general,QStringLiteral("基本设置"));tabs.addTab(vsr::aboutLabel("VS Cap"),QStringLiteral("关于"));
+        QFormLayout layout(&general);
+        cap::HotkeyEdit screenshot(QKeySequence(settings_.value("hotkeys/capture","Alt+A").toString()));
+        cap::HotkeyEdit pin(QKeySequence(settings_.value("hotkeys/pin","Alt+T").toString()));
         QCheckBox autostart(QStringLiteral("开机自启"));
+        QCheckBox elevatedStartup(QStringLiteral("以管理员身份开机自启"));elevatedStartup.setObjectName("capElevatedStartup");elevatedStartup.setChecked(settings_.value("general/elevatedStartup",false).toBool());
+        connect(&elevatedStartup,&QCheckBox::clicked,&dialog,[&](bool enabled){
+            QString error;if(!cap::configureElevatedStartup(enabled,&error)){const QSignalBlocker block(&elevatedStartup);elevatedStartup.setChecked(!enabled);QMessageBox::warning(&dialog,"VS Cap",error);return;}
+            settings_.setValue("general/elevatedStartup",enabled);
+            if(enabled){autostart.setChecked(true);settings_.setValue("general/autostart",true);QSettings startup("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",QSettings::NativeFormat);startup.remove("VS Cap");}
+            else if(settings_.value("general/autostart",false).toBool()){QSettings startup("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",QSettings::NativeFormat);startup.setValue("VS Cap",QDir::toNativeSeparators("\""+QCoreApplication::applicationFilePath()+"\""));}
+        });
         QCheckBox trayMode(QStringLiteral("启动时最小化到托盘"));
         QCheckBox uiAccess(QStringLiteral("UIAccess 高优先级置顶（重启后生效，需要管理员授权）"));
         uiAccess.setObjectName("capUiAccess");uiAccess.setChecked(settings_.value("general/uiAccess",false).toBool());
@@ -817,7 +833,7 @@ private:
         layout.addRow(QStringLiteral("默认保存格式"),&format);
         layout.addRow(QStringLiteral("AWJ AVIF 质量"),&quality);
         layout.addRow(&uiAccess);
-        layout.addRow(&autostart);layout.addRow(&trayMode);
+        layout.addRow(&autostart);layout.addRow(&elevatedStartup);layout.addRow(&trayMode);
         QLabel note(QStringLiteral("默认 JXL，16bit×4 通道无损，原生携带 HDR 色彩信息；PNG 为兼容候选。HDR 自动按所选格式保存，JXL/PNG 同时提供 SDR 副本，不生成浮点附件。AWJ AVIF 使用 AOM、默认质量 70。UIAccess 默认关闭，启用后下次启动会请求 Windows 管理员授权，无需驱动或安装证书。"));
         note.setWordWrap(true);layout.addRow(&note);
         QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
@@ -825,6 +841,9 @@ private:
         connect(&buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);
         connect(&buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
         if(dialog.exec()!=QDialog::Accepted)return;
+        if(!autostart.isChecked() && settings_.value("general/elevatedStartup",false).toBool()){
+            QString error;if(!cap::configureElevatedStartup(false,&error)){QMessageBox::warning(nullptr,"VS Cap",error);return;}settings_.setValue("general/elevatedStartup",false);
+        }
         const QString a=screenshot.keySequence().toString(QKeySequence::PortableText);
         const QString b=pin.keySequence().toString(QKeySequence::PortableText);
         if(!bindHotkeys(a,b)){
@@ -843,7 +862,7 @@ private:
         settings_.setValue("general/uiAccess",uiAccess.isChecked());
         settings_.sync();
         QSettings startup("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",QSettings::NativeFormat);
-        if(autostart.isChecked())startup.setValue("VS Cap",QDir::toNativeSeparators("\""+QCoreApplication::applicationFilePath()+"\""));
+        if(autostart.isChecked() && !settings_.value("general/elevatedStartup",false).toBool())startup.setValue("VS Cap",QDir::toNativeSeparators("\""+QCoreApplication::applicationFilePath()+"\""));
         else startup.remove("VS Cap");
     }
 };
@@ -869,6 +888,8 @@ int main(int argc,char **argv) {
     app.setQuitOnLastWindowClosed(false);
     app.setApplicationName("VS Cap");
     app.setApplicationVersion(VSR_VERSION);
+    const int startupArgument=app.arguments().indexOf("--startup-task");
+    if(startupArgument>=0)return cap::runStartupTaskCommand(app.arguments().value(startupArgument+1)=="enable",app.arguments().value(startupArgument+2));
     const int waitArgument=app.arguments().indexOf("--wait-parent");
     if(waitArgument>=0){const auto parent=OpenProcess(SYNCHRONIZE,FALSE,app.arguments().value(waitArgument+1).toULong());if(parent){WaitForSingleObject(parent,10000);CloseHandle(parent);}}
     if(const auto running=OpenMutexW(SYNCHRONIZE,FALSE,L"Local\\VSRenderer-VSCap")){CloseHandle(running);return 0;}

@@ -30,7 +30,7 @@ def _vsr_sharpen_chain(c, stages):
         return c
     c=core.resize.Point(c,format=core.query_video_format(vs.YUV,vs.INTEGER,16,c.format.subsampling_w,c.format.subsampling_h).id)
     shader='\n'.join(_vsr_sharpen_shader(*stage) for stage in stages)
-    filtered=core.placebo.Shader(c,shader_s=shader,width=c.width,height=c.height,linearize=False,sigmoidize=False)
+    filtered=getattr(core, 'vsrplacebo', core.placebo).Shader(c,shader_s=shader,width=c.width,height=c.height,linearize=False,sigmoidize=False)
     return core.std.ShufflePlanes([filtered,c,c],planes=[0,1,2],colorfamily=vs.YUV)
 
 def _vsr_sharpen(c, mode, strength, threshold=0):

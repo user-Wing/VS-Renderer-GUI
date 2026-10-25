@@ -1,0 +1,10 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::bdDragCommitsFinalPosition(paused) BD final drag seek ms 235 target seconds 426.426
+PASS   : TestPlayer::bdDragCommitsFinalPosition(paused)
+QINFO  : TestPlayer::bdDragCommitsFinalPosition(playing) BD final drag seek ms 220 target seconds 426.426
+PASS   : TestPlayer::bdDragCommitsFinalPosition(playing)
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 4939ms
+********* Finished testing of TestPlayer *********

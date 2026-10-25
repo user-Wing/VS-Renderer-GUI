@@ -1,6 +1,6 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-10-18。源码版本 **1.0.13**，以 `CMakeLists.txt` 为准；Native 固定 API20 / PR23，提交 `ce195ebd06e9cbb8352a443f0c874cf569a60733`。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
+核对日期：2026-10-25。源码版本 **1.0.14**，以 `CMakeLists.txt` 为准；Native 固定 API20 / 上游 main `922e4b70268fcbc83f0deb06d9e2c1b62e7a33b2`，含 #35，并通过本地补丁迁入 AI 字幕 #36/#37 Native 能力。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
 
 ## 1. 发心与边界
 
@@ -30,7 +30,9 @@
 | 直通相对逐帧 | `PlayerWindow::stepFrame` 调用内核当前PTS逐帧；Native重新解码局部GOP确认相邻帧 | 不用绝对帧号逐帧，也不把稀疏缓存中的近邻当成真实相邻帧；VS仍按输出帧号定位 |
 | 查看与编辑解耦 | PhotoCraft 独立进程保留未保存工作 | 旧 Qt 编辑器仍有源码/测试，不作为生产编辑入口 |
 | 固定上游 + 完整 Native 补丁 | 保留本地扩展并可重新构建 | 不拼装 API14/18/20 不同版本 DLL 或补丁 |
-| 软件播放同步与内存预算 | `PlayerSession.cpp` 按帧字节约束在途深度与队列；`WasapiRenderer.cpp` 欠载补静音保持时间推进，8K AV1 恒帧率落后时在关键包切换参考帧追赶 | 不任意丢弃编码参考包或靠慢放保帧；暂停定位恢复完整解码，实际性能按素材验收 |
+| 软件播放同步与内存预算 | 上游线程/帧池/CPU 域按负载逐级调整；音频从60ms起按告警升至240ms，呈现允许最多250ms的平滑节奏容差；保留VSP的8K关键包参考帧追赶 | 不把显示器限帧记为解码丢帧；CPU预缩放仍默认关闭，8K逐帧实时按素材验收 |
+| AI 字幕外置推理 | 固定 main + #36/#37 Native 音频 tap；Qt 有界传 PCM 到外置 worker，跳转按 generation 隔离 | 模型与 llama-server 不随包下载；不移植上游 VB 页面，不将未装模型测试当作识别验收 |
+| Shader 平面输出 | `third_party/vsr-placebo` 直接回读 YUV 平面、合并增强 hooks，独立命名空间与 color 依赖 | 保留标准 placebo 插件作为缺少组件时的兼容路径；不把 VS 吞吐当作 Native 播放帧率 |
 
 ## 4. 目录地图与改动入口
 
@@ -71,7 +73,7 @@
 | Qt | 6.8+；本地记录 6.10.2，MinGW；CMake 查找 | 编译或 GUI 启动失败 |
 | VapourSynth / Python | VS API4 / R81；构建和 stage 脚本，`update-vapoursynth-runtime.py` 锁定哈希 | VS 链不可用；直通路径独立 |
 | VS 插件 | BM3D 11.0、BM3Dvk2 1.0、BestSource 22；其余随运行时保留 | 对应滤镜不可用；不能用 API3 DLL 替代 |
-| FFF.Native | API20 / PR23；`build-native-api20.ps1` 应用完整补丁，动态 C ABI | 原生播放/呈现不可用 |
+| FFF.Native | API20 / main `922e4b7`；`build-native-api20.ps1` 应用完整补丁，配置112字节、snapshot464字节，动态 C ABI | 原生播放/呈现不可用 |
 | FFmpeg | 当前 shared ABI：63/63/61/7/10/12；Native SDK 与运行 DLL 配套 | 相应解码/导出失败，单文件启动器先检查组件 |
 | GLSL / RIFE | 随包 shader 与 NCNN 模型，`stage-shaders.ps1` / `install-analysis-plugins.ps1` | 相应增强不可用；RIFE 需要 Vulkan |
 | libVLC / LAV / madVR | Full 可选后端，stage 脚本及各自许可 | 对应后端不可用，PlayerLite 不包含 |
@@ -89,7 +91,8 @@
 | Renderer 项目 | `*.vsr.json` / `MainWindow` | `schemaVersion=1`；读取能力以代码为准，未知节点不保证无损往返 |
 | VPY 预设 | 程序旁 `vpy/` / `PresetStore` | `# VSR_PRESET` Base64 JSON；时间组 metadata `schema=2`，兼容旧单链；不能与项目 schema 混淆 |
 | Player 配置 | `player.ini` / `PlayerSettings` | 保留用户显式选择；单文件放启动器旁 |
-| Renderer / 社区设置 | QSettings；`community/sourceUrl` | 默认源为 VS-GUI 公开页面，解析与下载按内部协议处理 |
+| Renderer / 社区设置 | QSettings；`community/sourceUrl`、`appearance/dark`、`appearance/language` | 源/主题/语言在同一滚动页；主题即时生效 |
+| 说明 / 命令 / AI | `vpy/preset-descriptions.json`；QSettings `export/commandHistory`；`player.ini` 的 `ai/package` | 说明只补空键；命令历史最多 50 条；模型路径指向外置清单 |
 | 临时脚本/索引 | QStandardPaths、媒体索引缓存 | 可再生；导出冻结脚本、源和参数，不删除用户 VPY |
 | 分发元数据 | `release.json`、资源/组件清单 | 版本、根目录和文件哈希须对应实际产物 |
 
@@ -113,6 +116,8 @@
 
 ## 10. 当前状态与下一步
 
+1.0.14 在固定 API20 主线补丁上迁入 AI 音频 tap 与字幕 HDR，Qt 接入 RTX VSR/TrueHDR、外置 AI 字幕、八档与组合处理、Renderer 主题设置、3FUI 命令桥及 Cap 设置改进。Player 设置新增独立字幕页；渲染页完整列出 Anime 档位，Jinc/D3D11 补帧分别保存参与列表；其他缩放算法限纯 D3D11 直通，Tab/底栏读取实际路径。ParameterEditor 跟随全局主题。入口分别为 `PlayerAiSubtitles`、`PlayerProfiles`、`MainWindow`、`ExportWindow`、`src/cap/main.cpp`；插件源码在 `plugins/3fui-export-bridge`，单文件更新在 `SinglePlayerUpdater`。保留 VS 帧桥、BD 定位、音频效果和色彩桥；普通声床没有新增内置双耳渲染器。原理见[性能排查](docs/performance-debugging.md#上游内核优化)，逐项状态及实测见[台账](development/validation.md)。本轮更新本地产物并同步源码，不打压缩包、不更新外部 Release 附件。
+
 1.0.13 增加安装进程清理、压缩运行时按需展开与单文件BD定位显示保持；列表/右键共用返回菜单入口，原生菜单页禁用时间轴，同盘重开复用盘信息，原生会话同步销毁后再替换窗口。VSCap续修将颜色窗口归属到真实工具栏窗口，避免贴图拖动模式拦截颜色交互；已发布的1.0.13附件不自动包含续修，重新分发须核对哈希。具体测试见台账。此前1.0.12 已有 BD 全卷定位/按段索引、Jinc 色彩、无音轨 VS 时钟、Anime 预取与软件内核的聚焦测试记录；**未运行全量 Full 播放器套件**。后轮结果只覆盖其实际测试范围，不能把同版多个 passed 数字相加为一次总回归。
 
 当前仍未完成：
@@ -125,7 +130,7 @@
 
 4. IAMF/OBR 真实空间音频听感
 
-语言检查留有 9 项旧字符串缺失。逐项依据及跨版本变化见 [台账](development/validation.md)。
+1.0.14 语言检查通过。新增验收边界：AI 未配置真实模型、3FUI 未操作真实宿主按钮、管理员计划任务未实际启用；i5-9500/1650 Super 无远程入口。BT.2020 CL 原生路径的既有断言失败在旧 DLL 同样复现，尚未关闭。逐项依据及跨版本变化见 [台账](development/validation.md)。
 
 下一步按用户指定设备和素材复测上述未完成项。不要把 1.0.10/11 的旧失败继续写成 1.0.12 已修复路径的当前结论，也不要从工作区版本推断外部 Release 状态。
 

@@ -1,0 +1,25 @@
+{
+  "dist/VS-GUI-Full": {
+    "nativeSha256": "490d4cd7f7e0cbc95d2ad93b573497557aeeb3b692d91ccf73963a2192c87bbb",
+    "upstream": "922e4b70268fcbc83f0deb06d9e2c1b62e7a33b2",
+    "playerSha256": "a594574cb22d5914c11e4e8ca661713396e04f9915264bf7efe20097c0994d06",
+    "manifestMatches": true
+  },
+  "build/playerlite-runtime": {
+    "nativeSha256": "490d4cd7f7e0cbc95d2ad93b573497557aeeb3b692d91ccf73963a2192c87bbb",
+    "upstream": "922e4b70268fcbc83f0deb06d9e2c1b62e7a33b2",
+    "playerSha256": "63631a660a0f59968c56af513974b773d429dd77245262bcc9c94174ae8c2b4f",
+    "manifestMatches": true
+  },
+  "dist/VS-Player.exe": {
+    "sha256": "38acf3a5ca1db5341b6faa3a51d70388f9d5028a7bfeebc5446bb52db12f05eb",
+    "bytes": 35872593,
+    "nativeSha256": "490d4cd7f7e0cbc95d2ad93b573497557aeeb3b692d91ccf73963a2192c87bbb",
+    "payloadSha256": "ee8a0037ed6d9d4f8a830c34e999ffda406ab91f3b43c9517582c4f9b285751a",
+    "zipVerified": true,
+    "aiSubtitlesBundled": false
+  },
+  "settingsUnchanged": true,
+  "vscapUnchanged": true,
+  "backup": "build/pr-integration-20261024/deployment"
+}

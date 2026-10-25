@@ -1,0 +1,11 @@
+********* Start testing of TestColor *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestColor::initTestCase()
+FAIL!  : TestColor::constantLuminanceAndHdr() 'p.samplePixel(160,120,ncl)' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestColor.cpp(90) : failure location
+PASS   : TestColor::invalidProfileFallsBackAndRecovers()
+FAIL!  : TestColor::customIccLutAndRgbOrder() 'p.samplePixel(160,120,sample)' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestColor.cpp(124) : failure location
+PASS   : TestColor::cleanupTestCase()
+Totals: 3 passed, 2 failed, 0 skipped, 0 blacklisted, 1362ms
+********* Finished testing of TestColor *********

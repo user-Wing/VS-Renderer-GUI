@@ -54,6 +54,10 @@ public:
     bool setOutputFormat(const QString &format);
     void setAntiRinging(bool enabled);
     bool setSubtitle(const QImage &image);
+    bool enableAudioTap(bool enabled);
+    QByteArray readAudioTap(AudioTapBlock &block);
+    bool setVideoEnhancement(bool hdr, bool enabled);
+    VideoEnhancementStatus videoEnhancementStatus(bool hdr) const;
     QImage capture() const;
     QImage captureFloat() const;
 
@@ -75,6 +79,7 @@ private:
     float volume_ = 1.0f;
     unsigned decodeMode_ = 2;
     bool automaticHdr_ = false;
+    bool videoAutoHdr_ = false,videoSuperResolution_ = false;
     VsrColorSettings colorSettings_ = VsrColorDefaultSettings();
     bool customColorSettings_ = false;
     bool antiRinging_ = false;

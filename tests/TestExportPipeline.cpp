@@ -20,6 +20,10 @@
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QSettings>
+#include <QLocalSocket>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTest>
 
 using namespace vsr;
@@ -27,6 +31,16 @@ using namespace vsr;
 class TestExportPipeline final : public QObject {
     Q_OBJECT
 private slots:
+    void commandBridgeAndHistory(){
+        QSettings settings;const auto saved=settings.value("export/commandHistory");const auto restore=qScopeGuard([&]{if(saved.isValid())settings.setValue("export/commandHistory",saved);else settings.remove("export/commandHistory");});
+        ExportWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *command=window.findChild<QPlainTextEdit*>("exportCommand");auto *history=window.findChild<QComboBox*>("exportCommandHistory");QVERIFY(command && history);
+        const QString text="ffmpeg -i \"input file.mkv\" -c:v libx264 output.mkv";
+        QLocalSocket socket;socket.connectToServer("VSRenderer.ExportCommand");QTRY_COMPARE(socket.state(),QLocalSocket::ConnectedState);
+        socket.write(QJsonDocument(QJsonObject{{"command",text}}).toJson(QJsonDocument::Compact)+'\n');socket.flush();QTRY_VERIFY(socket.canReadLine());QCOMPARE(socket.readLine(),QByteArray("OK\n"));QCOMPARE(command->toPlainText(),text);QCOMPARE(history->itemText(0),text);
+        QCOMPARE(window.findChild<QTreeWidget*>()->topLevelItemCount(),0);
+        window.hide();QLocalSocket hidden;hidden.connectToServer("VSRenderer.ExportCommand");QTRY_COMPARE(hidden.state(),QLocalSocket::ConnectedState);hidden.write("{\"command\":\"ignored\"}\n");hidden.flush();QTRY_VERIFY(hidden.canReadLine());QVERIFY(hidden.readLine().startsWith("ERROR"));QCOMPARE(command->toPlainText(),text);
+    }
     void initTestCase()
     {
         QFont font(QStringLiteral("Segoe UI Variable"));

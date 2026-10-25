@@ -3,5 +3,5 @@
 #include <QString>
 
 namespace vsr {
-QString applicationStyleSheet();
+QString applicationStyleSheet(bool dark = false);
 }

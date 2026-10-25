@@ -233,6 +233,11 @@ private slots:
         }
         tabs->setCurrentIndex(2);window.grab().save(QCoreApplication::applicationDirPath()+"/renderer-export-tabs.png");
     }
+    void parameterEditorFollowsTheme() {
+        const auto previous=qApp->styleSheet();const auto restore=qScopeGuard([&]{qApp->setStyleSheet(previous);});
+        FilterGraph graph;const int id=graph.add("anime4k");ParameterEditor editor;editor.setNode(FilterCatalog::find("anime4k"),graph.at(id));editor.resize(620,850);editor.show();
+        for(bool dark:{true,false}){qApp->setStyleSheet(applicationStyleSheet(dark));QTest::qWait(100);const auto image=editor.grab().toImage();QVERIFY(!image.isNull());const auto background=image.pixelColor(image.width()-4,image.height()-4);QVERIFY(dark?background.lightness()<80:background.lightness()>220);auto *label=editor.findChild<QLabel *>();QVERIFY(label);const auto text=label->palette().color(QPalette::WindowText);QVERIFY(dark?text.lightness()>180:text.lightness()<80);editor.grab().save(QCoreApplication::applicationDirPath()+QString(dark?"/renderer-parameters-dark.png":"/renderer-parameters-light.png"));}
+    }
     void rendererSettingsPageAndVpyWarning()
     {
         const auto oldOrganization=QCoreApplication::organizationName(),oldApplication=QCoreApplication::applicationName();
@@ -244,6 +249,9 @@ private slots:
         auto *pages=window.findChild<QStackedWidget *>();auto *button=window.findChild<QToolButton *>("applicationSettings");
         auto *page=window.findChild<QWidget *>("rendererSettingsPage");QVERIFY(pages && button && page);
         button->click();QCOMPARE(pages->currentWidget(),page);QVERIFY(button->isChecked());QVERIFY(!QApplication::activeModalWidget());
+        auto *theme=window.findChild<QComboBox*>("rendererTheme");QVERIFY(theme);const auto previousStyle=qApp->styleSheet();const auto previousDark=settings.value("appearance/dark");
+        const auto restoreTheme=qScopeGuard([&]{qApp->setStyleSheet(previousStyle);if(previousDark.isValid())settings.setValue("appearance/dark",previousDark);else settings.remove("appearance/dark");});
+        theme->setCurrentIndex(1);QVERIFY(qApp->styleSheet().contains("#202124"));page->grab().save(QCoreApplication::applicationDirPath()+"/renderer-settings-dark.png");theme->setCurrentIndex(0);
         auto *source=window.findChild<QComboBox *>("rendererSettingsSource");
         auto *apply=window.findChild<QPushButton *>("rendererApplySettings");QVERIFY(source && apply);
         const int choice=1-source->currentIndex();source->setCurrentIndex(choice);apply->click();

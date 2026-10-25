@@ -1,0 +1,54 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 392 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 882 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 445 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 492 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 905 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 1359 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 2716 position 6010380000 6010170000 frame 28821 28820 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 1358 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button 1 ms 1406 position 6010380000 6010590000 frame 28821 28822 native-index 357 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) frame-button -1 ms 2663 position 6010590000 6010380000 frame 28822 28821 native-index 356 pending false
+FAIL!  : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) QTestLib: This test case check ("!player.seekPending_ && player.outputSnapshot().frameIndex>=0 && player.outputSnapshot().position100ns<keyAt") failed because the requested timeout (5000 ms) was too short, 5300 ms would have been sufficient this time.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(117) : failure location
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 442 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 745 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 386 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 403 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 737 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 1422 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 2688 position 6010380000 6010170000 frame 28821 28820 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 1385 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button 1 ms 1456 position 6010380000 6010590000 frame 28821 28822 native-index 357 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) frame-button -1 ms 2950 position 6010590000 6010380000 frame 28822 28821 native-index 356 pending false
+FAIL!  : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) QTestLib: This test case check ("!player.seekPending_ && player.outputSnapshot().frameIndex>=0 && player.outputSnapshot().position100ns<keyAt") failed because the requested timeout (5000 ms) was too short, 5400 ms would have been sufficient this time.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(117) : failure location
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 440 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 784 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 403 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 391 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 761 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1395 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 2841 position 6010380000 6010170000 frame 28821 28820 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1493 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1458 position 6010380000 6010590000 frame 28821 28822 native-index 357 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 2782 position 6010590000 6010380000 frame 28822 28821 native-index 356 pending false
+FAIL!  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) QTestLib: This test case check ("!player.seekPending_ && player.outputSnapshot().frameIndex>=0 && player.outputSnapshot().position100ns<keyAt") failed because the requested timeout (5000 ms) was too short, 6000 ms would have been sufficient this time.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(117) : failure location
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 447 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 836 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 450 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 439 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 823 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 1491 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 3084 position 6010380000 6010170000 frame 28821 28820 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 1531 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 1644 position 6010380000 6010590000 frame 28821 28822 native-index 357 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 3142 position 6010590000 6010380000 frame 28822 28821 native-index 356 pending false
+FAIL!  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) QTestLib: This test case check ("!player.seekPending_ && player.outputSnapshot().frameIndex>=0 && player.outputSnapshot().position100ns<keyAt") failed because the requested timeout (5000 ms) was too short, 6000 ms would have been sufficient this time.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(117) : failure location
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 2 passed, 4 failed, 0 skipped, 0 blacklisted, 121829ms
+********* Finished testing of TestPlayer *********

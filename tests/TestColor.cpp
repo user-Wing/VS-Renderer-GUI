@@ -20,6 +20,26 @@ class TestColor final : public QObject {
     }
     static VsrColorSettings advanced() {auto c=VsrColorDefaultSettings();c.engine=1;c.output=1;c.icc=0;c.peakDetect=0;return c;}
 private slots:
+    void nativeUploadTelemetry() {
+        QWidget surface;surface.resize(320,240);surface.show();QVERIFY(QTest::qWaitForWindowExposed(&surface));
+        ThreeFpApi api;QVERIFY2(api.available(),qPrintable(api.errorString()));ThreeFpPlayer player(api,&surface);
+        const auto frame=yuv(1,1,1,128,128,128);
+        QVERIFY2(player.submitFrame(frame),qPrintable(player.lastError()));
+        QTRY_VERIFY(player.snapshot().swapChainPresents>0);
+        const auto first=player.snapshot();
+        QCOMPARE(first.size,std::uint32_t(sizeof(ThreeFpSnapshot)));QCOMPARE(first.version,20u);
+        QCOMPARE(first.uploadPath,2u);QCOMPARE(first.uploadCount,std::uint64_t(1));
+        QCOMPARE(first.uploadCopyBytes,std::uint64_t(64*48*3));
+        QVERIFY(first.videoUpload100ns>=first.uploadCopy100ns);
+        player.redraw();QTRY_VERIFY(player.snapshot().swapChainPresents>first.swapChainPresents);
+        QCOMPARE(player.snapshot().uploadCount,first.uploadCount);
+        QVERIFY(player.submitFrame(frame));
+        QCOMPARE(player.snapshot().uploadCount,first.uploadCount+1);
+        QCOMPARE(player.snapshot().uploadCopyBytes,first.uploadCopyBytes*2);
+        ThreeFpPixelProbe pixel{};QVERIFY(player.samplePixel(160,120,pixel));
+        QVERIFY(pixel.red>.45f && pixel.red<.60f);QVERIFY(std::abs(pixel.red-pixel.green)<.01f);
+    }
+
     void nativeDefaultAndPausedColorSwitch() {
         QWidget surface;surface.resize(320,240);surface.show();QVERIFY(QTest::qWaitForWindowExposed(&surface));
         ThreeFpApi api;QVERIFY2(api.available(),qPrintable(api.errorString()));ThreeFpPlayer p(api,&surface);
@@ -67,7 +87,7 @@ private slots:
         QWidget surface;surface.resize(320,240);surface.show();QVERIFY(QTest::qWaitForWindowExposed(&surface));
         ThreeFpApi api;ThreeFpPlayer p(api,&surface);QVERIFY(p.setColorSettings(advanced()));
         ThreeFpPixelProbe ncl{},cl{};
-        auto frame=yuv(9,1,9,128,100,155);QVERIFY(p.submitFrame(frame));QTRY_VERIFY_WITH_TIMEOUT(p.colorStatus().activeEngine==1,20000);QVERIFY(p.samplePixel(160,120,ncl));
+        auto frame=yuv(9,1,9,128,100,155);QVERIFY(p.submitFrame(frame));QTRY_VERIFY_WITH_TIMEOUT(p.colorStatus().activeEngine==1,20000);QTRY_VERIFY_WITH_TIMEOUT(p.samplePixel(160,120,ncl),5000);
         frame.colorMatrix=10;QVERIFY(p.submitFrame(frame));QTRY_COMPARE(p.colorStatus().sourceMatrix,10u);QTest::qWait(100);QVERIFY(p.samplePixel(160,120,cl));
         qInfo()<<"2020 NCL"<<ncl.red<<ncl.green<<ncl.blue<<"CL"<<cl.red<<cl.green<<cl.blue;
         QVERIFY(std::abs(cl.green-ncl.green)>.01 || std::abs(cl.red-ncl.red)>.01);
@@ -101,7 +121,7 @@ private slots:
         f.colorMatrix=0;f.colorTransfer=13;f.colorPrimaries=1;f.colorRange=2;
         for(int i=0;i<3;++i){f.strides[i]=64;f.planes[i]=QByteArray(64*48,i==0?char(220):char(20));}
         QVERIFY(p.submitFrame(f));QTRY_COMPARE_WITH_TIMEOUT(p.colorStatus().activeEngine,1u,20000);QCOMPARE(p.colorStatus().iccState,1u);
-        ThreeFpPixelProbe sample{};QVERIFY(p.samplePixel(160,120,sample));qInfo()<<"RGB source"<<sample.red<<sample.green<<sample.blue;
+        ThreeFpPixelProbe sample{};QTRY_VERIFY_WITH_TIMEOUT(p.samplePixel(160,120,sample),5000);qInfo()<<"RGB source"<<sample.red<<sample.green<<sample.blue;
         QVERIFY(sample.red>sample.blue+.5f);QVERIFY(sample.red>sample.green+.5f);
         QVERIFY(std::abs(sample.red-220/255.0f)<.04f);QVERIFY(std::abs(sample.green-20/255.0f)<.04f);QVERIFY(std::abs(sample.blue-20/255.0f)<.04f);
         QVERIFY(p.setColorSettings(advanced()));QTRY_COMPARE(p.colorStatus().iccState,0u);QVERIFY(p.samplePixel(160,120,sample));qInfo()<<"RGB without ICC"<<sample.red<<sample.green<<sample.blue;

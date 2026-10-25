@@ -1,0 +1,18 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 402 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 790 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 460 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 456 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 799 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1391 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 2698 position 6010380000 6010170000 frame 28821 28820 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1396 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 1356 position 6010380000 6010590000 frame 28821 28822 native-index 357 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 2689 position 6010590000 6010380000 frame 28822 28821 native-index 356 pending false
+FAIL!  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) QTestLib: This test case check ("!player.seekPending_ && player.outputSnapshot().frameIndex>=0 && player.outputSnapshot().position100ns<keyAt") failed because the requested timeout (5000 ms) was too short, 5650 ms would have been sufficient this time.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(117) : failure location
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 2 passed, 1 failed, 0 skipped, 0 blacklisted, 30509ms
+********* Finished testing of TestPlayer *********
