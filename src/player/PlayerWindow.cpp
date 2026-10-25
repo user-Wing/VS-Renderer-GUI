@@ -640,6 +640,7 @@ bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
 #endif
         }
     }
+    if(event->type()==QEvent::MouseButtonPress && object==equalizerButton_ && equalizerPopup_ && equalizerPopup_->isVisible()) {equalizerPopup_->close();return true;}
     if(event->type()==QEvent::MouseButtonPress && object==speedButton_ && speedPopup_ && speedPopup_->isVisible()) {speedPopup_->close();return true;}
     return QMainWindow::eventFilter(object, event);
 }

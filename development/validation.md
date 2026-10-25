@@ -33,6 +33,23 @@
 | 1.0.1 | Release构建、CTest五组；真实原生解码/像素、VS桥及导出 | Qt布局截图不等于完整人工画面验收；九路4K/VFR长片/多DPI未穷举 | [发行记录](history.md#record-docs-release-1-0-1-draft-md) |
 | 1.0.0 | 留存基础Renderer功能记录 | 没有独立、可对应本版的完整测试结论，标记未确认，不倒填后版结果 | [早期原文](history.md#record-docs-history-development-records-through-2026-10-03-md) |
 
+## 1.0.14：音量、静音与均衡器浮层续修（2026-10-25）
+
+版本保持 1.0.14。Full/Lite 增加音量百分比、带斜线/不带斜线的话筒图标，EQ 按钮位于静音正下方；均衡器改为与倍速互斥的 Popup，展开时保持底栏可见。载入配置先保存音量/静音值，避免音量变化信号覆盖静音配置。
+
+| 专项 | 本轮结果 | 覆盖与边界 |
+| --- | --- | --- |
+| Full 音频与界面 | 7 passed / 0 failed / 0 skipped | 含 init/cleanup；百分比、静音恢复/图标真实像素、1000/1280 宽度、EQ 位置/边界/重复点击与外部点击收起、与倍速互斥、实际音频增益/WAV、轨道/字幕/音频拖放、透明度和窗口底栏 |
+| 设置应用回归 | 4 passed / 0 failed / 0 skipped | 含 init/cleanup；中英文与配置保存、应用后保持播放/暂停位置 |
+| Lite 界面与边界 | 5 passed / 0 failed / 0 skipped | 含 init/cleanup；同一音量/静音/EQ 操作，原生模式和禁用 Full 后端 |
+| 实际均衡器增益 | 峰值 0.0265137 → 0.0528351 → 0.0264384 | 1 kHz +6 dB 约翻倍，WAV 0.5 后约减半；不等于空间音频或听感验收 |
+| 语言资源 | 590 条通过 | 中英文键与占位符一致 |
+| 旧原生音频延迟探针 | 保留失败 | 先修正测试绕过 API20 适配、沿用旧峰值布局的问题；实际增益/WAV 断言通过后，延迟补静音计数 `>=4000` 仍失败。测试分出 gain-wave 与 delay-surround 两项，未删除延迟检查；不将后者算作通过 |
+
+Native DLL SHA-256 与前轮记录相同，仍为 `db8cec2b4f4082c4bdf8337e7404a68c58ecac84fa9037c2c83896dcf1b01ac6`，本轮未修改 Native。原始日志、实际 UI 抓图和发行草稿正文在本地 `build/audio-ui-1.0.14`；未运行全量 Full 播放器套件。
+
+部署 Full/Lite Player 后重新封装单文件 Player；配置、VPY、ICC/LUT 和 Full 的 `preset-descriptions.json` 保持原哈希。封装检查版本资源、ZIP CRC、内嵌清单及隔离首次启动；结果与原 EXE 备份留在同一轮目录。源码推送并准备 v1.0.14 Release 草稿，发行压缩包及附件由维护者手动制作、上传。
+
 ## 1.0.14：Player 设置与缩放显示续修（2026-10-25）
 
 本轮保持版本 1.0.14，更新 Player/Renderer 的设置布局、实际缩放状态与主题；源码同步到本项目仓库，不制作压缩包、不更新远端 Release 附件。上轮不上传代码的边界属于当轮记录。

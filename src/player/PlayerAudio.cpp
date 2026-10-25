@@ -3,7 +3,8 @@
 #include "backend/VapourSynthFrameServer.h"
 #include "backend/LavPlayback.h"
 #include <QSettings>
-#include <QDialog>
+#include "player/PlayerChromePanel.h"
+#include <QScreen>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -72,8 +73,9 @@ void PlayerWindow::applyAudioEffects() {
     clock_->setAudioEffects(enabled,gains.data(),wave,audioDelay_);
 }
 void PlayerWindow::showEqualizer() {
-    if(equalizerWindow_){equalizerWindow_->show();equalizerWindow_->raise();equalizerWindow_->activateWindow();return;}
-    auto *dialog=new QDialog(this);equalizerWindow_=dialog;dialog->setObjectName("playerEqualizer");dialog->setAttribute(Qt::WA_DeleteOnClose);dialog->setWindowTitle(tr("均衡器"));dialog->resize(640,300);
+    if(equalizerPopup_ && equalizerPopup_->isVisible()){equalizerPopup_->close();return;}
+    if(speedPopup_)speedPopup_->close();
+    auto *dialog=new PlayerChromePanel(this);equalizerPopup_=dialog;dialog->setWindowFlags(Qt::Popup);dialog->setTransparency(100-property("playerMenuOpacity").toInt());dialog->setObjectName("playerEqualizer");dialog->setAttribute(Qt::WA_DeleteOnClose);dialog->setWindowTitle(tr("均衡器"));dialog->resize(640,300);
     auto *layout=new QVBoxLayout(dialog);auto *header=new QHBoxLayout;layout->addLayout(header);
     auto *enabled=new QCheckBox(tr("均衡器"),dialog);enabled->setChecked(settings_->value("audio/eq/enabled",false).toBool());header->addWidget(enabled);
     auto *presets=new QComboBox(dialog);presets->addItems({tr("默认"),tr("低音增强"),tr("人声"),tr("高音增强")});header->addWidget(presets,1);
@@ -85,7 +87,7 @@ void PlayerWindow::showEqualizer() {
     connect(enabled,&QCheckBox::toggled,dialog,[this](bool on){settings_->setValue("audio/eq/enabled",on);applyAudioEffects();});
     connect(presets,&QComboBox::currentIndexChanged,dialog,[bands](int preset){const int values[4][10]{{0,0,0,0,0,0,0,0,0,0},{6,5,3,1,0,0,0,0,0,0},{-2,-1,0,2,4,3,1,0,-1,-2},{0,0,0,0,0,1,3,4,5,5}};for(int i=0;i<10;++i)bands[i]->setValue(values[preset][i]);});
     connect(reset,&QPushButton::clicked,dialog,[bands,presets]{presets->setCurrentIndex(0);for(auto *band:bands)band->setValue(0);});
-    dialog->setStyleSheet("QSlider::groove:vertical{width:4px;background:#151515;}QSlider::sub-page:vertical{background:#151515;}QSlider::add-page:vertical{background:#2389ee;}QSlider::handle:vertical{height:12px;margin:0 -4px;background:#e8e8e8;border-radius:6px;}");
-    dialog->show();
+    dialog->setStyleSheet("QWidget#playerEqualizer,QWidget#playerEqualizer QWidget{background:transparent;color:#e8eaed;} QWidget#playerEqualizer QPushButton,QWidget#playerEqualizer QComboBox{background:#303238;border:1px solid #70747b;} QSlider::groove:vertical{width:4px;background:#151515;}QSlider::sub-page:vertical{background:#151515;}QSlider::add-page:vertical{background:#2389ee;}QSlider::handle:vertical{height:12px;margin:0 -4px;background:#e8e8e8;border-radius:6px;}");
+    dialog->adjustSize();dialog->resize(qMax(640,dialog->width()),qMax(300,dialog->height()));const auto area=equalizerButton_->screen()->availableGeometry();auto at=equalizerButton_->mapToGlobal(QPoint(0,-dialog->height()));at.setX(qBound(area.left(),at.x(),qMax(area.left(),area.right()-dialog->width()+1)));at.setY(qBound(area.top(),at.y(),qMax(area.top(),area.bottom()-dialog->height()+1)));dialog->move(at);dialog->show();
 }
 }

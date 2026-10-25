@@ -241,7 +241,7 @@ void PlayerWindow::layoutChrome() {
 }
 void PlayerWindow::updateChrome() {
     layoutChrome();
-    const auto *active=qApp->activeWindow();const bool activePlayer=isActiveWindow() || active==controls_ || active==playlistPanel_ || active==fullscreenTitle_;
+    const auto *active=qApp->activeWindow();const bool activePlayer=isActiveWindow() || active==controls_ || active==playlistPanel_ || active==fullscreenTitle_ || active==speedPopup_ || active==equalizerPopup_;
     if(!isVisible() || isMinimized() || !activePlayer){controls_->hide();if(playlistPanel_->isWindow())playlistPanel_->hide();fullscreenTitle_->hide();return;}
     if(!isFullScreen())controls_->show();
     const auto pos=centralWidget()->mapFromGlobal(QCursor::pos());const bool inside=centralWidget()->rect().contains(pos);

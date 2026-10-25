@@ -16,6 +16,7 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QSlider>
+#include <QLabel>
 #include <QTreeWidget>
 #include <QLineEdit>
 #include <QPushButton>
@@ -121,6 +122,11 @@ private slots:
     }
     void initTestCase(){QCoreApplication::setOrganizationName("VSRendererLiteTests");QCoreApplication::setApplicationName("VSPlayerLiteTests");QFile file(config());existed_=file.exists();if(file.open(QIODevice::ReadOnly))previous_=file.readAll();}
     void init(){QSettings settings(config(),QSettings::IniFormat);settings.clear();settings.setValue("playback/remember",false);settings.setValue("basic/autoplay",true);settings.sync();}
+    void audioControlsPopup(){
+        QSettings settings(config(),QSettings::IniFormat);settings.setValue("player/volume",63);settings.setValue("player/muted",true);settings.sync();PlayerWindow player;player.show();player.activateWindow();QTRY_VERIFY(player.isActiveWindow());
+        auto *percent=player.findChild<QLabel *>("playerVolumePercent");auto *button=player.findChild<QPushButton *>("playerEqualizerButton");QVERIFY(percent && button);QCOMPARE(percent->text(),QString("63%"));const auto muted=player.mute_->icon().pixmap(24,24).toImage();QVERIFY(!muted.isNull());player.mute_->click();QVERIFY(!player.mute_->isChecked());QVERIFY(player.mute_->icon().pixmap(24,24).toImage()!=muted);
+        button->click();QTRY_VERIFY(player.equalizerPopup_ && player.equalizerPopup_->isVisible());QVERIFY(!qobject_cast<QDialog *>(player.equalizerPopup_.data()));QCOMPARE(player.equalizerPopup_->windowType(),Qt::Popup);player.equalizerPopup_->findChild<QSlider *>("equalizerMaster")->setValue(27);QCOMPARE(percent->text(),QString("27%"));button->click();QVERIFY(!player.equalizerPopup_ || !player.equalizerPopup_->isVisible());
+    }
     void allowedModes(){
         PlayerWindow player;player.show();QCOMPARE(player.qualityStage(),5);
         player.loadPreset("Anime-4-Jinc.vpy");QCOMPARE(player.qualityStage(),4);

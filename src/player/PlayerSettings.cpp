@@ -76,8 +76,9 @@ void PlayerWindow::applySettings(bool reopen) {
     visible->setOutputFormat(settings_->value("decode/output").toString());
     clock_->setDecodeMode(settings_->value("decode/mode",2).toUInt());
     clock_->setSoftwarePreScale(settings_->value("decode/softwarePreScaleHeight",0).toInt());
-    volume_->setValue(std::clamp(settings_->value("player/volume",100).toInt(),0,100));
-    mute_->setChecked(settings_->value("player/muted",false).toBool());
+    const int savedVolume=std::clamp(settings_->value("player/volume",100).toInt(),0,100);const bool savedMuted=settings_->value("player/muted",false).toBool();
+    volume_->setValue(savedVolume);
+    mute_->setChecked(savedMuted);
     setRate(settings_->value("player/speed",1).toDouble());
     subtitleVisible_=settings_->value("subtitle/visible",true).toBool();
     applyAppearance();

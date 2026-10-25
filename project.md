@@ -116,7 +116,7 @@
 
 ## 10. 当前状态与下一步
 
-1.0.14 在固定 API20 主线补丁上迁入 AI 音频 tap 与字幕 HDR，Qt 接入 RTX VSR/TrueHDR、外置 AI 字幕、八档与组合处理、Renderer 主题设置、3FUI 命令桥及 Cap 设置改进。Player 设置新增独立字幕页；渲染页完整列出 Anime 档位，Jinc/D3D11 补帧分别保存参与列表；其他缩放算法限纯 D3D11 直通，Tab/底栏读取实际路径。ParameterEditor 跟随全局主题。入口分别为 `PlayerAiSubtitles`、`PlayerProfiles`、`MainWindow`、`ExportWindow`、`src/cap/main.cpp`；插件源码在 `plugins/3fui-export-bridge`，单文件更新在 `SinglePlayerUpdater`。保留 VS 帧桥、BD 定位、音频效果和色彩桥；普通声床没有新增内置双耳渲染器。原理见[性能排查](docs/performance-debugging.md#上游内核优化)，逐项状态及实测见[台账](development/validation.md)。本轮更新本地产物并同步源码，单文件 `dist/VS-Player.exe` 同步到 1.0.14；不制作发行压缩包、不更新外部 Release 附件。
+1.0.14 在固定 API20 主线补丁上迁入 AI 音频 tap 与字幕 HDR，Qt 接入 RTX VSR/TrueHDR、外置 AI 字幕、八档与组合处理、Renderer 主题设置、3FUI 命令桥及 Cap 设置改进。Player 设置新增独立字幕页；渲染页完整列出 Anime 档位，Jinc/D3D11 补帧分别保存参与列表；其他缩放算法限纯 D3D11 直通，Tab/底栏读取实际路径。ParameterEditor 跟随全局主题。PlayerControls 显示音量百分比和状态图标，均衡器由 PlayerAudio 创建与倍速互斥的 Popup，并在展开时保持控制栏可见。入口分别为 `PlayerAiSubtitles`、`PlayerProfiles`、`MainWindow`、`ExportWindow`、`src/cap/main.cpp`；插件源码在 `plugins/3fui-export-bridge`，单文件更新在 `SinglePlayerUpdater`。保留 VS 帧桥、BD 定位、音频效果和色彩桥；普通声床没有新增内置双耳渲染器。原理见[性能排查](docs/performance-debugging.md#上游内核优化)，逐项状态及实测见[台账](development/validation.md)。本轮更新本地产物并同步源码，单文件 `dist/VS-Player.exe` 同步到 1.0.14；准备 Release 草稿，发行压缩包与附件由维护者手动制作、上传。
 
 1.0.13 增加安装进程清理、压缩运行时按需展开与单文件BD定位显示保持；列表/右键共用返回菜单入口，原生菜单页禁用时间轴，同盘重开复用盘信息，原生会话同步销毁后再替换窗口。VSCap续修将颜色窗口归属到真实工具栏窗口，避免贴图拖动模式拦截颜色交互；已发布的1.0.13附件不自动包含续修，重新分发须核对哈希。具体测试见台账。此前1.0.12 已有 BD 全卷定位/按段索引、Jinc 色彩、无音轨 VS 时钟、Anime 预取与软件内核的聚焦测试记录；**未运行全量 Full 播放器套件**。后轮结果只覆盖其实际测试范围，不能把同版多个 passed 数字相加为一次总回归。
 

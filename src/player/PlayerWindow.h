@@ -289,7 +289,8 @@ private:
     QString externalAudio_;
     bool matchedTracks_ = false;
     qint64 audioDelay_ = 0;
-    QPointer<QWidget> equalizerWindow_;
+    QPointer<QWidget> equalizerPopup_;
+    QPushButton *equalizerButton_ = nullptr;
     QString dragStatus_;
     int primarySubtitle_ = -1, secondarySubtitle_ = -1;
     bool subtitleVisible_ = true;

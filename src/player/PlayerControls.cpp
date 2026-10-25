@@ -11,6 +11,7 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QIcon>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSettings>
@@ -38,13 +39,15 @@ protected:
 };
 }
 void PlayerWindow::buildTransport(QVBoxLayout *layout) {
-    auto *first = new QHBoxLayout; first->setContentsMargins(8, 0, 8, 0); first->setSpacing(8); layout->addLayout(first);
-    auto *slider = timeline_;
-    first->addWidget(slider, 1);
-    mute_ = new QPushButton(QStringLiteral("♪"), this); mute_->setObjectName("playerMute"); mute_->setCheckable(true); mute_->setToolTip(tr("静音")); first->addWidget(mute_);
-    volume_ = new QSlider(Qt::Horizontal, this); volume_->setObjectName("playerVolume"); volume_->setRange(0, 100); volume_->setValue(100); volume_->setFixedWidth(105); volume_->setToolTip(tr("音量")); first->addWidget(volume_);
-    const auto volume = [this] { clock_->setVolume(volume_->value() / 100.0f); clock_->setMuted(lavAudio_ || mute_->isChecked()); if (lav_) lav_->volume(volume_->value() / 100.0f,!lavAudio_ || mute_->isChecked());settings_->setValue("player/volume",volume_->value());settings_->setValue("player/muted",mute_->isChecked()); };
+    auto *transport = new QGridLayout;transport->setContentsMargins(8,0,8,0);transport->setHorizontalSpacing(8);transport->setVerticalSpacing(4);transport->setColumnStretch(0,1);layout->addLayout(transport);
+    auto *slider = timeline_;transport->addWidget(slider,0,0);
+    mute_ = new QPushButton(this);mute_->setObjectName("playerMute");mute_->setCheckable(true);mute_->setFixedWidth(34);mute_->setIconSize(QSize(20,20));transport->addWidget(mute_,0,1);
+    volume_ = new QSlider(Qt::Horizontal, this); volume_->setObjectName("playerVolume"); volume_->setRange(0, 100); volume_->setValue(100); volume_->setFixedWidth(105); volume_->setToolTip(tr("音量"));transport->addWidget(volume_,0,2);
+    auto *volumePercent=new QLabel("100%",this);volumePercent->setObjectName("playerVolumePercent");volumePercent->setMinimumWidth(volumePercent->fontMetrics().horizontalAdvance("100%"));volumePercent->setAlignment(Qt::AlignRight|Qt::AlignVCenter);transport->addWidget(volumePercent,0,3);
+    const auto updateVolumeUi=[this,volumePercent]{volumePercent->setText(QString::number(volume_->value())+"%");mute_->setIcon(QIcon(mute_->isChecked()?":/ui/microphone-muted.svg":":/ui/microphone.svg"));mute_->setToolTip(mute_->isChecked()?tr("取消静音"):tr("静音"));mute_->setAccessibleName(mute_->toolTip());};updateVolumeUi();
+    const auto volume = [this,updateVolumeUi] {updateVolumeUi();clock_->setVolume(volume_->value() / 100.0f); clock_->setMuted(lavAudio_ || mute_->isChecked()); if (lav_) lav_->volume(volume_->value() / 100.0f,!lavAudio_ || mute_->isChecked());settings_->setValue("player/volume",volume_->value());settings_->setValue("player/muted",mute_->isChecked()); };
     connect(volume_, &QSlider::valueChanged, this, volume); connect(mute_, &QPushButton::toggled, this, volume);
+    equalizerButton_=new QPushButton("EQ",this);equalizerButton_->setObjectName("playerEqualizerButton");equalizerButton_->setToolTip(tr("均衡器"));equalizerButton_->setFixedWidth(34);transport->addWidget(equalizerButton_,1,1);connect(equalizerButton_,&QPushButton::clicked,this,&PlayerWindow::showEqualizer);
     timelinePreview_=new QTimer(this);timelinePreview_->setInterval(16);
     connect(timelinePreview_,&QTimer::timeout,this,[this]{
         if(!timelineDragging_ || timelineTarget_<0){timelinePreview_->stop();return;}
@@ -74,7 +77,7 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
         if(target!=timelineSeekTarget_)seekTime(target);timelineSeekTarget_=-1;
         if(timelineResume_ && !playing_){if(discMenu_ && discMenu_->active())togglePlayback();else autoPlay_=true;}timelineResume_=false;
     });
-    auto *row = new QHBoxLayout; row->setContentsMargins(8, 0, 8, 0); row->setSpacing(4); layout->addLayout(row);
+    auto *row = new QHBoxLayout; row->setContentsMargins(0, 0, 0, 0); row->setSpacing(4); transport->addLayout(row,1,0);
     const auto button = [this, row](const QString &text, const QString &tooltip, auto action) {
         auto *b = new QPushButton(text, this); b->setToolTip(tooltip); b->setFixedWidth(34); row->addWidget(b); connect(b, &QPushButton::clicked, this, action); return b;
     };
@@ -116,6 +119,7 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
 }
 void PlayerWindow::showSpeedPopup() {
     if(speedPopup_ && speedPopup_->isVisible()) {speedPopup_->close();return;}
+    if(equalizerPopup_)equalizerPopup_->close();
     auto *popup = new PlayerChromePanel(this);popup->setWindowFlags(Qt::Popup);popup->setTransparency(100-property("playerMenuOpacity").toInt());popup->setAttribute(Qt::WA_DeleteOnClose); popup->setObjectName("playerSpeedPopup");speedPopup_=popup; auto *layout = new QVBoxLayout(popup);
     popup->setAttribute(Qt::WA_TranslucentBackground);popup->setStyleSheet("QWidget#playerSpeedPopup{background:transparent;} QWidget#playerSpeedPopup QPushButton{background:transparent;} QWidget#playerSpeedPopup QPushButton:checked{background:rgba(80,127,189,230);}");
     auto *grid = new QGridLayout; layout->addLayout(grid); const QList<double> rates{.25,.5,.75,.9,1,1.1,1.25,1.5,1.75,2,2.5,16};
