@@ -54,7 +54,7 @@ Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $_.Name -ne 'r
 }
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'resource-manifest.json') -Encoding UTF8
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Fastest
+Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
 $resource = Join-Path $work 'launcher-icons.rc'
 $resourceObject = Join-Path $work 'launcher-icons.o'
 $iconPath = (Join-Path $root 'assets\icons\player.ico').Replace('\','/')

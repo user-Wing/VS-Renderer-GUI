@@ -839,7 +839,7 @@ index 0000000..cf33be4
 +    HANDLE task_=nullptr;
 +};
 diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
-index 96c52c1..2b2e182 100644
+index 96c52c1..bf0a9f0 100644
 --- a/FFF.Native/3FP/Core/PlayerSession.cpp
 +++ b/FFF.Native/3FP/Core/PlayerSession.cpp
 @@ -1,9 +1,12 @@
@@ -1294,7 +1294,28 @@ index 96c52c1..2b2e182 100644
      if (result < 0) {
          if (failureReason != nullptr && failureReason->empty())
              setFailure("FFmpeg could not open decoder " + std::string(codec->name == nullptr ? "unknown" : codec->name) +
-@@ -3304,6 +3549,10 @@ void PlayerSession::DoOpen(std::string path) noexcept {
+@@ -3278,9 +3523,11 @@ bool PlayerSession::HardwareDecoderProducesFrame(AVFormatContext* owner, const s
+         // Enough packets to cover a decoder with output delay plus a reopened GOP;
+         // stop as soon as a frame arrives, which for nearly every stream is the first
+         // packet of the stream.
+-        for (int attempt = 0; attempt < 32 && !produced; ++attempt) {
++        int videoPackets = 0;
++        for (int attempt = 0; attempt < 4096 && videoPackets < 32 && !produced; ++attempt) {
+             if (av_read_frame(probe, packet) < 0) break;
+             if (packet->stream_index != index) { av_packet_unref(packet); continue; }
++            ++videoPackets;
+             const auto sendResult = avcodec_send_packet(decoder, packet);
+             av_packet_unref(packet);
+             if (sendResult < 0) { detail = FfmpegError(sendResult); break; }
+@@ -3297,13 +3544,17 @@ bool PlayerSession::HardwareDecoderProducesFrame(AVFormatContext* owner, const s
+             avcodec_receive_frame(decoder, frame) == 0) produced = true;
+     } else detail = "stream count differs";
+     avformat_close_input(&probe);
+-    return finish(produced || !streamCountMatches, detail);
++    return finish(produced || !streamCountMatches || detail.empty(), detail);
+ }
+ 
+ void PlayerSession::DoOpen(std::string path) noexcept {
      // Keep the flip-model chain for a same-HWND media switch. DXGI can reject
      // an immediate replacement while the previous chain is still retiring.
      DoClose(FFF3FPState::Opening, true);
@@ -1305,7 +1326,7 @@ index 96c52c1..2b2e182 100644
      // A new file is a new audio-pool round: back to the default target.
      audioTargetBuffer100ns_ = kDefaultAudioTargetBuffer100ns;
      seenAudioUnderruns_ = 0;
-@@ -3391,7 +3640,7 @@ void PlayerSession::DoOpen(std::string path) noexcept {
+@@ -3391,7 +3642,7 @@ void PlayerSession::DoOpen(std::string path) noexcept {
      snapshot_.decodeMode = decodeMode_;
      bool hardwareFallback = false;
      std::string hardwareFailureReason;
@@ -1314,7 +1335,7 @@ index 96c52c1..2b2e182 100644
          // Still images are included here on purpose: the hardware decoder is tried
          // first for every media type and the retry below takes the CPU decoder when the
          // GPU refuses. Formats with no hardware path (PNG, WebP, TIFF, JPEG XL, JXR) are
-@@ -3479,8 +3728,8 @@ void PlayerSession::DoOpen(std::string path) noexcept {
+@@ -3479,8 +3730,8 @@ void PlayerSession::DoOpen(std::string path) noexcept {
          // A tiled still image is presented as its canvas, so that is what the host
          // has to see: the decoder belongs to one tile and would report a fraction.
          if (videoStream_ >= 0) {
@@ -1325,7 +1346,7 @@ index 96c52c1..2b2e182 100644
              ApplyHdrState(snapshot_, videoRenderer_.StreamHdrState(), videoRenderer_.HdrState());
          }
          else if (coverArtFrame_ != nullptr) { snapshot_.videoWidth = coverArtFrame_->width; snapshot_.videoHeight = coverArtFrame_->height; snapshot_.isHdrSource = 0; }
-@@ -3645,7 +3894,7 @@ FFFResult PlayerSession::DecodeInitialFrame() noexcept {
+@@ -3645,7 +3896,7 @@ FFFResult PlayerSession::DecodeInitialFrame() noexcept {
      int readResult = 0;
      while (videoRenderer_.PresentedVideoFrames() == before &&
          (readResult = av_read_frame(format_, playbackPacket_)) >= 0) {
@@ -1334,7 +1355,7 @@ index 96c52c1..2b2e182 100644
              if (staticImage_) {
                  av_packet_unref(stillImagePacket_);
                  if (av_packet_ref(stillImagePacket_, playbackPacket_) < 0) return FFFResult::NativeFailure;
-@@ -3680,6 +3929,7 @@ FFFResult PlayerSession::DecodeInitialFrame() noexcept {
+@@ -3680,6 +3931,7 @@ FFFResult PlayerSession::DecodeInitialFrame() noexcept {
      const auto start = stream->start_time == AV_NOPTS_VALUE ? 0 : stream->start_time;
      if (av_seek_frame(format_, videoStream_, start, AVSEEK_FLAG_BACKWARD) >= 0)
      {
@@ -1342,7 +1363,7 @@ index 96c52c1..2b2e182 100644
          avcodec_flush_buffers(videoDecoder_);
      }
      if (state_.load() == FFF3FPState::Failed) return FFFResult::DeviceFailure;
-@@ -3760,6 +4010,9 @@ void PlayerSession::EvaluateDecoderLoad() noexcept {
+@@ -3760,6 +4012,9 @@ void PlayerSession::EvaluateDecoderLoad() noexcept {
      if (format_ == nullptr || videoStream_ < 0) return;
      if (snapshot_.decodeMode != FFF3FPDecodeMode::Cpu) return;
      if (videoDecoder_ == nullptr) return;
@@ -1352,7 +1373,7 @@ index 96c52c1..2b2e182 100644
  
      // The one situation placement cannot improve: the decoder is at its thread budget,
      // so the software stack (workers + worker + audio + present + the scheduler
-@@ -4026,6 +4279,8 @@ void PlayerSession::EvaluateDecoderLoad() noexcept {
+@@ -4026,6 +4281,8 @@ void PlayerSession::EvaluateDecoderLoad() noexcept {
      const auto resume = std::max<std::int64_t>(0, snapshot_.position100ns);
      StopSoftwareVideoDecode();
      avcodec_free_context(&videoDecoder_);
@@ -1361,7 +1382,7 @@ index 96c52c1..2b2e182 100644
      videoDecoder_ = replacement;
      if (videoDecodeFrame_ != nullptr) av_frame_unref(videoDecodeFrame_);
      if (videoTransferFrame_ != nullptr) av_frame_unref(videoTransferFrame_);
-@@ -4054,7 +4309,10 @@ FFFResult PlayerSession::FallbackToSoftwareVideoDecoder(const char* reason) noex
+@@ -4054,7 +4311,10 @@ FFFResult PlayerSession::FallbackToSoftwareVideoDecoder(const char* reason) noex
          -1, nullptr, false);
      if (openResult != FFFResult::Success) return openResult;
      const auto resumePosition = std::max<std::int64_t>(0, snapshot_.position100ns);
@@ -1372,7 +1393,7 @@ index 96c52c1..2b2e182 100644
      videoDecoder_ = softwareDecoder;
      if (videoDecodeFrame_ != nullptr) av_frame_unref(videoDecodeFrame_);
      if (videoTransferFrame_ != nullptr) av_frame_unref(videoTransferFrame_);
-@@ -4079,12 +4337,6 @@ FFFResult PlayerSession::FallbackToSoftwareVideoDecoder(const char* reason) noex
+@@ -4079,12 +4339,6 @@ FFFResult PlayerSession::FallbackToSoftwareVideoDecoder(const char* reason) noex
  }
  
  void PlayerSession::PumpPlayback() noexcept {
@@ -1385,7 +1406,7 @@ index 96c52c1..2b2e182 100644
      if (format_ == nullptr) { SetState(FFF3FPState::Failed); return; }
      // The host asked for an auxiliary composition: open the second video
      // stream on this worker, once, before the next demux. A file without such
-@@ -4130,7 +4382,10 @@ void PlayerSession::PumpPlayback() noexcept {
+@@ -4130,7 +4384,10 @@ void PlayerSession::PumpPlayback() noexcept {
          if (GetEnvironmentVariableW(L"FFF_CADENCE_TRACE", nullptr, 0))
              std::fprintf(stderr, "CADENCE rebuild\n");
      }
@@ -1397,7 +1418,7 @@ index 96c52c1..2b2e182 100644
          // Windows can block both shared and exclusive initialization while a
          // different process owns the endpoint. Keep audio-only media on its
          // normal wall clock instead of draining the entire file immediately.
-@@ -4197,7 +4452,14 @@ void PlayerSession::PumpPlayback() noexcept {
+@@ -4197,7 +4454,14 @@ void PlayerSession::PumpPlayback() noexcept {
      // Feed already-demuxed audio before doing a due frame's enhancement/render
      // work. Otherwise a costly frame can starve a short WASAPI buffer.
      if (PumpVideoPresentation()) return;
@@ -1413,7 +1434,7 @@ index 96c52c1..2b2e182 100644
          DecodePendingPacket(true);
          return;
      }
-@@ -4205,12 +4467,10 @@ void PlayerSession::PumpPlayback() noexcept {
+@@ -4205,12 +4469,10 @@ void PlayerSession::PumpPlayback() noexcept {
      if (externalFormat_ != nullptr && audioRenderer_ && !delayAudioUntilVideo &&
          audioBuffered < audioTargetBuffer100ns_) PumpExternalAudio();
      if (demuxEnded_) {
@@ -1427,7 +1448,7 @@ index 96c52c1..2b2e182 100644
      const auto audioPacketsFull = pendingAudioPackets_.size() >= MaximumPendingAudioPackets ||
          pendingAudioPacketBytes_ >= MaximumPendingAudioPacketBytes;
      if (videoSaturated() &&
-@@ -4246,11 +4506,12 @@ void PlayerSession::PumpPlayback() noexcept {
+@@ -4246,11 +4508,12 @@ void PlayerSession::PumpPlayback() noexcept {
          }
          demuxEnded_ = true;
          if (!pendingVideoPackets_.empty()) return;
@@ -1441,7 +1462,7 @@ index 96c52c1..2b2e182 100644
          // The decoder can free an input slot while av_read_frame runs. New
          // packets must still follow the compressed packets already held here.
          if (!pendingVideoPackets_.empty() || videoSaturated()) {
-@@ -4528,6 +4789,7 @@ FFFResult PlayerSession::QueueSoftwareVideoDecode(AVPacket* packet) noexcept {
+@@ -4528,6 +4791,7 @@ FFFResult PlayerSession::QueueSoftwareVideoDecode(AVPacket* packet) noexcept {
  }
  
  void PlayerSession::SoftwareVideoDecodeWorker(AVCodecContext* decoder) noexcept {
@@ -1449,7 +1470,7 @@ index 96c52c1..2b2e182 100644
      auto* frame = av_frame_alloc();
      const auto receive = [&] {
          int result;
-@@ -4569,6 +4831,13 @@ void PlayerSession::SoftwareVideoDecodeWorker(AVCodecContext* decoder) noexcept
+@@ -4569,6 +4833,13 @@ void PlayerSession::SoftwareVideoDecodeWorker(AVCodecContext* decoder) noexcept
              if (result == AVERROR(EAGAIN)) result = send();
          }
          if (result >= 0 || result == AVERROR_EOF) result = receive();
@@ -1463,7 +1484,7 @@ index 96c52c1..2b2e182 100644
          av_packet_free(&packet);
          {
              std::lock_guard lock(softwareVideoMutex_);
-@@ -4639,6 +4908,41 @@ FFFResult PlayerSession::DecodePacket(AVCodecContext* decoder, AVPacket* packet,
+@@ -4639,6 +4910,41 @@ FFFResult PlayerSession::DecodePacket(AVCodecContext* decoder, AVPacket* packet,
      if (decoder == nullptr) return FFFResult::Success;
      if (packet != nullptr && packet->size == 0 && packet->side_data_elems == 0)
          return FFFResult::Success;
@@ -1505,7 +1526,7 @@ index 96c52c1..2b2e182 100644
      if (video && decoder == videoDecoder_ && decoder->codec && !decoder->hw_device_ctx &&
          !disc_ && !staticImage_ && !animatedImage_ &&
          (std::strcmp(decoder->codec->name, "libdav1d") == 0 || decoder->codec_id == AV_CODEC_ID_HEVC) &&
-@@ -4703,6 +5007,9 @@ FFFResult PlayerSession::DecodePacket(AVCodecContext* decoder, AVPacket* packet,
+@@ -4703,6 +5009,9 @@ FFFResult PlayerSession::DecodePacket(AVCodecContext* decoder, AVPacket* packet,
          result = avcodec_send_packet(decoder, packet);
      }
      if (result < 0 && result != AVERROR_EOF) {
@@ -1515,7 +1536,7 @@ index 96c52c1..2b2e182 100644
          if (video && snapshot_.decodeMode == FFF3FPDecodeMode::Gpu &&
              FallbackToSoftwareVideoDecoder(("The GPU rejected a video packet: " +
                  FfmpegError(result) + "; playback continued with CPU decoding.").c_str()) == FFFResult::Success)
-@@ -4766,7 +5073,7 @@ bool PlayerSession::PumpVideoPresentation() noexcept {
+@@ -4766,7 +5075,7 @@ bool PlayerSession::PumpVideoPresentation() noexcept {
          audioRenderer_->Buffered100ns() < audioTargetBuffer100ns_;
      const auto packetCapacityAvailable =
          pendingVideoPackets_.size() < MaximumPendingVideoPackets &&
@@ -1524,7 +1545,7 @@ index 96c52c1..2b2e182 100644
      if (saturated && (!audioNeedsData || !packetCapacityAvailable)) {
          std::unique_lock lock(mutex_);
          // The media clock owns presentation.  Once the bounded queue is full,
-@@ -5355,7 +5662,7 @@ void PlayerSession::PresentVideoFrame(AVFrame* frame, AVFormatContext* owner) no
+@@ -5355,7 +5664,7 @@ void PlayerSession::PresentVideoFrame(AVFrame* frame, AVFormatContext* owner) no
                  AVRational{1, static_cast<int>(TicksPerSecond)});
      }
      lastVideoFrameDuration100ns_ = contentPeriod100ns > 0 ? contentPeriod100ns : 0;
@@ -1533,7 +1554,7 @@ index 96c52c1..2b2e182 100644
          if (cadenceSpreadSamples_ == 0)
              cadenceSpreadMin100ns_ = cadenceSpreadMax100ns_ = contentPeriod100ns;
          else {
-@@ -5393,7 +5700,14 @@ void PlayerSession::PresentVideoFrame(AVFrame* frame, AVFormatContext* owner) no
+@@ -5393,7 +5702,14 @@ void PlayerSession::PresentVideoFrame(AVFrame* frame, AVFormatContext* owner) no
      videoRenderer_.SetContentFramePeriod100ns(lastVideoFrameDuration100ns_);
      auto nextIndex = snapshot_.frameIndex + 1;
      if (nextIndex < 0) nextIndex = 0;
@@ -1549,7 +1570,7 @@ index 96c52c1..2b2e182 100644
          if (rebuildingFrameIndex_) {
              // During an out-of-window SeekFrame rebuild, the rolling PTS table
              // is rebuilt from the stream start. Its absolute index must follow
-@@ -5430,6 +5744,7 @@ void PlayerSession::PresentVideoFrame(AVFrame* frame, AVFormatContext* owner) no
+@@ -5430,6 +5746,7 @@ void PlayerSession::PresentVideoFrame(AVFrame* frame, AVFormatContext* owner) no
  
      if (keyframeSeekPending_) {
          keyframeSeekPending_ = false;
@@ -1557,7 +1578,7 @@ index 96c52c1..2b2e182 100644
          seekTarget100ns_ = -1;
          seekTargetFrame_ = -1;
          ResetClock(position);
-@@ -5803,7 +6118,7 @@ void PlayerSession::QueueAudioFrame(AVFrame* frame, AVFormatContext* owner, cons
+@@ -5803,7 +6120,7 @@ void PlayerSession::QueueAudioFrame(AVFrame* frame, AVFormatContext* owner, cons
      }
      ++snapshot_.decodedAudioFrames;
      const auto timestampResolution = av_rescale_q(1, stream->time_base, AVRational{1, TicksPerSecond});
@@ -1566,7 +1587,7 @@ index 96c52c1..2b2e182 100644
      if (result == FFFResult::Success && owner == format_) internalAudioDecodeErrorCount_ = 0;
      if (result == FFFResult::BufferTooSmall) ++snapshot_.audioRejectedFrames;
      else if (result != FFFResult::Success) {
-@@ -6288,6 +6603,14 @@ void PlayerSession::FlushAtEnd() noexcept {
+@@ -6288,6 +6605,14 @@ void PlayerSession::FlushAtEnd() noexcept {
  FFFResult PlayerSession::DoSeek(std::int64_t position, const std::int64_t targetFrame,
      const bool exact) noexcept {
      StopSoftwareVideoDecode();
@@ -1581,7 +1602,7 @@ index 96c52c1..2b2e182 100644
      if (disc_) {
          if (!disc_->Seek(position)) { ReportError(FFFResult::NotSupported, "This disc position cannot be seeked.", "seek"); return FFFResult::NotSupported; }
          if (ReopenDiscDemux() && state_.load() != FFF3FPState::Playing && videoStream_ >= 0)
-@@ -6299,18 +6622,20 @@ FFFResult PlayerSession::DoSeek(std::int64_t position, const std::int64_t target
+@@ -6299,18 +6624,20 @@ FFFResult PlayerSession::DoSeek(std::int64_t position, const std::int64_t target
      // Still-image seek is a no-op: single-image demuxers have no seekable timeline.
      if (staticImage_) { PublishSnapshot(); return FFFResult::Success; }
      auto decodeStartPosition = position;
@@ -1611,7 +1632,7 @@ index 96c52c1..2b2e182 100644
          (format_->pb->seekable & AVIO_SEEKABLE_NORMAL) != 0) {
          const auto fileSize = avio_size(format_->pb);
          const auto timelineExtent = snapshot_.duration100ns > 0
-@@ -6357,6 +6682,7 @@ FFFResult PlayerSession::DoSeek(std::int64_t position, const std::int64_t target
+@@ -6357,6 +6684,7 @@ FFFResult PlayerSession::DoSeek(std::int64_t position, const std::int64_t target
      }
      ClearVideoQueue();
      ResetBitRateTracking();
@@ -1619,7 +1640,7 @@ index 96c52c1..2b2e182 100644
      if (videoDecoder_) avcodec_flush_buffers(videoDecoder_);
      if (audioDecoder_) avcodec_flush_buffers(audioDecoder_);
      internalAudioDecodeErrorCount_ = 0;
-@@ -6369,6 +6695,10 @@ FFFResult PlayerSession::DoSeek(std::int64_t position, const std::int64_t target
+@@ -6369,6 +6697,10 @@ FFFResult PlayerSession::DoSeek(std::int64_t position, const std::int64_t target
      snapshot_.position100ns = position;
      snapshot_.frameIndex = targetFrame >= 0 && position > 0 ? targetFrame - 1 : -1;
      ++snapshot_.timelineGeneration;
@@ -1630,7 +1651,7 @@ index 96c52c1..2b2e182 100644
      ResetClock(position); if (audioRenderer_) audioRenderer_->Reset(position);
      if (state_.load() == FFF3FPState::Ended)
          SetState(FFF3FPState::Paused, "seek");
-@@ -6453,6 +6783,8 @@ void PlayerSession::DoSelectStream(const std::int32_t index, const bool video) n
+@@ -6453,6 +6785,8 @@ void PlayerSession::DoSelectStream(const std::int32_t index, const bool video) n
      if (video) {
          StopSoftwareVideoDecode();
          if (videoDecoder_) avcodec_free_context(&videoDecoder_);
@@ -1639,7 +1660,7 @@ index 96c52c1..2b2e182 100644
          videoDecoder_ = replacement; videoStream_ = index;
          // The auxiliary stream was chosen against the previous base stream, so
          // forget it; the host's next enabled request re-selects against this one.
-@@ -6544,6 +6876,7 @@ void PlayerSession::DoLoadExternalAudio(std::string path, const std::int32_t req
+@@ -6544,6 +6878,7 @@ void PlayerSession::DoLoadExternalAudio(std::string path, const std::int32_t req
  }
  
  void PlayerSession::DoClose(const FFF3FPState finalState, const bool preserveVideoOutput) noexcept {
@@ -1647,7 +1668,7 @@ index 96c52c1..2b2e182 100644
      StopSoftwareVideoDecode();
      placement_.Release();
      if (audioRenderer_) { audioRenderer_->Stop(); audioRenderer_.reset(); }
-@@ -6556,6 +6889,8 @@ void PlayerSession::DoClose(const FFF3FPState finalState, const bool preserveVid
+@@ -6556,6 +6891,8 @@ void PlayerSession::DoClose(const FFF3FPState finalState, const bool preserveVid
      if (externalAudioDecoder_) avcodec_free_context(&externalAudioDecoder_); CloseFormat(&externalFormat_, externalFormatIo_);
      CloseAuxiliaryLayer();
      if (videoDecoder_) avcodec_free_context(&videoDecoder_);
@@ -1656,7 +1677,7 @@ index 96c52c1..2b2e182 100644
      if (audioDecoder_) avcodec_free_context(&audioDecoder_);
      ReleaseIamfDecoder();
      if (coverArtFrame_) av_frame_free(&coverArtFrame_);
-@@ -6597,6 +6932,7 @@ void PlayerSession::DoClose(const FFF3FPState finalState, const bool preserveVid
+@@ -6597,6 +6934,7 @@ void PlayerSession::DoClose(const FFF3FPState finalState, const bool preserveVid
      nextUntimedVideoPosition100ns_ = 0; draining_ = false;
      demuxEnded_ = audioDecoderDrained_ = externalAudioDrained_ = audioClockFinished_ = false;
      staticImage_ = false;
@@ -1664,7 +1685,7 @@ index 96c52c1..2b2e182 100644
      animatedImage_ = false;
      sessionWrapLoop_ = false; sessionWrapFailures_ = 0;
      { std::lock_guard lock(snapshotMutex_); hasPublishedImageInfo_ = false; }
-@@ -6748,6 +7084,13 @@ void PlayerSession::RebuildMediaInfo() noexcept {
+@@ -6748,6 +7086,13 @@ void PlayerSession::RebuildMediaInfo() noexcept {
          << ",\"fileSize\":" << std::max<std::int64_t>(0, format_->pb ? avio_size(format_->pb) : 0)
          << ",\"probeScore\":" << format_->probe_score
          << ",\"staticImage\":" << (staticImage_ ? "true" : "false")
@@ -1678,7 +1699,7 @@ index 96c52c1..2b2e182 100644
          << ",\"tileGrid\":" << (tileGrid_ ? "true" : "false")
          << ",\"tileGridWidth\":" << tileGridWidth_
          << ",\"tileGridHeight\":" << tileGridHeight_
-@@ -6886,6 +7229,9 @@ void PlayerSession::RebuildMediaInfo() noexcept {
+@@ -6886,6 +7231,9 @@ void PlayerSession::RebuildMediaInfo() noexcept {
                  const auto decoderBitDepth = PixelFormatBitDepth(
                      decoderSurfaceFormat != AV_PIX_FMT_NONE ? decoderSurfaceFormat : decoderFormat);
                  if (decoderBitDepth > 0) json << ",\"decoderBitDepth\":" << decoderBitDepth;
@@ -1688,7 +1709,7 @@ index 96c52c1..2b2e182 100644
                  const auto acceleration = HardwareAccelerationName(videoDecoder_);
                  if (!acceleration.empty())
                      json << ",\"hardwareAcceleration\":\"" << EscapeJson(acceleration) << "\"";
-@@ -7007,6 +7353,7 @@ void PlayerSession::SetState(const FFF3FPState state, const char* operation) noe
+@@ -7007,6 +7355,7 @@ void PlayerSession::SetState(const FFF3FPState state, const char* operation) noe
  }
  
  void PlayerSession::Fail(const FFFResult result, std::string message, const char* operation) noexcept {
@@ -1696,7 +1717,7 @@ index 96c52c1..2b2e182 100644
      try {
          // Mirror every failure into the process log sink (FFF3FP_SetLogCallback).
          extern void FFF3FP_KernelLogImpl(const char*) noexcept;
-@@ -7040,13 +7387,13 @@ std::int64_t PlayerSession::ClockPosition() const noexcept {
+@@ -7040,13 +7389,13 @@ std::int64_t PlayerSession::ClockPosition() const noexcept {
          return position;
      }
      if (!audioClockFinished_ && audioRenderer_ && (audioStream_ >= 0 || externalAudioStream_ >= 0)) {
@@ -1713,7 +1734,7 @@ index 96c52c1..2b2e182 100644
      PublishPlaybackClock(position, snapshot_.duration100ns > 0
          ? snapshot_.duration100ns : (std::numeric_limits<std::int64_t>::max)());
      return position;
-@@ -7106,3 +7453,239 @@ bool PlayerSession::NormalizeLocalPath(const char* path, std::string& normalized
+@@ -7106,3 +7455,239 @@ bool PlayerSession::NormalizeLocalPath(const char* path, std::string& normalized
          normalized = ToUtf8(full.data()); return !normalized.empty();
      } catch (...) { error = "The local path could not be normalized."; return false; }
  }

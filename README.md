@@ -1,14 +1,14 @@
 # VS Renderer / VS Player / VS Cap
 
-![源码版本 1.0.14](https://img.shields.io/badge/source-1.0.14-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
+![源码版本 1.0.14](https://img.shields.io/badge/source-1.0.15-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
 
 Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片，用 **VSCap** 截图与标注。
 
 [下载便携包](https://github.com/user-Wing/VS-Renderer-GUI/releases) · [ModelScope 下载源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) · [操作指南](docs/README.md) · [更新日志](changelog.md)
 
-源码版本：**1.0.14**。本轮更新源码及本地单文件 Player，并准备 Release 草稿；发行压缩包与附件由维护者手动制作、上传。下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
+源码版本：**1.0.15**。1.0.15 已本地构建；发行压缩包与附件由维护者手动制作、上传。下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
 
-1.0.14 完善 Player 音量百分比、静音图标与内嵌均衡器，新增 Renderer 即时深色主题、八档图像处理、组合补帧、外置 AI 字幕入口、3FUI 命令桥和 Cap 设置改进。AI 模型需手动准备；组合链路的画质取舍与实测边界见 [Player 指南](docs/player.md)。
+1.0.15 修复部分多轨视频误回退软解，并压缩单文件 Player 体积。1.0.14 完善 Player 音量百分比、静音图标与内嵌均衡器，新增 Renderer 即时深色主题、八档图像处理、组合补帧、外置 AI 字幕入口、3FUI 命令桥和 Cap 设置改进。AI 模型需手动准备；组合链路的画质取舍与实测边界见 [Player 指南](docs/player.md)。
 
 ## 功能介绍
 
