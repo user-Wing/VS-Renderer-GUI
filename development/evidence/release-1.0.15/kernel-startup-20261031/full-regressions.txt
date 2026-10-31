@@ -1,0 +1,109 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+PASS   : TestPlayer::softwareCodecPipeline(HEVC)
+PASS   : TestPlayer::softwareCodecPipeline(AV1)
+PASS   : TestPlayer::nativeVfrSteppingAcrossIndexGaps()
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 53 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 53 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 53 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 53 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 103 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 221 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 460 position 6010380000 6010170000 frame 28821 28820 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 226 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 233 position 6010380000 6010590000 frame 28821 28822 native-index 357 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 448 position 6010590000 6010380000 frame 28822 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 292 position 12010120000 12010330000 frame 57591 57592 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 568 position 12010330000 12010120000 frame 57592 57591 native-index 773 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 287 position 12010120000 12010330000 frame 57591 57592 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button 1 ms 292 position 12010330000 12010540000 frame 57592 57593 native-index 775 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) frame-button -1 ms 601 position 12010540000 12010330000 frame 57593 57592 native-index 774 pending false
+PASS   : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc)
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 50 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 50 position 610400000 610190000 frame 2927 2926 native-index 60 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 60 position 610190000 610400000 frame 2926 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 51 position 610400000 610610000 frame 2927 2928 native-index 62 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 119 position 610610000 610400000 frame 2928 2927 native-index 61 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 222 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 441 position 6010380000 6010170000 frame 28821 28820 native-index 355 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 222 position 6010170000 6010380000 frame 28820 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 240 position 6010380000 6010590000 frame 28821 28822 native-index 357 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 448 position 6010590000 6010380000 frame 28822 28821 native-index 356 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 285 position 12010120000 12010330000 frame 57591 57592 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 564 position 12010330000 12010120000 frame 57592 57591 native-index 773 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 268 position 12010120000 12010330000 frame 57591 57592 native-index 774 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button 1 ms 279 position 12010330000 12010540000 frame 57592 57593 native-index 775 pending false
+QINFO  : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) frame-button -1 ms 557 position 12010540000 12010330000 frame 57593 57592 native-index 774 pending false
+PASS   : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11)
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(default-1-4) requested-HDR 1 4 -1 requested/active 0 0 transfer 0 output 0 RGB 0.838845 0.74454 0.627584 colors 264 greenFraction 0 fallback 
+PASS   : TestPlayer::requestedHdrUsesNativeColor(default-1-4)
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(default-2-4) requested-HDR 2 4 -1 requested/active 0 0 transfer 0 output 0 RGB 0.836925 0.744356 0.626331 colors 270 greenFraction 0 fallback 
+PASS   : TestPlayer::requestedHdrUsesNativeColor(default-2-4)
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(default-1-5) requested-HDR 1 5 -1 requested/active 0 0 transfer 0 output 0 RGB 0.839421 0.745206 0.627163 colors 268 greenFraction 0 fallback 
+PASS   : TestPlayer::requestedHdrUsesNativeColor(default-1-5)
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(default-2-5) requested-HDR 2 5 -1 requested/active 0 0 transfer 0 output 0 RGB 0.837617 0.745148 0.625658 colors 266 greenFraction 0 fallback 
+PASS   : TestPlayer::requestedHdrUsesNativeColor(default-2-5)
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(software-stored-0-4) requested-HDR 1 4 0 requested/active 0 0 transfer 0 output 0 RGB 0.838859 0.744536 0.627588 colors 263 greenFraction 0 fallback 
+PASS   : TestPlayer::requestedHdrUsesNativeColor(software-stored-0-4)
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(software-stored-2-4) requested-HDR 1 4 2 requested/active 0 0 transfer 0 output 0 RGB 0.838845 0.74454 0.627584 colors 264 greenFraction 0 fallback 
+PASS   : TestPlayer::requestedHdrUsesNativeColor(software-stored-2-4)
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(software-stored-0-5) requested-HDR 1 5 0 requested/active 0 0 transfer 0 output 0 RGB 0.839421 0.745206 0.627163 colors 268 greenFraction 0 fallback 
+PASS   : TestPlayer::requestedHdrUsesNativeColor(software-stored-0-5)
+QINFO  : TestPlayer::requestedHdrUsesNativeColor(software-stored-2-5) requested-HDR 1 5 2 requested/active 0 0 transfer 0 output 0 RGB 0.839421 0.745206 0.627163 colors 268 greenFraction 0 fallback 
+PASS   : TestPlayer::requestedHdrUsesNativeColor(software-stored-2-5)
+QINFO  : TestPlayer::colorSettingsPreserveVsChain() color engine libplacebo v7.360.1 / D3D11 fallback 
+PASS   : TestPlayer::colorSettingsPreserveVsChain()
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 0 0 7 0.501961 0.501961 0.501961 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 0 0 4 0.501961 0.501961 0.501961 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 0 2 7 0.501961 0.501961 0.501961 8 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 0 2 4 0.501961 0.501961 0.501961 8 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 1 0 7 0.501961 0.501961 0.501961 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 1 0 4 0.501961 0.501961 0.501961 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 1 2 7 0.501961 0.501961 0.501961 8 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 1 1 2 4 0.501961 0.501961 0.501961 8 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 0 0 7 0.819608 0.823529 0.823529 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 0 0 4 0.819608 0.823529 0.823529 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 0 2 7 0.976471 0.976471 0.976471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 0 2 4 0.976471 0.976471 0.976471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 1 0 7 0.819608 0.823529 0.823529 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 1 0 4 0.819608 0.823529 0.823529 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 1 2 7 0.976471 0.976471 0.976471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 16 1 2 4 0.976471 0.976471 0.976471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 0 0 7 0.682353 0.682353 0.682353 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 0 0 4 0.682353 0.682353 0.682353 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 0 2 7 0.776471 0.776471 0.776471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 0 2 4 0.776471 0.776471 0.776471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 1 0 7 0.682353 0.682353 0.682353 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 1 0 4 0.682353 0.682353 0.682353 8 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 1 2 7 0.776471 0.776471 0.776471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color false 18 1 2 4 0.776471 0.776471 0.776471 8 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 0 0 7 0.499511 0.499511 0.499511 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 0 0 4 0.499511 0.499511 0.499511 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 0 2 7 0.499511 0.499511 0.499511 10 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 0 2 4 0.499511 0.499511 0.499511 10 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 1 0 7 0.499511 0.499511 0.499511 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 1 0 4 0.499511 0.499511 0.499511 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 1 2 7 0.499511 0.499511 0.499511 10 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 1 1 2 4 0.499511 0.499511 0.499511 10 0 3FP native Automatic color management: native SDR / HDR output.
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 0 0 7 0.818182 0.818182 0.818182 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 0 0 4 0.818182 0.818182 0.818182 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 0 2 7 0.975562 0.97654 0.97654 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 0 2 4 0.975562 0.975562 0.97654 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 1 0 7 0.818182 0.818182 0.818182 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 1 0 4 0.818182 0.818182 0.818182 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 1 2 7 0.975562 0.97654 0.97654 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 16 1 2 4 0.975562 0.975562 0.97654 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 0 0 7 0.680352 0.680352 0.680352 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 0 0 4 0.680352 0.680352 0.680352 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 0 2 7 0.807429 0.808407 0.808407 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 0 2 4 0.807429 0.807429 0.807429 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 1 0 7 0.680352 0.680352 0.680352 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 1 0 4 0.680352 0.680352 0.680352 10 0 3FP native 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 1 2 7 0.807429 0.808407 0.808407 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color true 18 1 2 4 0.807429 0.807429 0.807429 10 0 libplacebo v7.360.1 / D3D11 
+QINFO  : TestPlayer::jincColorMatchesNative() neutral-color max algorithm delta 0.000977516
+PASS   : TestPlayer::jincColorMatchesNative()
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 17 passed, 0 failed, 0 skipped, 0 blacklisted, 73277ms
+********* Finished testing of TestPlayer *********

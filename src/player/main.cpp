@@ -10,7 +10,32 @@
 #include <QTimer>
 #include <QFileInfo>
 #include "update/SinglePlayerUpdater.h"
+#include <qt_windows.h>
+#include <array>
+#include <thread>
+
+namespace {
+void prefetchPlaybackLibraries(std::stop_token stop) {
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+    std::array<unsigned char,128*1024> buffer;
+    for (const auto *name : {L"avcodec-63.dll",L"avformat-63.dll",L"avutil-61.dll",L"swresample-7.dll",L"swscale-10.dll",L"avfilter-12.dll"}) {
+        if (stop.stop_requested()) return;
+        wchar_t path[32768];
+        const auto length=SearchPathW(nullptr,name,nullptr,32768,path,nullptr);
+        if (!length || length>=32768) continue;
+        const auto file=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,nullptr);
+        if (file==INVALID_HANDLE_VALUE) continue;
+        DWORD bytes=0;
+        while (!stop.stop_requested() && ReadFile(file,buffer.data(),DWORD(buffer.size()),&bytes,nullptr) && bytes) {}
+        CloseHandle(file);
+    }
+}
+}
 int main(int argc, char **argv) {
+    std::jthread prefetch;
+    wchar_t disabled[2]{};
+    if (GetEnvironmentVariableW(L"FFF_NO_PREFETCH",disabled,2)!=1 || disabled[0]!=L'1')
+        if (argc<2 || QByteArray(argv[1])!="--photocraft-import") prefetch=std::jthread(prefetchPlaybackLibraries);
     QApplication app(argc, argv);
     if(app.arguments().value(1)=="--photocraft-import" && app.arguments().size()==4){
         vsr::PlayerImage decoder;int result=1;

@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-31",
+  "version": "1.0.15",
+  "upstreamMain": "146b5e03c784a01215bcc21b5dee60c97dabb089",
+  "startupPr": 48,
+  "nativeHead": "cc545d2afc3f7b45058f47434628db6a703c7b07",
+  "nativeSha256": "2f26bc1a1293b9ff11c57f287ec2dac0d111521f79816dd090d3de9d22115508",
+  "host": {
+    "cpu": "AMD Ryzen 9 7940HX",
+    "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU"
+  },
+  "tests": {
+    "headless-before.txt": {
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0
+    },
+    "kernel-first.txt": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0
+    },
+    "full-regressions.txt": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "rtx-bd.txt": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "lite-regressions.txt": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "frame-bridge.txt": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "hardwareActualModes": {
+    "8K_AV1_420p10": 2,
+    "HEVC_444p10": 2,
+    "AV1_444p12": 1,
+    "multitrack_HEVC_420p10": 2
+  },
+  "startup": {
+    "fullTrials": 19,
+    "singleTrials": 24,
+    "fullOldMs": 979.415,
+    "fullNewOffMs": 963.859,
+    "fullNewOnMs": 962.613,
+    "singleOldWarmMs": 991.297,
+    "singleNewOffWarmMs": 1037.715,
+    "singleNewOnWarmMs": 1018.231,
+    "singleNewFreshExtractionMs": 1516.641
+  },
+  "sampledSingleSha256": "8e5a450a707e7d2a6842d2a09a5494dad4f599564fdea6f079b1e483d17fde7d",
+  "finalSingle": {
+    "version": "1.0.15",
+    "bytes": 27418889,
+    "sha256": "13f5f50ea686a27fde40a21182a1bd6705cf1c46afd8afcdcaa16630519ddf02",
+    "payload": "0cd3b52101d8723d1020c02b",
+    "manifestFiles": 66,
+    "zipCRC": true,
+    "externalFFmpeg": true,
+    "iconResource101": true,
+    "matchesInternalStageExceptPETimestampAndChecksum": true,
+    "launcherChildImport": {
+      "bits": 8,
+      "height": 1254,
+      "icc": false,
+      "name": "I1.png",
+      "temporary": true,
+      "version": 1,
+      "width": 1254
+    },
+    "settingsUnchanged": true,
+    "originalDiscIndexesUnchanged": true
+  },
+  "limits": [
+    "Focused tests only; counts include init/cleanup and are not one full regression run.",
+    "RTX requests/status and continued playback passed; enhancement remained inactive (VSR reason 4, HDR reason 5).",
+    "No physical HDR display or colorimeter acceptance; no new software 8K throughput claim.",
+    "Startup uses a generated solid-green H264/AAC fixture, wall clock before launch to real visible pixels; own windows temporarily topmost. OS file cache was not cleared.",
+    "8 alternating prefetch on/off pairs each; observed differences do not prove a stable speedup. Invalid initial Full baseline (mistaken launcher) excluded.",
+    "Startup benchmark single package precedes a project.md-only payload refresh; executable/Native unchanged; final package startup/exit is recorded separately.",
+    "Running VSCap preserved. Existing configs, VPY, ICC/LUT and preset descriptions unchanged. No GitHub release/tag/asset changes."
+  ]
+}

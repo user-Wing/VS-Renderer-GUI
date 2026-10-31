@@ -97,6 +97,26 @@ class TestPlayer final : public QObject {
     QString configPath() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
     Q_OBJECT
 private slots:
+    void headlessOpenSkipsRgbConversion(){
+        QTemporaryDir directory;const auto source=directory.filePath("rgb.mkv");QProcess encoder;encoder.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),{"-v","error","-f","lavfi","-i","testsrc=size=320x180:rate=24:duration=2","-pix_fmt","bgr0","-c:v","ffv1","-y",source});QVERIFY(encoder.waitForFinished(10000));QCOMPARE(encoder.exitCode(),0);
+        ThreeFpApi api;ThreeFpConfiguration config{};config.size=sizeof(config);config.version=api.apiVersion();config.decodeMode=1;config.sdrPeakNits=100;config.sdrPaperWhiteNits=203;void *handle=nullptr;QCOMPARE(api.create(&config,&handle),ThreeFpResult::Success);const auto cleanup=qScopeGuard([&]{api.destroy(handle);});
+        const auto snapshot=[&]{ThreeFpSnapshot s{};s.size=sizeof(s);s.version=8;api.snapshot(handle,&s);return s;};QCOMPARE(api.open(handle,source.toUtf8().constData()),ThreeFpResult::Success);QTRY_COMPARE_WITH_TIMEOUT(snapshot().state,ThreeFpState::Ready,10000);QCOMPARE(api.play(handle),ThreeFpResult::Success);QTRY_VERIFY_WITH_TIMEOUT(snapshot().presentedVideoFrames>=6,5000);QCOMPARE(snapshot().swapChainPresents,quint64(0));qInfo()<<"headless-convert-100ns"<<snapshot().softwareConvert100ns;QCOMPARE(snapshot().softwareConvert100ns,quint64(0));
+    }
+    void upstreamHardwarePreference_data(){
+        QTest::addColumn<QString>("source");QTest::addColumn<uint>("expected");const auto root=qEnvironmentVariable("VSR_KERNEL_MEDIA_ROOT");
+        for(const auto &[name,mode]:{std::pair{"ChouKaguya432048-Part.mkv",2u},std::pair{"RebellionHEVC444p10-700MBPS-SoftwareLast.mkv",2u},std::pair{"OP-yuv444p12-SWTest.mkv",1u}})QTest::newRow(name)<<(root.isEmpty()?QString():QDir(root).filePath(name))<<mode;
+        QTest::newRow("multitrack")<<qEnvironmentVariable("VSR_KERNEL_MULTITRACK_SOURCE")<<2u;
+    }
+    void upstreamHardwarePreference(){
+        QFETCH(QString,source);QFETCH(uint,expected);if(source.isEmpty())QSKIP("Set VSR_KERNEL_MEDIA_ROOT and VSR_KERNEL_MULTITRACK_SOURCE");
+        QWidget surface;surface.resize(960,540);surface.show();ThreeFpApi api;ThreeFpPlayer player(api,&surface);player.setMuted(true);QVERIFY(player.setDecodeMode(2));QVERIFY(player.openFile(source));QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Ready,20000);QVERIFY(player.play());QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>=8,20000);QCOMPARE(player.snapshot().decodeMode,expected);QVERIFY(!player.capture().isNull());qInfo()<<"hardware-preference"<<source<<"actual"<<player.snapshot().decodeMode<<player.mediaInfo();
+        QVERIFY(player.pause());QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);const auto generation=player.snapshot().timelineGeneration;QVERIFY(player.seek(10000000));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().timelineGeneration>generation && player.snapshot().frameIndex>=0,10000);QVERIFY(player.play());QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().position100ns>15000000,10000);QCOMPARE(player.snapshot().decodeMode,expected);
+    }
+    void rtxRequestsKeepPlaybackWorking(){
+        QTemporaryDir directory;const auto source=directory.filePath("rtx.mkv");QProcess encoder;encoder.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),{"-v","error","-f","lavfi","-i","testsrc2=size=320x180:rate=24:duration=5","-c:v","libx264","-preset","ultrafast","-y",source});QVERIFY(encoder.waitForFinished(10000));QCOMPARE(encoder.exitCode(),0);
+        QWidget surface;surface.resize(960,540);surface.show();ThreeFpApi api;ThreeFpPlayer player(api,&surface);player.setMuted(true);QVERIFY(player.openFile(source));QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Ready,10000);QVERIFY(player.play());QTRY_VERIFY(player.snapshot().presentedVideoFrames>3);
+        for(bool hdr:{false,true})for(bool enabled:{true,false}){const auto before=player.snapshot().presentedVideoFrames;QVERIFY(player.setVideoEnhancement(hdr,enabled));QTRY_COMPARE(player.videoEnhancementStatus(hdr).requested,uint(enabled));QTRY_VERIFY(player.snapshot().presentedVideoFrames>before);const auto status=player.videoEnhancementStatus(hdr);QVERIFY(!status.active || (status.nvidiaAdapter && !status.driverRejected));QVERIFY(!player.capture().isNull());qInfo()<<"rtx-request"<<hdr<<enabled<<"active"<<status.active<<"rejected"<<status.driverRejected<<"reason"<<status.reason;}
+    }
     void eightStagesAndExternalDescriptions(){
         PlayerWindow player;QCOMPARE(player.qualityNames().size(),8);
         const QDir builtin(QDir(PresetStore::directory()).filePath("builtin"));

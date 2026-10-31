@@ -54,7 +54,16 @@ Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $_.Name -ne 'r
 }
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'resource-manifest.json') -Encoding UTF8
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
+$compress = @'
+import pathlib, sys, zipfile
+source = pathlib.Path(sys.argv[1])
+with zipfile.ZipFile(sys.argv[2], 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+    for path in sorted(source.rglob('*')):
+        if path.is_file():
+            archive.write(path, path.relative_to(source).as_posix())
+'@
+& python -c $compress $stage $zip
+if ($LASTEXITCODE -ne 0) { throw 'Cannot compress the single-player runtime' }
 $resource = Join-Path $work 'launcher-icons.rc'
 $resourceObject = Join-Path $work 'launcher-icons.o'
 $iconPath = (Join-Path $root 'assets\icons\player.ico').Replace('\','/')

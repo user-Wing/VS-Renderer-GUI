@@ -1,0 +1,22 @@
+{
+  "version": "1.0.15",
+  "bytes": 27418889,
+  "sha256": "13f5f50ea686a27fde40a21182a1bd6705cf1c46afd8afcdcaa16630519ddf02",
+  "payload": "0cd3b52101d8723d1020c02b",
+  "manifestFiles": 66,
+  "zipCRC": true,
+  "externalFFmpeg": true,
+  "iconResource101": true,
+  "matchesInternalStageExceptPETimestampAndChecksum": true,
+  "launcherChildImport": {
+    "bits": 8,
+    "height": 1254,
+    "icc": false,
+    "name": "I1.png",
+    "temporary": true,
+    "version": 1,
+    "width": 1254
+  },
+  "settingsUnchanged": true,
+  "originalDiscIndexesUnchanged": true
+}

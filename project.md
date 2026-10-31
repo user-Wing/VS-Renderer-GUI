@@ -1,6 +1,6 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-10-31。源码版本 **1.0.15**，以 `CMakeLists.txt` 为准；Native 固定 API20 / 上游 main `922e4b70268fcbc83f0deb06d9e2c1b62e7a33b2`，含 #35，并通过本地补丁迁入 AI 字幕 #36/#37 Native 能力。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
+核对日期：2026-10-31。源码版本 **1.0.15**，以 `CMakeLists.txt` 为准；Native 固定 API20 / 上游 main `146b5e03c784a01215bcc21b5dee60c97dabb089` + 启动 PR48 `cc545d2afc3f7b45058f47434628db6a703c7b07`，保留本地 AI 字幕 #36/#37 Native 补丁。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
 
 ## 1. 发心与边界
 
@@ -30,6 +30,7 @@
 | 直通相对逐帧 | `PlayerWindow::stepFrame` 调用内核当前PTS逐帧；Native重新解码局部GOP确认相邻帧 | 不用绝对帧号逐帧，也不把稀疏缓存中的近邻当成真实相邻帧；VS仍按输出帧号定位 |
 | 查看与编辑解耦 | PhotoCraft 独立进程保留未保存工作 | 旧 Qt 编辑器仍有源码/测试，不作为生产编辑入口 |
 | 固定上游 + 完整 Native 补丁 | 保留本地扩展并可重新构建 | 不拼装 API14/18/20 不同版本 DLL 或补丁 |
+| 启动期库预读 | `src/player/main.cpp` 用128KiB缓冲在低优先级线程读取FFmpeg；单文件解包后的Qt子进程共用 | 不照搬.NET图标和LakeUI设备预热，不额外提高进程优先级；首次解包单独计时 |
 | 软件播放同步与内存预算 | 上游线程/帧池/CPU 域按负载逐级调整；音频从60ms起按告警升至240ms，呈现允许最多250ms的平滑节奏容差；保留VSP的8K关键包参考帧追赶 | 不把显示器限帧记为解码丢帧；CPU预缩放仍默认关闭，8K逐帧实时按素材验收 |
 | AI 字幕外置推理 | 固定 main + #36/#37 Native 音频 tap；Qt 有界传 PCM 到外置 worker，跳转按 generation 隔离 | 模型与 llama-server 不随包下载；不移植上游 VB 页面，不将未装模型测试当作识别验收 |
 | Shader 平面输出 | `third_party/vsr-placebo` 直接回读 YUV 平面、合并增强 hooks，独立命名空间与 color 依赖 | 保留标准 placebo 插件作为缺少组件时的兼容路径；不把 VS 吞吐当作 Native 播放帧率 |
@@ -73,7 +74,7 @@
 | Qt | 6.8+；本地记录 6.10.2，MinGW；CMake 查找 | 编译或 GUI 启动失败 |
 | VapourSynth / Python | VS API4 / R81；构建和 stage 脚本，`update-vapoursynth-runtime.py` 锁定哈希 | VS 链不可用；直通路径独立 |
 | VS 插件 | BM3D 11.0、BM3Dvk2 1.0、BestSource 22；其余随运行时保留 | 对应滤镜不可用；不能用 API3 DLL 替代 |
-| FFF.Native | API20 / main `922e4b7`；`build-native-api20.ps1` 应用完整补丁，配置112字节、snapshot464字节，动态 C ABI | 原生播放/呈现不可用 |
+| FFF.Native | API20 / main `146b5e0` + PR48 `cc545d2`；`build-native-api20.ps1` 应用完整补丁，配置112字节、snapshot464字节，动态 C ABI | 原生播放/呈现不可用 |
 | FFmpeg | 当前 shared ABI：63/63/61/7/10/12；Native SDK 与运行 DLL 配套 | 相应解码/导出失败，单文件启动器先检查组件 |
 | GLSL / RIFE | 随包 shader 与 NCNN 模型，`stage-shaders.ps1` / `install-analysis-plugins.ps1` | 相应增强不可用；RIFE 需要 Vulkan |
 | libVLC / LAV / madVR | Full 可选后端，stage 脚本及各自许可 | 对应后端不可用，PlayerLite 不包含 |
@@ -116,7 +117,7 @@
 
 ## 10. 当前状态
 
-1.0.15 修复多轨视频硬解试探误判；单文件使用更高压缩率，实际播放器与 Native 本地验证范围见测试台账。与下一步
+1.0.15 同步近期3FP内核和可迁移的启动优化，保留多轨视频硬解试探修复；单文件使用更高压缩率。Full输出至 `dist/VS-GUI-Full`，单文件为 `dist/VS-Player.exe`；具体测试范围、启动采样及限制见测试台账。运行中的VSCap原文件保留，发行压缩包与附件由维护者手动制作、上传。
 
 1.0.14 在固定 API20 主线补丁上迁入 AI 音频 tap 与字幕 HDR，Qt 接入 RTX VSR/TrueHDR、外置 AI 字幕、八档与组合处理、Renderer 主题设置、3FUI 命令桥及 Cap 设置改进。Player 设置新增独立字幕页；渲染页完整列出 Anime 档位，Jinc/D3D11 补帧分别保存参与列表；其他缩放算法限纯 D3D11 直通，Tab/底栏读取实际路径。ParameterEditor 跟随全局主题。PlayerControls 显示音量百分比和状态图标，均衡器由 PlayerAudio 创建与倍速互斥的 Popup，并在展开时保持控制栏可见。入口分别为 `PlayerAiSubtitles`、`PlayerProfiles`、`MainWindow`、`ExportWindow`、`src/cap/main.cpp`；插件源码在 `plugins/3fui-export-bridge`，单文件更新在 `SinglePlayerUpdater`。保留 VS 帧桥、BD 定位、音频效果和色彩桥；普通声床没有新增内置双耳渲染器。原理见[性能排查](docs/performance-debugging.md#上游内核优化)，逐项状态及实测见[台账](development/validation.md)。本轮更新本地产物并同步源码，单文件 `dist/VS-Player.exe` 同步到 1.0.14；准备 Release 草稿，发行压缩包与附件由维护者手动制作、上传。
 

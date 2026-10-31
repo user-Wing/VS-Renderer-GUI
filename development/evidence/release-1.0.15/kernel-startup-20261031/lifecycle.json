@@ -1,0 +1,52 @@
+[
+  {
+    "case": "new-full-lifecycle",
+    "host": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\vs-player.exe",
+    "pid": 41212,
+    "prefetch": true,
+    "coldExtraction": false,
+    "single": false,
+    "spawnMs": 59.72789999941597,
+    "visibleWindowMs": 790.7041999933426,
+    "greenFrameMs": 1250.7037999966997,
+    "forcedStops": [],
+    "exitCodes": {
+      "41212": 0
+    },
+    "success": true
+  },
+  {
+    "case": "newsingle-lifecycle",
+    "host": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\upstream-20261031\\single-new\\VS-Player.exe",
+    "pid": 36340,
+    "prefetch": true,
+    "coldExtraction": false,
+    "single": true,
+    "spawnMs": 9.04399999853922,
+    "visibleWindowMs": 658.7717000002158,
+    "greenFrameMs": 994.6496999982628,
+    "forcedStops": [],
+    "exitCodes": {
+      "38820": 0,
+      "36340": 0
+    },
+    "success": true
+  },
+  {
+    "case": "newsingle-lifecycle-cold",
+    "host": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\upstream-20261031\\single-new\\VS-Player.exe",
+    "pid": 38412,
+    "prefetch": true,
+    "coldExtraction": true,
+    "single": true,
+    "spawnMs": 8.69059999968158,
+    "visibleWindowMs": 1049.1515999965486,
+    "greenFrameMs": 1441.2971999990987,
+    "forcedStops": [],
+    "exitCodes": {
+      "38412": 0,
+      "11912": 0
+    },
+    "success": true
+  }
+]

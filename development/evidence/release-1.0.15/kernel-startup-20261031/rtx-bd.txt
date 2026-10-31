@@ -1,0 +1,17 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::rtxRequestsKeepPlaybackWorking() rtx-request false true active 0 rejected 0 reason 4
+QINFO  : TestPlayer::rtxRequestsKeepPlaybackWorking() rtx-request false false active 0 rejected 0 reason 1
+QINFO  : TestPlayer::rtxRequestsKeepPlaybackWorking() rtx-request true true active 0 rejected 0 reason 5
+QINFO  : TestPlayer::rtxRequestsKeepPlaybackWorking() rtx-request true false active 0 rejected 0 reason 1
+PASS   : TestPlayer::rtxRequestsKeepPlaybackWorking()
+QINFO  : TestPlayer::bluRayNativePlaybackAndChapters() BD scan "C:/Users/ARXChem/Downloads/[BDMV][240417][BRMM-10775][BanG Dream! It's MyGO!!!!!][ÏÂŽ† Fin]/BRMM_10775"
+QINFO  : TestPlayer::bluRayNativePlaybackAndChapters() BD prepared QList("C:/Users/ARXChem/AppData/Local/VSRendererTests/VSPlayerTests/cache/bluray/1acbe4bfe5875028da382fef3f5b43b8da8eccc4abc72403aed3785d3fdb63f1/BDMV/PLAYLIST/00000.mpls", "C:/Users/ARXChem/AppData/Local/VSRendererTests/VSPlayerTests/cache/bluray/0e407c11a94aa2e90e7e6820b35c61784c118ccb005a86a2cee0da7089365043/BDMV/PLAYLIST/00000.mpls")
+QINFO  : TestPlayer::bluRayNativePlaybackAndChapters() BD opening
+QINFO  : TestPlayer::bluRayNativePlaybackAndChapters() BD status 3 decoded 44 presented 41 duration 14214200000 ""
+QINFO  : TestPlayer::bluRayNativePlaybackAndChapters() BD frames 6 chapters 6
+PASS   : TestPlayer::bluRayNativePlaybackAndChapters()
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 6065ms
+********* Finished testing of TestPlayer *********

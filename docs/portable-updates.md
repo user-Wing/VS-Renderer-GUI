@@ -23,7 +23,7 @@ Renderer 设置或 Player“设置 → 基本设置”中检查更新。完整�
 
 从 1.0.14 的单文件代码起，启动后检查 GitHub 上游版本；发现可验证的新单文件附件时提示下载，核对大小与 SHA-256 后等待播放器退出，只替换启动器原 EXE 并重启。失败保留旧文件或备份；不使用 Full 更新包、不更新外置 FFmpeg。只有由单文件启动器传入原始路径的进程才启用此检查，普通 Lite 缓存 EXE 不执行替换。
 
-单文件构建工具按 CMake 版本生成 FileVersion/ProductVersion 资源。本次只验证代码和隔离替换脚本，不重封装现有 `dist/VS-Player.exe`，该文件仍为旧版本；未进行真实网络更新安装。
+单文件构建工具按CMake版本生成FileVersion/ProductVersion资源。打包后分别核对ZIP/清单、启动器与子进程、本地配置保留；本地构建和真实网络更新安装的验证结果分别记入测试台账。
 
 当前Full固定为 `dist/VS-GUI-Full`；精简播放器只暂存在 `build/playerlite-runtime`，最终输出 `dist/VS-Player.exe`。`tools/deploy-local-runtime.py` 面向已存在的这两套运行目录，更新产物、备份旧文件并核对 INI/VPY/ICC/LUT 哈希；执行前先读脚本里的源目录与目标。`tools/stage-portable.ps1` 是较早的环境组装入口，默认目录和本机路径也必须显式核对。
 
@@ -37,7 +37,7 @@ Full的 `runtime/awj.zip` 保存AWJ 1.2.1独立CLI，`runtime/mkvtoolnix.zip` �
 
 1. 按 [构建指南](dependencies.md) 完成相关构建/测试，核对最终产物哈希和配置保护。
 2. Full 可用 `tools/package-portable.ps1 -ProgramDirectory 'dist/VS-GUI-Full' -Edition Full`。该脚本的 `-Edition Lite` 是历史删减 Full，仍要求 PhotoCraft，不能用来生成当前 PlayerLite。
-3. 单文件构建使用 `tools/package-playerlite-single.ps1`，默认读取 `build/playerlite-runtime`，不依赖dist下的PlayerLite目录。首次组装暂存可用 `stage-editions-1.0.9.py --edition Lite`（其余依赖参数按实际路径设置）；后续由 `deploy-local-runtime.py` 刷新已构建产物。不同版本的专用脚本不要互换。
+3. 单文件构建使用 `tools/package-playerlite-single.ps1`，默认读取 `build/playerlite-runtime`，需要构建环境的Python 3进行level 9压缩，不依赖dist下的PlayerLite目录。首次组装暂存可用 `stage-editions-1.0.9.py --edition Lite`（其余依赖参数按实际路径设置）；后续由 `deploy-local-runtime.py` 刷新已构建产物。不同版本的专用脚本不要互换。
 4. 发布包使用干净暂存，排除 INI、用户 VPY、缓存、截图、测试程序和日志，包含许可证及资源哈希。兼容旧更新器时保持单个带版本号顶层目录；新更新器可识别唯一完整目录，拒绝路径穿越、链接和多候选。
 5. 检查压缩完整性、独立解压后的清单/版本/依赖、主程序启动与配置保留。源码推送、Release 草稿、附件上传和正式发布分别确认，不由版本号或构建成功推断。
 

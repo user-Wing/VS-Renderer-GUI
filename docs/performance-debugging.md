@@ -47,7 +47,7 @@
 
 ## 上游内核优化
 
-当前固定 main `922e4b7`，API20；[构建与隔离边界](native-api20-build.md)给出完整SHA。以下描述代码机制，上游PR中的机器测量不能当作本机收益。本轮实测单独放在[验证台账](../development/validation.md)。
+当前固定 main `146b5e0` + 启动PR48 `cc545d2`，API20；[构建与隔离边界](native-api20-build.md)给出完整SHA。以下描述代码机制，上游PR中的机器测量不能当作本机收益。本轮实测单独放在[验证台账](../development/validation.md)。
 
 | 上游更新 | 怎么减少开销或改善稳定性 | 当前VSP中的边界 |
 | --- | --- | --- |
@@ -62,6 +62,14 @@
 | [#29](https://github.com/Lake1059/FFF_Project/pull/29)、[#31](https://github.com/Lake1059/FFF_Project/pull/31)、[#32](https://github.com/Lake1059/FFF_Project/pull/32)：附加Native能力 | 流级side-data独立缓存、外部声床渲染插槽、可选辅助视频层、RTX自动HDR，以及AVIF多extent/网格合成均随内核保留 | Qt已增加RTX VSR/TrueHDR入口，外部声床没有新增设置页；VSP图片由自己的图像模块解码，不能把Native AVIF修复直接当成VSP图片模块升级。IAMF/OBR继续保留，普通声床旧代码也未实际接入内置双耳渲染器 |
 
 [#24](https://github.com/Lake1059/FFF_Project/pull/24)主要是中性命名和注释，不能计为性能收益。1.0.14 已迁入 AI 字幕[#36](https://github.com/Lake1059/FFF_Project/pull/36)、[#37](https://github.com/Lake1059/FFF_Project/pull/37) 的音频 tap 与 Native 字幕更新；外置 worker 的配置步骤见 Player 指南。采样与识别队列有上限，设备速度由真实推理 RTF 判断，未装模型时不作识别性能结论。
+
+## 启动优化与单文件边界
+
+1.0.15采用main `146b5e0` 与启动PR48 `cc545d2`。Native无窗渲染在像素转换前返回；有窗路径仍按原规则渲染，不能把无窗逻辑计数当作首帧上屏。
+
+Qt宿主在后台以低线程优先级、128KiB读取缓冲预读六个FFmpeg共享库，不预加载或改变DLL搜索/缺失时的处理。`FFF_NO_PREFETCH=1`关闭此预读，供同一产物交替A/B。Qt已有Native句柄常驻，按钮也不走上游的托管SVG路径；LakeUI的D2D设备预热不直接适用于Qt，本次不迁入进程级HIGH优先级。
+
+单文件在完成解包后启动同一Qt宿主，因此能使用上述Native和预读路径；首次解包耗时需另列，不能套用上游累计645.6ms的数字。热缓存、CPU/GPU负载和宿主框架不同，收益以本机同产物实测为准，数据见测试台账。单文件打包使用Python 3的DEFLATE level 9，压缩率与启动首帧是两项独立指标。
 
 ## 内存与同步采样注意
 

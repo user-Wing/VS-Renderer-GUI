@@ -1,14 +1,14 @@
 # API 20 原生内核构建
 
-当前 API20 基线已更新到上游 main 的 `922e4b70268fcbc83f0deb06d9e2c1b62e7a33b2`，包含 #24、#25、#27～#29、#31～#35。主要变化是自适应调度、直接上传、硬解试解码回退、HDR 流级判定和自适应音频缓冲，原理与适用边界见 [内核优化](performance-debugging.md#上游内核优化)。
+当前 API20 固定上游 main `146b5e03c784a01215bcc21b5dee60c97dabb089`，再使用启动优化 [PR #48](https://github.com/Lake1059/FFF_Project/pull/48) 的 `cc545d2afc3f7b45058f47434628db6a703c7b07` 作为构建基线。包含此前 #24～#35 的内核演进、后续RTX/设备与缓冲策略、硬解试解探测和窗口重绑修复，以及PR48的无窗转换省略；Qt启动预读单独在 `src/player/main.cpp` 实现，适用边界见 [性能排查](performance-debugging.md)。
 
-在上述固定提交的独立 checkout 应用 `patches/3fp-api20-vsrenderer-1.0.10.patch`；文件名沿用历史，内容已完整重建，不能再用于旧 ce195eb 基线。不能把 API18 补丁直接应用到 API20，也不能直接使用未移植扩展的上游 DLL。构建脚本输出 `FFF.Native.dll` 到指定目录，现行本地部署从 `build/mingw-release/FFF.Native.dll` 取库。
+在 `cc545d2` 的独立 checkout 应用 `patches/3fp-api20-vsrenderer-1.0.10.patch`；文件名沿用历史，内容已重建，不能再用于旧 `922e4b7` 或 `ce195eb` 基线。保留VSP的VS帧桥、色彩、字幕、相对逐帧及多轨硬解修复；试解按视频包计数，缺少失败证据不排除硬解。构建脚本输出 `FFF.Native.dll` 到指定目录，现行本地部署从 `build/mingw-release/FFF.Native.dll` 取库。
 
 保留本项目的外部 VS 帧输入、clock-only、输出格式、像素探测、缩放、音频 EQ/tempo、软件解码队列和可选 libplacebo 色彩桥。snapshot、字幕及音频电平结构均按 API20 版本号传递，构建时必须保持 MinGW/MSVC 的配置、snapshot、字幕命令及图层布局一致。上游20移除了旧私有 DV/RPU 测试扩展；本补丁沿用上游公开色彩和元数据路径，不恢复该私有接口。
 
 配置仍为 112 字节，snapshot 增至 464 字节；Qt 镜像同步新增上传耗时、字节数、次数和路径，并固定关键偏移。Jinc 权重使用纹理槽 t8，避免与上游辅助视频层 t5～t7 重叠；修改内嵌 HLSL 后必须运行上游 `tools/generate_shader_bytecode.py` 及 `--sdr-specializations` 重新生成两个字节码头。
 
-1.0.14 按新更新单将 AI 字幕 #36/#37 的 Native 能力并入上述固定 main 的补丁，来源为 #37 head `edf533155727f681eefa771082702bab275bca48`（含 #36）。构建仍从 main `922e4b7` 应用完整补丁，不直接混用功能分支 DLL。音频 tap 在 VSP EQ/atempo 前采集，避免重复采样；Qt 只将有界 PCM 交给外置 worker。模型和 llama-server 不下载、不打包，上游 VB 页面不迁入。音频块 144 字节、tap 配置 16 字节、RTX 状态 44 字节，需与 Native 保持 ABI 一致。
+AI字幕沿用1.0.14迁入的 #36/#37 Native 能力，来源为 #37 head `edf533155727f681eefa771082702bab275bca48`（含 #36），与VSP扩展一同在新基线上重建，不直接混用功能分支DLL。音频tap在VSP EQ/atempo前采集，避免重复采样；Qt只将有界PCM交给外置worker。模型和llama-server不下载、不打包，上游VB页面不迁入。音频块144字节、tap配置16字节、RTX状态44字节，需与Native保持ABI一致。
 
 ## IAMF/OBR
 

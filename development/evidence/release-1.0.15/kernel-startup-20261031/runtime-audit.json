@@ -1,0 +1,16 @@
+{
+  "VS-GUI-Full": {
+    "manifestFiles": 624,
+    "manifestSha256": "2f535cc81eafb464479bf629d8ae3ccd262668aa9a0ebc04d3f1fb0a65776a94",
+    "nativeSha256": "2f26bc1a1293b9ff11c57f287ec2dac0d111521f79816dd090d3de9d22115508",
+    "totalBytes": 829452121,
+    "version": "1.0.15"
+  },
+  "playerlite-runtime": {
+    "manifestFiles": 107,
+    "manifestSha256": "8a290e975e4ba66b5cc0b84eb4c857b869e546ac787910cc2b6da178831833f5",
+    "nativeSha256": "2f26bc1a1293b9ff11c57f287ec2dac0d111521f79816dd090d3de9d22115508",
+    "totalBytes": 206982548,
+    "version": "1.0.15"
+  }
+}

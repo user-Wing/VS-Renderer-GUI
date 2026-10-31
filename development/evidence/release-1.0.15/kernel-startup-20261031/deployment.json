@@ -1,0 +1,27 @@
+{
+  "VS-GUI-Full": {
+    "nativeSha256": "2f26bc1a1293b9ff11c57f287ec2dac0d111521f79816dd090d3de9d22115508",
+    "programs": {
+      "vs-player.exe": "2216e7f9f537f124745e0d11ae40b44fadd9e4ef29fc1822c1aec1a9203effda",
+      "VSRenderer.exe": "0f06bf4665a411020f3209c3c8599e29829ad15ce0d35ac49ba567e2923e5f28"
+    },
+    "capPreservedSha256": "0993ffb5c573be7233aa130dbc29c899b9a4f7d6f73ad4b6e24bf9bb1486992c",
+    "protectedFiles": 24,
+    "protectedUnchanged": true,
+    "presetDescriptionsUnchanged": true,
+    "totalBytes": 829451869,
+    "manifestSha256": "35d0a7985097ed6cc00abf0730fce6fdcc0912e04d8bec0917e0add6928debcc"
+  },
+  "playerlite-runtime": {
+    "nativeSha256": "2f26bc1a1293b9ff11c57f287ec2dac0d111521f79816dd090d3de9d22115508",
+    "programs": {
+      "vs-player.exe": "c70e1eddea8c3acd726efb2fb227ad37541dbe50f52637b875fa00a454ac8853"
+    },
+    "capPreservedSha256": null,
+    "protectedFiles": 1,
+    "protectedUnchanged": true,
+    "presetDescriptionsUnchanged": true,
+    "totalBytes": 206982296,
+    "manifestSha256": "54a4370ef28b62887fe799ab830e36a637e2d313fc390b73d59df64e8410c10f"
+  }
+}
