@@ -1,20 +1,20 @@
 # VS Renderer / VS Player / VS Cap
 
-![源码版本 1.0.15](https://img.shields.io/badge/source-1.0.15-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
+![源码版本 1.0.16](https://img.shields.io/badge/source-1.0.16-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
 
 Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片，用 **VSCap** 截图与标注。
 
 [下载便携包](https://github.com/user-Wing/VS-Renderer-GUI/releases) · [ModelScope 下载源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) · [操作指南](docs/README.md) · [更新日志](changelog.md)
 
-源码版本：**1.0.15**。1.0.15 已本地构建；发行压缩包与附件由维护者手动制作、上传。下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
+源码版本：**1.0.16**。本轮准备本地产物与 Release 草稿，附件由维护者上传。下载时以所选包的版本和说明为准。各版已测范围、失败及跳过项统一见 [版本测试台账](development/validation.md)（源码工作区内）。
 
-1.0.15 同步 3FP 近期内核与可迁移的启动优化，保持硬解优先，修复部分多轨视频误回退软解，并压缩单文件 Player 体积。1.0.14 完善 Player 音量百分比、静音图标与内嵌均衡器，新增 Renderer 即时深色主题、八档图像处理、组合补帧、外置 AI 字幕入口、3FUI 命令桥和 Cap 设置改进。AI 模型需手动准备；组合链路的画质取舍与实测边界见 [Player 指南](docs/player.md)。
+1.0.16 将八档 Anime4K/Jinc/D3D11 缩放预设接入单文件精简播放器，修复缩小视频时出现旧画面套叠的问题；Renderer 改善多路 AVIF 交互，支持同步读取原始 YUV 码值及大倍率比对。AI 模型需手动准备；组合链路与实测边界见 [Player 指南](docs/player.md)。
 
 ## 功能介绍
 
 | 程序 | 使用场景 |
 | --- | --- |
-| VS Renderer | 可视化组织VapourSynth滤镜和分段时间组，保存 VPY 预设；源/输出预览、多路视频比对、批量编码导出及 BD Remux |
+| VS Renderer | 可视化组织VapourSynth滤镜和分段时间组，保存 VPY 预设；源/输出预览、多路图像比对与同步取色、批量编码导出及 BD Remux |
 | VS Player | 播放本地媒体、网络链接与图片；音轨/双字幕、章节、逐帧与续播、截图；Full 版本可选 VS 增强和补帧 |
 | VSCap | 框选、移动选区、绘图和可编辑文字；剪贴板复制、多贴图、JXL/AVIF/PNG 保存 |
 | PhotoCraft（Full） | 从播放器打开独立图片编辑器，编辑图层、文字与滤镜；关闭播放器后可继续保存工作 |
@@ -32,9 +32,11 @@ VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处�
 | 分发形式 | 功能与运行要求 |
 | --- | --- |
 | Full | Renderer、Player、VSCap、VS 滤镜及完整编辑/可选后端；以所下载包的组件清单为准 |
-| 单文件 `VS-Player.exe` | 独立播放器，仅 3FP、D3D11/Jinc、音视频字幕及图片查看；首次启动展开缓存，同目录保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
+| 单文件 `VS-Player.exe` | 独立播放器，支持原生 Anime4K CNN/no CNN、额外增强、1X、D3D11/Jinc、音视频字幕及图片查看；首次启动展开缓存，同目录保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
 
 从 1.0.13 起仅提供 Full 目录与单文件播放器，不再生成 PlayerLite 发行目录。早期 Lite 包仍按其对应说明使用。
+
+本地单文件已接入与完整版同名的八档缩放预设，无需 VapourSynth，可在右键“图像处理 → 缩放滤镜”或设置中选择；构建和验收边界见 [Native 构建指南](docs/native-api20-build.md#lite-anime4k-fast)。已发布的旧附件不自动包含此功能。
 
 ## 快速上手
 

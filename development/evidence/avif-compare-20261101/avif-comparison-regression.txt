@@ -1,0 +1,17 @@
+********* Start testing of TestAnalysis *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestAnalysis::initTestCase()
+PASS   : TestAnalysis::directComparison()
+PASS   : TestAnalysis::multipleSourcesAndLayouts()
+PASS   : TestAnalysis::chromaAndScalingRender()
+QINFO  : TestAnalysis::wipeUsesSharedCanvasWithoutResizingOrLosingCapture() Wipe mode 1 100 drag updates ms: 332
+QINFO  : TestAnalysis::wipeUsesSharedCanvasWithoutResizingOrLosingCapture() Wipe mode 2 100 drag updates ms: 169
+QINFO  : TestAnalysis::wipeUsesSharedCanvasWithoutResizingOrLosingCapture() Wipe mode 3 100 drag updates ms: 166
+QINFO  : TestAnalysis::wipeUsesSharedCanvasWithoutResizingOrLosingCapture() Wipe mode 4 100 drag updates ms: 740
+QINFO  : TestAnalysis::wipeUsesSharedCanvasWithoutResizingOrLosingCapture() Wipe mode 5 100 drag updates ms: 1246
+QINFO  : TestAnalysis::wipeUsesSharedCanvasWithoutResizingOrLosingCapture() Wipe mode 9 100 drag updates ms: 1558
+FAIL!  : TestAnalysis::wipeUsesSharedCanvasWithoutResizingOrLosingCapture() 'elapsed.elapsed()<1500' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestAnalysis.cpp(853) : failure location
+PASS   : TestAnalysis::cleanupTestCase()
+Totals: 5 passed, 1 failed, 0 skipped, 0 blacklisted, 12718ms
+********* Finished testing of TestAnalysis *********

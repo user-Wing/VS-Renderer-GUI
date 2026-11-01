@@ -15,6 +15,16 @@ class TestPreviewPane final : public QObject {
     Q_OBJECT
 
 private slots:
+    void nativePreviewZoomContinuesBeyond1600Percent() {
+        PreviewPane pane("Test","Native");pane.resize(640,480);pane.setVideoSize({1920,1080});pane.show();
+        auto *surface=pane.surface();const auto at=surface->rect().center();
+        QWheelEvent wheel(at,surface->mapToGlobal(at),{},QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+        for(int i=0;i<40;++i){
+            const auto before=pane.zoom();QApplication::sendEvent(surface,&wheel);
+            QVERIFY2(pane.zoom()>before,"Native comparison zoom stopped increasing");
+        }
+        QVERIFY(pane.zoom()>1024);
+    }
     void wheelAnchorsSourcePixelAndWorksForImages() {
         PreviewPane pane("Test","Fit");pane.resize(900,600);pane.show();pane.setVideoSize({1920,1080});
         auto *surface=pane.surface();const QPointF at(surface->width()*.7,surface->height()*.55);

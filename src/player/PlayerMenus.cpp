@@ -117,6 +117,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     const auto scaleChoice=[&](QMenu *folder,int stage){
         const auto path=QDir(PresetStore::directory()).filePath("builtin/"+animeFiles[stage]);
         auto *action=folder->addAction(qualityNames().at(stage),this,[this,path]{loadPreset(path);});
+        action->setObjectName(QString("playerAnimeStage%1").arg(stage));
         action->setToolTip(PresetStore::description(path));action->setCheckable(true);
         action->setChecked(fixedAnimeStage()==stage);scalingGroup->addAction(action);
         if(stage!=4 && stage!=5 && !animeSourceSupported())action->setEnabled(false);
@@ -125,10 +126,10 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     const auto autoPath=QDir(PresetStore::directory()).filePath("builtin/Anime.vpy");
     auto *automatic=scalingFilters->addAction(tr("自动切换（推荐）"),this,[this,autoPath]{loadPreset(autoPath);});
     automatic->setToolTip(PresetStore::description(autoPath));automatic->setCheckable(true);automatic->setChecked(profile()=="Anime" && fixedAnimeStage()<0);scalingGroup->addAction(automatic);
+#endif
     const QStringList groups{tr("CNN 模式"),tr("no CNN 模式"),tr("1X 直通模式")};
     const QList<QList<int>> stages{{0,1},{2,3},{6,7}};
     for(int n=0;n<groups.size();++n){scalingFilters->addSeparator();auto *folder=PlayerMenu::add(scalingFilters,groups[n]);for(int stage:stages[n])scaleChoice(folder,stage);}
-#endif
     scalingFilters->addSeparator();auto *passThroughFilters=PlayerMenu::add(scalingFilters,tr("常规直通模式"));
     scaleChoice(passThroughFilters,4);scaleChoice(passThroughFilters,5);
 #ifndef VSR_LITE_PLAYER

@@ -73,6 +73,111 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void nativeImageZoomBeyondViewportBounds() {
+        QTemporaryDir directory;QImage image(64,48,QImage::Format_RGB32);image.fill(Qt::green);
+        for(int y=0;y<image.height();++y)image.setPixelColor(32,y,Qt::red);
+        const auto path=directory.filePath("zoom.png");QVERIFY(image.save(path));
+        ThreeFpApi api;QWidget surface;surface.resize(640,480);surface.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&surface));ThreeFpPlayer player(api,&surface);
+        QVERIFY(player.openFile(path));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0,10000);
+        for(float zoom:{128.f,1024.f,8192.f}){
+            const auto before=player.snapshot().swapChainPresents;player.setView(zoom,0,0);
+            QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().swapChainPresents>before,5000);
+            VsrSourcePixelProbe a,b;QVERIFY(player.sampleSourcePixel(32,24,false,a));QVERIFY(player.sampleSourcePixel(33,24,false,b));
+            qInfo()<<"Requested zoom"<<zoom<<"source pixel screen span"<<b.surfaceX-a.surfaceX;
+            QVERIFY(std::abs((b.surfaceX-a.surfaceX)-zoom)<2);
+            ThreeFpPixelProbe rgb{};const auto size=surface.size()*surface.devicePixelRatioF();
+            const auto distance=std::min(int(zoom/4),size.width()/4);
+            QVERIFY(player.samplePixel(size.width()/2+distance,size.height()/2,rgb));
+            QVERIFY2(rgb.red>.8f && rgb.green<.1f && rgb.blue<.1f,"Magnified image became blank beyond D3D viewport bounds");
+            QVERIFY(player.samplePixel(size.width()/2-distance,size.height()/2,rgb));
+            QVERIFY2(rgb.green>.8f && rgb.red<.1f,"Clipped viewport sampled the wrong source pixel");
+        }
+    }
+    void sourceYuvProbePreservesTenBitSubsampling() {
+        ThreeFpApi api;QWidget surface;surface.resize(640,500);surface.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&surface));ThreeFpPlayer player(api,&surface);
+        VapourSynthFrame frame;frame.width=64;frame.height=48;frame.format=ThreeFpExternalPixelFormat::Yuv420P10;
+        frame.colorRange=1;frame.colorMatrix=1;frame.duration100ns=400000;frame.totalFrames=1;
+        for(int c=0;c<3;++c){
+            const int w=c?32:64,h=c?24:48;frame.strides[c]=w*2;frame.planes[c].resize(w*h*2);
+            for(int y=0;y<h;++y)for(int x=0;x<w;++x){
+                const quint16 value=100+c*200+x+y;
+                memcpy(frame.planes[c].data()+(y*w+x)*2,&value,2);
+            }
+        }
+        QVERIFY(player.submitFrame(frame));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0,10000);
+        VsrSourcePixelProbe sample;
+        QVERIFY(player.sampleSourcePixel(19,13,false,sample));
+        QCOMPARE(sample.x,19);QCOMPARE(sample.y,13);QCOMPARE(sample.family,1u);QCOMPARE(sample.bitDepth,10u);
+        QCOMPARE(sample.values[0],132u);QCOMPARE(sample.values[1],315u);QCOMPARE(sample.values[2],515u);
+        QCOMPARE(sample.chromaShiftX,1u);QCOMPARE(sample.chromaShiftY,1u);
+        VsrSourcePixelProbe mapped;QVERIFY(player.sampleSourcePixel(sample.surfaceX,sample.surfaceY,true,mapped));
+        QCOMPARE(mapped.x,19);QCOMPARE(mapped.y,13);
+        QVERIFY(!player.sampleSourcePixel(-1,13,false,mapped));
+        QVERIFY(!player.sampleSourcePixel(64,13,false,mapped));
+        QVERIFY(!player.sampleSourcePixel(0,0,true,mapped)); // letterbox
+    }
+    void threeAvifDragLatency() {
+        const auto directory=qEnvironmentVariable("VSR_AVIF_TEST_DIR");
+        if(directory.isEmpty())QSKIP("Set VSR_AVIF_TEST_DIR to the Stray AVIF directory");
+        QStringList paths;
+        for(const auto &file:QDir(directory).entryList({"*.avif"},QDir::Files,QDir::Name))
+            if(file.startsWith("[Stray]"))paths.append(QDir(directory).filePath(file));
+        QCOMPARE(paths.size(),3);
+        ThreeFpApi api;AnalysisPage page(api);page.resize(1600,950);page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));page.openFiles(paths);
+        QTRY_VERIFY_WITH_TIMEOUT(!page.busy(),5000);
+        for(int i=0;i<3;++i)QTRY_VERIFY_WITH_TIMEOUT(page.snapshot(i).presentedVideoFrames>0,10000);
+        auto *view=page.findChild<MultiCompareView *>();auto *pane=view->pane(0);
+        emit pane->viewChanged(3,0,0);pane->adoptView(3,0,0);QTest::qWait(200);
+        auto *surface=pane->surface();const auto start=surface->rect().center();
+        std::array<std::uint64_t,3> before{};for(int i=0;i<3;++i)before[i]=page.snapshot(i).swapChainPresents;
+        QTest::mousePress(surface,Qt::LeftButton,Qt::NoModifier,start);
+        QList<double> durations;
+        for(int i=0;i<60;++i){
+            const auto at=start+QPoint(i%30, i%20);
+            QMouseEvent move(QEvent::MouseMove,at,surface->mapToGlobal(at),Qt::NoButton,Qt::LeftButton,Qt::NoModifier);
+            QElapsedTimer timer;timer.start();QApplication::sendEvent(surface,&move);QApplication::processEvents();
+            durations.append(timer.nsecsElapsed()/1e6);
+            QTest::qWait(8);
+        }
+        QTest::mouseRelease(surface,Qt::LeftButton);std::sort(durations.begin(),durations.end());
+        qInfo()<<"Three AVIF drag ms median"<<durations[30]<<"p95"<<durations[57];
+        for(int i=0;i<3;++i){
+            const auto updates=page.snapshot(i).swapChainPresents-before[i];
+            qInfo()<<"Lane"<<i<<"drag presents"<<updates;
+            QVERIFY2(updates>=15,"View changes are throttled to the still-image media frame rate");
+        }
+        QVERIFY2(durations[57]<30,"Three-lane dragging blocks the UI for more than 30 ms per update");
+        auto *display=page.findChild<QComboBox *>("colorDisplay");QVERIFY(display);QCOMPARE(display->currentIndex(),0);
+        const auto hover=[&](int lane){
+            auto *s=view->pane(lane)->surface();const auto at=s->rect().center();
+            QMouseEvent move(QEvent::MouseMove,at,s->mapToGlobal(at),Qt::NoButton,Qt::NoButton,Qt::NoModifier);
+            QApplication::sendEvent(s,&move);
+        };
+        hover(0);
+        for(int i=0;i<3;++i)QTRY_VERIFY(view->pane(i)->findChild<QLabel *>("pixelReadout")->text().contains("RGB"));
+        display->setCurrentIndex(1);
+        const auto first=view->pane(0)->findChild<QLabel *>("pixelReadout")->text().section(')',0,0);
+        for(int i=0;i<3;++i){
+            const auto text=view->pane(i)->findChild<QLabel *>("pixelReadout")->text();
+            QCOMPARE(text.section(')',0,0),first);QVERIFY(text.contains("YUV"));
+            qInfo()<<"Source lane"<<i<<text;
+        }
+        auto *layout=page.findChild<QComboBox *>("analysisLayout");
+        layout->setCurrentIndex(layout->findData(MultiCompareView::ThreeLeft));QTest::qWait(100);
+        auto *s=view->pane(1)->surface();
+        const auto at=s->mapFromGlobal(view->mapToGlobal(view->cellRect(1).center()+QPoint(0,28)));
+        QMouseEvent move(QEvent::MouseMove,at,s->mapToGlobal(at),Qt::NoButton,Qt::NoButton,Qt::NoModifier);
+        QApplication::sendEvent(s,&move);QTest::qWait(100);
+        const auto wipe=view->pane(1)->findChild<QLabel *>("pixelReadout")->text().section(')',0,0);
+        for(int i=0;i<3;++i)QCOMPARE(view->pane(i)->findChild<QLabel *>("pixelReadout")->text().section(')',0,0),wipe);
+        const auto anchor=s->rect().center();
+        QWheelEvent wheel(anchor,s->mapToGlobal(anchor),{},QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+        for(int step=0;step<20;++step)QApplication::sendEvent(s,&wheel);
+        for(int i=0;i<3;++i){QVERIFY(view->pane(i)->zoom()>128);QCOMPARE(view->pane(i)->zoom(),view->pane(1)->zoom());}
+    }
     void rendererTimeGroupLayout(){
         MainWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
         auto *groups=window.findChild<QListWidget*>("rendererTimeGroupList");auto *catalog=window.findChild<QListWidget*>("rendererCatalog");
@@ -481,7 +586,7 @@ private slots:
             QMouseEvent hover(QEvent::MouseMove, surface->mapFromGlobal(global), global, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
             QApplication::sendEvent(surface, &hover);
             auto *label = pane->findChild<QLabel *>("pixelReadout");
-            QVERIFY(label->isVisible());
+            QTRY_VERIFY(label->isVisible());
             QVERIFY(label->text().contains("RGB"));
             QVERIFY(view->cellRect(slot).translated(0,28).contains(QRect(label->mapTo(view,QPoint(0,0)),label->size())));
         }

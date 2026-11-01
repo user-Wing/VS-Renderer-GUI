@@ -132,8 +132,6 @@ PlayerWindow::PlayerWindow() {
     if (newConfiguration) {
         settings_->setValue("player/core","3FP");settings_->setValue("decode/video","3FP");settings_->setValue("decode/audio","3FP");
         settings_->setValue("player/renderer","VS");settings_->setValue("player/interpolationAuto",false);settings_->setValue("color/engine",0);
-        settings_->setValue("player/animeStage",std::clamp(settings_->value("player/animeStage",5).toInt(),4,5));
-        settings_->setValue("player/preset",QDir(PresetStore::directory()).filePath(settings_->value("player/animeStage").toInt()==4?"builtin/Anime-4-Jinc.vpy":"builtin/Anime-5-D3D11.vpy"));
     } else {
         if (settings_->value("player/core").toString() != "3FP") settings_->setValue("player/core","3FP");
         if (settings_->value("decode/video").toString() != "3FP") settings_->setValue("decode/video","3FP");
@@ -142,8 +140,12 @@ PlayerWindow::PlayerWindow() {
         if (settings_->value("color/engine").toInt() != 0) settings_->setValue("color/engine",0);
         if (settings_->value("player/interpolationAuto").toBool()) settings_->setValue("player/interpolationAuto",false);
         const int stage=settings_->value("player/animeStage",5).toInt();
-        if (stage < 4 || stage > 5) settings_->setValue("player/animeStage",5);
+        if (stage < 0 || stage > 7) settings_->setValue("player/animeStage",5);
     }
+    if(settings_->value("render/anime4kFast",false).toBool())settings_->setValue("player/animeStage",1);
+    settings_->remove("render/anime4kFast");
+    const QStringList nativeAnimeFiles{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
+    settings_->setValue("player/preset",QDir(PresetStore::directory()).filePath("builtin/"+nativeAnimeFiles[std::clamp(settings_->value("player/animeStage",5).toInt(),0,7)]));
     settings_->sync();
 #endif
     preset_=settings_->value("player/preset").toString();
@@ -275,7 +277,7 @@ bool PlayerWindow::openFile(const QString &input) {
     if (QStringList{"ass","ssa","srt","sup","mks"}.contains(suffix)) { attachSubtitle(path); return true; }
     if (path.endsWith(".vpy", Qt::CaseInsensitive)) {
 #ifdef VSR_LITE_PLAYER
-        setError(tr("独立播放器支持 Jinc / D3D11 原生播放。"));return false;
+        setError(tr("独立播放器支持内置 Anime4K / Jinc / D3D11；自定义 VPY 请使用完整版。"));return false;
 #else
         loadPreset(path);return true;
 #endif
@@ -371,7 +373,11 @@ void PlayerWindow::refreshScript() {
         true ||
 #endif
         mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic" || (mode=="Anime" && (!animeSourceSupported() || (high && fixedAnimeStage()<0) || qualityStage_==4 || qualityStage_==5));
-    if(native && mode=="Anime" && (qualityStage_<4 || qualityStage_>=6))qualityStage_=4;
+    if(native && mode=="Anime" && (qualityStage_<4 || qualityStage_>=6)
+#ifdef VSR_LITE_PLAYER
+        && !animeSourceSupported()
+#endif
+    )qualityStage_=4;
     setDirectMode(native);
     applyScaling();
     profileSize_=profileTarget();autoPlay_=resume;
@@ -427,16 +433,22 @@ void PlayerWindow::savePosition() {
 void PlayerWindow::loadPreset(const QString &path) {
 #ifdef VSR_LITE_PLAYER
     const auto name=QFileInfo(path).fileName();
-    if(name!="Anime-4-Jinc.vpy" && name!="Anime-5-D3D11.vpy")return;
-    settings_->setValue("player/animeStage",name=="Anime-4-Jinc.vpy"?4:5);
+    const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
+    const int stage=names.indexOf(name);if(stage<0 || (stage!=4 && stage!=5 && !animeSourceSupported()))return;
+    settings_->setValue("player/animeStage",stage);
 #endif
     if(madvrMode()) { const auto text=tr("工作在 madVR 模式下，VS 预设不生效。");setError(text);QToolTip::showText(pane_->mapToGlobal(QPoint(20,20)),text,pane_,QRect(),4000);return; }
-    const auto previous=preset_;preset_=path;
+    const auto previous=preset_;preset_=
+#ifdef VSR_LITE_PLAYER
+        QDir(PresetStore::directory()).filePath("builtin/"+name);
+#else
+        path;
+#endif
     if(profile()=="Anime" && fixedAnimeStage()!=4 && fixedAnimeStage()!=5 && !animeSourceSupported()){
         preset_=previous;message_->setText(tr("源视频分辨率≥2160p，内置 Anime4K 已禁用；手动启用请使用自定义 VapourSynth 预设。"));return;
     }
     interpolationAuto_=false;settings_->setValue("player/interpolationAuto",false);
-    profileFallback_=false;profileStartup_.invalidate();preset_ = path; qualityStage_=initialQualityStage();settings_->setValue("player/preset",path); if (!source_.isEmpty() && !imageMode_) refreshScript();
+    profileFallback_=false;profileStartup_.invalidate();qualityStage_=initialQualityStage();settings_->setValue("player/preset",preset_); if (!source_.isEmpty() && !imageMode_) refreshScript();
 }
 void PlayerWindow::togglePlayback() {
     if(discMenu_ && discMenu_->active()){playing_=!playing_;discMenu_->pause(!playing_);play_->setText(playing_?"Ⅱ":"▶");return;}

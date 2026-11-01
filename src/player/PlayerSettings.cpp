@@ -89,7 +89,7 @@ void PlayerWindow::applyAppearance() {
     language_->setLanguage(settings_->value("basic/language","zh_CN").toString());
     language_->updateWidgets(this);
 #ifdef VSR_LITE_PLAYER
-    pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nJinc / D3D11 · Tab 视频信息"));
+    pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nAnime4K / Jinc / D3D11 · Tab 视频信息"));
 #else
     pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nCtrl+P 加载 VPY 预设 · Tab 视频信息"));
 #endif
@@ -209,11 +209,12 @@ void PlayerWindow::showSettings() {
     core->setEnabled(false);audioCore->setEnabled(false);
     decodeInfo->setText(tr("3FP 原生解码与显示，支持 D3D11 硬解和 FFmpeg 软解。"));
     output->setItemText(0,tr("保持原生输出(默认)"));
-    render->labelForField(animeStages)->setVisible(false);animeStages->hide();
+    qobject_cast<QLabel*>(render->labelForField(animeStages))->setText(tr("默认图像处理档位"));
+    for(int row=0;row<animeStages->count();++row){auto* item=animeStages->item(row);item->setData(Qt::CheckStateRole,QVariant());item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);}
     render->labelForField(interpolationStages)->setVisible(false);interpolationStages->hide();animeInfo->hide();
     resizeFirst->hide();resizeExplanation->hide();frames->hide();performance->labelForField(frames)->hide();
     limitInfo->setText(tr("原生解码器使用自身的有界缓冲队列。"));
-    renderInfo->setText(tr("Jinc / D3D11 两档；默认 D3D11 原生直通。"));
+    renderInfo->setText(tr("内置 Anime4K CNN / no CNN、额外增强、1X · Jinc / D3D11；默认 D3D11 原生直通。"));
     delete categories->takeItem(9);
 #endif
     auto *cache=page();auto *cacheMode=new QComboBox(&dialog);cacheMode->setObjectName("playerCacheMode");cacheMode->addItem(tr("软件目录(默认)"),"default");cacheMode->addItem(tr("自定义目录"),"custom");cacheMode->setCurrentIndex(settings_->value("cache/path").toString().isEmpty()?0:1);cache->addRow(tr("索引缓存位置"),cacheMode);
@@ -254,7 +255,11 @@ void PlayerWindow::showSettings() {
         renderer->currentText()
 #endif
     );settings_->setValue("render/antiring",antiring->isChecked());settings_->setValue("render/stableViewport",stableViewport->isChecked());if(animeStages->currentItem())settings_->setValue("player/animeStage",animeStages->currentItem()->data(Qt::UserRole));QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();settings_->setValue("associations/extensions",extensions);};
-    const auto storeStages=[&]{QStringList values;for(int row=0;row<animeStages->count();++row){const auto *item=animeStages->item(row);if(item->checkState()==Qt::Checked)values<<QString::number(item->data(Qt::UserRole).toInt());}settings_->setValue("player/animeStages",values);for(int output=0;output<2;++output){QStringList stages;for(int stage=0;stage<4;++stage)if(interpolationChoices[output*4+stage]->isChecked())stages<<QString::number(stage);settings_->setValue(output?"player/interpolationStagesD3D11":"player/interpolationStagesJinc",stages);}};
+    const auto storeStages=[&]{
+#ifndef VSR_LITE_PLAYER
+        QStringList values;for(int row=0;row<animeStages->count();++row){const auto *item=animeStages->item(row);if(item->checkState()==Qt::Checked)values<<QString::number(item->data(Qt::UserRole).toInt());}settings_->setValue("player/animeStages",values);for(int output=0;output<2;++output){QStringList stages;for(int stage=0;stage<4;++stage)if(interpolationChoices[output*4+stage]->isChecked())stages<<QString::number(stage);settings_->setValue(output?"player/interpolationStagesD3D11":"player/interpolationStagesJinc",stages);}
+#endif
+    };
     connect(apply,&QPushButton::clicked,&dialog,[&]{storeStages();store();applySettings(true);language_->updateWidgets(&dialog);});
     connect(save,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getSaveFileName(&dialog,tr("保存完整配置"),"vs-player.ini","INI (*.ini)");if(!file.isEmpty()){storeStages();store();if(!saveConfiguration(file))setError(tr("配置保存失败。"));}});
     connect(load,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getOpenFileName(&dialog,tr("加载完整配置"),{},"INI (*.ini)");if(!file.isEmpty()){if(loadConfiguration(file))dialog.reject();else setError(tr("配置文件无效。"));}});

@@ -13,6 +13,7 @@ class QSlider;
 class QPushButton;
 class QCheckBox;
 class QComboBox;
+class QTimer;
 
 namespace vsr {
 class ExportWindow;
@@ -58,6 +59,7 @@ private:
     void resizeEvent(QResizeEvent *event) override;
     void adjustTrackWidths();
     void configurePlayer(int video);
+    void updatePixelReadouts();
     int masterVideo() const;
     bool activeVideo(int video) const;
     bool loaded(int lane) const;
@@ -76,6 +78,10 @@ private:
     QComboBox *layoutChoice_ = nullptr;
     QComboBox *audio_ = nullptr;
     QComboBox *scaler_ = nullptr;
+    QComboBox *colorDisplay_ = nullptr;
+    QTimer *pixelTimer_ = nullptr;
+    PreviewPane *hoverPane_ = nullptr;
+    QPoint hoverPosition_;
     QCheckBox *vrr_ = nullptr;
     QCheckBox *pacing_ = nullptr;
     ThreeFpApi &api_;

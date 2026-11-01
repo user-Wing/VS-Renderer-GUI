@@ -1,0 +1,21 @@
+********* Start testing of TestAnalysis *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestAnalysis::initTestCase()
+QINFO  : TestAnalysis::nativeImageZoomBeyondViewportBounds() Requested zoom 128 source pixel screen span 128
+QINFO  : TestAnalysis::nativeImageZoomBeyondViewportBounds() Requested zoom 1024 source pixel screen span 1024
+QINFO  : TestAnalysis::nativeImageZoomBeyondViewportBounds() Requested zoom 8192 source pixel screen span 8192
+PASS   : TestAnalysis::nativeImageZoomBeyondViewportBounds()
+PASS   : TestAnalysis::sourceYuvProbePreservesTenBitSubsampling()
+QINFO  : TestAnalysis::threeAvifDragLatency() Three AVIF drag ms median 0.0747 p95 4.2001
+QINFO  : TestAnalysis::threeAvifDragLatency() Lane 0 drag presents 60
+QINFO  : TestAnalysis::threeAvifDragLatency() Lane 1 drag presents 60
+QINFO  : TestAnalysis::threeAvifDragLatency() Lane 2 drag presents 60
+QINFO  : TestAnalysis::threeAvifDragLatency() Source lane 0 "(1232,731) YUV 1153 1832 2221 ¡¤ 12 bit"
+QINFO  : TestAnalysis::threeAvifDragLatency() Source lane 1 "(1232,731) YUV 286 458 556 ¡¤ 10 bit"
+QINFO  : TestAnalysis::threeAvifDragLatency() Source lane 2 "(1232,731) YUV 284 455 556 ¡¤ 10 bit"
+PASS   : TestAnalysis::threeAvifDragLatency()
+PASS   : TestAnalysis::directComparison()
+PASS   : TestAnalysis::chromaAndScalingRender()
+PASS   : TestAnalysis::cleanupTestCase()
+Totals: 7 passed, 0 failed, 0 skipped, 0 blacklisted, 6761ms
+********* Finished testing of TestAnalysis *********

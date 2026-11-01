@@ -1,0 +1,74 @@
+{
+  "version": "1.0.16",
+  "date": "2026-11-01",
+  "rootCause": "Anime4K returns before the common compositor background clear; reused swap-chain pixels survive zoom-out.",
+  "baseline": "4 passed / 6 failed; repeat stage 1 fails; ordinary Jinc/D3D11 pass with prior Full native",
+  "fix": "Clear Anime4K target to black before rendering; same swap-chain pixel assertions pass for all eight stages",
+  "liteRegression": "25 passed / 0 failed / 0 skipped, including init/cleanup",
+  "firstParallelRun": "24 passed / 1 failed: short warmup clip reached end at pause assertion; identical isolated test passed on both old/new native, complete isolated suite passed without assertion changes",
+  "realSdrAnime": "10 passed / 0 failed; 960x540 6-second H.264 High 10, actual software decode",
+  "preview": "10 passed / 0 failed",
+  "renderer": "8 passed / 0 failed",
+  "realAvif": "3 passed / 0 failed; 60 presents per lane, UI handler p95 8.5413 ms",
+  "shaderCases": 48,
+  "maxRgbError": 0.00244140625,
+  "maxMeanRgbError": 2.6831896320800297e-05,
+  "shaderBoundary": "FP16 shader processing plus bilinear probe adaptation; not entire Full/libplacebo colour/scaler equivalence",
+  "nativeExports": 128,
+  "optionalSourcePixelExport": "VSR3FP_ReadSourcePixel",
+  "package": {
+    "version": "1.0.16",
+    "singleBytes": 27505204,
+    "singleSha256": "67ec6bf2f76caa2ff5f5467a2e31299c215a86dac82f60d6ef4733e31037da0f",
+    "cache": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\9d1f42a9c9b8af72cc1d1c7c",
+    "entries": 69,
+    "zipCrcAndManifestValid": true,
+    "currentStrippedBuildMatchedIgnoringPeTimestampAndChecksum": true,
+    "nativeMatchesTestedDll": true,
+    "stageManifestsValid": true,
+    "languagesAndLicensesMatched": true,
+    "coldCacheAbsentBeforeSmoke": true,
+    "actualColdExtractionMatched": true,
+    "actualSingleImageImport": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.16\\single-smoke\\cold-import.json"
+  },
+  "actualGui": "Final single-file test copy opened real animation and displayed A4KCNN+; zoom acceptance uses actual swap-chain pixel tests, not GUI screenshot",
+  "configurationsUnchanged": true,
+  "protectedFileCount": 29,
+  "oldFullRuntimeReplaced": false,
+  "languageCheck": "591 strings and matching placeholders passed",
+  "build": "Native API20 VSP -> analysis -> Anime4K; GUI VSRenderer/VSPlayer/VSPlayerLite/VSCap built with VSR_VERSION=1.0.16",
+  "binaries": [
+    {
+      "path": "dist/VS-Player.exe",
+      "bytes": 27505204,
+      "sha256": "67ec6bf2f76caa2ff5f5467a2e31299c215a86dac82f60d6ef4733e31037da0f"
+    },
+    {
+      "path": "build/release-1.0.16/native/FFF.Native.dll",
+      "bytes": 6753792,
+      "sha256": "873221b73e90b5f32822fe748e1af55421d99dbc8fa87992bbd95d2ae3b46aea"
+    },
+    {
+      "path": "dist/VS-GUI-Full-1.0.16/VSRenderer.exe",
+      "bytes": 2846223,
+      "sha256": "14fbec636d1a2d9968b67ab8b715cb903247a00dd0429782f8a3389b6ffeca78"
+    },
+    {
+      "path": "dist/VS-GUI-Full-1.0.16/vs-player.exe",
+      "bytes": 13805583,
+      "sha256": "add802f8f55e75249fced7c0a6fadc7ef728702be7bff1d023d1693d314ed4c7"
+    },
+    {
+      "path": "dist/VS-GUI-Full-1.0.16/vs-cap.exe",
+      "bytes": 6790671,
+      "sha256": "687607e8ed6e1b63d7d1cf237bb500e7851811aa593d7a99e454fbd6b44ec1eb"
+    }
+  ],
+  "release": "Draft only; maintainer uploads assets",
+  "notValidated": [
+    "HDR colour accuracy",
+    "long-run playback",
+    "iGPU or 4K realtime performance",
+    "full regression suite"
+  ]
+}

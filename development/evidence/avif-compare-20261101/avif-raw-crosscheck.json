@@ -1,0 +1,65 @@
+[
+  {
+    "name": "[Stray]   2025_5_31 23_16_26.avif",
+    "width": 2560,
+    "height": 1600,
+    "pix_fmt": "yuv444p12le",
+    "coordinate": [
+      1232,
+      731
+    ],
+    "native": [
+      1153,
+      1832,
+      2221
+    ],
+    "ffmpeg": [
+      1153,
+      1832,
+      2221
+    ],
+    "match": true
+  },
+  {
+    "name": "[Stray]   2025_5_31 23_16_26_q70t5_10.avif",
+    "width": 2560,
+    "height": 1600,
+    "pix_fmt": "yuv444p10le",
+    "coordinate": [
+      1232,
+      731
+    ],
+    "native": [
+      286,
+      458,
+      556
+    ],
+    "ffmpeg": [
+      286,
+      458,
+      556
+    ],
+    "match": true
+  },
+  {
+    "name": "[Stray]   2025_5_31 23_16_26_q70t5_420_10.avif",
+    "width": 2560,
+    "height": 1600,
+    "pix_fmt": "yuv420p10le",
+    "coordinate": [
+      1232,
+      731
+    ],
+    "native": [
+      284,
+      455,
+      556
+    ],
+    "ffmpeg": [
+      284,
+      455,
+      556
+    ],
+    "match": true
+  }
+]

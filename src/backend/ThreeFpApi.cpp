@@ -119,6 +119,11 @@ ThreeFpResult ThreeFpApi::snapshot(void *h, ThreeFpSnapshot *s) const { if(!avai
 ThreeFpResult ThreeFpApi::setColorSettings(void *h, const VsrColorSettings *s) const { return setColorSettings_ ? setColorSettings_(h,s) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::colorStatus(void *h, VsrColorStatus *s) const { return colorStatus_ ? colorStatus_(h,s) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::readPixel(void *h, ThreeFpPixelProbe *p) const { if(!available())return ThreeFpResult::NativeFailure;p->version=apiVersion()>=20?20:1;return readPixel_(h,p); }
+ThreeFpResult ThreeFpApi::readSourcePixel(void *h, VsrSourcePixelProbe *p) const {
+    using Fn=ThreeFpResult(*)(void *,VsrSourcePixelProbe *);
+    const auto call=reinterpret_cast<Fn>(library_.resolve("VSR3FP_ReadSourcePixel"));
+    return call?call(h,p):ThreeFpResult::NotSupported;
+}
 ThreeFpResult ThreeFpApi::submitExternalVideoFrame(void *h, const ThreeFpExternalVideoFrame *f) const { return available() ? submitExternalVideoFrame_(h, f) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setExternalOutputFormat(void *h, const char *f) const { return setExternalOutputFormat_ ? setExternalOutputFormat_(h,f) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setSubtitleLayer(void *h, const TimedTextLayer *layer) const {

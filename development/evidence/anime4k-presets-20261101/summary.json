@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-01",
+  "version": "1.0.15",
+  "output": "dist/VS-Player.exe",
+  "sha256": "08add200a18fc79bbadc5f13134bdfebc23c4d134eda96a4dafd54a78fe2c222",
+  "bytes": 27500089,
+  "previousBytes": 27418889,
+  "stages": [
+    "Anime4K CNN + extra enhancement",
+    "Anime4K CNN",
+    "Anime4K no CNN + extra enhancement",
+    "Anime4K no CNN",
+    "Jinc",
+    "D3D11",
+    "Anime4K 1X / Jinc",
+    "Anime4K 1X / D3D11"
+  ],
+  "nativeAlgorithms": [
+    10,
+    9,
+    11,
+    12,
+    4,
+    7,
+    13,
+    14
+  ],
+  "sourcePasses": {
+    "fast": 27,
+    "noCnn": 16,
+    "lumaEnhancement": 2
+  },
+  "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU/PCIe/SSE2",
+  "pixelCases": 48,
+  "maxRgbError": 0.00244140625,
+  "maxMeanRgbError": 2.6831896320800297e-05,
+  "pixelBoundary": "original GLSL vs translated shaders with FP16 intermediates and bilinear probe final resize; native 1X Jinc/D3D11 difference covered by player tests; not full libplacebo colour/resampling equivalence",
+  "playerTests": "17 passed / 0 failed / 0 skipped, including init and cleanup",
+  "realClipTests": "10 passed / 0 failed / 0 skipped, including init and cleanup",
+  "realClip": "960x540 SDR 6-second H.264 High 10 animation; software decode",
+  "singlePackage": {
+    "singleSha256": "08add200a18fc79bbadc5f13134bdfebc23c4d134eda96a4dafd54a78fe2c222",
+    "bytes": 27500089,
+    "cache": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\626c803cd06ef4998d54c061",
+    "entries": 69,
+    "currentStrippedBuildMatchedIgnoringPeTimestampAndChecksum": true,
+    "allOriginalFilesRetained": true,
+    "crcAndManifestValid": true,
+    "bothLanguagePacksMatched": true,
+    "cacheAbsentBeforeSmoke": true,
+    "actualColdExtractionMatched": true,
+    "actualSingleImageImport": "final-smoke/import.json",
+    "actualSingleGui": "A4K-1X-Jinc on animation"
+  },
+  "singleGui": "CNN+ actual GUI observed; final package GUI observed as A4K-1X-Jinc",
+  "nativeExportsUnchanged": 127,
+  "protectedConfigurations": [
+    {
+      "Hash": "539D8A2E1EC6225A131B70A35483C1E493C9CD7CF64E7F8E456F11271CD04300",
+      "Path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\player.ini"
+    },
+    {
+      "Hash": "12AB8FF2C24C46B05993B013A623F6AC31EC3B68847D5595A077529B72808F2D",
+      "Path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\lite-anime4k-test\\lite\\player.ini"
+    }
+  ],
+  "fullRuntimeReplaced": false,
+  "remotePublication": false,
+  "notValidated": [
+    "HDR colour accuracy",
+    "long-run playback",
+    "iGPU performance",
+    "4K realtime"
+  ],
+  "languageCheck": "PASS: 591 player strings, both language packs and matching placeholders"
+}

@@ -1,0 +1,10 @@
+********* Start testing of TestAnalysis *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestAnalysis::initTestCase()
+QINFO  : TestAnalysis::threeAvifDragLatency() Three AVIF drag ms median 0.4821 p95 4.7255
+QINFO  : TestAnalysis::threeAvifDragLatency() Lane 0 drag presents 1
+FAIL!  : TestAnalysis::threeAvifDragLatency() 'updates>=15' returned FALSE. (View changes are throttled to the still-image media frame rate)
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestAnalysis.cpp(105) : failure location
+PASS   : TestAnalysis::cleanupTestCase()
+Totals: 2 passed, 1 failed, 0 skipped, 0 blacklisted, 17720ms
+********* Finished testing of TestAnalysis *********

@@ -1,0 +1,13 @@
+********* Start testing of TestPreviewPane *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPreviewPane::initTestCase()
+PASS   : TestPreviewPane::wheelAnchorsSourcePixelAndWorksForImages()
+PASS   : TestPreviewPane::leftDragPansOnlyAfterZoom()
+PASS   : TestPreviewPane::letterboxedVideoUsesEqualPixelPanSensitivity()
+PASS   : TestPreviewPane::dragDistanceIsIndependentOfZoom()
+PASS   : TestPreviewPane::wheelStillWorksWhenDeliveredToPaneAfterResize()
+PASS   : TestPreviewPane::resizeBurstCoalescesNativeRedraw()
+PASS   : TestPreviewPane::sliderModeClipsProcessedPaneAtDivider()
+PASS   : TestPreviewPane::cleanupTestCase()
+Totals: 9 passed, 0 failed, 0 skipped, 0 blacklisted, 1262ms
+********* Finished testing of TestPreviewPane *********

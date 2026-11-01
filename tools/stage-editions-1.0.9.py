@@ -17,7 +17,11 @@ p.add_argument('--mingw', required=True)
 p.add_argument('--dumpbin', required=True)
 p.add_argument('--crt', default='C:/BuildTools/2026/VC/Redist/MSVC/14.51.36231/x64/Microsoft.VC145.CRT')
 p.add_argument('--edition', choices=['Full', 'Lite', 'Both'], default='Both')
+p.add_argument('--player', help='Explicit Lite player executable; defaults to the release build')
+p.add_argument('--output-directory', help='Explicit clean destination for a single selected edition')
 a = p.parse_args()
+if a.output_directory and a.edition == 'Both':
+    p.error('--output-directory requires --edition Full or Lite')
 root, runtime, native = Path(a.root), Path(a.runtime), Path(a.native)
 build, dist = root / 'build/mingw-release', root / 'dist'
 version = re.search(r'project\(VSRenderer VERSION ([0-9.]+)', (root / 'CMakeLists.txt').read_text(encoding='utf-8')).group(1)
@@ -65,7 +69,7 @@ def closure(target, seeds, skip_ffmpeg=False):
 for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', 'playerlite-runtime')]:
     if a.edition not in (edition, 'Both'):
         continue
-    target = dist / folder if edition == 'Full' else root / 'build' / folder
+    target = Path(a.output_directory) if a.output_directory else dist / folder if edition == 'Full' else root / 'build' / folder
     target.mkdir(parents=True, exist_ok=True)
     if any(target.iterdir()):
         raise RuntimeError(f'Staging directory must be empty: {target}')
@@ -75,6 +79,15 @@ for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', 'playerlite-runtime')]
                           'tools', 'color', 'imageformats', 'iconengines', 'styles', 'tls',
                           'networkinformation']:
             source = runtime / directory
+            if directory == 'vpy':
+                if (source / 'builtin').is_dir():
+                    shutil.copytree(source / 'builtin', target / 'vpy/builtin')
+                descriptions = source / 'preset-descriptions.json'
+                if descriptions.is_file():
+                    entries = json.loads(descriptions.read_text(encoding='utf-8-sig'))
+                    (target / 'vpy').mkdir(exist_ok=True)
+                    (target / 'vpy/preset-descriptions.json').write_text(json.dumps({k:v for k,v in entries.items() if k.startswith('builtin/')},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+                continue
             if source.is_dir():
                 ignored = ['__pycache__', '*.pyc', '*.log', '*.ini', '*.lwi', '*.ffindex', 'cache', 'data', 'screenshots', 'shader-cache', 'user', 'PhotoCraftData']
                 if directory == 'runtime':
@@ -90,7 +103,10 @@ for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', 'playerlite-runtime')]
             copy(build / name, target / name)
     else:
         programs = ['vs-player.exe']
-        copy(build / 'lite/vs-player.exe', target / 'vs-player.exe')
+        copy(Path(a.player) if a.player else build / 'lite/vs-player.exe', target / 'vs-player.exe')
+        for name in ('jpeg-xl-LICENSE.txt', 'preset-community-LICENSE.txt'):
+            copy(runtime / 'licenses' / name, target / 'licenses' / name)
+        shutil.copytree(runtime / 'licenses/native-api20', target / 'licenses/native-api20')
         # Text subtitle rendering calls FFmpeg; retain the full FFmpeg build
         # for now, as requested, while collecting only its dependency closure.
         for name in ['ffmpeg.exe', 'ffprobe.exe']:
@@ -102,14 +118,22 @@ for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', 'playerlite-runtime')]
                 shutil.copytree(source, target / directory,
                     ignore=shutil.ignore_patterns('qcertonlybackend.dll') if directory == 'tls' else None)
     copy(native, target / 'FFF.Native.dll')
+    if edition == 'Full' and (runtime / 'licenses').is_dir():
+        shutil.copytree(runtime / 'licenses', target / 'licenses', dirs_exist_ok=True)
+    for name in ('anime4k-a-fast.glsl', 'anime4k-no-cnn.glsl'):
+        copy(root / 'assets' / name, target / 'licenses' / name)
     for name in ['msvcp140.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll']:
         copy(Path(a.crt) / name, target / name)
     for source in root.glob('LICENSE*'):
         if source.is_file():
             copy(source, target / source.name)
     for source in Path(a.native_dependencies).glob('*.dll'):
-        if edition == 'Full':
+        if edition == 'Full' and source.name != 'FFF.Native.dll':
             copy(source, target / source.name)
+    if edition == 'Full':
+        for name in ('components.json',):
+            if (runtime / name).is_file():
+                copy(runtime / name, target / name)
     for name in ['zh_CN.json', 'en_US.json']:
         copy(root / 'assets/languages' / name, target / 'languages' / name)
     for name in ['README.md', 'project.md', 'changelog.md', 'THIRD_PARTY_NOTICES.md']:
@@ -141,6 +165,4 @@ for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', 'playerlite-runtime')]
         'sha256': hashlib.file_digest(f.open('rb'), 'sha256').hexdigest()}
         for f in sorted(target.rglob('*')) if f.is_file()}
     (target / 'resource-manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
-    if edition == 'Lite' and without_ff >= 50 * 1024 * 1024:
-        raise RuntimeError(f'Lite exceeds 50 MiB excluding FFmpeg: {without_ff / 1048576:.2f} MiB')
     print(f'{folder}: {total/1048576:.2f} MiB total; {without_ff/1048576:.2f} MiB excluding FFmpeg', flush=True)

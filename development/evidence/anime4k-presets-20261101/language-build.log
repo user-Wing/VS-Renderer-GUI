@@ -1,0 +1,3 @@
+[1/3] Automatic RCC for assets/startup.qrc
+[2/3] Building CXX object CMakeFiles/VSPlayerLite.dir/VSPlayerLite_autogen/GBFAFXFCVO/qrc_startup.cpp.obj
+[3/3] Linking CXX executable lite\vs-player.exe

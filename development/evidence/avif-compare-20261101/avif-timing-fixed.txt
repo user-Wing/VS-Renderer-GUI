@@ -1,0 +1,11 @@
+********* Start testing of TestAnalysis *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestAnalysis::initTestCase()
+QINFO  : TestAnalysis::threeAvifDragLatency() Three AVIF drag ms median 0.1263 p95 1.4541
+QINFO  : TestAnalysis::threeAvifDragLatency() Lane 0 drag presents 60
+QINFO  : TestAnalysis::threeAvifDragLatency() Lane 1 drag presents 60
+QINFO  : TestAnalysis::threeAvifDragLatency() Lane 2 drag presents 60
+PASS   : TestAnalysis::threeAvifDragLatency()
+PASS   : TestAnalysis::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 17456ms
+********* Finished testing of TestAnalysis *********

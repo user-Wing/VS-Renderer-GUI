@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-01",
+  "version": "1.0.15",
+  "baseline": {
+    "uiCap": 16,
+    "nativeStillCap": 32
+  },
+  "fix": "Remove fixed zoom caps; bound only numeric coordinates; clip the viewport and remap UVs.",
+  "nativeActualZooms": [
+    128,
+    1024,
+    8192
+  ],
+  "adjacentPixelGpuSamples": "red and green passed at all three zooms",
+  "previewTests": "10 passed including init/cleanup",
+  "comparisonTests": "7 passed including init/cleanup",
+  "realThreeAvif": "Synchronized wheel zoom beyond 128x passed; 60 pan updates presented 60 times in each lane.",
+  "binaries": [
+    {
+      "name": "VSRenderer.exe",
+      "bytes": 2845199,
+      "sha256": "bfa24d4a4e202c0fec86c3105024c4240724d0805ed0cdc7c09dccbd5f817325"
+    },
+    {
+      "name": "FFF.Native.dll",
+      "bytes": 6598144,
+      "sha256": "417414dfdca45a626097f940bf896222051852c6a2c231634cec49030c2e7e2b"
+    }
+  ],
+  "protectedFilesUnchanged": 27,
+  "scope": "Local Full Renderer and Native only; no user window control, no package, version change or publication."
+}

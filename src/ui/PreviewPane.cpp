@@ -186,7 +186,7 @@ void PreviewPane::adoptView(float zoom, float panX, float panY)
     zoom_ = zoom;
     panX_ = panX;
     panY_ = panY;
-    zoomBadge_->setText(QStringLiteral("%1%").arg(qRound(zoom_ * 100.0f)));
+    zoomBadge_->setText(QStringLiteral("%1%").arg(double(zoom_) * 100, 0, 'f', 0));
     surface_->setCursor(zoom_ > 1.0f ? Qt::OpenHandCursor : Qt::CrossCursor);
     auto *surface=static_cast<NativeVideoSurface *>(surface_);
     surface->zoom=zoom_;surface->panX=panX_;surface->panY=panY_;
@@ -252,6 +252,7 @@ bool PreviewPane::eventFilter(QObject *watched, QEvent *event)
             panX_ = std::clamp(static_cast<float>(dragPanStart_.x()) + dx, -1.0f, 1.0f);
             panY_ = std::clamp(static_cast<float>(dragPanStart_.y()) + dy, -1.0f, 1.0f);
             emit viewChanged(zoom_, panX_, panY_);
+            emit pixelHovered(static_cast<int>(mouse->position().x()), static_cast<int>(mouse->position().y()));
             return true;
         }
         emit pixelHovered(static_cast<int>(mouse->position().x()), static_cast<int>(mouse->position().y()));
@@ -320,7 +321,9 @@ void PreviewPane::scheduleRedraw()
 
 void PreviewPane::updateZoom(float next, const QPointF &anchor)
 {
-    next = std::clamp(next, 0.25f, image().isNull()?16.0f:65536.0f);
+    // Keep coordinates representable without imposing a fixed magnification limit.
+    const auto extent=std::max({1.0,double(surface_->width()),double(surface_->height())})*surface_->devicePixelRatioF();
+    next = std::clamp(next, 0.25f, float((1u<<30)/extent));
     const QSizeF fitted=videoSize_.isEmpty()?QSizeF(surface_->size()):QSizeF(videoSize_.scaled(surface_->size(),Qt::KeepAspectRatio));
     const auto anchoredPan=[&](double extent,double base,double at,float pan){
         const double oldSize=base*zoom_,newSize=base*next;

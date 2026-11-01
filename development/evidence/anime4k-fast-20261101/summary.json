@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-01",
+  "edition": "local Lite only",
+  "version": "1.0.15",
+  "output": "build/lite-anime4k-test/lite",
+  "sourceShaderSha256": "8c998e1c90a5ea3ddc9589c62bb3aabee9a259c7a2dbb520af0c0078ee2a3bdf",
+  "artifactsSha256": {
+    "vs-player.exe": "cc99cc10e1ca329dc2ba9bb0c39009f0779d82430cdd357af94d9e517675f970",
+    "FFF.Native.dll": "c0c74ee037cad8c3db323633a3e27758addf189c3c961f05c05e9ee9efe740dc",
+    "player.ini": "7dc74fa5927cd79642b0db2fa8b2a02f26f64f3cd8bfa1c6b9adbc240dada998",
+    "libwinpthread-1.dll": "c8167eb13ba082929586a09278c71b1f69add7a68280d26143772798b1795196"
+  },
+  "nativeExportsUnchanged": 127,
+  "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+  "pixelComparison": "8 scales; original GLSL OpenGL vs translated HLSL D3D11; FP16 intermediates, bilinear final resize",
+  "menuTests": "8 passed, 0 failed, 0 skipped, including init/cleanup",
+  "realClipTests": "4 passed, 0 failed, 0 skipped, including init/cleanup",
+  "realClip": "6-second 960x540 SDR H.264 High 10 derived from local animation; actual software decode in both settings",
+  "standaloneLaunch": "actual deployed EXE successfully displayed; matching shared media dependencies staged; older libwinpthread replaced",
+  "playerIniPreserved": true,
+  "notValidated": [
+    "HDR colour accuracy",
+    "long playback",
+    "iGPU performance",
+    "4K realtime",
+    "full player suite"
+  ],
+  "published": false
+}

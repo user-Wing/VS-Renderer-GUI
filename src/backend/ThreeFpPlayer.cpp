@@ -274,6 +274,13 @@ bool ThreeFpPlayer::samplePixel(int x, int y, ThreeFpPixelProbe &sample) const
     return api_.readPixel(handle_, &sample) == ThreeFpResult::Success;
 }
 
+bool ThreeFpPlayer::sampleSourcePixel(int x, int y, bool surfaceCoordinates, VsrSourcePixelProbe &sample) const
+{
+    if(!handle_)return false;
+    sample={};sample.x=x;sample.y=y;sample.coordinates=surfaceCoordinates?1:0;
+    return api_.readSourcePixel(handle_,&sample)==ThreeFpResult::Success;
+}
+
 bool ThreeFpPlayer::submitFrame(const VapourSynthFrame &frame)
 {
     if (!createSession())

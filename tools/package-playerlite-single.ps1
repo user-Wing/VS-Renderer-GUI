@@ -8,7 +8,7 @@ $version = [regex]::Match((Get-Content -LiteralPath (Join-Path $root 'CMakeLists
 if (!$version) { throw 'Project version not found' }
 if (-not $SourceDirectory) { $SourceDirectory = Join-Path $root 'build\playerlite-runtime' }
 if (-not $OutputFile) { $OutputFile = Join-Path $root 'dist\VS-Player.exe' }
-$built = Join-Path $root 'build\mingw-release\lite\vs-player.exe'
+$built = Join-Path $SourceDirectory 'vs-player.exe'
 if (!(Test-Path -LiteralPath $built)) { throw "Rebuild VSPlayerLite first: $built" }
 if (!(Test-Path -LiteralPath (Join-Path $SourceDirectory 'FFF.Native.dll'))) { throw "Missing FFF.Native.dll: $SourceDirectory" }
 $compiler = 'C:\Private\Soft\QT\Tools\mingw1310_64\bin\gcc.exe'

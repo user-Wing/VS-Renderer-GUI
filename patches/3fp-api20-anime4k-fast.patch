@@ -1,0 +1,72 @@
+--- a/FFF.Native/3FP/Render/VideoRenderer.h
++++ b/FFF.Native/3FP/Render/VideoRenderer.h
+@@ -2,2 +2,3 @@
+ #include "3FP/Render/NativeColorEngine.h"
++#include "3FP/Render/Anime4KFast.h"
+ 
+@@ -790,2 +791,3 @@
+     ID3D11PixelShader* scalePixelShader_;
++    vsr::anime4k::Pipeline anime4kFast_;
+     ID3D11SamplerState* sampler_;
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -8756,2 +8756,44 @@
+     }
++    const auto animeAlgorithm = upscaleAlgorithm_.load() & 255u;
++    if (animeAlgorithm >= 9u && animeAlgorithm <= 14u && !sourceCoverArt_) {
++        // This branch returns before the common compositor clear. Every target,
++        // including a reused swap-chain buffer after zoom-out, needs a background.
++        constexpr float black[] = {0, 0, 0, 1};
++        context_->ClearRenderTargetView(target, black);
++        videoSuperResolutionActive_.store(false, std::memory_order_release);
++        videoTrueHdrActive_.store(false, std::memory_order_release);
++        auto* input = anime4kFast_.input(device_, sourceWidth_, sourceHeight_);
++        if (!input || DrawWithShader(input, 0, 0, float(sourceWidth_), float(sourceHeight_), 0) != FFFResult::Success ||
++            !anime4kFast_.process(context_, destination.width, destination.height, animeAlgorithm,
++                cachedVideoSettings_.kr, cachedVideoSettings_.kb, cachedVideoSettings_.yOffset, 1.0f / cachedVideoSettings_.yScale)) {
++            SetError("Anime4K D3D11 processing failed.");
++            return FFFResult::DeviceFailure;
++        }
++        // The intermediate is already colour-converted RGB. Reuse the native
++        // RGB scaler with colour pass-through, so 1X retains Jinc/D3D11 choice.
++        auto settings = cachedVideoSettings_;
++        settings.colorMode = 1; settings.transfer = settings.gamut = settings.reserved = 0;
++        settings.inputLayout = 0; settings.sampleScale = 1;
++        settings.projection360 = 0; settings.viewRotation = 0; settings.imageModeX = 0;
++        settings.sourceWidth = float(anime4kFast_.width()); settings.sourceHeight = float(anime4kFast_.height());
++        settings.outputWidth = float(destination.width); settings.outputHeight = float(destination.height);
++        settings.vsrUpscale = (animeAlgorithm == 13u ? 4u : animeAlgorithm == 14u ? 7u : 1u) | (upscaleAlgorithm_.load() & 65536u);
++        settings.vsrDownscale = settings.vsrUpscale & 255u;
++        context_->UpdateSubresource(constants_, 0, nullptr, &settings, 0, 0);
++        context_->OMSetRenderTargets(1, &target, nullptr);
++        const D3D11_VIEWPORT viewport{float(destination.x), float(destination.y), float(destination.width), float(destination.height), 0, 1};
++        context_->RSSetViewports(1, &viewport);
++        context_->VSSetShader(vertexShader_, nullptr, 0); context_->PSSetShader(pixelShader_, nullptr, 0);
++        context_->PSSetConstantBuffers(0, 1, &constants_);
++        ID3D11Buffer* noDynamic = nullptr; context_->PSSetConstantBuffers(2, 1, &noDynamic);
++        ID3D11ShaderResourceView* views[]{anime4kFast_.output(), nullptr, nullptr};
++        context_->PSSetShaderResources(0, 3, views); context_->PSSetShaderResources(8, 1, &jincWeightsView_);
++        ID3D11SamplerState* samplers[]{sampler_, pointSampler_, panoramaSampler_}; context_->PSSetSamplers(0, 3, samplers);
++        context_->Draw(3, 0);
++        ID3D11ShaderResourceView* empty[3]{}; context_->PSSetShaderResources(0, 3, empty); context_->OMSetRenderTargets(0, nullptr, nullptr);
++        actualVideoScalingMode_.store(FFF3FPVideoScalingMode::Shader);
++        lastDestX_.store(destination.x); lastDestY_.store(destination.y);
++        lastDestWidth_.store(destination.width); lastDestHeight_.store(destination.height);
++        return FFFResult::Success;
++    }
+     if (colorEngine_.settings.engine && (projection360 || sourceCoverArt_))
+@@ -9326,2 +9368,3 @@
+     ReleaseCom(timedTextPixelShader_);
++    anime4kFast_.reset();
+     ReleaseCom(vertexShader_);
+@@ -9670,7 +9713,8 @@
+     const FFF3FPScalingAlgorithm downscale) noexcept {
+-    if ((static_cast<std::uint32_t>(upscale) & 255u) > 8u ||
++    if ((static_cast<std::uint32_t>(upscale) & 255u) > 14u ||
+         ((static_cast<std::uint32_t>(upscale) >> 8) & 255u) > 11u ||
+-        static_cast<std::uint32_t>(downscale) > 8u)
++        static_cast<std::uint32_t>(downscale) > 14u)
+         return FFFResult::InvalidArgument;
+     std::lock_guard lock(deviceMutex_);
++    if ((static_cast<std::uint32_t>(upscale) & 255u) < 9u) anime4kFast_.reset();
+     upscaleAlgorithm_.store(static_cast<std::uint32_t>(upscale), std::memory_order_release);

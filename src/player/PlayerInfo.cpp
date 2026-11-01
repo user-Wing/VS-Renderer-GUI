@@ -125,7 +125,7 @@ void PlayerWindow::updateInfo() {
               .arg(source.bufferedAudio100ns/10000.0,0,'f',1).arg((source.audioPosition100ns-at)/10000.0,0,'f',1).arg(source.audioTimestampJitterFrames))
           << "" << tr("倍速：%1× · %2").arg(speed_,0,'f',2).arg(preset_.isEmpty() ? tr("原画") : QFileInfo(preset_).fileName());
     lines << tr("补帧：%1").arg(interpolationStage()>=0?interpolationNames().at(interpolationStage())+(interpolationAuto_?tr(" · 自动降档"):tr(" · 手动固定")):tr("未启用"));
-    const QStringList algorithms{"Nearest Neighbour","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11","Lanczos4"};
+    const QStringList algorithms{"Nearest Neighbour","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11","Lanczos4",qualityNames().at(1),qualityNames().at(0),qualityNames().at(2),qualityNames().at(3),qualityNames().at(6),qualityNames().at(7)};
     const QString scalingName=madvrMode()?QString("madVR"):direct_?algorithms.value(scalingAlgorithm()):interpolationStage()>=0?(interpolationRenderer()?tr("D3D11"):tr("Jinc 直通")):profile()=="Anime"?qualityNames().at(std::clamp(qualityStage_,0,7)):algorithms.value(scalingAlgorithm());
     lines << tr("缩放滤镜：%1").arg(scalingName);
 

@@ -1,0 +1,300 @@
+diff --git a/FFF.Native/3FP/Api/PlayerApi.cpp b/FFF.Native/3FP/Api/PlayerApi.cpp
+index e0448fd..0d7dc0a 100644
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -243,6 +243,12 @@ FFFResult FFF3FP_ReadVideoPixel(const FFF3FPHandle player,
+     return player && probe ? static_cast<PlayerSession*>(player)->ReadVideoPixel(*probe) :
+         FFFResult::InvalidArgument;
+ }
++
++extern "C" __declspec(dllexport) FFFResult VSR3FP_ReadSourcePixel(const FFF3FPHandle player,
++    VsrSourcePixelProbe* probe) noexcept {
++    return player && probe ? static_cast<PlayerSession*>(player)->ReadSourcePixel(*probe)
++        : FFFResult::InvalidArgument;
++}
+ // Batch pixel readback (single staging copy + Map).
+ FFFResult FFF3FP_ReadVideoPixelRegion(const FFF3FPHandle player,
+     const std::uint32_t x, const std::uint32_t y, const std::uint32_t width,
+diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
+index d0c814e..fb7aa31 100644
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -2897,6 +2897,77 @@ FFFResult PlayerSession::ReadVideoPixel(FFF3FPVideoPixelProbe& probe) noexcept {
+     return result;
+ }
+ 
++void PlayerSession::RetainSourcePixelFrame(const AVFrame* frame, const std::uint32_t rotation) noexcept {
++    std::lock_guard lock(sourcePixelMutex_);
++    if (!sourcePixelFrame_) sourcePixelFrame_ = av_frame_alloc();
++    if (!sourcePixelFrame_) return;
++    av_frame_unref(sourcePixelFrame_);
++    av_frame_ref(sourcePixelFrame_, frame);
++    sourcePixelRotation_ = rotation;
++}
++
++FFFResult PlayerSession::ReadSourcePixel(VsrSourcePixelProbe& probe) noexcept {
++    if (probe.size != sizeof(probe) || probe.version != 1 || probe.coordinates > 1)
++        return FFFResult::InvalidArgument;
++    FFF3FPRenderTargetInfo target{}; target.size = sizeof(target); target.version = 20;
++    if (GetRenderTargetInfo(target) != FFFResult::Success || !target.destWidth || !target.destHeight)
++        return FFFResult::InvalidState;
++    std::lock_guard lock(sourcePixelMutex_);
++    if (!sourcePixelFrame_ || !sourcePixelFrame_->buf[0]) return FFFResult::InvalidState;
++    if (IsHardwareFrame(sourcePixelFrame_)) {
++        auto* cpu = av_frame_alloc();
++        if (!cpu) return FFFResult::NativeFailure;
++        if (av_hwframe_transfer_data(cpu, sourcePixelFrame_, 0) < 0) {
++            av_frame_free(&cpu); return FFFResult::FfmpegFailure;
++        }
++        av_frame_copy_props(cpu, sourcePixelFrame_);
++        av_frame_free(&sourcePixelFrame_); sourcePixelFrame_ = cpu;
++    }
++    const auto* frame = sourcePixelFrame_;
++    const auto* descriptor = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame->format));
++    if (!descriptor || (descriptor->flags & (AV_PIX_FMT_FLAG_FLOAT | AV_PIX_FMT_FLAG_BITSTREAM | AV_PIX_FMT_FLAG_PAL)))
++        return FFFResult::NotSupported;
++    probe.width = frame->width; probe.height = frame->height;
++    probe.family = descriptor->flags & AV_PIX_FMT_FLAG_RGB ? 2 : descriptor->nb_components < 3 ? 3 : 1;
++    probe.bitDepth = descriptor->comp[0].depth;
++    probe.chromaShiftX = descriptor->log2_chroma_w; probe.chromaShiftY = descriptor->log2_chroma_h;
++    if (probe.coordinates == 1) {
++        const double u = (probe.x - target.destX + .5) / target.destWidth;
++        const double v = (probe.y - target.destY + .5) / target.destHeight;
++        if (u < 0 || u >= 1 || v < 0 || v >= 1) return FFFResult::InvalidArgument;
++        double x = u, y = v;
++        switch (sourcePixelRotation_ & 3u) {
++        case 1: x = v; y = 1 - u; break;
++        case 2: x = 1 - u; y = 1 - v; break;
++        case 3: x = 1 - v; y = u; break;
++        }
++        probe.x = static_cast<int>(x * frame->width); probe.y = static_cast<int>(y * frame->height);
++    }
++    if (probe.x < 0 || probe.y < 0 || probe.x >= frame->width || probe.y >= frame->height)
++        return FFFResult::InvalidArgument;
++    double u = (probe.x + .5) / frame->width, v = (probe.y + .5) / frame->height;
++    switch (sourcePixelRotation_ & 3u) {
++    case 1: { const auto old = u; u = 1 - v; v = old; break; }
++    case 2: u = 1 - u; v = 1 - v; break;
++    case 3: { const auto old = u; u = v; v = 1 - old; break; }
++    }
++    probe.surfaceX = static_cast<int>(std::floor(target.destX + u * target.destWidth));
++    probe.surfaceY = static_cast<int>(std::floor(target.destY + v * target.destHeight));
++    for (int c = 0; c < std::min(3, static_cast<int>(descriptor->nb_components)); ++c) {
++        const auto& component = descriptor->comp[c];
++        if (component.depth > 16 || component.shift + component.depth > 16) return FFFResult::NotSupported;
++        const bool chroma = probe.family == 1 && c > 0;
++        const auto x = probe.x >> (chroma ? descriptor->log2_chroma_w : 0);
++        const auto y = probe.y >> (chroma ? descriptor->log2_chroma_h : 0);
++        const auto* data = frame->data[component.plane] + static_cast<std::ptrdiff_t>(y) * frame->linesize[component.plane] + x * component.step + component.offset;
++        unsigned value = data[0];
++        if (component.shift + component.depth > 8)
++            value = descriptor->flags & AV_PIX_FMT_FLAG_BE ? (data[0] << 8) | data[1] : data[0] | (data[1] << 8);
++        probe.values[c] = (value >> component.shift) & ((1u << component.depth) - 1);
++    }
++    return FFFResult::Success;
++}
++
+ FFFResult PlayerSession::ReadVideoPixelRegion(const std::uint32_t x, const std::uint32_t y,
+     const std::uint32_t width, const std::uint32_t height, float* dst,
+     const std::uint32_t dstFloatCount, std::uint32_t* outputBitDepth) noexcept {
+@@ -6225,6 +6296,7 @@ void PlayerSession::PresentVideoFrame(AVFrame* frame, AVFormatContext* owner) no
+         }
+         Fail(renderResult, videoRenderer_.LastError(), "render"); return;
+     }
++    RetainSourcePixelFrame(renderFrame, sourceRotation_);
+     if (ShouldDelayAudioUntilVideoFrame() &&
+         audioUnblockVideoGeneration_ == 0 && videoRenderer_.HasOutputWindow()) {
+         audioUnblockVideoGeneration_ = videoRenderer_.SubmittedVideoGeneration();
+@@ -7051,6 +7123,7 @@ void PlayerSession::DoClose(const FFF3FPState finalState, const bool preserveVid
+     if (coverArtFrame_) av_frame_free(&coverArtFrame_);
+     ReleasePrimariesCarrierFilter();
+     if (stillImageFrame_) av_frame_free(&stillImageFrame_);
++    { std::lock_guard lock(sourcePixelMutex_); av_frame_free(&sourcePixelFrame_); }
+     if (videoDecodeFrame_) av_frame_free(&videoDecodeFrame_);
+     if (videoTransferFrame_) av_frame_free(&videoTransferFrame_);
+     if (audioDecodeFrame_) av_frame_free(&audioDecodeFrame_);
+@@ -7705,6 +7778,7 @@ FFFResult PlayerSession::SubmitExternalVideoFrame(const FFF3FPExternalVideoFrame
+         sws_freeContext(scale); submitted = converted;
+     }
+     const auto result = videoRenderer_.Render(submitted, source.frameIndex, false, false, false, false, nullptr, nullptr, true);
++    if (result == FFFResult::Success) RetainSourcePixelFrame(owned, 0);
+     av_frame_free(&converted);av_frame_free(&owned);
+     if (result != FFFResult::Success) {
+         if (result == FFFResult::DeviceFailure) videoRenderer_.RequestRecoveryIfDeviceLost();
+diff --git a/FFF.Native/3FP/Core/PlayerSession.h b/FFF.Native/3FP/Core/PlayerSession.h
+index 7cc2967..d8e3bee 100644
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include "3FP/Api/FFF.Player.Api.h"
++#include "SourcePixelProbe.h"
+ #include "3FP/Api/FFF.Player.AudioRenderPlug.h"
+ #include "3FP/Audio/WasapiRenderer.h"
+ #include "3FP/Core/AvifTileGridComposer.h"
+@@ -176,6 +177,7 @@ public:
+     FFFResult GetHdrSignalDiagnostics(
+         FFF3FPHdrSignalDiagnostics& diagnostics) const noexcept;
+     FFFResult ReadVideoPixel(FFF3FPVideoPixelProbe& probe) noexcept;
++    FFFResult ReadSourcePixel(VsrSourcePixelProbe& probe) noexcept;
+     // Batch pixel readback
+     FFFResult ReadVideoPixelRegion(std::uint32_t x, std::uint32_t y,
+         std::uint32_t width, std::uint32_t height, float* dst,
+@@ -598,6 +600,10 @@ private:
+     std::int32_t coverArtStream_;
+     AVFrame* coverArtFrame_;
+     AVFrame* stillImageFrame_;
++    void RetainSourcePixelFrame(const AVFrame* frame, std::uint32_t rotation) noexcept;
++    std::mutex sourcePixelMutex_;
++    AVFrame* sourcePixelFrame_ = nullptr;
++    std::uint32_t sourcePixelRotation_ = 0;
+     // Clockwise quarter turns the source asks to be displayed with (0..3).
+     // Filled at open time from the container's rotation metadata / display
+     // matrix, for images and video alike. 0 means "no rotation requested".
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/VideoRenderer.cpp
+index 3c13e46..137afb8 100644
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -29,6 +29,7 @@ extern "C" {
+ }
+ 
+ #include <d2d1effects.h>
++#include <d3dcompiler.h>
+ #include <d2d1helper.h>
+ #include <DirectXPackedVector.h>
+ #include <roapi.h>
+@@ -2949,8 +2950,8 @@ FFFResult PlayerVideoRenderer::SetViewTransform(const float zoom,
+     if (!std::isfinite(zoom) || zoom <= 0.0f || !std::isfinite(panX) || !std::isfinite(panY))
+         return FFFResult::InvalidArgument;
+     std::lock_guard deviceLock(deviceMutex_);
+-    const auto zoomClamped = std::clamp(zoom, sourceImageMode_ ? 1.0f : 0.05f,
+-        sourceImageMode_ ? 32.0f : 64.0f);
++    const auto coordinateLimit = float(1u << 30) / std::max({1u, swapWidth_, swapHeight_});
++    const auto zoomClamped = std::clamp(zoom, sourceImageMode_ ? 1.0f : 0.05f, coordinateLimit);
+     const auto panXClamped = zoomClamped == 1.0f ? 0.0f : std::clamp(panX, -1.0f, 1.0f);
+     const auto panYClamped = zoomClamped == 1.0f ? 0.0f : std::clamp(panY, -1.0f, 1.0f);
+     viewZoomBits_.store(std::bit_cast<float>(zoomClamped), std::memory_order_relaxed);
+@@ -5347,11 +5348,46 @@ FFFResult PlayerVideoRenderer::DrawWithShader(ID3D11RenderTargetView* target,
+     cachedVideoSettings_.vsrUpscale=upscaleAlgorithm_.load();cachedVideoSettings_.vsrDownscale=downscaleAlgorithm_.load();
+     context_->UpdateSubresource(constants_, 0, nullptr, &cachedVideoSettings_, 0, 0);
+     context_->OMSetRenderTargets(1, &target, nullptr);
+-    const D3D11_VIEWPORT viewport{x, y, width, height, 0.0f, 1.0f};
++    // Clip the viewport, then map its UVs back into the magnified picture.
++    // D3D11 viewport bounds are much smaller than a highly zoomed image rectangle.
++    ComPtr<ID3D11Resource> targetResource; target->GetResource(&targetResource);
++    ComPtr<ID3D11Texture2D> targetTexture;
++    if (FAILED(targetResource.As(&targetTexture))) return FFFResult::DeviceFailure;
++    D3D11_TEXTURE2D_DESC targetDescription{}; targetTexture->GetDesc(&targetDescription);
++    const auto left = std::max(0.0f, x), top = std::max(0.0f, y);
++    const auto right = std::min(float(targetDescription.Width), x + width);
++    const auto bottom = std::min(float(targetDescription.Height), y + height);
++    if (right <= left || bottom <= top) return FFFResult::Success;
++    const bool clipped = left != x || top != y || right != x + width || bottom != y + height;
++    if (clipped) {
++        if (!clippedVertexShader_ || !viewConstants_) {
++            ReleaseCom(clippedVertexShader_); ReleaseCom(viewConstants_);
++            constexpr char source[] = R"(
++cbuffer View : register(b0) { float2 uvOffset; float2 uvScale; };
++struct Output { float4 position : SV_Position; float2 uv : TEXCOORD0; };
++Output main(uint id : SV_VertexID) {
++    float2 uv = float2((id << 1) & 2, id & 2);
++    Output value;
++    value.position = float4(uv * float2(2, -2) + float2(-1, 1), 0, 1);
++    value.uv = uvOffset + uv * uvScale;
++    return value;
++})";
++            ComPtr<ID3DBlob> code;
++            if (FAILED(D3DCompile(source, sizeof(source)-1, nullptr, nullptr, nullptr, "main", "vs_4_0", 0, 0, &code, nullptr)) ||
++                FAILED(device_->CreateVertexShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &clippedVertexShader_)))
++                return FFFResult::DeviceFailure;
++            const D3D11_BUFFER_DESC description{16, D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0};
++            if (FAILED(device_->CreateBuffer(&description, nullptr, &viewConstants_))) return FFFResult::DeviceFailure;
++        }
++        const float view[]{(left-x)/width, (top-y)/height, (right-left)/width, (bottom-top)/height};
++        context_->UpdateSubresource(viewConstants_, 0, nullptr, view, 0, 0);
++        context_->VSSetConstantBuffers(0, 1, &viewConstants_);
++    }
++    const D3D11_VIEWPORT viewport{left, top, right-left, bottom-top, 0.0f, 1.0f};
+     context_->RSSetViewports(1, &viewport);
+     context_->IASetInputLayout(nullptr);
+     context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+-    context_->VSSetShader(vertexShader_, nullptr, 0);
++    context_->VSSetShader(clipped ? clippedVertexShader_ : vertexShader_, nullptr, 0);
+     auto* shader = pixelShader_;
+     // SDR layout specialization: the bytecode has InputLayout fixed at compile time
+     // and the colour/projection constants forced to zero, so it is only valid when
+@@ -5943,6 +5979,7 @@ void PlayerVideoRenderer::TimedTextThread() noexcept {
+     PresenterTimerResolution timerResolution;
+     std::uint64_t observedPresentationGeneration = 0;
+     std::uint64_t observedVideoGeneration = 0;
++    std::uint64_t observedViewGeneration = 0;
+     auto nextPresentation = std::chrono::steady_clock::time_point::min();
+     for (;;) {
+         float frameRate = 60.0f;
+@@ -5980,7 +6017,7 @@ void PlayerVideoRenderer::TimedTextThread() noexcept {
+                 // Decode and 360-view updates present immediately; overlay-only
+                 // updates obey their cadence. The swap chain paces the display.
+                 if (const auto now = std::chrono::steady_clock::now();
+-                    !cameraLive && (paceEngaged || !videoChanged) &&
++                    !cameraLive && viewGeneration_ == observedViewGeneration && (paceEngaged || !videoChanged) &&
+                     nextPresentation != std::chrono::steady_clock::time_point::min() &&
+                     now < nextPresentation) {
+                     if (paceEngaged)
+@@ -5988,14 +6025,16 @@ void PlayerVideoRenderer::TimedTextThread() noexcept {
+                             [this] { return timedTextThreadStop_; });
+                     else
+                         timedTextCondition_.wait_until(lock, nextPresentation,
+-                            [this, &observedVideoGeneration] {
++                            [this, &observedVideoGeneration, &observedViewGeneration] {
+                                 return timedTextThreadStop_ ||
++                                    viewGeneration_ != observedViewGeneration ||
+                                     videoGeneration_.load() != observedVideoGeneration;
+                             });
+                     if (timedTextThreadStop_) return;
+                 }
+                 observedPresentationGeneration = presentationGeneration_;
+                 observedVideoGeneration = videoGeneration_.load();
++                observedViewGeneration = viewGeneration_;
+                 // Publishes the readouts and, when the calibrated panel period has drifted
+                 // from the declared rate, re-reads the declared rate. Runs here because this
+                 // is the presenter thread and this block holds timedTextMutex_, the lock every
+@@ -7931,6 +7970,8 @@ FFFResult PlayerVideoRenderer::Redraw() noexcept {
+             timedTextThread_ = std::thread(&PlayerVideoRenderer::TimedTextThread, this);
+         }
+         ++presentationGeneration_;
++        // Interactive view/resize updates must not inherit a still's 1 Hz media cadence.
++        ++viewGeneration_;
+     }
+     timedTextCondition_.notify_one();
+     return FFFResult::Success;
+@@ -9325,6 +9366,8 @@ void PlayerVideoRenderer::ReleaseDeviceObjects() noexcept {
+     ReleaseCom(coverBackdropPixelShader_);
+     ReleaseCom(timedTextPixelShader_);
+     ReleaseCom(vertexShader_);
++    ReleaseCom(clippedVertexShader_);
++    ReleaseCom(viewConstants_);
+     ReleaseCom(context_);
+     ReleaseCom(device_);
+     swapWidth_ = swapHeight_ = sourceWidth_ = sourceHeight_ = 0;
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/VideoRenderer.h
+index f8faea8..002c669 100644
+--- a/FFF.Native/3FP/Render/VideoRenderer.h
++++ b/FFF.Native/3FP/Render/VideoRenderer.h
+@@ -780,6 +780,8 @@ private:
+     HANDLE frameLatencyWaitable_ = nullptr;
+     bool swapWaitable_ = false;
+     ID3D11VertexShader* vertexShader_;
++    ID3D11VertexShader* clippedVertexShader_ = nullptr;
++    ID3D11Buffer* viewConstants_ = nullptr;
+     ID3D11PixelShader* pixelShader_;
+     ID3D11ShaderResourceView* jincWeightsView_ = nullptr;
+     ID3D11PixelShader* sdrPixelShaders_[3]{};
+@@ -1262,6 +1264,7 @@ private:
+     bool coverBackdropRequestPending_;
+     std::uint64_t coverBackdropRequestGeneration_;
+     std::uint64_t presentationGeneration_;
++    std::uint64_t viewGeneration_ = 0;
+     float presentationFrameRate_;
+     // The producer publishes an immutable layer and renderers retain a shared
+     // snapshot. This keeps the timed-text mutex short without copying every

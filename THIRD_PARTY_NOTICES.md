@@ -40,8 +40,8 @@ Hyllian, Copyright (c) 2015. MIT License. Adapted from the pass-0 diagonal kerne
 - `madVR09217`：从用户现有 PotPlayer madVR 目录复制，专有软件，保留目录内 license.txt；不是本项目开源代码。播放器通过 DirectShow 加载随附 madVR64.ax，不注册系统。
 - 早期仅在本地携带；本轮完整便携包包含上述现有运行时与许可，源码仓库仍不包含这些二进制。清理后的资源 SHA-256 随包记录。
 
-- `anime4k-a-fast.glsl`：官方 Anime4K Windows Low-end Mode A (Fast) 的六段组合，算法未修改，保留上游版权 / MIT 等原文件许可；commit `7684e9586f8dcc738af08a1cdceb024cc184f426`。来源为 [bloc97/Anime4K](https://github.com/bloc97/Anime4K/tree/7684e9586f8dcc738af08a1cdceb024cc184f426)，完整许可保留在该 shader 文件头。
-- `anime4k-no-cnn.glsl`：同一 Anime4K commit 的 Clamp_Highlights + Thin_HQ + Darken_HQ 组合，保留原 MIT 许可与系数；传统梯度 / DoG 线条处理，不含神经网络。来源同上，完整许可保留在 shader 文件头。
+- `anime4k-a-fast.glsl`：官方 Anime4K Windows Low-end Mode A (Fast) 的六段组合，算法未修改，保留上游版权 / MIT 等原文件许可；commit `7684e9586f8dcc738af08a1cdceb024cc184f426`。来源为 [bloc97/Anime4K](https://github.com/bloc97/Anime4K/tree/7684e9586f8dcc738af08a1cdceb024cc184f426)，完整许可保留在该 shader 文件头。Lite 的 HLSL 字节码由此文件离线转换，分发时保留 `licenses/anime4k-a-fast.glsl`，不改变 CNN 权重。
+- `anime4k-no-cnn.glsl`：同一 Anime4K commit 的 Clamp_Highlights + Thin_HQ + Darken_HQ 组合，保留原 MIT 许可与系数；传统梯度 / DoG 线条处理，不含神经网络。来源同上，完整许可保留在 shader 文件头。精简版将该组合转换为 HLSL，额外增强沿用本项目 `assets/gpu-sharpen.py` 的两个亮度 shader；分发保留两个原始 GLSL 文件及项目许可。
 
 ## mpv 用户着色器库
 

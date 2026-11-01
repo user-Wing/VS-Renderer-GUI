@@ -1,0 +1,8 @@
+********* Start testing of TestPreviewPane *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPreviewPane::initTestCase()
+FAIL!  : TestPreviewPane::nativePreviewZoomContinuesBeyond1600Percent() 'pane.zoom()>before' returned FALSE. (Native comparison zoom stopped increasing)
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPreviewPane.cpp(24) : failure location
+PASS   : TestPreviewPane::cleanupTestCase()
+Totals: 2 passed, 1 failed, 0 skipped, 0 blacklisted, 204ms
+********* Finished testing of TestPreviewPane *********

@@ -1,6 +1,6 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-10-31。源码版本 **1.0.15**，以 `CMakeLists.txt` 为准；Native 固定 API20 / 上游 main `146b5e03c784a01215bcc21b5dee60c97dabb089` + 启动 PR48 `cc545d2afc3f7b45058f47434628db6a703c7b07`，保留本地 AI 字幕 #36/#37 Native 补丁。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
+核对日期：2026-11-01。源码版本 **1.0.16**，以 `CMakeLists.txt` 为准；Native 固定 API20 / 上游 main `146b5e03c784a01215bcc21b5dee60c97dabb089` + 启动 PR48 `cc545d2afc3f7b45058f47434628db6a703c7b07`，保留本地 AI 字幕 #36/#37 Native 补丁。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
 
 ## 1. 发心与边界
 
@@ -30,10 +30,12 @@
 | 直通相对逐帧 | `PlayerWindow::stepFrame` 调用内核当前PTS逐帧；Native重新解码局部GOP确认相邻帧 | 不用绝对帧号逐帧，也不把稀疏缓存中的近邻当成真实相邻帧；VS仍按输出帧号定位 |
 | 查看与编辑解耦 | PhotoCraft 独立进程保留未保存工作 | 旧 Qt 编辑器仍有源码/测试，不作为生产编辑入口 |
 | 固定上游 + 完整 Native 补丁 | 保留本地扩展并可重新构建 | 不拼装 API14/18/20 不同版本 DLL 或补丁 |
+| 比对源像素与显示值分开 | `AnalysisPage::updatePixelReadouts` 按源坐标联动；`SourcePixelProbe.h` 和 Native 比对扩展提供转换前码值 | YUV 不由渲染 RGB 反算；交互重绘不继承静态图片媒体帧率；缩放移除固定倍率上限，Native 裁剪视口并映射 UV |
 | 启动期库预读 | `src/player/main.cpp` 用128KiB缓冲在低优先级线程读取FFmpeg；单文件解包后的Qt子进程共用 | 不照搬.NET图标和LakeUI设备预热，不额外提高进程优先级；首次解包单独计时 |
 | 软件播放同步与内存预算 | 上游线程/帧池/CPU 域按负载逐级调整；音频从60ms起按告警升至240ms，呈现允许最多250ms的平滑节奏容差；保留VSP的8K关键包参考帧追赶 | 不把显示器限帧记为解码丢帧；CPU预缩放仍默认关闭，8K逐帧实时按素材验收 |
 | AI 字幕外置推理 | 固定 main + #36/#37 Native 音频 tap；Qt 有界传 PCM 到外置 worker，跳转按 generation 隔离 | 模型与 llama-server 不随包下载；不移植上游 VB 页面，不将未装模型测试当作识别验收 |
 | Shader 平面输出 | `third_party/vsr-placebo` 直接回读 YUV 平面、合并增强 hooks，独立命名空间与 color 依赖 | 保留标准 placebo 插件作为缺少组件时的兼容路径；不把 VS 吞吐当作 Native 播放帧率 |
+| Lite 原生 Anime4K | `src/render/Anime4KFast.h` 执行 Fast 27、no CNN 16、亮度增强2个转换pass；算法9～14对应六种增强变体，1X按源尺寸处理后复用原生缩放器 | 不引入 VS/Python 播放依赖或通用 GLSL 加载器；新增shader需重新转换、构建内核并验证像素 |
 
 ## 4. 目录地图与改动入口
 
@@ -47,6 +49,7 @@
 | `src/cap/` | `main.cpp` 负责截图/标注/贴图，`DesktopCapture` 捕获，`UiAccess` 启动 |
 | `src/bluray/` | `BlurayCatalog` 解析节目，`BlurayWidget` 提供共用界面 |
 | `src/color/`、`src/image/` | 色彩桥、高精度图片、PSD/HDR/JXL 与保留的 Qt 编辑实现 |
+| `src/render/Anime4KFast.h` | Lite 原生 Anime4K Fast；转换入口 `tools/convert-anime4k-fast.py`，Native 补丁及构建见 API20 指南 |
 | `src/update/` | `PortableUpdater`、`ComponentDownloads` |
 | `assets/`、`third_party/` | 图标/语言/滤镜资源与第三方来源、运行时说明和许可 |
 | `patches/`、`tools/` | 固定上游补丁；构建、部署、打包和测量脚本 |
@@ -60,7 +63,7 @@
 | 入口与导航 | 文件 |
 | --- | --- |
 | Renderer：导入 → 时间组/处理链 → 参数/脚本 → 源与输出预览 → 预设/导出 | `src/app/MainWindow*.cpp`、`src/ui/ParameterEditor.cpp`、`CompareView.cpp` |
-| 图像分析比对：多源 → 偏移/布局 → 对比画布导出 | `src/ui/AnalysisPage.cpp`、`MultiCompareView.cpp`、`AnalysisExport.cpp` |
+| 图像分析比对：多源 → 偏移/布局 → 同坐标 RGB/原始 YUV → 对比画布导出 | `src/ui/AnalysisPage.cpp`、`MultiCompareView.cpp`、`AnalysisExport.cpp`；Native 扩展见 `patches/3fp-api20-analysis-probe.patch` |
 | BD Remux：节目识别 → 轨道/输出 → 队列 | `src/bluray/BlurayWidget.cpp` |
 | Player：打开媒体 → 底栏/列表 → 右键音频/字幕/设置 → 图片工具 | `src/player/PlayerWindow.cpp`、`PlayerMenus.cpp`、`PlayerSettings.cpp` |
 | Player色彩：解码设置 → 3FP默认 / 手动libplacebo对照；旧自动档迁回原生 | `src/player/PlayerColor.cpp`、`PlayerWindow.cpp` |
@@ -74,7 +77,7 @@
 | Qt | 6.8+；本地记录 6.10.2，MinGW；CMake 查找 | 编译或 GUI 启动失败 |
 | VapourSynth / Python | VS API4 / R81；构建和 stage 脚本，`update-vapoursynth-runtime.py` 锁定哈希 | VS 链不可用；直通路径独立 |
 | VS 插件 | BM3D 11.0、BM3Dvk2 1.0、BestSource 22；其余随运行时保留 | 对应滤镜不可用；不能用 API3 DLL 替代 |
-| FFF.Native | API20 / main `146b5e0` + PR48 `cc545d2`；`build-native-api20.ps1` 应用完整补丁，配置112字节、snapshot464字节，动态 C ABI | 原生播放/呈现不可用 |
+| FFF.Native | API20 / main `146b5e0` + PR48 `cc545d2`；`build-native-api20.ps1` 应用完整补丁及比对扩展，配置112字节、snapshot464字节，动态 C ABI | 原生播放/呈现不可用；旧库缺少原始 YUV 接口 |
 | FFmpeg | 当前 shared ABI：63/63/61/7/10/12；Native SDK 与运行 DLL 配套 | 相应解码/导出失败，单文件启动器先检查组件 |
 | GLSL / RIFE | 随包 shader 与 NCNN 模型，`stage-shaders.ps1` / `install-analysis-plugins.ps1` | 相应增强不可用；RIFE 需要 Vulkan |
 | libVLC / LAV / madVR | Full 可选后端，stage 脚本及各自许可 | 对应后端不可用，PlayerLite 不包含 |
@@ -116,6 +119,8 @@
 文档纪律：结构/决策变化当天更新本地图；操作变化只改对应 docs 指南；用户可见变化写 changelog；测试按版本与轮次更新同一台账，不新建 `docs/update-版本.md`、`validation-版本.md`。原始日志留 `build/`，必要证据放 `development/evidence/`；不携带用户媒体。README、本地测试数据和开发记录不得混入上游 PR。
 
 ## 10. 当前状态
+
+1.0.16 整合精简版八档原生Anime4K与Renderer多路图像比对，修复Anime4K缩小后交换链旧画面套叠。Native标准构建顺序为VSP基础补丁 → 比对扩展 → Anime4K，Full/Lite共用包含源像素接口与原生增强的API20 DLL。当前正在使用的1.0.15 Full保留；供上传的干净Full目录为 `dist/VS-GUI-Full-1.0.16`，单文件为 `dist/VS-Player.exe`。版本验收见台账；本轮只创建Release草稿，附件由维护者上传。
 
 1.0.15 同步近期3FP内核和可迁移的启动优化，保留多轨视频硬解试探修复；单文件使用更高压缩率。Full输出至 `dist/VS-GUI-Full`，单文件为 `dist/VS-Player.exe`；具体测试范围、启动采样及限制见测试台账。运行中的VSCap原文件保留，发行压缩包与附件由维护者手动制作、上传。
 

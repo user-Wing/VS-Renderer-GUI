@@ -50,6 +50,7 @@ public:
     bool setColorSettings(const VsrColorSettings &settings);
     VsrColorStatus colorStatus() const;
     bool samplePixel(int x, int y, ThreeFpPixelProbe &sample) const;
+    bool sampleSourcePixel(int x, int y, bool surfaceCoordinates, VsrSourcePixelProbe &sample) const;
     bool submitFrame(const VapourSynthFrame &frame);
     bool setOutputFormat(const QString &format);
     void setAntiRinging(bool enabled);

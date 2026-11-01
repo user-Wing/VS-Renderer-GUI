@@ -42,7 +42,7 @@ int PlayerWindow::fixedAnimeStage() const {
 }
 int PlayerWindow::initialQualityStage() const {
 #ifdef VSR_LITE_PLAYER
-    return std::clamp(settings_->value("player/animeStage",5).toInt(),4,5);
+    return std::clamp(settings_->value("player/animeStage",5).toInt(),0,7);
 #endif
     if(interpolationStage()>=0)return 4;
     const int fixed=fixedAnimeStage();
@@ -68,7 +68,7 @@ void PlayerWindow::updateAlgorithmBadges(){
     if(superInterpolationStage()>=0 && !direct_){algorithmBadge_->setText(superInterpolationStage()==2?"D3D11":superInterpolationStage()==1?"Jinc":"A4K");interpolationBadge_->setText("RIFE 960×540");interpolationBadge_->show();}
     else if(interpolation>=0 && !direct_){algorithmBadge_->setText(interpolationRenderer()?"D3D11":"Jinc");interpolationBadge_->setText(QStringList{"RIFE+","RIFE","MVT+","MVT"}.at(interpolation));interpolationBadge_->show();}
     else if(!direct_ && profile()=="Anime")algorithmBadge_->setText(QStringList{"A4KCNN+","A4KCNN","A4K+","A4K","Jinc","D3D11","A4K-1X-Jinc","A4K-1X-D3D11"}.at(std::clamp(qualityStage_,0,7)));
-    else algorithmBadge_->setText(QStringList{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","SuperXbr","D3D11","Lanczos4"}.value(scalingAlgorithm(),"Jinc"));
+    else algorithmBadge_->setText(QStringList{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","SuperXbr","D3D11","Lanczos4","A4KCNN","A4KCNN+","A4K+","A4K","A4K-1X-Jinc","A4K-1X-D3D11"}.value(scalingAlgorithm(),"Jinc"));
 }
 int PlayerWindow::interpolationStage() const {
     const QFileInfo file(preset_);
@@ -115,7 +115,7 @@ void PlayerWindow::showInterpolationWarning(bool visible) {
 }
 void PlayerWindow::ensureProfiles() {
 #ifdef VSR_LITE_PLAYER
-    // Only the two user-selected pass-through presets are shipped by Lite.
+    // Lite identifies built-in presets by name and executes their native shaders.
     return;
 #endif
     const QDir shaders(QDir(QCoreApplication::applicationDirPath()).filePath("shaders"));QDir().mkpath(shaders.absolutePath());
@@ -291,6 +291,9 @@ void PlayerWindow::updateProfile() {
 }
 void PlayerWindow::suspendQualityCheck() {qualityTimer_.invalidate();qualitySettling_.restart();}
 int PlayerWindow::scalingAlgorithm(bool downscale) const {
+#ifdef VSR_LITE_PLAYER
+    if(direct_){const int algorithms[]{10,9,11,12,4,7,13,14};if(qualityStage_!=4 && qualityStage_!=5)return algorithms[std::clamp(qualityStage_,0,7)];}
+#endif
     if(direct_ && qualityStage_==5)return std::clamp(settings_->value(downscale?"render/d3d11Downscale":"render/d3d11Upscale",7).toInt(),0,8);
     if(qualityStage_==7 || superInterpolationStage()==2 || (interpolationStage()>=0 && interpolationRenderer()==1))return 7;
     return 4;

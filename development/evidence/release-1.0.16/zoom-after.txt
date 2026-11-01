@@ -1,0 +1,14 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+PASS   : TestPlayer::zoomOutClearsOutsideVideo(0)
+PASS   : TestPlayer::zoomOutClearsOutsideVideo(1)
+PASS   : TestPlayer::zoomOutClearsOutsideVideo(2)
+PASS   : TestPlayer::zoomOutClearsOutsideVideo(3)
+PASS   : TestPlayer::zoomOutClearsOutsideVideo(4)
+PASS   : TestPlayer::zoomOutClearsOutsideVideo(5)
+PASS   : TestPlayer::zoomOutClearsOutsideVideo(6)
+PASS   : TestPlayer::zoomOutClearsOutsideVideo(7)
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 10 passed, 0 failed, 0 skipped, 0 blacklisted, 7056ms
+********* Finished testing of TestPlayer *********

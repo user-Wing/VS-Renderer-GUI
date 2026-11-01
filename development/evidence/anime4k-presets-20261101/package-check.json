@@ -1,0 +1,14 @@
+{
+  "singleSha256": "08add200a18fc79bbadc5f13134bdfebc23c4d134eda96a4dafd54a78fe2c222",
+  "bytes": 27500089,
+  "cache": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\626c803cd06ef4998d54c061",
+  "entries": 69,
+  "currentStrippedBuildMatchedIgnoringPeTimestampAndChecksum": true,
+  "allOriginalFilesRetained": true,
+  "crcAndManifestValid": true,
+  "bothLanguagePacksMatched": true,
+  "cacheAbsentBeforeSmoke": true,
+  "actualColdExtractionMatched": true,
+  "actualSingleImageImport": "final-smoke/import.json",
+  "actualSingleGui": "A4K-1X-Jinc on animation"
+}

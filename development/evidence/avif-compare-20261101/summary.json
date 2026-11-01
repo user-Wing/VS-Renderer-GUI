@@ -1,0 +1,111 @@
+{
+  "date": "2026-11-01",
+  "version": "1.0.15",
+  "scope": "Renderer local Full, no package/publication",
+  "rootCause": "Still-image media cadence throttled interactive redraws; view generation now wakes presentation independently.",
+  "drag": {
+    "updates": 60,
+    "baselineFirstLanePresents": 1,
+    "fixedLanePresents": [
+      60,
+      60,
+      60
+    ],
+    "fixedUiHandlerP95Ms": 4.0986
+  },
+  "rawYuvCrosscheck": [
+    {
+      "name": "[Stray]   2025_5_31 23_16_26.avif",
+      "width": 2560,
+      "height": 1600,
+      "pix_fmt": "yuv444p12le",
+      "coordinate": [
+        1232,
+        731
+      ],
+      "native": [
+        1153,
+        1832,
+        2221
+      ],
+      "ffmpeg": [
+        1153,
+        1832,
+        2221
+      ],
+      "match": true
+    },
+    {
+      "name": "[Stray]   2025_5_31 23_16_26_q70t5_10.avif",
+      "width": 2560,
+      "height": 1600,
+      "pix_fmt": "yuv444p10le",
+      "coordinate": [
+        1232,
+        731
+      ],
+      "native": [
+        286,
+        458,
+        556
+      ],
+      "ffmpeg": [
+        286,
+        458,
+        556
+      ],
+      "match": true
+    },
+    {
+      "name": "[Stray]   2025_5_31 23_16_26_q70t5_420_10.avif",
+      "width": 2560,
+      "height": 1600,
+      "pix_fmt": "yuv420p10le",
+      "coordinate": [
+        1232,
+        731
+      ],
+      "native": [
+        284,
+        455,
+        556
+      ],
+      "ffmpeg": [
+        284,
+        455,
+        556
+      ],
+      "match": true
+    }
+  ],
+  "tests": {
+    "newQtTest": "4 passed including init/cleanup",
+    "previewQtTest": "9 passed including init/cleanup",
+    "comparison": "directComparison, multipleSourcesAndLayouts, chromaAndScalingRender passed; wipe passed isolated for old and new DLLs"
+  },
+  "timingCaveat": "Initial combined wipe run reached 1558 ms / 1500 ms limit. Isolated old/new runs reached 434/450 ms; both passed. No threshold changed.",
+  "ui": "Deployed RGB default, button placement and three readouts observed on desktop; user completed acceptance and stopped further computer use.",
+  "nativeExports": {
+    "old": 127,
+    "new": 128,
+    "removed": [],
+    "added": [
+      "VSR3FP_ReadSourcePixel"
+    ]
+  },
+  "binaries": [
+    {
+      "name": "VSRenderer.exe",
+      "bytes": 2845199,
+      "sha256": "e0cce3936749d000ddfd8ce6e9f96d6bd519c83c26ad42dfbf06cdbba1a6bc65"
+    },
+    {
+      "name": "FFF.Native.dll",
+      "bytes": 6596096,
+      "sha256": "e20ffd2d043803ddf43a796c4d7ee7d754cc3906c571e104e71bb8e21d5e0164"
+    }
+  ],
+  "protectedFiles": 27,
+  "settingsUnchanged": true,
+  "limits": "Focused comparison/preview coverage; no full Player regression or physical HDR colour accuracy claim."
+}

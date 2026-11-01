@@ -1,4 +1,5 @@
 #pragma once
+#include "backend/SourcePixelProbe.h"
 #include "color/ColorBridge.h"
 
 #include <QLibrary>
@@ -47,7 +48,13 @@ enum class ThreeFpScalingAlgorithm : std::uint32_t {
     Spline36 = 5,
     SuperXbrSinglePass = 6,
     D3D11Native = 7,
-    Lanczos4 = 8
+    Lanczos4 = 8,
+    Anime4KFast = 9,
+    Anime4KCnnEnhanced = 10,
+    Anime4KNoCnnEnhanced = 11,
+    Anime4KNoCnn = 12,
+    Anime4K1xJinc = 13,
+    Anime4K1xD3D11 = 14
 };
 
 struct ThreeFpConfiguration {
@@ -254,6 +261,7 @@ public:
     ThreeFpResult setColorSettings(void *handle, const VsrColorSettings *settings) const;
     ThreeFpResult colorStatus(void *handle, VsrColorStatus *status) const;
     ThreeFpResult readPixel(void *handle, ThreeFpPixelProbe *probe) const;
+    ThreeFpResult readSourcePixel(void *handle, VsrSourcePixelProbe *probe) const;
     ThreeFpResult submitExternalVideoFrame(void *handle, const ThreeFpExternalVideoFrame *frame) const;
     ThreeFpResult setExternalOutputFormat(void *handle, const char *format) const;
     ThreeFpResult setSubtitleLayer(void *handle, const TimedTextLayer *layer) const;

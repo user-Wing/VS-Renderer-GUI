@@ -12,6 +12,8 @@
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMimeData>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -111,6 +113,12 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     connect(vrr_,&QCheckBox::toggled,this,[this](bool enabled){for(auto &p:players_)if(p)p->setVrrPresent(enabled);});
     connect(pacing_,&QCheckBox::toggled,this,[this](bool enabled){for(auto &p:players_)if(p)p->setVrrPacing(enabled);});
     controls->addStretch();
+    colorDisplay_=new QComboBox(this);
+    colorDisplay_->setObjectName(QStringLiteral("colorDisplay"));
+    colorDisplay_->addItems({QStringLiteral("颜色显示：RGB"),QStringLiteral("颜色显示：YUV")});
+    colorDisplay_->setToolTip(QStringLiteral("坐标为源像素；RGB 为渲染输出码值，YUV 为解码源的原始码值（保留位深与色度抽样，不反算 RGB）。"));
+    controls->addWidget(colorDisplay_);
+    connect(colorDisplay_,&QComboBox::currentIndexChanged,this,&AnalysisPage::updatePixelReadouts);
     auto *color = new QComboBox(this);
     color->setObjectName(QStringLiteral("colorProcessing"));
     color->setMinimumWidth(240);
@@ -138,6 +146,8 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     controls_->hide(); mode_->hide();
     status_=new QLabel(QStringLiteral("导入最多 9 个视频；每个视频独立保存对齐偏移。"),this); status_->setWordWrap(true); layout->addWidget(status_);
     auto *timer=new QTimer(this); connect(timer,&QTimer::timeout,this,&AnalysisPage::poll); timer->start(25);
+    pixelTimer_=new QTimer(this);pixelTimer_->setSingleShot(true);pixelTimer_->setInterval(33);
+    connect(pixelTimer_,&QTimer::timeout,this,&AnalysisPage::updatePixelReadouts);
     driftTime_.start();
 }
 
@@ -182,12 +192,43 @@ void AnalysisPage::configurePlayer(int i)
         if(sync_->isChecked() || view_->isWipe()) for(int j:visibleVideos()) if(j!=i && players_[j]) {panes_[j]->adoptView(z,x,y);players_[j]->setView(z,x,y);}
     });
     connect(panes_[i],&PreviewPane::pixelHovered,this,[this,pane=panes_[i]](int x,int y){
-        const int i = int(std::find(panes_.begin(), panes_.end(), pane) - panes_.begin());
-        ThreeFpPixelProbe sample{};
-        if(!players_[i]->samplePixel(x,y,sample)){panes_[i]->setPixelText({});return;}
-        const auto maxCode=(1u<<std::min(sample.outputBitDepth,16u))-1u;
-        panes_[i]->setPixelText(QStringLiteral("(%1,%2) RGB %3 %4 %5").arg(x).arg(y).arg(qRound(sample.red*maxCode)).arg(qRound(sample.green*maxCode)).arg(qRound(sample.blue*maxCode)));
+        hoverPane_=pane;hoverPosition_={x,y};
+        if(!pixelTimer_->isActive())pixelTimer_->start();
     });
+}
+
+void AnalysisPage::updatePixelReadouts()
+{
+    const int lane=int(std::find(panes_.begin(),panes_.end(),hoverPane_)-panes_.begin());
+    VsrSourcePixelProbe reference;
+    const double ratio=hoverPane_?hoverPane_->surface()->devicePixelRatioF():1;
+    if(lane>=videoCount_ || !visibleVideos().contains(lane) || !players_[lane] ||
+       !players_[lane]->sampleSourcePixel(qFloor(hoverPosition_.x()*ratio),qFloor(hoverPosition_.y()*ratio),true,reference)){
+        for(auto *pane:panes_)pane->setPixelText({});
+        return;
+    }
+    for(int i:visibleVideos()){
+        VsrSourcePixelProbe source;
+        const QString coordinate=QStringLiteral("(%1,%2)").arg(reference.x).arg(reference.y);
+        if(!players_[i] || !players_[i]->sampleSourcePixel(reference.x,reference.y,false,source)){
+            panes_[i]->setPixelText(coordinate+QStringLiteral(" 超出源图像 / 无源像素"));continue;
+        }
+        if(colorDisplay_->currentIndex()==1){
+            panes_[i]->setPixelText(source.family==1
+                ?QStringLiteral("%1 YUV %2 %3 %4 · %5 bit").arg(coordinate).arg(source.values[0]).arg(source.values[1]).arg(source.values[2]).arg(source.bitDepth)
+                :coordinate+QStringLiteral(" 无源 YUV（RGB / 灰度源）"));
+        }else{
+            ThreeFpPixelProbe sample{};
+            // Off-screen source pixels have no rendered RGB sample; never clamp them to an edge.
+            const auto size=panes_[i]->surface()->size()*panes_[i]->surface()->devicePixelRatioF();
+            if(source.surfaceX<0 || source.surfaceY<0 || source.surfaceX>=size.width() || source.surfaceY>=size.height() ||
+               !players_[i]->samplePixel(source.surfaceX,source.surfaceY,sample)){
+                panes_[i]->setPixelText(coordinate+QStringLiteral(" RGB 不在视口内"));continue;
+            }
+            const auto maxCode=(1u<<std::min(sample.outputBitDepth,16u))-1u;
+            panes_[i]->setPixelText(QStringLiteral("%1 RGB %2 %3 %4").arg(coordinate).arg(qRound(sample.red*maxCode)).arg(qRound(sample.green*maxCode)).arg(qRound(sample.blue*maxCode)));
+        }
+    }
 }
 
 QList<int> AnalysisPage::visibleVideos() const { return slots_.mid(0,std::min(trackCount_,videoCount_)); }
@@ -274,6 +315,8 @@ bool AnalysisPage::openVideo(int lane,const QString &path)
 void AnalysisPage::removeVideo(int video)
 {
     if (video < 0 || video >= videoCount_) return;
+    hoverPane_=nullptr;pixelTimer_->stop();
+    for(auto *pane:panes_)pane->setPixelText({});
     pause();
     queuedSeek_.reset();
     aligning_ = -1;
@@ -365,6 +408,10 @@ std::int64_t AnalysisPage::clampGlobal(std::int64_t position) const
 
 void AnalysisPage::seekLane(int lane, std::int64_t target)
 {
+    // Single images have no seek completion generation; their initial frame is already ready.
+    if(QJsonDocument::fromJson(players_[lane]->mediaInfo().toUtf8()).object().value("staticImage").toBool()){
+        pending_[lane]=false;return;
+    }
     const auto snap = snapshot(lane);
     generations_[lane] = snap.timelineGeneration;
     presents_[lane] = snap.presentedVideoFrames;

@@ -10,6 +10,41 @@
 
 AI字幕沿用1.0.14迁入的 #36/#37 Native 能力，来源为 #37 head `edf533155727f681eefa771082702bab275bca48`（含 #36），与VSP扩展一同在新基线上重建，不直接混用功能分支DLL。音频tap在VSP EQ/atempo前采集，避免重复采样；Qt只将有界PCM交给外置worker。模型和llama-server不下载、不打包，上游VB页面不迁入。音频块144字节、tap配置16字节、RTX状态44字节，需与Native保持ABI一致。
 
+## 多路比对扩展
+
+`build-native-api20.ps1` 在完整 VSP 补丁后应用 `patches/3fp-api20-analysis-probe.patch`，并复制 `src/backend/SourcePixelProbe.h`。此扩展让交互重绘绕开静态图片的媒体帧率限制，并新增本地可选导出 `VSR3FP_ReadSourcePixel`；配置、snapshot 和 API20 版本不变。
+
+源像素保留在色彩/位深转换前，YUV 直接按 FFmpeg 像素格式描述读取原码值；硬件帧在第一次取样时下载并缓存。坐标通过原生呈现矩形映射，保留旋转、留黑、缩放和 DPI 关系。缺少此扩展的旧 DLL 不提供原始 YUV，不能用 RGB 反算代替。
+
+## Lite Anime4K Fast
+
+Lite和本地单文件的“图像处理 → 缩放滤镜”提供与Full同名的八档：CNN＋额外增强、CNN、no CNN＋额外增强、no CNN、Jinc、D3D11、1X·Jinc、1X·D3D11。设置的渲染页可指定默认档位，`player.ini` 的 `player/animeStage` 保存0～7；旧Fast布尔选择迁移为CNN档。底栏和Tab显示实际模式。源高度≥2160p保留原有内置增强禁用规则。
+
+1.0.16 的 Full/Lite 使用同一内核。标准构建依次应用 VSP、比对取样与 Anime4K 补丁；在固定基线的独立 checkout 上执行：
+
+```powershell
+& tools/build-native-api20.ps1 `
+  -NativeRoot <独立的固定提交checkout> `
+  -DependenciesRoot <包含ffmpeg和vcpkg_installed的目录> `
+  -LibiamfRoot build/iamf-api20-stage `
+  -OutputDirectory build/mingw-release
+cmake --build build/mingw-release --target VSRenderer VSPlayer VSPlayerLite VSCap
+```
+
+脚本追加 `patches/3fp-api20-anime4k-fast.patch`，用 `.deps/color/ucrt64/bin` 的glslc、spirv-cross及Windows SDK 10.0.26100.0的fxc转换 `anime4k-a-fast.glsl`、`anime4k-no-cnn.glsl` 和 `gpu-sharpen.py` 生成的两个原始LUMA shader，共45个pass，将字节码嵌入DLL。播放不需要构建工具、Python、VapourSynth或外部shader文件。分发保留Qt/Native各依赖的原许可，以及两个原shader的MIT/Unlicense声明。
+
+执行链为原生色彩转换（源尺寸）→ 可选亮度提取、两段额外增强及合回RGB → MAIN → PREKERNEL → 原生RGB缩放。亮度提取使用源矩阵与量程，增强仍为原有0.3强度/2阈值的sharpen_edges、enhance_detail；浮点16位中间纹理保留CNN负数。常规Anime档按视口调度WIDTH/HEIGHT/WHEN；1X档将OUTPUT固定为源尺寸，再交给现有Jinc或D3D11 shader缩放路径。算法号为CNN 9、CNN增强10、no CNN增强11、no CNN 12、1X·Jinc 13、1X·D3D11 14。它仅运行已转换的内置shader。
+
+像素回归：用MSVC将 `tests/Anime4KFastProbe.cpp` 编译并链接d3d11/d3dcompiler，包含 `src` 和 `build/anime4k-native/shaders`，输出 `build/anime4k-native/probe.exe`；安装测试用moderngl/numpy后运行 `python tools/check-anime4k-fast.py`。六变体×八比例，共48组，独立编译原GLSL对照D3D11 shader输出；探针最后统一双线性适配，不声称整个Full/libplacebo色彩/缩放链逐像素一致。`vsr_player_lite_tests nativeAnimePresets` 验证八档菜单、实际像素、额外增强差异、两种1X最终缩放差异、播放/定位和重开持久化，可用 `VSR_ANIME4K_SOURCE` 指定片段。
+
+单文件先用 `stage-editions-1.0.9.py --edition Lite --player <本轮Lite EXE>` 整理 `build/playerlite-runtime`，再运行 `tools/package-playerlite-single.ps1 -SourceDirectory build/playerlite-runtime`。打包以暂存内的EXE为准，不再强制取另一构建目录的旧EXE；自动排除用户INI和FFmpeg专用文件。原有60.9 MiB解压体积已经超过旧脚本50 MiB门槛，现改为如实报告体积并验证单文件压缩结果。
+
+Anime4K 的提前返回分支也必须先清空目标背景，否则缩小视频后会保留旧交换链画面。`vsr_player_lite_tests zoomOutClearsOutsideVideo` 对八档逐次缩小、放大并读取实际交换链像素，验证视频内颜色与视频外黑底。
+
+本轮验收SDR短片、八档输出及RTX4070 Laptop上的实际处理。尚未验收HDR色准、长时间稳定性、核显/4K实时性能。1.0.16 单文件替换 `dist/VS-Player.exe` 并保留旁边配置；干净Full目录为 `dist/VS-GUI-Full-1.0.16`。可用暂存脚本的 `--output-directory` 指定空目录，保留正在使用的旧Full；Release只创建草稿，附件由维护者上传。
+
+部署目录必须使用与共享 FFmpeg 配套的 `libwinpthread-1.dll` 等传递依赖；旧 MinGW 文件可能导致入口缺失并以 `0xc06d007e` 退出。只验证测试目录能启动不能代替直接运行最终 `lite/vs-player.exe`。
+
 ## IAMF/OBR
 
 先取得以下固定源，初始化 libiamf 的 OAR 子模块。不要下载 libiamf 仓库的媒体测试集合；可用 sparse checkout 仅取 `code/`、`LICENSE`、`.gitmodules`。

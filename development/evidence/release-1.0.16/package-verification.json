@@ -1,0 +1,15 @@
+{
+  "version": "1.0.16",
+  "singleBytes": 27505204,
+  "singleSha256": "67ec6bf2f76caa2ff5f5467a2e31299c215a86dac82f60d6ef4733e31037da0f",
+  "cache": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\9d1f42a9c9b8af72cc1d1c7c",
+  "entries": 69,
+  "zipCrcAndManifestValid": true,
+  "currentStrippedBuildMatchedIgnoringPeTimestampAndChecksum": true,
+  "nativeMatchesTestedDll": true,
+  "stageManifestsValid": true,
+  "languagesAndLicensesMatched": true,
+  "coldCacheAbsentBeforeSmoke": true,
+  "actualColdExtractionMatched": true,
+  "actualSingleImageImport": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.16\\single-smoke\\cold-import.json"
+}
