@@ -22,7 +22,18 @@ QString PlayerAiSubtitles::validatePackage(const QString &path,QJsonObject *reso
     QFile manifest(directory.filePath("ai-subtitles.json"));
     if(!manifest.open(QIODevice::ReadOnly))return tr("未找到 AI 字幕扩展包 ai-subtitles.json；请在字幕设置中手动配置模型和运行时。");
     auto data=QJsonDocument::fromJson(manifest.readAll()).object();
-    if(data.value("version").toInt(1)!=1)return tr("不支持的 AI 字幕包版本。");
+    const int version=data.value("version").toInt(1);
+    if(version!=1 && version!=2)return tr("不支持的 AI 字幕包版本。");
+    if(version==2){
+        for(const auto &key:QStringList{"worker","python","modelDirectory","runtimeDirectory"}){
+            auto value=data.value(key).toString();if(value.isEmpty() && key=="runtimeDirectory")continue;
+            if(!QFileInfo(value).isAbsolute())value=directory.absoluteFilePath(value);
+            if(key=="modelDirectory" || key=="runtimeDirectory"){if(!QFileInfo(value).isDir())return tr("AI 字幕目录缺失：%1").arg(key);}
+            else if(!QFileInfo(value).isFile())return tr("AI 字幕文件缺失：%1").arg(key);
+            data.insert(key,value);
+        }
+        if(resolved)*resolved=data;return {};
+    }
     for(const auto &key:QStringList{"worker","model","mmproj","python","llamaServer"}){
         auto value=data.value(key).toString();
         if(value.isEmpty() && key=="python")value=QStandardPaths::findExecutable("python");
@@ -38,6 +49,10 @@ QString PlayerAiSubtitles::start(ThreeFpPlayer *player,const QString &package){
     if(!player->enableAudioTap(true))return tr("当前内核不支持 AI 音频接口，或尚未打开媒体。");
     player_=player;stamped_=false;lines_.clear();
     QStringList arguments{data.value("worker").toString(),"--model-dir",QFileInfo(data.value("model").toString()).absolutePath(),"--model",data.value("model").toString(),"--mmproj",data.value("mmproj").toString(),"--llama-server",data.value("llamaServer").toString(),"--device-backend",data.value("device").toString("auto"),"--window",QString::number(qBound(.5,data.value("window").toDouble(5),30.)),"--step",QString::number(qBound(.5,data.value("step").toDouble(5),30.))};
+    if(data.value("version").toInt()==2){
+        arguments={data.value("worker").toString(),"--model-dir",data.value("modelDirectory").toString(),"--device",data.value("device").toString("auto"),"--engine",data.value("engine").toString("auto"),"--window",QString::number(qBound(.5,data.value("window").toDouble(5),30.)),"--step",QString::number(qBound(.5,data.value("step").toDouble(5),30.)),"--language",data.value("language").toString("auto")};
+        if(!data.value("runtimeDirectory").toString().isEmpty())arguments<<"--runtime-dir"<<data.value("runtimeDirectory").toString();
+    }
     worker_.start(data.value("python").toString(),arguments);timer_.start();emit status(tr("AI 字幕：正在检查推理后端与实时性能…"));return {};
 }
 void PlayerAiSubtitles::stop(){
@@ -46,15 +61,19 @@ void PlayerAiSubtitles::stop(){
 }
 void PlayerAiSubtitles::pump(){
     if(!player_)return;const auto snap=player_->snapshot();
-    if(!stamped_ || generation_!=snap.timelineGeneration){generation_=snap.timelineGeneration;stamped_=true;captionUntil_=0;emit caption({});}
+    if(!stamped_ || generation_!=snap.timelineGeneration){generation_=snap.timelineGeneration;stamped_=true;flushed_=false;captionUntil_=0;emit caption({});}
     if(captionUntil_ && snap.position100ns>captionUntil_){captionUntil_=0;emit caption({});}
-    if(snap.state!=ThreeFpState::Playing || worker_.state()!=QProcess::Running)return;
+    if((snap.state!=ThreeFpState::Playing && snap.state!=ThreeFpState::Ended) || worker_.state()!=QProcess::Running)return;
     for(int n=0;n<16;++n){
         AudioTapBlock block;const auto pcm=player_->readAudioTap(block);if(pcm.isEmpty())break;
         if(worker_.bytesToWrite()>512*1024)continue;
         QJsonArray positions;for(unsigned c=0;c<qMin(block.channels,24u);++c)positions.append(block.positions[c]);
         const auto meta=QJsonDocument(QJsonObject{{"generation",double(block.generation)},{"position100ns",double(block.position100ns)},{"frames",int(block.frames)},{"sampleRate",int(block.sampleRate)},{"channels",int(block.channels)},{"sampleFormat",block.sampleFormat},{"positions",positions},{"bytes",pcm.size()}}).toJson(QJsonDocument::Compact);
         QByteArray packet(4,Qt::Uninitialized);qToLittleEndian<quint32>(meta.size(),packet.data());packet+=meta;packet+=pcm;worker_.write(packet);
+    }
+    if(snap.state==ThreeFpState::Ended && !flushed_){
+        const auto meta=QJsonDocument(QJsonObject{{"generation",double(generation_)},{"flush",true},{"bytes",0}}).toJson(QJsonDocument::Compact);
+        QByteArray packet(4,Qt::Uninitialized);qToLittleEndian<quint32>(meta.size(),packet.data());packet+=meta;worker_.write(packet);flushed_=true;
     }
 }
 void PlayerAiSubtitles::receive(){

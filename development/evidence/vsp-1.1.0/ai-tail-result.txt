@@ -1,0 +1,20 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::realAiSubtitlePackage() AI integration: "AI 字幕：正在检查推理后端与实时性能…"
+QINFO  : TestPlayer::realAiSubtitlePackage() AI integration: "[asr-worker] engine=onnx model=C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\ai-subtitles-pack\\models runtime=(??)\r\n"
+QINFO  : TestPlayer::realAiSubtitlePackage() AI integration: "loading: engine=onnx device=cpu 候选=cpu threads=6"
+QINFO  : TestPlayer::realAiSubtitlePackage() [DEBUG-ai110] 3 10200283 50800000 12 1
+QINFO  : TestPlayer::realAiSubtitlePackage() [DEBUG-ai110] 3 20254666 50800000 23 1
+QINFO  : TestPlayer::realAiSubtitlePackage() AI integration: "[asr-worker] δ???????????model_dir ??? selftest.wav ?? selftest.txt???????????\r\n[asr-worker] cpu ?????δ???????????????\r\n[asr-worker] ready; reading frames from stdin??δ?????????????????\r\n[asr-worker] generation -> 1; buffer cleared\r\n"
+QINFO  : TestPlayer::realAiSubtitlePackage() AI integration: "ready: window=5.0s step=5.0s device=cpu provider=cpu threads=6 lang=auto [cpu 无需确认]"
+QINFO  : TestPlayer::realAiSubtitlePackage() [DEBUG-ai110] 3 30221221 50800000 33 1
+QINFO  : TestPlayer::realAiSubtitlePackage() [DEBUG-ai110] 3 40385197 50800000 44 1
+QINFO  : TestPlayer::realAiSubtitlePackage() [DEBUG-ai110] 3 50200826 50800000 55 1
+QINFO  : TestPlayer::realAiSubtitlePackage() AI integration: "[asr-worker] final [0.09s..5.08s] lang=? rtf=0.144 :: ?i????\\?????U???????碌??????????????????????\r\n"
+QINFO  : TestPlayer::realAiSubtitlePackage() AI integration: "[asr-worker] stdin EOF; shutting down\r\n"
+QINFO  : TestPlayer::realAiSubtitlePackage() AI integration: "AI 字幕性能：RTF 0.14（≤1 可跟上实时）。"
+PASS   : TestPlayer::realAiSubtitlePackage()
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 3 passed, 0 failed, 0 skipped, 0 blacklisted, 7150ms
+********* Finished testing of TestPlayer *********

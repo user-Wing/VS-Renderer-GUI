@@ -105,7 +105,7 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             if(definition->id=="anime4k" && id=="scale")outputScale=combo;
             combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
             combo->setMinimumContentsLength(8);
-            if(combo!=shaderMode)combo->addItems(parameter.choices);
+            if(combo!=shaderMode){combo->addItems(parameter.choices);if(combo==shaderCategory){const int custom=combo->findText("自定义 GLSL");if(custom>=0)combo->setItemText(custom,"自定义 GLSL/HLSL");}}
             if(combo==shaderMode){combo->setEditable(true);combo->setInsertPolicy(QComboBox::NoInsert);combo->completer()->setCompletionMode(QCompleter::PopupCompletion);combo->completer()->setFilterMode(Qt::MatchContains);combo->completer()->setCaseSensitivity(Qt::CaseInsensitive);}
             int popupWidth = 0;
             for (const auto &item : parameter.choices) popupWidth = std::max(popupWidth, combo->fontMetrics().horizontalAdvance(item) + 48);
@@ -132,8 +132,8 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
                     [this, id, path] { emit parameterChanged(id, path->text()); });
             connect(browse, &QPushButton::clicked, this, [this, id, path] {
                 const QString selected = QFileDialog::getOpenFileName(
-                    this, QStringLiteral("选择 libplacebo GLSL"), path->text(),
-                    QStringLiteral("mpv shader (*.glsl *.hook);;所有文件 (*.*)"));
+                    this, QStringLiteral("选择 GLSL/HLSL 着色器"), path->text(),
+                    QStringLiteral("Shaders (*.glsl *.hook *.hlsl);;所有文件 (*.*)"));
                 if (!selected.isEmpty()) {
                     path->setText(selected);
                     emit parameterChanged(id, selected);
@@ -147,7 +147,7 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         }
         auto *label = new QLabel(parameter.label, this);
         label->setObjectName(QStringLiteral("parameterLabel_") + id);
-        label->setWordWrap(true);
+        label->setWordWrap(false);
         label->setMinimumWidth(0);
         label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
         editor->setObjectName(QStringLiteral("parameter_") + id);
@@ -167,8 +167,8 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         const auto populate=[shaderMode,shaderCategory,choices](const QString &selected) {
             const QSignalBlocker blocker(shaderMode);shaderMode->clear();
             for(const auto &path:choices){
-                if(shaderCategory->currentText()!="全部" && FilterCatalog::shaderCategory(path)!=shaderCategory->currentText())continue;
-                QString label=QFileInfo(path).fileName();const auto hardware=FilterCatalog::shaderHardwareLabel(path);
+                if(shaderCategory->currentText()!="全部" && FilterCatalog::shaderCategory(path)!=(shaderCategory->currentText()=="自定义 GLSL/HLSL"?QString("自定义 GLSL"):shaderCategory->currentText()))continue;
+                QString label=path=="自定义 GLSL"?QString("自定义 GLSL/HLSL"):QFileInfo(path).fileName();const auto hardware=FilterCatalog::shaderHardwareLabel(path);
                 if(!hardware.isEmpty())label+=" · "+hardware;
                 if(path.contains('/'))label+=" · "+path.section('/',1,1)+" / "+QFileInfo(path).dir().dirName();
                 shaderMode->addItem(label,path);shaderMode->setItemData(shaderMode->count()-1,path+"\n"+FilterCatalog::shaderCategory(path)+"\n"+hardware,Qt::ToolTipRole);
@@ -177,7 +177,7 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             shaderMode->setToolTip(shaderMode->currentData(Qt::ToolTipRole).toString());shaderMode->lineEdit()->setCursorPosition(0);
         };
         const auto selected=node->parameters.value("shader").toString().isEmpty()?node->parameters.value("mode").toString():QString("自定义 GLSL");
-        if(shaderCategory->currentText()!="全部" && shaderCategory->currentText()!=FilterCatalog::shaderCategory(selected)){const QSignalBlocker blocker(shaderCategory);shaderCategory->setCurrentText(FilterCatalog::shaderCategory(selected));}
+        if(shaderCategory->currentText()!="全部" && shaderCategory->currentText()!=FilterCatalog::shaderCategory(selected)){const QSignalBlocker blocker(shaderCategory);shaderCategory->setCurrentText(FilterCatalog::shaderCategory(selected)=="自定义 GLSL"?QString("自定义 GLSL/HLSL"):FilterCatalog::shaderCategory(selected));}
         populate(selected);
         shaderPath->parentWidget()->setEnabled(selected=="自定义 GLSL");
         const auto select=[this,shaderPath,shaderMode] {
@@ -189,7 +189,10 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         };
         connect(shaderMode,qOverload<int>(&QComboBox::activated),this,[select](int){select();});
         connect(shaderCategory,&QComboBox::currentTextChanged,this,[populate,select,shaderMode](const QString &){const auto selected=shaderMode->currentData().toString();populate(selected);select();});
-        connect(shaderPath,&QLineEdit::textChanged,this,[shaderCategory](const QString &path){if(!path.isEmpty())shaderCategory->setCurrentText("自定义 GLSL");});
+        connect(shaderPath,&QLineEdit::textChanged,this,[shaderCategory](const QString &path){if(!path.isEmpty())shaderCategory->setCurrentText("自定义 GLSL/HLSL");});
+        auto *nativeCheck=findChild<QCheckBox *>("parameter_hlsl");
+        const auto updateNative=[shaderPath,nativeCheck]{const bool native=QFileInfo(shaderPath->text()).suffix().compare("hlsl",Qt::CaseInsensitive)==0;nativeCheck->setEnabled(!native);if(native)nativeCheck->setChecked(true);};
+        connect(shaderPath,&QLineEdit::textChanged,this,[updateNative]{updateNative();});updateNative();
         const auto updateOutput=[this,outputMode,outputScale]{const bool resolution=outputMode->currentText()=="指定分辨率";outputScale->setEnabled(!resolution);shaderWidth_->setEnabled(resolution);shaderHeight_->setEnabled(resolution);keepAspect_->setEnabled(resolution);};
         updateOutput();connect(outputMode,&QComboBox::currentTextChanged,this,[updateOutput](const QString &){updateOutput();});
         connect(keepAspect_,&QCheckBox::toggled,this,[this](bool enabled){if(enabled)setInputSize(inputSize_);});

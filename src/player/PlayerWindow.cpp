@@ -1,4 +1,12 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerShortcuts.h"
+#include <QClipboard>
+#include <QMimeData>
+#include <QBuffer>
+#include <QKeySequence>
+#include <QImageReader>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include "player/PlayerAiSubtitles.h"
 #include "bluray/BlurayCatalog.h"
 #include "player/PlayerInfoPanel.h"
@@ -9,6 +17,8 @@
 #include "backend/LavPlayback.h"
 #include "backend/FrameTimeline.h"
 #include "graph/PresetStore.h"
+#include "graph/HlslPreview.h"
+#include "render/ShaderPackage.h"
 #include "ui/PreviewPane.h"
 #include "player/PlayerSubtitles.h"
 #include "player/PlayerNetworkInput.h"
@@ -127,6 +137,12 @@ PlayerWindow::PlayerWindow() {
 #endif
     const QVariantMap defaults{{"basic/language","zh_CN"},{"basic/autoplay",true},{"theme/chineseFont","Microsoft YaHei UI"},{"theme/latinFont","Comic Sans MS"},{"theme/background","#202124"},{"theme/opacity",100},{"playback/remember",true},{"playback/multithread",true},{"playback/arrows","seconds"},{"playback/ctrlSeconds",10},{"playback/ctrlAltSeconds",60},{"cache/path",QString()},{"decode/video",settings_->value("player/core","3FP")},{"decode/audio",settings_->value("player/core","3FP")},{"player/renderer","VS"},{"player/animeStage",0},{"player/speed",1.0},{"player/volume",100},{"player/muted",false},{"performance/predecode",true},{"performance/cpu",100},{"performance/gpu",100},{"performance/ram",50},{"performance/vram",50},{"performance/frames",8},{"performance/resizeBeforeEnhance",false},{"player/wheel","volume"},{"decode/mode",2},{"decode/output",QString()},{"render/upscale",4},{"render/downscale",4},{"render/antiring",true},{"subtitle/visible",true},{"subtitle/style/font","Comic Sans MS"},{"subtitle/style/size",36},{"subtitle/style/color","#ffffff"},{"subtitle/style/outlineColor","#000000"},{"subtitle/style/shadowColor","#000000"},{"subtitle/style/outline",2},{"subtitle/style/shadow",2},{"subtitle/style/alignment",2},{"subtitle/style/margin",48},{"subtitle/style/left",40},{"subtitle/style/right",40},{"subtitle/style/scaleX",100},{"subtitle/style/scaleY",100},{"subtitle/style/spacing",0}};
     for(auto it=defaults.begin();it!=defaults.end();++it)if(!settings_->contains(it.key()))settings_->setValue(it.key(),it.value());
+    if(!settings_->value("render/threeStage",false).toBool()){
+        settings_->setValue("render/upscale",settings_->value("render/d3d11Upscale",7));
+        settings_->setValue("render/secondUpscale",4);
+        settings_->setValue("render/downscale",settings_->value("render/d3d11Downscale",settings_->value("render/downscale",4)));
+        settings_->setValue("render/threeStage",true);
+    }
     if(settings_->value("color/engine",0).toInt()==2)settings_->setValue("color/engine",0);
 #ifdef VSR_LITE_PLAYER
     if (newConfiguration) {
@@ -145,7 +161,7 @@ PlayerWindow::PlayerWindow() {
     if(settings_->value("render/anime4kFast",false).toBool())settings_->setValue("player/animeStage",1);
     settings_->remove("render/anime4kFast");
     const QStringList nativeAnimeFiles{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
-    settings_->setValue("player/preset",QDir(PresetStore::directory()).filePath("builtin/"+nativeAnimeFiles[std::clamp(settings_->value("player/animeStage",5).toInt(),0,7)]));
+    settings_->setValue("player/preset",QDir(PresetStore::directory()).filePath("builtin/"+(settings_->value("player/animeAuto",false).toBool()?QString("Anime.vpy"):nativeAnimeFiles[std::clamp(settings_->value("player/animeStage",5).toInt(),0,7)])));
     settings_->sync();
 #endif
     preset_=settings_->value("player/preset").toString();
@@ -156,7 +172,7 @@ PlayerWindow::PlayerWindow() {
 #endif
     interpolationAuto_=interpolationStage()>=0 && settings_->value("player/interpolationAuto",false).toBool();
     subtitleVisible_=settings_->value("subtitle/visible",true).toBool();
-    setWindowTitle("VS Player"); resize(1280, 760); setMinimumSize(1000, 500); setAcceptDrops(true);
+    setWindowTitle("VS Player"); resize(1280, 760); setMinimumSize(420, 160); setAcceptDrops(true);
     setStyleSheet(QStringLiteral(
         "QMainWindow,QDialog,QWidget{background:#202124;color:#e8eaed;}"
         "QPushButton,QComboBox,QLineEdit,QDoubleSpinBox{background:#303238;border:1px solid #50535a;border-radius:3px;padding:4px;}"
@@ -197,28 +213,32 @@ PlayerWindow::PlayerWindow() {
     connect(resetZoom_,&QPushButton::clicked,this,[this]{pane_->adoptView(1,0,0);emit pane_->viewChanged(1,0,0);});
     timeline_ = new ChapterTimeline(this); timeline_->setObjectName("playerTimeline");
     controls_=new PlayerChromePanel(central);controls_->setObjectName("playerControls");auto *transport=new QVBoxLayout(controls_);transport->setContentsMargins(0,0,0,0);transport->setSpacing(4);layout->addWidget(controls_);buildTransport(transport);
-    message_ = new QLabel(controls_); message_->setObjectName("playerStatus"); message_->setContentsMargins(8, 0, 8, 0); message_->setText(tr("就绪")); transport->addWidget(message_);
+    message_ = new QLabel(controls_); message_->setObjectName("playerStatus"); message_->setContentsMargins(8, 0, 8, 0); transport->addWidget(message_);message_->hide();statusTimer_=new QTimer(this);statusTimer_->setSingleShot(true);statusTimer_->setInterval(3000);connect(statusTimer_,&QTimer::timeout,message_,&QWidget::hide);
     buildPlaylist(central);
     imageTools_=new PlayerImageTools(pane_,central);layout->insertWidget(0,imageTools_);
     connect(imageTools_,&PlayerImageTools::errorOccurred,this,&PlayerWindow::setError);
-    connect(imageTools_,&PlayerImageTools::statusChanged,message_,&QLabel::setText);
+    connect(imageTools_,&PlayerImageTools::statusChanged,this,&PlayerWindow::showStatus);
     connect(imageTools_,&PlayerImageTools::imageRemoved,this,[this](const QString &path){
         if(source_!=path)return;
         const int index=files_.indexOf(path);files_.removeAll(path);
         if(!files_.isEmpty()){openFile(files_[std::clamp(index,0,int(files_.size())-1)]);return;}
-        imageLoader_->cancel();source_.clear();imageMode_=ready_=false;pane_->setImage({});pane_->setSurfaceActive(false);pane_->setPlaceholderText(tr("图片已移入回收站"));imageTools_->setSource({});infoVisible_=false;info_->hide();resetZoom_->hide();setWindowTitle("VS Player");message_->setText(tr("图片已移入回收站"));updatePlaylist();
+        imageLoader_->cancel();source_.clear();imageMode_=ready_=false;pane_->setImage({});pane_->setSurfaceActive(false);pane_->setPlaceholderText(tr("图片已移入回收站"));imageTools_->setSource({});infoVisible_=false;info_->hide();resetZoom_->hide();setWindowTitle("VS Player");showStatus(tr("图片已移入回收站"));updatePlaylist();
     });
     imageLoader_=std::make_unique<PlayerImage>();
+    imageAnimation_=new QTimer(this);imageAnimation_->setInterval(100);connect(imageAnimation_,&QTimer::timeout,this,[this]{if(!imageMode_ || !playing_ || imagePages_<2 || imagePagePending_)return;imagePage_=(imagePage_+1)%imagePages_;imagePagePending_=true;imageLoader_->openPage(source_,imagePage_);});
+
     connect(imageLoader_.get(),&PlayerImage::loaded,this,[this](const QImage &image){
         if(!imageMode_)return;
+        imagePagePending_=false;setProperty("imageAnimationPage",imagePage_);
+        if(imagePages_>1 && playing_ && !imageAnimation_->isActive())imageAnimation_->start();
         clip_.width=image.width();clip_.height=image.height();ready_=true;
         pane_->setImage(image);pane_->surface()->setFocus();
         imageTools_->setReady(true);
         rendererBadge_->setText("Image");videoBadge_->setText(QFileInfo(source_).suffix().toUpper());audioBadge_->setText("—");decoderBadge_->setText(QFileInfo(source_).suffix().compare("avif",Qt::CaseInsensitive)==0?"libavif / dav1d":"Image");hdrBadge_->setText("—");
-        message_->setText(tr("图片：%1 × %2 · 左右键切图 · 滚轮缩放").arg(image.width()).arg(image.height()));
+        showStatus(tr("图片：%1 × %2 · 左右键切图 · 滚轮缩放").arg(image.width()).arg(image.height()));
         updateInfo();
     });
-    connect(imageLoader_.get(),&PlayerImage::failed,this,[this](const QString &error){if(imageMode_){const auto message=tr("图片解码失败：%1").arg(error);setError(message);pane_->setPlaceholderText(message);}});
+    connect(imageLoader_.get(),&PlayerImage::failed,this,[this](const QString &error){if(imageMode_){imageAnimation_->stop();imagePagePending_=false;playing_=false;const auto message=tr("图片解码失败：%1").arg(error);setError(message);pane_->setPlaceholderText(message);}});
     chromeTimer_=new QTimer(this);chromeTimer_->setInterval(100);connect(chromeTimer_,&QTimer::timeout,this,&PlayerWindow::updateChrome);chromeTimer_->start();
     connect(clock_.get(), &ThreeFpPlayer::errorOccurred, this, &PlayerWindow::setError);
     connect(output_.get(), &ThreeFpPlayer::errorOccurred, this, &PlayerWindow::setError);
@@ -230,6 +250,12 @@ PlayerWindow::PlayerWindow() {
     connect(server_.get(), &VapourSynthFrameServer::errorOccurred, this, [this](const QString &error) { if(imageMode_ || madvrMode() || direct_) return; if(advanceInterpolation())return; ready_ = pending_ = false; autoPlay_ = false; clock_->pause(); if (lav_) lav_->pause(); playing_ = false; setError(error); });
     connect(server_.get(), &VapourSynthFrameServer::scriptLoaded, this, [this](const VapourSynthClipInfo &clip, const VapourSynthClipInfo &) {
         if(imageMode_ || madvrMode() || direct_) return;
+        if(!hlslParameters_.isEmpty()){
+            const auto size=hlslOutputSize(hlslParameters_,QSize(clip.width,clip.height));
+            if(size.isEmpty() || !hlslAspectCompatible(hlslParameters_,QSize(clip.width,clip.height),size) || !output_->setCustomShader(customShaderPackage_,size.width(),size.height())){
+                hlslFailed_=true;hlslFallback_=tr("HLSL 输出不兼容，已回退原 VPY。");customShaderPackage_.clear();hlslParameters_.clear();refreshScript();return;
+            }
+        }
         clip_ = clip; ready_ = true; pending_ = false; requested_ = lastFrame_ = -1; pane_->setVideoSize(QSize(clip.width, clip.height)); pane_->setSurfaceActive(true); if(resumeAt_<0)requestFrame(frameAtPosition100ns(position(), clip.totalFrames, clip.fpsNumerator, clip.fpsDenominator));
     });
     connect(server_.get(), &VapourSynthFrameServer::frameReady, this, [this](const VapourSynthFrame &frame) {
@@ -240,31 +266,40 @@ PlayerWindow::PlayerWindow() {
         const double milliseconds=frameTimer_.isValid()?frameTimer_.elapsed():0;
         frameMilliseconds_=submittedFrames_?frameMilliseconds_*.9+milliseconds*.1:milliseconds;
         ++submittedFrames_; displayedFrame_=frame;
-        if (!output_->submitFrame(frame)) { setError(output_->lastError()); return; }
+        if(!customShaderPackage_.isEmpty() && (frame.colorTransfer==16 || frame.colorTransfer==18 || frame.colorMatrix==9 || frame.colorMatrix==10 || (frame.colorPrimaries!=1 && frame.colorPrimaries!=2))){
+            hlslFailed_=true;hlslFallback_=tr("当前色彩设置不兼容 HLSL 预览，已回退 GLSL。");customShaderPackage_.clear();hlslParameters_.clear();refreshScript();return;
+        }
+        if (!output_->submitFrame(frame)) {
+            if(!customShaderPackage_.isEmpty()){hlslFailed_=true;hlslFallback_=tr("HLSL 执行失败，已回退 GLSL：%1").arg(output_->lastError());customShaderPackage_.clear();hlslParameters_.clear();refreshScript();return;}
+            setError(output_->lastError());return;
+        }
         lastFrame_ = static_cast<int>(frame.frameIndex);
         preindexDisc();
-        message_->clear();
+        showStatus(hlslFallback_.isEmpty()?tr("已加载：%1").arg(QFileInfo(source_).fileName()):hlslFallback_);
         if (autoPlay_ && seekUiTarget_<0 && (lav_ || clock_->snapshot().state == ThreeFpState::Ready || clock_->snapshot().state == ThreeFpState::Paused)) { togglePlayback(); if (playing_) autoPlay_ = false; }
         const int target=frameAtPosition100ns(position(),clip_.totalFrames,clip_.fpsNumerator,clip_.fpsDenominator);
         if(playing_ && frame.frameIndex+1<clip_.totalFrames && frame.frameIndex<target)requestFrame(target);
     });
     connect(pane_, &PreviewPane::viewChanged, this, [this](float z, float x, float y) { resetZoom_->setVisible(z!=1 || x!=0 || y!=0);if(resetZoom_->isVisible())resetZoom_->raise();if(imageMode_){pane_->adoptView(z,x,y);updateInfo();return;}suspendQualityCheck();if(!madvrMode()) (direct_?clock_:output_)->setView(z, x, y); });
     connect(pane_, &PreviewPane::redrawRequested, this, [this] { if(imageMode_){pane_->surface()->update();return;}if(madvrMode()) { if(lav_) { const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height()); } } else (direct_?clock_:output_)->redraw();
-        if(ready_)suspendQualityCheck();if(!direct_ && !profile().isEmpty() && interpolationStage()<0 && superInterpolationStage()<0 && ready_ && !networkSource())profileResize_->start(); });
+        if(ready_)suspendQualityCheck();if((!direct_ || (nativeAnime_ && qualityStage_!=4 && qualityStage_!=5)) && !profile().isEmpty() && interpolationStage()<0 && superInterpolationStage()<0 && ready_ && !networkSource())profileResize_->start(); });
     ensureProfiles();
+    nativeAnime_=nativeBuiltinCompatible();
+    const auto customShader=settings_->value("render/customShader").toString();
+    if(!customShader.isEmpty()){const auto package=ShaderPackage::prepare(customShader,QDir(customShaderDirectory()).filePath("cache"));customShaderPackage_=package.packagePath;if(!package.error.isEmpty())setError(package.error);else {preset_.clear();nativeAnime_=false;qualityStage_=5;}}
     profileResize_=new QTimer(this);profileResize_->setSingleShot(true);profileResize_->setInterval(350);
-    connect(profileResize_,&QTimer::timeout,this,[this]{if(!direct_ && !source_.isEmpty() && !profile().isEmpty() && !media_.isEmpty() && profileTarget()!=profileSize_) {resumeAt_=position();autoPlay_=playing_ || autoPlay_;refreshScript();}});
+    connect(profileResize_,&QTimer::timeout,this,[this]{if((!direct_ || (nativeAnime_ && qualityStage_!=4 && qualityStage_!=5)) && !source_.isEmpty() && !profile().isEmpty() && !media_.isEmpty() && (nativeAnime_ || profileTarget()!=profileSize_)) {resumeAt_=position();autoPlay_=playing_ || autoPlay_;refreshScript();}});
     applySettings(false);
     if(overlayChrome_)resize(width(),height()+controls_->sizeHint().height());
     qApp->installEventFilter(this);
     timer_ = new QTimer(this); timer_->setTimerType(Qt::PreciseTimer);timer_->setInterval(interpolationStage()>=0?4:10); connect(timer_, &QTimer::timeout, this, &PlayerWindow::updateState); timer_->start();
 }
-PlayerWindow::~PlayerWindow() { if(aiSubtitles_)aiSubtitles_->stop();qApp->removeEventFilter(this); timer_->stop();stopDiscIndexing();timelinePreview_->stop();savePosition(); settings_->sync(); network_->cancel(); discMenu_.reset(); subtitles_.reset(); lav_.reset(); clock_->stop(); server_.reset(); network_.reset(); output_.reset(); clock_.reset(); }
+PlayerWindow::~PlayerWindow() { if(bitrateProbe_){bitrateProbe_->disconnect(this);bitrateProbe_->kill();bitrateProbe_->waitForFinished(1000);delete bitrateProbe_;bitrateProbe_=nullptr;}if(aiSubtitles_)aiSubtitles_->stop();qApp->removeEventFilter(this); timer_->stop();stopDiscIndexing();timelinePreview_->stop();savePosition(); settings_->sync(); network_->cancel(); discMenu_.reset(); subtitles_.reset(); lav_.reset(); clock_->stop(); server_.reset(); network_.reset(); output_.reset(); clock_.reset(); }
 void PlayerWindow::moveEvent(QMoveEvent *event){QMainWindow::moveEvent(event);if(chromeTimer_){layoutChrome();layoutInfoPanels();}}
 bool PlayerWindow::openFile(const QString &input) {
     if(blurayGroups_.value(input)=="menu" && !discRoot_.isEmpty()){returnToDiscMenu();return true;}
     if(discMenu_ && discMenu_->active()){discMenu_->close(discSurface_);discSurface_=nullptr;}
-    timeline_->setEnabled(true);
+    lastStatus_.clear();showStatus({});timeline_->setEnabled(true);
     decoderBadge_->setEnabled(true);decoderBadge_->setToolTip(tr("切换 3FP 硬件 / 软件解码"));
     const QUrl url(input);const bool remote=url.scheme()=="http" || url.scheme()=="https";
     const QString path=url.isLocalFile()?url.toLocalFile():remote?url.toString(QUrl::FullyEncoded):input;
@@ -282,26 +317,32 @@ bool PlayerWindow::openFile(const QString &input) {
         loadPreset(path);return true;
 #endif
     }
-    const bool image=!remote && PlayerImage::supports(path);
+    QImageReader imageProbe(remote?QString():path);
+    const bool animatedGif=!remote && suffix=="gif" && imageProbe.imageCount()>1;
+    const bool image=!remote && !animatedGif && PlayerImage::supports(path);
     if(clock_->snapshot().state==ThreeFpState::Opening){pendingMediaOpen_=path;return true;}
+    imageAnimation_->stop();imagePages_=image && (suffix=="tif" || suffix=="tiff")?qMax(1,imageProbe.imageCount()):1;imagePage_=0;imagePagePending_=false;
     pendingMediaOpen_.clear();
     timelinePreview_->stop();timelineTarget_=timelineSeekTarget_=-1;timelineDragging_=timelineResume_=timelineWaiting_=false;
     seekUiTarget_=queuedSeek_=-1;
-    if (suffix!="mpls" && !playerAudioExtensions().contains(suffix) && !image && !remote && !madvrMode() && !preset_.isEmpty() && profile()!="Realistic" && fixedAnimeStage()<4 && server_->initializing()) { deferred_ = path; deferredSubtitle_.clear();deferredAudio_.clear(); message_->setText(tr("正在初始化 VS，完成后自动打开。")); return true; }
+    if (suffix!="mpls" && !playerAudioExtensions().contains(suffix) && !image && !remote && !madvrMode() && !preset_.isEmpty() && !nativeBuiltinCompatible() && customShaderPackage_.isEmpty() && profile()!="Realistic" && fixedAnimeStage()<4 && server_->initializing()) { deferred_ = path; deferredSubtitle_.clear();deferredAudio_.clear(); showStatus(tr("正在初始化 VS，完成后自动打开。")); return true; }
+    if(bitrateProbe_){bitrateProbe_->disconnect(this);bitrateProbe_->kill();bitrateProbe_->deleteLater();bitrateProbe_=nullptr;}decodeBurstFrom_=decodeBurstUntil_=0;decodePoolBytes_=decodePoolFrames_=0;bitrateTimer_.invalidate();
     stopDiscIndexing();discIndexParts_.clear();
     if(aiSubtitles_)aiSubtitles_->stop();
     savePosition(); imageLoader_->cancel();deferred_.clear();deferredAudio_.clear();network_->cancel(); server_->unloadScript();
     imageMode_=image;audioMode_=!image && playerAudioExtensions().contains(suffix);audioMetadataLoaded_=false;audioMetadata_={};setProperty("audioOnly",audioMode_);setProperty("lyricCount",0);lyricLabel_->clear();lyricLabel_->hide();pane_->setImage({});pane_->adoptView(1,0,0);resetZoom_->hide();
+    minimalMode_=audioMode_ || (!isFullScreen() && width()<950);updateMinimalControls();
     imageTools_->setSource(image?QFileInfo(path).absoluteFilePath():QString());
-    for(auto *control:QList<QWidget *>{timeline_,play_,time_,frame_,rate_,speedButton_})control->setEnabled(!image);
+    for(auto *control:QList<QWidget *>{timeline_,play_,time_,frame_,rate_,speedButton_})control->setEnabled(!image || control==play_ && imagePages_>1);
     lav_.reset(); clock_->pause(); playing_ = false; autoPlay_ = settings_->value("basic/autoplay",true).toBool(); ready_ = pending_ = seekPending_ = rateApplied_ = false;
     if(interpolationAuto_ && interpolationStages(settings_->value("player/interpolationRenderer",0).toInt()).isEmpty())interpolationAuto_=false;
     if(interpolationAuto_){const QStringList stages{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};preset_=QDir(PresetStore::directory()).filePath("builtin/"+stages[std::clamp(interpolationStages(settings_->value("player/interpolationRenderer",0).toInt()).value(0,"3").toInt(),0,3)]);if(settings_->value("player/interpolationRenderer",0).toInt()==1)preset_.replace(".vpy","-D3D11.vpy");}
     frameEditPending_=false;frameJumpTarget_=-1;profileFallback_=false;profileStartup_.invalidate();
+    hlslFailed_=false;nativeAnime_=nativeBuiltinCompatible();
     manualFrame_ = -1;clip_={};positionRestored_=false;qualityStage_=initialQualityStage();resumeAt_=settingsPosition_=-1;profileSize_={};resetStatistics(); displayedFrame_={};
     const auto actual=remote?path:QFileInfo(path).absoluteFilePath();
     const auto mounted=actual==source_?externalSubtitle_:QString();
-    externalSubtitle_.clear();externalSecondarySubtitle_.clear();externalAudio_.clear();pendingExternalAudio_.clear();matchedTracks_=false;audioDelay_=0; primarySubtitle_=secondarySubtitle_=-1;
+    externalSubtitle_.clear();externalSecondarySubtitle_.clear();externalAudio_.clear();pendingExternalAudio_.clear();pendingAudioStream_=-2;matchedTracks_=false;audioDelay_=0; primarySubtitle_=secondarySubtitle_=-1;
     subtitles_->load(0,{},-1,{},{});subtitles_->load(1,{},-1,{},{});
     externalChapters_={};externalSubtitleTracks_[0]={};externalSubtitleTracks_[1]={};externalSubtitleIndex_[0]=externalSubtitleIndex_[1]=-1;audioSubtitle_->hide();
     source_ = actual; media_ = {}; setWindowTitle("VS Player — " + (remote?url.fileName():QFileInfo(path).fileName()));
@@ -319,7 +360,7 @@ bool PlayerWindow::openFile(const QString &input) {
     }
     fileIndex_ = files_.indexOf(source_);
     updatePlaylist();
-    if(remote) {mediaInput_.clear();clock_->stop();network_->open(url);message_->setText(tr("正在解析视频链接…"));return true;}
+    if(remote) {mediaInput_.clear();clock_->stop();network_->open(url);showStatus(tr("正在解析视频链接…"));return true;}
     mediaInput_=source_;
     if(suffix=="mpls"){
         if(QDir(QFileInfo(path).absolutePath()).dirName().compare("PLAYLIST",Qt::CaseInsensitive)!=0){setError(tr("MPLS 须位于 BDMV/PLAYLIST 中"));return false;}
@@ -328,7 +369,7 @@ bool PlayerWindow::openFile(const QString &input) {
         if(playlists.size()!=1)return openBluRay(root);
         QString error;mediaInput_=BlurayCatalog::playbackInput(path,&error);if(mediaInput_.isEmpty()){setError(error);return false;}
     }
-    if(image){clock_->stop();output_->stop();profileResize_->stop();autoPlay_=false;playing_=false;play_->setText(QStringLiteral("▶"));pane_->setSurfaceActive(false);pane_->setPlaceholderText(tr("正在解码图片…"));timeline_->setValue(0);timeline_->setProperty("chapters",QJsonArray());timeline_->setProperty("duration",0);time_->setText("00:00:00.000");frame_->setText("0");duration_->setText("/ —");message_->setText(tr("正在解码图片…"));imageLoader_->open(source_);return true;}
+    if(image){clock_->stop();output_->stop();profileResize_->stop();playing_=autoPlay_ && imagePages_>1;autoPlay_=false;play_->setText(playing_?QStringLiteral("Ⅱ"):QStringLiteral("▶"));pane_->setSurfaceActive(false);pane_->setPlaceholderText(tr("正在解码图片…"));timeline_->setValue(0);timeline_->setProperty("chapters",QJsonArray());timeline_->setProperty("duration",0);time_->setText("00:00:00.000");frame_->setText("0");duration_->setText("/ —");showStatus(tr("正在解码图片…"));imageLoader_->open(source_);return true;}
     return openMedia();
 }
 bool PlayerWindow::openMedia() {
@@ -337,7 +378,8 @@ bool PlayerWindow::openMedia() {
 #else
     setDirectMode(mediaInput_.startsWith("bluray:") || networkSource() || (!madvrMode() && (preset_.isEmpty() || (!profile().isEmpty() && interpolationStage()<0) || playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower()))));
 #endif
-    clock_->setClockOnly(audioMode_ || (!direct_ && !madvrMode()));
+    applyScaling();
+    clock_->setClockOnly(minimalMode_ || audioMode_ || (!direct_ && !madvrMode()));
     if (!clock_->openFile(mediaInput_)) { setError(clock_->lastError()); return false; }
     applyBlurayMetadata();
     lavVideo_ = !audioMode_ && !networkSource() && (madvrMode() || (!direct_ && settings_->value("decode/video",settings_->value("player/core","3FP")).toString()=="LAV"));
@@ -353,8 +395,8 @@ bool PlayerWindow::openMedia() {
         server_->unloadScript();ready_=true; output_->stop(); pane_->setSurfaceActive(true);
         const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height());
         if(speed_!=1) { lav_->setRate(speed_); lav_->volume(0,true);clock_->setMuted(mute_->isChecked()); }
-        rendererBadge_->setText("madVR");message_->setText(tr("madshi video renderer · LAV DirectShow 输入"));
-    } else { rendererBadge_->setText(direct_?"3FP":"VS"); if(direct_) {ready_=true;pane_->setSurfaceActive(true);if(preset_.isEmpty())message_->clear();} else refreshScript(); } return true;
+        rendererBadge_->setText("madVR");showStatus(tr("madshi video renderer · LAV DirectShow 输入"));
+    } else { rendererBadge_->setText(direct_?"3FP":"VS"); if(direct_) {ready_=true;pane_->setSurfaceActive(!minimalMode_);if(preset_.isEmpty())showStatus({});} else refreshScript(); } return true;
 }
 void PlayerWindow::refreshScript() {
     if ((discMenu_ && discMenu_->active()) || imageMode_ || audioMode_ || source_.isEmpty() || mediaInput_.isEmpty() || (madvrMode() && !networkSource())) return;
@@ -368,26 +410,54 @@ void PlayerWindow::refreshScript() {
     bool high=false;for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()=="video")high=stream.value("width").toInt()>=3840 || stream.value("height").toInt()>=2160;}
     bool audioOnly=playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower());
     if(!audioMode_ && !media_.value("streams").toArray().isEmpty()){audioOnly=true;for(const auto &entry:media_.value("streams").toArray())if(entry.toObject().value("type").toString()=="video")audioOnly=false;}
+    if(!hlslFailed_)hlslFallback_.clear();
+    nativeAnime_=nativeBuiltinCompatible() && !hlslFailed_;
+#ifndef VSR_LITE_PLAYER
+    const auto nativeViewport=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();
+    if(nativeAnime_ && (nativeViewport.width()>3840 || nativeViewport.height()>2160)){nativeAnime_=false;hlslFallback_=tr("超过 3840×2160 的滤镜目标保留原 GLSL 尺寸限制。");}
+    if(nativeAnime_ && (!hlslColorCompatible() || settings_->value("performance/resizeBeforeEnhance",false).toBool())){
+        nativeAnime_=false;hlslFallback_=tr("当前色彩或预缩放设置需要原 VPY，已回退 GLSL。");
+    }
+#endif
     const bool native=
 #ifdef VSR_LITE_PLAYER
         true ||
 #endif
-        mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic" || (mode=="Anime" && (!animeSourceSupported() || (high && fixedAnimeStage()<0) || qualityStage_==4 || qualityStage_==5));
-    if(native && mode=="Anime" && (qualityStage_<4 || qualityStage_>=6)
-#ifdef VSR_LITE_PLAYER
-        && !animeSourceSupported()
-#endif
-    )qualityStage_=4;
+        !settings_->value("render/customShader").toString().isEmpty() || nativeAnime_ || mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic" || (mode=="Anime" && (!animeSourceSupported() || (high && fixedAnimeStage()<0) || qualityStage_==4 || qualityStage_==5));
+    if(native && mode=="Anime" && (qualityStage_<4 || qualityStage_>=6) && (!animeSourceSupported() || (high && fixedAnimeStage()<0)))qualityStage_=4;
     setDirectMode(native);
+    rendererBadge_->setText(direct_?"3FP":"VS");
     applyScaling();
     profileSize_=profileTarget();autoPlay_=resume;
-    if(direct_) {server_->unloadScript();ready_=true;lastFrame_=-1;applyScaling();message_->clear();return;}
+    if(direct_) {
+        server_->unloadScript();ready_=true;lastFrame_=-1;applyScaling();
+        QString status=hlslFallback_;
+        if(status.isEmpty()){
+            if(!customShaderPackage_.isEmpty() && !hlslFailed_)status="HLSL";
+            else if(mode=="Anime"){status=qualityNames().value(qualityStage_);if(nativeAnime_ && qualityStage_!=4 && qualityStage_!=5)status+=" · HLSL";}
+        }
+        showStatus(status);return;
+    }
     server_->initialize();
-    if(server_->initializing()){message_->setText(tr("正在初始化 VS，完成后加载滤镜。"));return;}
+    if(server_->initializing()){showStatus(tr("正在初始化 VS，完成后加载滤镜。"));return;}
     output_->resetVideoOutput(); output_->setMuted(true);
     const auto vsSource=mediaInput_;
     const auto activePreset=mode=="Anime" && qualityStage_>=6?QDir(PresetStore::directory()).filePath(qualityStage_==6?"builtin/Anime-6-1X-Jinc.vpy":"builtin/Anime-7-1X-D3D11.vpy"):preset_;
     auto result = activePreset.isEmpty() ? VpyScriptBuilder::build(vsSource, SourceFilter::Ffms2, FilterGraph()) : PresetStore::load(activePreset, vsSource);
+    customShaderPackage_.clear();hlslParameters_.clear();output_->setCustomShader({});
+    if(settings_->value("render/hlsl",true).toBool() && !hlslFailed_ && mode.isEmpty() && !activePreset.isEmpty()){
+        QFile presetFile(activePreset);FilterGraph graph;SourceFilter filter=SourceFilter::Ffms2;
+        if(!presetFile.open(QIODevice::ReadOnly) || !PresetStore::verifiedGraph(QString::fromUtf8(presetFile.readAll()),&graph,&filter))hlslFallback_=tr("VPY 包含自定义 Python 或已修改正文，保留 VapourSynth 执行。");
+        else if(!hlslColorCompatible())hlslFallback_=tr("当前色彩设置不兼容 HLSL 预览，已回退 GLSL。");
+        else {
+            const auto plan=hlslPreviewPlan(graph);hlslFallback_=plan.error;
+            if(!plan.shaderPath.isEmpty()){
+                const auto package=ShaderPackage::prepare(plan.shaderPath,QDir(customShaderDirectory()).filePath("cache"));
+                if(package.packagePath.isEmpty())hlslFallback_=tr("HLSL 不兼容，已回退 GLSL：%1").arg(package.error);
+                else {customShaderPackage_=package.packagePath;hlslParameters_=plan.parameters;result=VpyScriptBuilder::build(vsSource,filter,plan.graph);}
+            }
+        }
+    }
     if(!mode.isEmpty())result.script.replace("core.placebo.Shader(","getattr(core, 'vsrplacebo', core.placebo).Shader(");
     if (!result.errors.isEmpty()) { setError(result.errors.join('\n')); autoPlay_ = false; return; }
     result.script.replace(QRegularExpression("(?<![A-Za-z_])(?:vs\\.)?core\\.ffms2\\.Source\\("),"_vsr_player_ffms(");
@@ -420,9 +490,10 @@ void PlayerWindow::refreshScript() {
         .arg(ffindex.isEmpty()?"False":"True",literal(ffindex),lwi.isEmpty()?"0":"1",literal(lwi),settings_->value("playback/multithread",true).toBool()?"0":"1"));
     if(!mode.isEmpty() && interpolationStage()<0)result.script.prepend(QString("_vsr_target_width = %1\n_vsr_target_height = %2\n_vsr_quality_stage = %3\n_vsr_resize_before_enhance = %4\n").arg(profileSize_.width()).arg(profileSize_.height()).arg(qualityStage_).arg(settings_->value("performance/resizeBeforeEnhance",false).toBool()?"True":"False"));
     requested_=lastFrame_=-1;profileStartup_.restart();
+    result.script.prepend("_vsr_realtime_player = True\n");
     server_->loadScript(result.script, preset_.isEmpty() ? QDir(QCoreApplication::applicationDirPath()).filePath("vpy/player.vpy") : preset_);
-    message_->setText(preset_.isEmpty() ? tr("正在加载 VS 原画播放…") : tr("正在加载 VPY：%1").arg(QFileInfo(preset_).fileName()));
-    if(QUrl(source_).scheme()=="http" || QUrl(source_).scheme()=="https")message_->setText(tr("正在读取网络视频并建立帧索引；首次索引需要扫描视频…"));
+    showStatus(preset_.isEmpty() ? tr("正在加载 VS 原画播放…") : tr("正在加载 VPY：%1").arg(QFileInfo(preset_).fileName()));
+    if(QUrl(source_).scheme()=="http" || QUrl(source_).scheme()=="https")showStatus(tr("正在读取网络视频并建立帧索引；首次索引需要扫描视频…"));
 }
 bool PlayerWindow::networkSource() const {const auto scheme=QUrl(source_).scheme();return scheme=="http" || scheme=="https";}
 void PlayerWindow::savePosition() {
@@ -431,11 +502,14 @@ void PlayerWindow::savePosition() {
     settings_->setValue("positions/"+key,clock_->snapshot().state==ThreeFpState::Ended?0:position());
 }
 void PlayerWindow::loadPreset(const QString &path) {
+    if(QFileInfo(path).fileName()=="Anime-4-Jinc.vpy")settings_->setValue("render/upscale",4);
+    if(QFileInfo(path).fileName()=="Anime-5-D3D11.vpy")settings_->setValue("render/upscale",7);
+
 #ifdef VSR_LITE_PLAYER
     const auto name=QFileInfo(path).fileName();
     const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
-    const int stage=names.indexOf(name);if(stage<0 || (stage!=4 && stage!=5 && !animeSourceSupported()))return;
-    settings_->setValue("player/animeStage",stage);
+    const int stage=names.indexOf(name);if((stage<0 && name!="Anime.vpy") || (stage!=4 && stage!=5 && !animeSourceSupported()))return;
+    if(stage>=0)settings_->setValue("player/animeStage",stage);settings_->setValue("player/animeAuto",stage<0);
 #endif
     if(madvrMode()) { const auto text=tr("工作在 madVR 模式下，VS 预设不生效。");setError(text);QToolTip::showText(pane_->mapToGlobal(QPoint(20,20)),text,pane_,QRect(),4000);return; }
     const auto previous=preset_;preset_=
@@ -445,12 +519,14 @@ void PlayerWindow::loadPreset(const QString &path) {
         path;
 #endif
     if(profile()=="Anime" && fixedAnimeStage()!=4 && fixedAnimeStage()!=5 && !animeSourceSupported()){
-        preset_=previous;message_->setText(tr("源视频分辨率≥2160p，内置 Anime4K 已禁用；手动启用请使用自定义 VapourSynth 预设。"));return;
+        preset_=previous;showStatus(tr("源视频分辨率≥2160p，内置 Anime4K 已禁用；手动启用请使用自定义 VapourSynth 预设。"));return;
     }
+    settings_->remove("render/customShader");customShaderPackage_.clear();hlslParameters_.clear();hlslFallback_.clear();hlslFailed_=false;clock_->setCustomShader({});output_->setCustomShader({});nativeAnime_=nativeBuiltinCompatible();
     interpolationAuto_=false;settings_->setValue("player/interpolationAuto",false);
     profileFallback_=false;profileStartup_.invalidate();qualityStage_=initialQualityStage();settings_->setValue("player/preset",preset_); if (!source_.isEmpty() && !imageMode_) refreshScript();
 }
 void PlayerWindow::togglePlayback() {
+    if(imageMode_ && imagePages_>1){playing_=!playing_;play_->setText(playing_?"Ⅱ":"▶");if(playing_)imageAnimation_->start();else imageAnimation_->stop();return;}
     if(discMenu_ && discMenu_->active()){playing_=!playing_;discMenu_->pause(!playing_);play_->setText(playing_?"Ⅱ":"▶");return;}
     if (imageMode_ || !ready_ || source_.isEmpty()) return;
     suspendQualityCheck();
@@ -531,7 +607,7 @@ void PlayerWindow::setRate(double rate) {
     if (lav_ && speed_ != 1) {
         const auto at = position(); const bool resume = playing_; lav_.reset(); useLav_ = lavVideo_ = lavAudio_ = false;
         clock_->setMuted(mute_->isChecked()); clock_->seek(at); clock_->setPlaybackRate(speed_); if (resume) clock_->play();
-        message_->setText(tr("不变调倍速使用 3FP / atempo；LAV 配置保留。"));
+        showStatus(tr("不变调倍速使用 3FP / atempo；LAV 配置保留。"));
     } else if (!lav_) clock_->setPlaybackRate(speed_);
 }
 void PlayerWindow::nextFile(int direction) {
@@ -546,8 +622,10 @@ void PlayerWindow::nextFile(int direction) {
     while(next>=0 && next<files_.size() && blurayGroups_.value(files_[next])=="menu")next+=direction;
     if(next>=0 && next<files_.size())openFile(files_[next]);
 }
-void PlayerWindow::setError(const QString &message) { message_->setText(message); message_->setToolTip(message);message_->show(); }
+void PlayerWindow::showStatus(const QString &message) {if(!message.isEmpty() && lastStatus_==message)return;lastStatus_=message;message_->setText(message);message_->setToolTip(message);message_->setVisible(!message.isEmpty() && !minimalMode_);if(message.isEmpty())statusTimer_->stop();else statusTimer_->start();}
+void PlayerWindow::setError(const QString &message) {showStatus(message);}
 void PlayerWindow::updateState() {
+    updateDecodeBuffer();
     if(!pendingMediaOpen_.isEmpty() && clock_->snapshot().state!=ThreeFpState::Opening){const auto path=pendingMediaOpen_;pendingMediaOpen_.clear();openFile(path);return;}
     if(discMenu_ && discMenu_->active()){
         const auto programme=discMenu_->programme();if(handoffDiscProgramme(programme))return;
@@ -563,14 +641,27 @@ void PlayerWindow::updateState() {
     }
     if(imageMode_){if(infoVisible_ && ++infoTick_>=50){infoTick_=0;updateInfo();}return;}
     if(!direct_ && profile()=="Anime" && fixedAnimeStage()<0 && lastFrame_<0 && profileStartup_.isValid() && profileStartup_.elapsed()>=8000){
-        profileStartup_.invalidate();profileFallback_=true;qualityStage_=4;refreshScript();message_->setText(tr("VS 首帧等待超过 8 秒：已切换 Jinc 直通。"));
+        profileStartup_.invalidate();profileFallback_=true;qualityStage_=4;refreshScript();showStatus(tr("VS 首帧等待超过 8 秒：已切换 Jinc 直通。"));
     }
     const auto snap = clock_->snapshot();
+    if(snap.state==ThreeFpState::Failed && direct_ && !customShaderPackage_.isEmpty() && !hlslFailed_){
+        const auto at=qMax<qint64>(0,snap.position100ns);const bool resume=playing_ || autoPlay_;
+        hlslFailed_=true;hlslFallback_=tr("当前视频不兼容，已停用自定义 HLSL：%1").arg(clock_->lastError());
+        if(!externalAudio_.isEmpty())pendingExternalAudio_=externalAudio_;
+        pendingAudioStream_=pendingExternalAudio_.isEmpty() && snap.selectedAudioStream>=0?snap.selectedAudioStream:-2;externalAudio_.clear();
+        clock_->setCustomShader({});applyScaling();
+        if(!clock_->openFile(mediaInput_)){setError(clock_->lastError());autoPlay_=playing_=false;return;}
+        resumeAt_=at;autoPlay_=resume;playing_=false;ready_=true;rateApplied_=false;setError(hlslFallback_);return;
+    }
+#ifndef VSR_LITE_PLAYER
+    if(snap.state==ThreeFpState::Failed && nativeAnime_ && !hlslFailed_){hlslFailed_=true;hlslFallback_=tr("原生 HLSL 执行失败，已回退 GLSL。");refreshScript();return;}
+#endif
     if(!pendingExternalAudio_.isEmpty() && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Playing || snap.state==ThreeFpState::Paused)){const auto path=pendingExternalAudio_;pendingExternalAudio_.clear();attachAudio(path);}
     if(direct_ && resumeAt_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)) {clock_->seek(resumeAt_);resumeAt_=-1;}
     if (snap.state == ThreeFpState::Ready && !rateApplied_) { rateApplied_ = true; clock_->setPlaybackRate(speed_); }
     if (!positionRestored_ && (snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused || snap.state == ThreeFpState::Playing)) {
         media_ = QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();
+        if(lastStatus_.isEmpty())showStatus(tr("已加载：%1").arg(QFileInfo(source_).fileName()));
         applyBlurayMetadata();
         if(!networkSource())loadAudioMetadata();
         applyAudioEffects();
@@ -580,7 +671,11 @@ void PlayerWindow::updateState() {
             if(settingsPosition_>=0){resumeAt_=settingsPosition_;settingsPosition_=-1;}
             else if(settings_->value("playback/remember",true).toBool()) {const auto key=QString::fromLatin1(QCryptographicHash::hash(source_.toUtf8(),QCryptographicHash::Sha256).toHex());const auto stored=settings_->value("positions/"+key,0).toLongLong();if(stored>0 && stored<snap.duration100ns-10000000)resumeAt_=stored;}
         }
-        if(!audioMode_ && !madvrMode() && (!profile().isEmpty() || networkSource()))refreshScript();
+        if(direct_ && profile()=="Anime" && (qualityStage_==4 || qualityStage_==5)){
+            applyScaling();
+            if(!autoPlay_ && resumeAt_<0 && !minimalMode_ && snap.state==ThreeFpState::Ready && snap.selectedVideoStream>=0 && !snap.presentedVideoFrames)seekTime(0);
+        }
+        else if(!audioMode_ && !madvrMode() && (!profile().isEmpty() || !customShaderPackage_.isEmpty() || networkSource()))refreshScript();
         else if(!media_.value("streams").toArray().isEmpty()) {bool video=false;for(const auto &entry:media_.value("streams").toArray())video|=entry.toObject().value("type").toString()=="video";if(!video){setDirectMode(true);ready_=true;server_->unloadScript();}}
         const auto streams=media_.value("streams").toArray();int audio=playerDefaultTrack(streams,"audio"),subtitle=playerDefaultTrack(streams,"subtitle");
         for(const auto &value:streams){const auto stream=value.toObject();if(property("discSelectedAudioPid").isValid() && stream.value("type").toString()=="audio" && stream.value("streamId").toInt()==property("discSelectedAudioPid").toInt())audio=stream.value("index").toInt();if(property("discSelectedSubtitlePid").isValid() && stream.value("type").toString()=="subtitle" && stream.value("streamId").toInt()==property("discSelectedSubtitlePid").toInt())subtitle=stream.value("index").toInt();}
@@ -590,6 +685,7 @@ void PlayerWindow::updateState() {
         matchExternalTracks();
         if(externalSubtitle_.isEmpty())selectSubtitle(0,subtitle);
     }
+    if(pendingAudioStream_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Playing || snap.state==ThreeFpState::Paused)){const int stream=pendingAudioStream_;pendingAudioStream_=-2;selectAudio(stream);}
     if(resumeAt_>=0 && ready_ && !direct_ && !seekPending_ && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)){const auto stored=resumeAt_;resumeAt_=-1;seekTime(stored);}
     if (autoPlay_ && !seekPending_ && seekUiTarget_<0 && (madvrMode() || direct_ || lastFrame_ >= 0) && (lav_ || snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused)) { togglePlayback(); if (playing_) autoPlay_ = false; }
     if (seekPending_ && snap.timelineGeneration != generation_ && (!direct_ || snap.selectedVideoStream<0 || (snap.presentedVideoFrames>seekPresented_ && snap.frameIndex>=0))) { seekPending_ = false; requested_ = lastFrame_ = -1;
@@ -615,6 +711,7 @@ void PlayerWindow::updateState() {
     if(!positionTimer_.isValid() || positionTimer_.elapsed()>=5000){positionTimer_.restart();savePosition();}
 }
 bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
+    if(event->type()==QEvent::Resize && object==this && !isFullScreen() && width()<950 && !minimalMode_ && !imageMode_ && controls_){QTimer::singleShot(0,this,[this]{if(width()<950 && !isFullScreen())setMinimalMode(true);});}
     if(event->type()==QEvent::Resize && object==pane_->surface() && aiCaption_){const auto size=pane_->surface()->size();aiCaption_->setGeometry(24,qMax(0,size.height()-180),qMax(1,size.width()-48),120);}
     if(object==discSurface_ && discMenu_ && discMenu_->active() &&
        (event->type()==QEvent::MouseMove || event->type()==QEvent::MouseButtonRelease)){
@@ -628,11 +725,13 @@ bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
     if(event->type()==QEvent::MouseButtonPress && frameEditPending_ && isActiveWindow() && object!=frame_)commitFrameEdit();
     if(event->type()==QEvent::Wheel)if(auto *widget=qobject_cast<QWidget *>(object);widget && (widget==pane_ || pane_->isAncestorOf(widget)) && widget!=info_ && !info_->isAncestorOf(widget) && !imageMode_ && settings_->value("player/wheel","volume").toString()=="volume") {const int delta=static_cast<QWheelEvent *>(event)->angleDelta().y();if(delta)volume_->setValue(std::clamp(volume_->value()+(delta>0?5:-5),0,100));return true;}
     if(event->type()==QEvent::ContextMenu)if(auto *widget=qobject_cast<QWidget *>(object);widget && (widget==pane_ || pane_->isAncestorOf(widget))) {showContextMenu(static_cast<QContextMenuEvent *>(event)->globalPos());return true;}
-    if (event->type() == QEvent::KeyPress && (isActiveWindow() || qApp->activeWindow()==controls_ || qApp->activeWindow()==playlistPanel_ || qApp->activeWindow()==fullscreenTitle_)) {
+    if (event->type() == QEvent::KeyPress && (isActiveWindow() || qApp->activeWindow()==controls_ || qApp->activeWindow()==playlistPanel_ || qApp->activeWindow()==fullscreenTitle_ || qApp->activeWindow()==equalizerPopup_)) {
         auto *key = static_cast<QKeyEvent *>(event);
-        if (key->key() == Qt::Key_Tab && !source_.isEmpty()) { infoVisible_ = !infoVisible_;infoFpsTimer_.invalidate(); updateInfo(); if(infoVisible_){info_->show();info_->raise();}else {static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();} return true; }
+        if(key->key()==Qt::Key_Escape && equalizerPopup_ && equalizerPopup_->isVisible()){equalizerPopup_->close();return true;}
+        if (key->key() == Qt::Key_Tab && !minimalMode_ && !source_.isEmpty()) { infoVisible_ = !infoVisible_;infoFpsTimer_.invalidate(); updateInfo(); if(infoVisible_){info_->show();info_->raise();}else {static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();} return true; }
         const bool editing = qApp->activePopupWidget() || qobject_cast<QComboBox *>(object) || qobject_cast<QComboBox *>(qApp->focusWidget()) || qobject_cast<QLineEdit *>(object) || qobject_cast<QDoubleSpinBox *>(object) || qobject_cast<QLineEdit *>(qApp->focusWidget()) || qobject_cast<QDoubleSpinBox *>(qApp->focusWidget());
         if(!editing && discMenu_ && discMenu_->active() && discMenuNavigation_){int command=-1;switch(key->key()){case Qt::Key_Return:case Qt::Key_Enter:command=0;break;case Qt::Key_Up:command=1;break;case Qt::Key_Down:command=2;break;case Qt::Key_Left:command=3;break;case Qt::Key_Right:command=4;break;case Qt::Key_Menu:command=5;break;default:break;}if(command>=0){discMenu_->navigate(command);return true;}}
+        if(!editing && handleShortcut(key))return true;
         if(!editing && (key->key()==Qt::Key_Left || key->key()==Qt::Key_Right)) {
             const int direction=key->key()==Qt::Key_Left?-1:1;
             if(imageMode_){nextFile(direction);return true;}
@@ -652,9 +751,64 @@ bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
 #endif
         }
     }
-    if(event->type()==QEvent::MouseButtonPress && object==equalizerButton_ && equalizerPopup_ && equalizerPopup_->isVisible()) {equalizerPopup_->close();return true;}
+    if(equalizerPopup_ && equalizerPopup_->isVisible()){
+        if(event->type()==QEvent::ApplicationDeactivate)equalizerPopup_->close();
+        else if(event->type()==QEvent::MouseButtonPress){auto *widget=qobject_cast<QWidget *>(object);if(widget && widget!=equalizerButton_ && widget!=equalizerPopup_ && !equalizerPopup_->isAncestorOf(widget))equalizerPopup_->close();}
+    }
     if(event->type()==QEvent::MouseButtonPress && object==speedButton_ && speedPopup_ && speedPopup_->isVisible()) {speedPopup_->close();return true;}
     return QMainWindow::eventFilter(object, event);
+}
+bool PlayerWindow::handleShortcut(QKeyEvent *event){
+    const auto key=QKeySequence(event->keyCombination()).toString(QKeySequence::PortableText);
+    const auto entries=playerShortcuts(*settings_);
+    for(int row=0;row<entries.size();++row){
+        const auto &entry=entries[row];if(QKeySequence::fromString(entry.key,QKeySequence::PortableText).toString(QKeySequence::PortableText)!=key)continue;
+        const auto prefix=shortcutPrefix(row);if(!settings_->value(prefix+"enabled",true).toBool())return true;
+        const auto action=settings_->value(prefix+"action",entry.action).toString();const double value=settings_->value(prefix+"value",entry.value).toDouble();
+        if(event->isAutoRepeat() && (action=="play" || action=="mute" || action=="list" || action=="minimal"))return true;
+        if(action=="play")togglePlayback();
+        else if(action=="volume")volume_->setValue(std::clamp(volume_->value()+qRound(value),0,200));
+        else if(action=="rate")setRate(speed_+value);
+        else if(action=="mute")mute_->click();
+        else if(action=="list" && !minimalMode_){setPlaylistPinned(!playlistPinned_);if(playlistPinned_)for(QTreeWidgetItemIterator it(playlist_);*it;++it)if((*it)->data(0,Qt::UserRole).toString()==source_){playlist_->setCurrentItem(*it);playlist_->scrollToItem(*it);break;}}
+        else if(action=="jinc" || action=="d3d11" || action=="auto"){
+            if(action=="d3d11")settings_->setValue("render/upscale",7);
+            loadPreset(QDir(PresetStore::directory()).filePath("builtin/"+QString(action=="auto"?"Anime.vpy":action=="jinc"?"Anime-4-Jinc.vpy":"Anime-5-D3D11.vpy")));
+        }
+        else if(action=="seek"){if(imageMode_)nextFile(value<0?-1:1);else seekTime(position()+qRound64(value*1e7));}
+        else if(action=="frame")stepFrame(value<0?-1:1);
+        else if(action=="keyframe"){generation_=clock_->snapshot().timelineGeneration;seekPending_=clock_->stepKeyframe(value<0?-1:1);}
+        else if(action=="chapter"){
+            qint64 target=value<0?0:clock_->snapshot().duration100ns;const auto at=position();
+            for(const auto &item:media_.value("chapters").toArray()){const auto start=qint64(item.toObject().value("start100ns").toDouble());if(value<0 && start<at-10000000)target=qMax(target,start);if(value>0 && start>at+1000000)target=qMin(target,start);}seekTime(target);
+        }
+        else if(action=="clipboard"){
+            auto image=imageMode_?pane_->image():(direct_?clock_:output_)->capture();
+            if(!image.isNull()){QByteArray png;QBuffer buffer(&png);buffer.open(QIODevice::WriteOnly);if(image.save(&buffer,"PNG")){auto *mime=new QMimeData;mime->setImageData(image);mime->setData("image/png",png);QApplication::clipboard()->setMimeData(mime);}}
+        }
+        else if(action=="minimal")setMinimalMode(!minimalMode_);
+        return true;
+    }
+    return false;
+}
+void PlayerWindow::updateMinimalControls(){
+    if(!controls_)return;
+    for(auto *widget:controls_->findChildren<QWidget*>(QString(),Qt::FindDirectChildrenOnly))widget->setVisible(!minimalMode_ || widget->property("minimalControl").toBool());
+    message_->setVisible(!minimalMode_ && statusTimer_->isActive() && !message_->text().isEmpty());
+    videoSplit_->setVisible(!minimalMode_);
+    if(minimalMode_){
+        if(!property("minimalMode").toBool())normalWindowSize_=size();
+        infoVisible_=false;static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();playlistPanel_->hide();lyricLabel_->hide();audioSubtitle_->hide();message_->hide();equalizerButton_->hide();speedButton_->hide();
+        pane_->setImage({});pane_->setSurfaceActive(false);setMinimumSize(360,70);
+        if(!isFullScreen())resize(420,controls_->sizeHint().height()+40);
+    }else {setMinimumSize(420,160);equalizerButton_->show();}
+    setProperty("minimalMode",minimalMode_);layoutChrome();
+}
+void PlayerWindow::setMinimalMode(bool enabled){
+    if(imageMode_ || (discMenu_ && discMenu_->active()) || minimalMode_==enabled)return;
+    const auto at=position();const bool resume=playing_ || autoPlay_;minimalMode_=enabled;updateMinimalControls();
+    if(!enabled && !isFullScreen())resize(normalWindowSize_.expandedTo(QSize(1000,500)));
+    if(!source_.isEmpty()){server_->unloadScript();output_->stop();clock_->pause();setDirectMode(true);openMedia();settingsPosition_=at;autoPlay_=resume;}
 }
 void PlayerWindow::dragEnterEvent(QDragEnterEvent *event) {
     if(event->mimeData()->hasUrls()){dragStatus_=message_->text();event->acceptProposedAction();}
@@ -664,12 +818,12 @@ void PlayerWindow::dragMoveEvent(QDragMoveEvent *event) {
     const auto urls=event->mimeData()->urls();if(urls.isEmpty())return;
     const auto suffix=QFileInfo(urls.first().toLocalFile()).suffix().toLower();
     const auto area=pane_->surface()->mapFrom(this,event->position().toPoint());
-    if(QStringList{"ass","ssa","srt","sup","vtt"}.contains(suffix))message_->setText(area.y()<pane_->surface()->height()*.4?tr("作为次字幕加载(顶部)"):tr("作为主字幕加载(底部)"));
-    else if(playerAudioExtensions().contains(suffix))message_->setText(!imageMode_ && clock_->snapshot().selectedVideoStream>=0 && area.y()<pane_->surface()->height()*.5?tr("作为外部音频加载"):tr("关闭当前视频，单独播放音频"));
+    if(QStringList{"ass","ssa","srt","sup","vtt"}.contains(suffix))showStatus(area.y()<pane_->surface()->height()*.4?tr("作为次字幕加载(顶部)"):tr("作为主字幕加载(底部)"));
+    else if(playerAudioExtensions().contains(suffix))showStatus(!imageMode_ && clock_->snapshot().selectedVideoStream>=0 && area.y()<pane_->surface()->height()*.5?tr("作为外部音频加载"):tr("关闭当前视频，单独播放音频"));
     dragHint_->setText(message_->text());dragHint_->adjustSize();dragHint_->move(qMax(0,(pane_->surface()->width()-dragHint_->width())/2),qMax(0,(pane_->surface()->height()-dragHint_->height())/2));dragHint_->show();dragHint_->raise();
     event->acceptProposedAction();
 }
-void PlayerWindow::dragLeaveEvent(QDragLeaveEvent *event) {dragHint_->hide();message_->setText(dragStatus_);event->accept();}
+void PlayerWindow::dragLeaveEvent(QDragLeaveEvent *event) {dragHint_->hide();showStatus(dragStatus_);event->accept();}
 void PlayerWindow::dropEvent(QDropEvent *event) {
     dragHint_->hide();QStringList videos,audio,mounted;
     const auto area=pane_->surface()->mapFrom(this,event->position().toPoint());
@@ -677,7 +831,7 @@ void PlayerWindow::dropEvent(QDropEvent *event) {
         const auto path=url.isLocalFile()?url.toLocalFile():url.toString(QUrl::FullyEncoded),suffix=QFileInfo(path).suffix().toLower();
         if(suffix=="vpy")loadPreset(path);else if(QStringList{"ass","ssa","srt","sup","vtt"}.contains(suffix))mounted<<path;else if(playerAudioExtensions().contains(suffix))audio<<path;else videos<<path;
     }
-    message_->setText(dragStatus_);
+    showStatus(dragStatus_);
     if(!videos.isEmpty()){files_=videos;openFile(videos.first());}
     if(!audio.isEmpty()) {if(!imageMode_ && (!videos.isEmpty() || !deferred_.isEmpty() || clock_->snapshot().selectedVideoStream>=0) && area.y()<pane_->surface()->height()*.5)attachAudio(audio.first());else{files_=audio;openFile(audio.first());}}
     if(!mounted.isEmpty())attachSubtitle(mounted.first(),area.y()<pane_->surface()->height()*.4?1:0);

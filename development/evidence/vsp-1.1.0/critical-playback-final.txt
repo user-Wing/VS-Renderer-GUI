@@ -1,0 +1,88 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::directStartupClock(original) startup-clock-first-frame-ms 246 source-fps 47.9521 display-hz 165 decode-mode 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 0.505 position 0.544625 pts 542 accepted 27 presents 29 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 1.016 position 1.05553 pts 1043 accepted 51 presents 55 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 1.517 position 1.55704 pts 1543 accepted 75 presents 79 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 2.019 position 2.05885 pts 2044 accepted 99 presents 103 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 2.528 position 2.56791 pts 2565 accepted 124 presents 128 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 3.029 position 3.06911 pts 3066 accepted 148 presents 152 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock-summary open wall 3.029 media 3.02985 accepted-fps 48.2007 frame-clock-error -0.0031807 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 0.51 position 5.53523 pts 5526 accepted 174 presents 179 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 1.01 position 6.03565 pts 6027 accepted 198 presents 203 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 1.51 position 6.53576 pts 6527 accepted 222 presents 227 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 2.01 position 7.03612 pts 7028 accepted 246 presents 251 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 2.519 position 7.54506 pts 7528 accepted 270 presents 275 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 3.03 position 8.05546 pts 8050 accepted 295 presents 300 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock-summary seek wall 3.03 media 3.03034 accepted-fps 48.1848 frame-clock-error -0.0055026 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 0.5 position 8.55594 pts 8550 accepted 319 presents 324 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 1.006 position 9.06192 pts 9051 accepted 343 presents 348 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 1.513 position 9.56951 pts 9551 accepted 367 presents 372 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 2.014 position 10.0699 pts 10052 accepted 391 presents 396 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 2.514 position 10.5701 pts 10552 accepted 415 presents 420 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 3.019 position 11.0749 pts 11074 accepted 440 presents 445 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock-summary resume wall 3.019 media 3.01942 accepted-fps 48.0291 frame-clock-error -0.0009574 dropped 0 coalesced 0
+PASS   : TestPlayer::directStartupClock(original)
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock-first-frame-ms 204 source-fps 47.9521 display-hz 165 decode-mode 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 0.5 position 0.512803 pts 500 accepted 25 presents 28 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 1 position 1.01288 pts 1001 accepted 49 presents 52 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 1.501 position 1.51385 pts 1501 accepted 73 presents 76 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 2.002 position 2.01487 pts 2002 accepted 97 presents 100 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 2.508 position 2.52086 pts 2502 accepted 121 presents 124 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 3.008 position 3.02096 pts 3003 accepted 145 presents 148 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock-summary open wall 3.008 media 3.00863 accepted-fps 47.8723 frame-clock-error -0.0179972 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 0.501 position 5.53042 pts 5526 accepted 171 presents 175 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 1.011 position 6.03978 pts 6027 accepted 195 presents 199 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 1.526 position 6.55471 pts 6548 accepted 220 presents 224 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 2.026 position 7.0552 pts 7049 accepted 244 presents 248 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 2.527 position 7.55635 pts 7549 accepted 268 presents 272 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 3.034 position 8.06279 pts 8050 accepted 292 presents 296 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock-summary seek wall 3.034 media 3.03425 accepted-fps 47.7917 frame-clock-error -0.012866 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 0.501 position 8.56469 pts 8550 accepted 316 presents 320 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 1.009 position 9.07188 pts 9072 accepted 341 presents 345 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 1.51 position 9.57327 pts 9572 accepted 365 presents 369 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 2.016 position 10.0793 pts 10073 accepted 389 presents 393 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 2.524 position 10.5869 pts 10573 accepted 413 presents 417 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 3.024 position 11.0874 pts 11074 accepted 437 presents 441 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock-summary resume wall 3.024 media 3.02456 accepted-fps 47.9497 frame-clock-error -0.0134475 dropped 0 coalesced 0
+PASS   : TestPlayer::directStartupClock(D3D11)
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock-first-frame-ms 206 source-fps 47.9521 display-hz 165 decode-mode 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 0.5 position 0.512087 pts 500 accepted 25 presents 28 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 1.001 position 1.01268 pts 1001 accepted 49 presents 52 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 1.508 position 1.52013 pts 1501 accepted 73 presents 76 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 2.014 position 2.02619 pts 2023 accepted 98 presents 101 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 2.515 position 2.52725 pts 2523 accepted 122 presents 125 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 3.016 position 3.02762 pts 3024 accepted 146 presents 149 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock-summary open wall 3.016 media 3.01636 accepted-fps 48.0769 frame-clock-error -0.0036868 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 0.507 position 5.53588 pts 5526 accepted 172 presents 176 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 1.007 position 6.036 pts 6027 accepted 196 presents 200 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 1.508 position 6.53665 pts 6527 accepted 220 presents 224 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 2.012 position 7.04145 pts 7028 accepted 244 presents 248 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 2.515 position 7.54413 pts 7528 accepted 268 presents 272 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 3.016 position 8.04511 pts 8029 accepted 292 presents 296 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock-summary seek wall 3.016 media 3.01655 accepted-fps 47.7454 frame-clock-error -0.0161569 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 0.5 position 8.54646 pts 8529 accepted 316 presents 320 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 1.005 position 9.05187 pts 9051 accepted 341 presents 345 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 1.522 position 9.56871 pts 9551 accepted 365 presents 369 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 2.023 position 10.0696 pts 10052 accepted 389 presents 393 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 2.527 position 10.5732 pts 10573 accepted 414 presents 418 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 3.039 position 11.0851 pts 11074 accepted 438 presents 442 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock-summary resume wall 3.039 media 3.03922 accepted-fps 48.0421 frame-clock-error -0.0111057 dropped 0 coalesced 0
+PASS   : TestPlayer::directStartupClock(Jinc)
+PASS   : TestPlayer::algorithmBadgesReflectCurrentStages()
+FAIL!  : TestPlayer::timelineSingleJump(SW) 'player.outputSnapshot().presentedVideoFrames>0' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1154) : failure location
+FAIL!  : TestPlayer::timelineSingleJump(SW-one-CPU) 'player.outputSnapshot().presentedVideoFrames>0' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1154) : failure location
+PASS   : TestPlayer::externalSubtitleVariants()
+QINFO  : TestPlayer::hardware8kQueueLookAhead(D3D11) 8K queue peak 1 accepted 486 dropped 0
+FAIL!  : TestPlayer::hardware8kQueueLookAhead(D3D11) Compared values are not the same
+   Actual   (after.videoScalingMode): 0
+   Expected (algorithm==519?1u:0u)  : 1
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(487) : failure location
+QINFO  : TestPlayer::hardware8kQueueLookAhead(Jinc) 8K queue peak 0 accepted 488 dropped 0
+PASS   : TestPlayer::hardware8kQueueLookAhead(Jinc)
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 8 passed, 3 failed, 0 skipped, 0 blacklisted, 131775ms
+********* Finished testing of TestPlayer *********

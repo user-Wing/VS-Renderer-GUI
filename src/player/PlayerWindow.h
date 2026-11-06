@@ -4,12 +4,14 @@
 #include "backend/VapourSynthFrameServer.h"
 #include <QMainWindow>
 #include <QJsonObject>
+#include <QVariantMap>
 #include <memory>
 #include <QPointer>
 #include <QSet>
 #include <QElapsedTimer>
 #include "player/PlayerResources.h"
 class QProcess;
+class QKeyEvent;
 class QSlider;
 class QSettings;
 class QLineEdit;
@@ -43,6 +45,7 @@ public:
     bool openFile(const QString &path);
     bool openFolder(const QString &path);
     void loadPreset(const QString &path);
+    bool importCustomShader(const QString &path);
     void setInterpolation(int stage, bool automatic = false, int renderer = 0);
     int interpolationStage() const;
     void togglePlayback();
@@ -68,6 +71,12 @@ protected:
     void dragLeaveEvent(QDragLeaveEvent *) override;
 private:
     friend class ::TestPlayer;
+    bool handleShortcut(QKeyEvent *event);
+    void setMinimalMode(bool enabled);
+    void updateMinimalControls();
+    bool minimalMode_=false;
+    QSize normalWindowSize_;
+    QPushButton *minimalButton_=nullptr;
     void buildTransport(QVBoxLayout *layout);
     void buildPlaylist(QWidget *parent);
     void updateChrome();
@@ -111,6 +120,13 @@ private:
     void applyScaling();
     void setDirectMode(bool enabled);
     void ensureProfiles();
+    bool nativeBuiltinCompatible() const;
+    bool hlslColorCompatible() const;
+    QString customShaderDirectory() const;
+    bool nativeAnime_ = false, hlslFailed_ = false;
+    QHash<QString, QString> builtinScripts_;
+    QString customShaderPackage_, hlslFallback_;
+    QVariantMap hlslParameters_;
     QString profile() const;
     bool animeSourceSupported() const;
     int fixedAnimeStage() const;
@@ -137,6 +153,9 @@ private:
     void updateAudioInfo(const QJsonObject &audio, quint64 bitRate);
     void nextFile(int direction);
     void setError(const QString &message);
+    void showStatus(const QString &message);
+    QTimer *statusTimer_=nullptr;
+    QString lastStatus_;
     void showContextMenu(const QPoint &position);
     void showSubtitleStyle();
     void selectSubtitle(int slot, int stream);
@@ -156,6 +175,12 @@ private:
     void applyAppearance();
     bool madvrMode() const;
     int prefetchCount() const;
+    void updateDecodeBuffer();
+    QProcess *bitrateProbe_=nullptr;
+    QElapsedTimer bufferTimer_,bitrateTimer_;
+    qint64 decodeBurstFrom_=0,decodeBurstUntil_=0;
+    quint64 decodePoolBytes_=0;
+    unsigned decodePoolFrames_=0;
     void resetStatistics();
     bool commitFrameEdit();
     bool frameEditPending_ = false;
@@ -167,6 +192,9 @@ private:
     std::unique_ptr<PlayerLanguage> language_;
     std::unique_ptr<PlayerImage> imageLoader_;
     bool imageMode_ = false;
+    QTimer *imageAnimation_=nullptr;
+    int imagePages_=1,imagePage_=0;
+    bool imagePagePending_=false;
     bool audioMode_ = false, audioMetadataLoaded_ = false;
     PlayerAudioMetadata audioMetadata_;
     QLabel *lyricLabel_ = nullptr;
@@ -245,6 +273,7 @@ private:
     QString deferredSubtitle_;
     int deferredSubtitleSlot_ = 0;
     QString deferredAudio_, pendingExternalAudio_;
+    int pendingAudioStream_ = -2;
     QStringList files_;
     int fileIndex_ = -1;
     VapourSynthClipInfo clip_;

@@ -1,0 +1,16 @@
+[1/16] Automatic MOC and UIC for target VSPlayer
+[2/15] Automatic MOC and UIC for target VSPlayerLite
+[3/14] Automatic MOC and UIC for target vsr_player_lite_tests
+[4/13] Building CXX object CMakeFiles/VSPlayerLite.dir/src/player/PlayerWindow.cpp.obj
+[5/13] Building CXX object CMakeFiles/VSPlayer.dir/src/player/PlayerWindow.cpp.obj
+[6/13] Building CXX object CMakeFiles/vsr_player_lite_tests.dir/src/player/PlayerWindow.cpp.obj
+[7/13] Linking CXX executable lite\vs-player.exe
+Staged GLSL import tools: C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\mingw-release\lite\runtime\shader-tools
+
+[8/13] Linking CXX executable vsr_player_lite_tests.exe
+[9/13] Linking CXX executable vs-player.exe
+Staged GLSL import tools: C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\mingw-release\runtime\shader-tools
+
+[10/13] Automatic MOC and UIC for target vsr_player_tests
+[11/12] Building CXX object CMakeFiles/vsr_player_tests.dir/src/player/PlayerWindow.cpp.obj
+[12/12] Linking CXX executable vsr_player_tests.exe

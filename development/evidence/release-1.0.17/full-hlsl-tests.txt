@@ -1,0 +1,20 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+PASS   : TestPlayer::fullNativeAnimeAndEditedPresetFallback()
+PASS   : TestPlayer::generatedVpyHlslAndUnsupportedHookFallback()
+PASS   : TestPlayer::animeStageSelection(CNN-enhanced-420-10)
+PASS   : TestPlayer::animeStageSelection(CNN-422-10)
+PASS   : TestPlayer::animeStageSelection(no-CNN-enhanced-444-10)
+PASS   : TestPlayer::animeStageSelection(no-CNN-420-10)
+PASS   : TestPlayer::animeStageSelection(Jinc)
+PASS   : TestPlayer::animeStageSelection(D3D11)
+PASS   : TestPlayer::fixedAnimePresets(CNN-enhanced-420-10)
+PASS   : TestPlayer::fixedAnimePresets(CNN-422-10)
+PASS   : TestPlayer::fixedAnimePresets(no-CNN-enhanced-444-10)
+PASS   : TestPlayer::fixedAnimePresets(no-CNN-420-10)
+PASS   : TestPlayer::fixedAnimePresets(Jinc)
+PASS   : TestPlayer::fixedAnimePresets(D3D11)
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 16 passed, 0 failed, 0 skipped, 0 blacklisted, 26717ms
+********* Finished testing of TestPlayer *********

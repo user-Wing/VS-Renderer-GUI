@@ -1,0 +1,13 @@
+********* Start testing of TestImageEditorLayout *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestImageEditorLayout::initTestCase()
+PASS   : TestImageEditorLayout::photoshopLayoutAndGroups()
+PASS   : TestImageEditorLayout::groupChildrenEditableAndUndo()
+PASS   : TestImageEditorLayout::adjustmentDialogAndMask()
+PASS   : TestImageEditorLayout::openNativeHdrAvif()
+PASS   : TestImageEditorLayout::backgroundPsdExportPreservesNewEdits()
+SKIP   : TestImageEditorLayout::realLargePsdWindow() Set VSR_PSD_SAMPLE for the user's large PSD UI check
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestImageEditorLayout.cpp(77) : failure location
+PASS   : TestImageEditorLayout::cleanupTestCase()
+Totals: 7 passed, 0 failed, 1 skipped, 0 blacklisted, 1959ms
+********* Finished testing of TestImageEditorLayout *********

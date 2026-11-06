@@ -1,10 +1,13 @@
 param(
     [string]$OutputDirectory,
-    [string]$SevenZip
+    [string]$SevenZip,
+    [string]$CompiledDirectory = ""
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $source = Join-Path $projectRoot 'assets/mpv-shaders'
+if (!$CompiledDirectory) { $CompiledDirectory = Join-Path $projectRoot '.deps/compiled-shaders110' }
+if (Test-Path -LiteralPath (Join-Path $CompiledDirectory 'mpv-shaders')) { $CompiledDirectory = Join-Path $CompiledDirectory 'mpv-shaders' }
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 if (-not $output.StartsWith($projectRoot.TrimEnd('\')+'\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Shader deployment escapes workspace' }
 if (Test-Path -LiteralPath (Join-Path $output 'mpv-shaders')) {
@@ -16,7 +19,15 @@ if (Test-Path -LiteralPath (Join-Path $output 'mpv-shaders')) {
 }
 New-Item -ItemType Directory -Path (Join-Path $output 'mpv-shaders') -Force | Out-Null
 $archive = Join-Path $output 'mpv-shaders-new.7z'
-Push-Location (Join-Path $projectRoot 'assets')
+$staging = Join-Path $projectRoot 'build/shader-archive-stage'
+New-Item -ItemType Directory -Path $staging -Force | Out-Null
+& robocopy.exe $source (Join-Path $staging 'mpv-shaders') /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+if ($LASTEXITCODE -ge 8) { throw 'Shader source staging failed' }
+if (Test-Path -LiteralPath $CompiledDirectory) {
+    & robocopy.exe $CompiledDirectory (Join-Path $staging 'mpv-shaders') /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw 'Compiled shader staging failed' }
+}
+Push-Location $staging
 try {
     & $SevenZip a $archive mpv-shaders -t7z -m0=lzma2 -mx=9 -ms=64m -md=32m -mmt=2 -bso0 -bsp0
     if ($LASTEXITCODE -ne 0) { throw 'Shader archive creation failed' }

@@ -26,6 +26,8 @@ class ExportWindow final : public QWidget {
     Q_OBJECT
 public:
     explicit ExportWindow();
+    void setRoutes(int count,int selected);
+    int selectedRoute() const;
     void setCurrentSource(const QString &source);
     void setScriptBuilder(std::function<ScriptBuildResult(const QString &)> builder);
     bool addJob(const QString &command, const QString &output, const QString &source,
@@ -59,7 +61,7 @@ private:
     void removeWaiting();
     void restartStopped();
     void rememberCommand();
-    QComboBox *history_=nullptr;
+    QComboBox *history_=nullptr,*routes_=nullptr;
     std::shared_ptr<Job> jobFor(QTreeWidgetItem *item) const;
     ExportPipeline pipeline_;
     QHash<quint64, std::shared_ptr<Job>> jobs_;

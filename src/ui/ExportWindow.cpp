@@ -1,4 +1,5 @@
 #include "ui/ExportWindow.h"
+#include <QSignalBlocker>
 #include "ui/PreparedFiles.h"
 
 #include <QComboBox>
@@ -63,6 +64,7 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     auto *settings = new QWidget(tabs_);
     auto *form = new QVBoxLayout(settings);
     form->setContentsMargins(12, 12, 12, 12);
+    routes_=new QComboBox(settings);routes_->setObjectName("exportRouteChoice");routes_->addItem(QStringLiteral("路 1"));form->addWidget(new QLabel(QStringLiteral("选择路（本次入队任务保存对应 VPY）"),settings));form->addWidget(routes_);
     form->addWidget(new QLabel(QStringLiteral("3FUI 参数(单文件与批处理共用，VS 设置取自主界面)"), settings));
     command_ = new QPlainTextEdit(settings);
     command_->setObjectName(QStringLiteral("exportCommand"));
@@ -481,4 +483,9 @@ void ExportWindow::stopAll()
     if (!active_) QTimer::singleShot(0, this, &ExportWindow::startNext);
 }
 
+}
+
+namespace vsr {
+void ExportWindow::setRoutes(int count,int selected){const QSignalBlocker blocker(routes_);routes_->clear();for(int i=0;i<count;++i)routes_->addItem(QString("路 %1").arg(i+1));routes_->setCurrentIndex(qBound(0,selected,qMax(0,count-1)));}
+int ExportWindow::selectedRoute() const{return routes_->currentIndex();}
 }

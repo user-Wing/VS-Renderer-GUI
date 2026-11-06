@@ -1,0 +1,76 @@
+[queue] animated bytesPerFrame=0 pipeline=0 limit=8
+[hevc @ 0000014845f0c780] Error parsing NAL unit #4.
+[av1 @ 0000014845f0ec80] Your platform doesn't support hardware accelerated AV1 decoding.
+[av1 @ 0000014845f0ec80] Failed to get pixel format.
+[av1 @ 0000014845f0ec80] Get current frame error
+[av1 @ 00000147fbce3b00] Your platform doesn't support hardware accelerated AV1 decoding.
+[av1 @ 00000147fbce3b00] Failed to get pixel format.
+[av1 @ 00000147fbce3b00] Get current frame error
+[libdav1d @ 0000014845f0e140] Application has requested 32 threads. Using a thread count greater than 16 is not recommended.
+VSR software CCD: assigned 8/8 workers, host mask ff00ff00, soft 1
+VSR software CCD: assigned 8/8 workers, host mask ff00ff00, soft 1
+[0 NVIDIA GeForce RTX 4070 Laptop GPU]  queueC=2[8]  queueG=0[16]  queueT=1[2]
+[0 NVIDIA GeForce RTX 4070 Laptop GPU]  bugsbn1=0  bugbilz=0  bugcopc=0  bugihfa=0
+[0 NVIDIA GeForce RTX 4070 Laptop GPU]  fp16-p/s/u/a=1/1/1/1  int8-p/s/u/a=1/1/1/1
+[0 NVIDIA GeForce RTX 4070 Laptop GPU]  subgroup=32(32~32)  ops=1/1/1/1/1/1/1/1/1/1
+[0 NVIDIA GeForce RTX 4070 Laptop GPU]  fp16-8x8x16/16x8x8/16x8x16/16x16x16=0/1/1/1
+[1 AMD Radeon(TM) 610M]  queueC=1[2]  queueG=0[1]  queueT=2[1]
+[1 AMD Radeon(TM) 610M]  bugsbn1=0  bugbilz=0  bugcopc=0  bugihfa=0
+[1 AMD Radeon(TM) 610M]  fp16-p/s/u/a=1/1/1/1  int8-p/s/u/a=1/1/1/1
+[1 AMD Radeon(TM) 610M]  subgroup=64(32~64)  ops=1/1/1/1/1/1/1/1/1/1
+[1 AMD Radeon(TM) 610M]  fp16-8x8x16/16x8x8/16x8x16/16x16x16=0/0/0/1
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkAllocateMemory failed -2
+vkWaitForFences failed -4
+vkWaitForFences failed -4
+vkWaitForFences failed -4
+vkWaitForFences failed -4

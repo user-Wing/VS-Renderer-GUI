@@ -1,0 +1,17 @@
+********* Start testing of TestShaderPackage *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestShaderPackage::initTestCase()
+PASS   : TestShaderPackage::cacheReuseInvalidationAndRepair()
+PASS   : TestShaderPackage::glslMainPrekernelAndComponents()
+PASS   : TestShaderPackage::bundledAnimeShadersCompile()
+PASS   : TestShaderPackage::rejectsUnsupportedContracts(luma)
+PASS   : TestShaderPackage::rejectsUnsupportedContracts(compute)
+PASS   : TestShaderPackage::rejectsUnsupportedContracts(offset)
+PASS   : TestShaderPackage::rejectsUnsupportedContracts(native-pixels)
+PASS   : TestShaderPackage::rejectsUnsupportedContracts(include)
+PASS   : TestShaderPackage::rejectsUnsupportedContracts(uint-texture)
+PASS   : TestShaderPackage::rejectsUnsupportedContracts(wrong-constants)
+PASS   : TestShaderPackage::rejectsUnsupportedContracts(comparison-sampler)
+PASS   : TestShaderPackage::cleanupTestCase()
+Totals: 13 passed, 0 failed, 0 skipped, 0 blacklisted, 10452ms
+********* Finished testing of TestShaderPackage *********

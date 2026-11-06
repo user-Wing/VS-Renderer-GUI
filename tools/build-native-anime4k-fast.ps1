@@ -8,21 +8,11 @@ $ErrorActionPreference='Stop'
 $projectRoot=Split-Path $PSScriptRoot -Parent
 $NativeRoot=(Resolve-Path -LiteralPath $NativeRoot).Path
 $LibiamfRoot=(Resolve-Path -LiteralPath $LibiamfRoot).Path
-# NativeRoot must already have the pinned API20 VS Renderer patches/dependencies.
-$patch=Join-Path $projectRoot 'patches/3fp-api20-anime4k-fast.patch'
-$savedPreference=$ErrorActionPreference
-$ErrorActionPreference='Continue'
-try { & git -C $NativeRoot apply --reverse --check $patch 2>$null; $applied=$LASTEXITCODE -eq 0 }
-finally { $ErrorActionPreference=$savedPreference }
-if(!$applied){
-    & git -C $NativeRoot apply --check $patch
-    if($LASTEXITCODE -ne 0){throw 'Prepare the patched API20 Native checkout before adding Anime4K Fast.'}
-    & git -C $NativeRoot apply $patch
-    if($LASTEXITCODE -ne 0){throw 'Anime4K Fast patch failed.'}
-}
+# NativeRoot is prepared by build-native-api20.ps1.
 & python (Join-Path $PSScriptRoot 'convert-anime4k-fast.py')
 if($LASTEXITCODE -ne 0){throw 'Anime4K Fast shader conversion failed.'}
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/render/Anime4KFast.h'),(Join-Path $projectRoot 'build/anime4k-native/shaders/Anime4KFastShaders.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Render') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'src/render/CustomShader.h'),(Join-Path $projectRoot 'src/render/ImageResample.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Render') -Force
 if(!$MSBuild){
     $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     $MSBuild=(& $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild/**/Bin/MSBuild.exe' | Select-Object -First 1)

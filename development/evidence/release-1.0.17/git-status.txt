@@ -1,0 +1,48 @@
+ M CMakeLists.txt
+ M README.md
+ M THIRD_PARTY_NOTICES.md
+ M assets/languages/en_US.json
+ M assets/languages/zh_CN.json
+ M changelog.md
+ D color.md
+ M development/validation.md
+ M docs/native-api20-build.md
+ M docs/player.md
+ M docs/renderer.md
+ M project.md
+ M src/app/MainWindow.cpp
+ M src/app/MainWindow.h
+ M src/app/MainWindowPresets.cpp
+ M src/backend/ThreeFpApi.cpp
+ M src/backend/ThreeFpApi.h
+ M src/backend/ThreeFpPlayer.cpp
+ M src/backend/ThreeFpPlayer.h
+ M src/graph/FilterCatalog.cpp
+ M src/graph/PresetStore.cpp
+ M src/graph/PresetStore.h
+ M src/player/PlayerColor.cpp
+ M src/player/PlayerInfo.cpp
+ M src/player/PlayerMenus.cpp
+ M src/player/PlayerProfiles.cpp
+ M src/player/PlayerWindow.cpp
+ M src/player/PlayerWindow.h
+ M src/ui/ParameterEditor.cpp
+ M tests/TestAnalysis.cpp
+ M tests/TestParameterEditor.cpp
+ M tests/TestPlayer.cpp
+ M tests/TestPlayerLite.cpp
+ M tests/TestVpyScript.cpp
+ M tools/build-native-anime4k-fast.ps1
+ M tools/build-native-api20.ps1
+ M tools/stage-editions-1.0.9.py
+?? patches/3fp-api20-custom-shader.patch
+?? src/graph/HlslPreview.h
+?? src/render/CustomShader.h
+?? src/render/ShaderPackage.cpp
+?? src/render/ShaderPackage.h
+?? tests/TestShaderPackage.cpp
+?? tools/__pycache__/
+?? tools/clean-build-followup-20261011.ps1
+?? tools/clean-workspace-20261011.ps1
+?? tools/experimental/
+?? tools/stage-shader-tools.py

@@ -1,6 +1,8 @@
 #include "graph/FilterGraph.h"
 #include "graph/VpyScriptBuilder.h"
 #include "graph/FilterCatalog.h"
+#include "graph/PresetStore.h"
+#include "graph/HlslPreview.h"
 
 #include <QTest>
 #include <QFile>
@@ -10,6 +12,27 @@ using namespace vsr;
 class TestVpyScript final : public QObject {
     Q_OBJECT
 private slots:
+    void hlslTailPreservesOrderAndDimensions(){
+        FilterGraph graph;graph.add("crop");const int shader=graph.add("anime4k");graph.setParameter(shader,"mode","anime4k-a-fast.glsl");
+        auto plan=hlslPreviewPlan(graph);QVERIFY(!plan.shaderPath.isEmpty());QCOMPARE(plan.graph.nodes().size(),1);QCOMPARE(plan.graph.nodes().first().definitionId,QString("crop"));
+        QCOMPARE(hlslOutputSize(plan.parameters,QSize(1920,1080)),QSize(3840,2160));
+        graph.setParameter(shader,"output_mode","指定分辨率");graph.setParameter(shader,"dimension_axis","height");graph.setParameter(shader,"height",720);
+        plan=hlslPreviewPlan(graph);QCOMPARE(hlslOutputSize(plan.parameters,QSize(1920,1080)),QSize(1280,720));
+        graph.setParameter(shader,"keep_aspect",false);graph.setParameter(shader,"width",1000);plan=hlslPreviewPlan(graph);QVERIFY(!hlslAspectCompatible(plan.parameters,QSize(1920,1080),hlslOutputSize(plan.parameters,QSize(1920,1080))));
+        graph.add("resize");plan=hlslPreviewPlan(graph);QVERIFY(plan.shaderPath.isEmpty());QVERIFY(!plan.error.isEmpty());QCOMPARE(plan.graph.nodes().size(),3);
+        graph.setParameter(shader,"hlsl",false);plan=hlslPreviewPlan(graph);QVERIFY(plan.shaderPath.isEmpty());QVERIFY(plan.error.isEmpty());
+    }
+    void hlslRejectsModifiedPythonAndTimeGroups(){
+        FilterGraph graph;graph.add("anime4k");FilterGraph checked;SourceFilter filter=SourceFilter::Lsmas;
+        const auto script=PresetStore::create(graph,SourceFilter::Ffms2,{},{});
+        QVERIFY(PresetStore::verifiedGraph(script,&checked,&filter));QCOMPARE(filter,SourceFilter::Ffms2);QCOMPARE(checked.nodes().size(),1);
+        QVERIFY(!PresetStore::verifiedGraph(script+"\nclip = core.std.Transpose(clip)\n",&checked,&filter));
+        const auto groups=PresetStore::create(QList<FilterTimeGroup>{{"All",0,graph}},SourceFilter::Ffms2,{},{});
+        QVERIFY(PresetStore::verifiedGraph(groups,&checked,&filter));
+        const auto timed=PresetStore::create(QList<FilterTimeGroup>{{"First",0,graph},{"Next",10,graph}},SourceFilter::Ffms2,{},{});
+        QVERIFY(!PresetStore::verifiedGraph(timed,&checked,&filter));
+        QVERIFY(!PresetStore::verifiedGraph("import vapoursynth as vs\nclip.set_output()\n",&checked,&filter));
+    }
     void timeGroupBoundaries(){
         FilterGraph first,second;first.add("transpose");second.add("resize");
         const auto result=VpyScriptBuilder::buildGroups("input.mkv",SourceFilter::Ffms2,{{"Opening",0,first},{"Main",12,second}});

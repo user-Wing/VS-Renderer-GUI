@@ -1,0 +1,121 @@
+{
+  "version": "1.0.17",
+  "root": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI",
+  "checked_utc": "2026-11-01T10:57:44.456621+00:00",
+  "passed": true,
+  "checks": [
+    {
+      "check": "baseline read",
+      "passed": true,
+      "details": {
+        "protected_files": 25,
+        "existing_archives": 6
+      }
+    },
+    {
+      "check": "rebuilt native",
+      "passed": true,
+      "details": {
+        "sha256": "57ca00bae99c12be3131f3bc2085d496f9ed54f747557b63117aa708d7bb135e"
+      }
+    },
+    {
+      "check": "Full manifest",
+      "passed": true,
+      "details": {
+        "files": 632,
+        "bytes": 846648654
+      }
+    },
+    {
+      "check": "Full version/tools/licenses",
+      "passed": true,
+      "details": {
+        "version": "1.0.17",
+        "edition": "Full",
+        "shader_tools": 2,
+        "license_files": {
+          "shaderc": 1,
+          "spirv-cross": 1
+        }
+      }
+    },
+    {
+      "check": "Full native",
+      "passed": true,
+      "details": {
+        "sha256": "57ca00bae99c12be3131f3bc2085d496f9ed54f747557b63117aa708d7bb135e"
+      }
+    },
+    {
+      "check": "Single tail/payload/CRC",
+      "passed": true,
+      "details": {
+        "payload_bytes": 33938167,
+        "sha256": "ff527617cf159ae37ce5a7caf32dc8f330af7e4ca5f92e92a83e6ef1a1922b58",
+        "fingerprint": "ff527617cf159ae37ce5a7ca",
+        "zip_entries": 85,
+        "crc": "all passed"
+      }
+    },
+    {
+      "check": "Single embedded manifest",
+      "passed": true,
+      "details": {
+        "files": 84,
+        "bytes": 81267249
+      }
+    },
+    {
+      "check": "Single version/tools/licenses",
+      "passed": true,
+      "details": {
+        "version": "1.0.17",
+        "edition": "SinglePlayer",
+        "shader_tools": 2,
+        "license_files": {
+          "shaderc": 1,
+          "spirv-cross": 1
+        }
+      }
+    },
+    {
+      "check": "Single exclusions",
+      "passed": true,
+      "details": {
+        "files_inspected": 85,
+        "forbidden": 0
+      }
+    },
+    {
+      "check": "Single native",
+      "passed": true,
+      "details": {
+        "sha256": "57ca00bae99c12be3131f3bc2085d496f9ed54f747557b63117aa708d7bb135e"
+      }
+    },
+    {
+      "check": "Single payload matches staging",
+      "passed": true,
+      "details": {
+        "matching_files": 85
+      }
+    },
+    {
+      "check": "protected baseline files",
+      "passed": true,
+      "details": {
+        "unchanged_files": 25,
+        "base_commit": "deefd4f8effc028e2bfea69fca10e859d8ff16cd"
+      }
+    },
+    {
+      "check": "no new external archives",
+      "passed": true,
+      "details": {
+        "existing_top_level_archives": 1,
+        "new_archives": 0
+      }
+    }
+  ]
+}

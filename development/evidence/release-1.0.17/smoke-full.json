@@ -1,0 +1,1266 @@
+{
+  "passed": true,
+  "started_utc": "2026-11-01T10:57:32.973235+00:00",
+  "scope": "Blank final Full Renderer startup, file version, Qt dependencies and normal shutdown; no media or GPU playback test.",
+  "native_scope": "Verify the packaged Native DLL against the rebuilt DLL. If already loaded, also verify its module path/hash; absence is recorded as lazy loading, not as a successful Native execution test. Dedicated Full/Renderer QtTest evidence covers Native execution.",
+  "executable": {
+    "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\VSRenderer.exe",
+    "bytes": 2937871,
+    "sha256": "497d9d634bec3afce5c2ca7cb838b1f29d0fd118a8bc5d75e3eb69767a3e0da2"
+  },
+  "release": {
+    "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\release.json",
+    "version": "1.0.17"
+  },
+  "version": {
+    "fileVersion": null,
+    "build": 0,
+    "major": 0,
+    "productVersion": null,
+    "revision": 0,
+    "minor": 0
+  },
+  "PEresourcePresent": false,
+  "PEresourceNote": "No embedded PE VERSIONINFO; release.json is verified as 1.0.17.",
+  "environment": {
+    "path_prefix": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17",
+    "removed_variables": []
+  },
+  "pid": 136648,
+  "last_windows": [
+    {
+      "hwnd": 26480992,
+      "title": "VS Renderer — VapourSynth 实时滤镜工作台"
+    }
+  ],
+  "window": {
+    "hwnd": 26480992,
+    "title": "VS Renderer — VapourSynth 实时滤镜工作台",
+    "visible": true,
+    "responsive": true
+  },
+  "uia": {
+    "title": "VS Renderer — VapourSynth 实时滤镜工作台",
+    "pid": 136648,
+    "items": [
+      {
+        "type": "ControlType.ToolBar",
+        "name": "命令栏",
+        "id": "QApplication.vsr::MainWindow.QToolBar",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "☰",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "打开源",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "打开项目",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "保存项目",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "预设管理",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "预设社区",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "关于",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.CheckBox",
+        "name": "隐藏功能区1",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.CheckBox",
+        "name": "隐藏功能区2",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "导入所有时间组",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "导入当前时间组",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolBarSeparator",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "查看 VPY",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "生成并验证",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "渲染预览",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "导出当前处理结果",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QToolBar.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.pageNavigation",
+        "value": ""
+      },
+      {
+        "type": "ControlType.CheckBox",
+        "name": "VS 实时渲染",
+        "id": "QApplication.vsr::MainWindow.QWidget.pageNavigation.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.CheckBox",
+        "name": "图像分析比对",
+        "id": "QApplication.vsr::MainWindow.QWidget.pageNavigation.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.CheckBox",
+        "name": "设置",
+        "id": "QApplication.vsr::MainWindow.QWidget.pageNavigation.applicationSettings",
+        "value": ""
+      },
+      {
+        "type": "ControlType.CheckBox",
+        "name": "BD 一键 Remux",
+        "id": "QApplication.vsr::MainWindow.QWidget.pageNavigation.QToolButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Pane",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Custom",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "双路对比 · 左侧播放时钟 / 右侧 VS 同帧",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.QWidget.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "就绪",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.QWidget.rendererWarmupState",
+        "value": null
+      },
+      {
+        "type": "ControlType.CheckBox",
+        "name": "同步视图",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.QWidget.QCheckBox",
+        "value": ""
+      },
+      {
+        "type": "ControlType.CheckBox",
+        "name": "VRR 低延迟(实验)",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.QWidget.QCheckBox",
+        "value": ""
+      },
+      {
+        "type": "ControlType.CheckBox",
+        "name": "VRR Pacing(实验)",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.QWidget.QCheckBox",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "源视频",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "Fit",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "100%",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "等待打开视频\n3FP 运行时未激活",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "处理后",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "VS · 待渲染",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "100%",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "等待打开视频\n3FP 运行时未激活",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.vsr::CompareView.QWidget.previewPane.QWidget.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "源视频 · CPU --  GPU 0.0%  内存 133 MiB\n丢帧 0 / 0 (0.00%)",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.QWidget.rendererSourceMonitor",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "处理后 · CPU --  GPU 0.0%  内存 133 MiB\n丢帧 0 / 0 (0.00%)",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.QWidget.rendererProcessedMonitor",
+        "value": null
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "00:00:00.000",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.rendererPosition",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "00:00:00.000",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Slider",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.rendererTimeline",
+        "value": "0"
+      },
+      {
+        "type": "ControlType.ComboBox",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.rendererCompareMode",
+        "value": "并排"
+      },
+      {
+        "type": "ControlType.ComboBox",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.QComboBox",
+        "value": "缩放：D3D11 原生直通"
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.rendererFrameControls",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "◀ 帧",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.rendererFrameControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "播放",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.rendererFrameControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "帧 ▶",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.rendererFrameControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Edit",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.QWidget.rendererSourcePath",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "浏览…",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.QWidget.rendererTransport.QWidget.rendererBrowse",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Custom",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererPipelinePanel",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "当前时间组已导入的滤镜",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererPipelinePanel.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.List",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererPipelinePanel.rendererPipeline",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "上移",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererPipelinePanel.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "下移",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererPipelinePanel.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "删除",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererPipelinePanel.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererParameterPanel",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "高级参数",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererParameterPanel.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererParameterPanel.rendererParameters",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererParameterPanel.rendererParameters.qt_scrollarea_viewport",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererParameterPanel.rendererParameters.qt_scrollarea_viewport.parameterEditor",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "选择处理链中的节点以编辑参数。",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.rendererParameterPanel.rendererParameters.qt_scrollarea_viewport.parameterEditor.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Thumb",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.rendererRightColumn.qt_splithandle_rendererPipelinePanel",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Custom",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.rendererTimeGroups",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "当前时间组 · 整秒吸附",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.rendererTimeGroups.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.List",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.rendererTimeGroups.rendererTimeGroupList",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "全片 · 0–片尾 秒",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.rendererTimeGroups.rendererTimeGroupList",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Edit",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.rendererTimeGroups.rendererTimeGroupName",
+        "value": "全片"
+      },
+      {
+        "type": "ControlType.Spinner",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.rendererTimeGroups.rendererTimeGroupStart",
+        "value": "0 秒开始"
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "新建时间组",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.rendererTimeGroups.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "删除",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.rendererTimeGroups.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Edit",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.QLineEdit",
+        "value": ""
+      },
+      {
+        "type": "ControlType.List",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "截取 Trim",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "裁切 Crop",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "转置 Transpose",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "指定帧率 AssumeFPS",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "位深转换 Depth",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "尺寸缩放 Resize",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "mpv GLSL 着色器",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "RemoveGrain",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "Bilateral",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.ListItem",
+        "name": "Reduce random noise · NLMeans",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.rendererCatalog",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "添加到处理链",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.QWidget.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Thumb",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.processingSidebar.rendererLeftColumn.qt_splithandle_rendererTimeGroups",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Thumb",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.qt_splithandle_rendererRightColumn",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Thumb",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QWidget.QStackedWidget.QWidget.QSplitter.qt_splithandle_",
+        "value": ""
+      },
+      {
+        "type": "ControlType.StatusBar",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QStatusBar",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Thumb",
+        "name": "",
+        "id": "QApplication.vsr::MainWindow.QStatusBar.QSizeGrip",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "就绪；打开源并点击“渲染预览”。",
+        "id": "QApplication.vsr::MainWindow.QStatusBar.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "帧 --  |  VS --  |  3FP --",
+        "id": "QApplication.vsr::MainWindow.QStatusBar.QLabel",
+        "value": null
+      }
+    ],
+    "position_ms": null,
+    "hlsl_badge": false,
+    "observed_utc": "2026-11-01T10:57:35.671875+00:00"
+  },
+  "loaded_modules": [
+    {
+      "name": "VSRenderer.exe",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\VSRenderer.exe"
+    },
+    {
+      "name": "ntdll.dll",
+      "path": "C:\\Windows\\SYSTEM32\\ntdll.dll"
+    },
+    {
+      "name": "KERNEL32.DLL",
+      "path": "C:\\Windows\\System32\\KERNEL32.DLL"
+    },
+    {
+      "name": "KERNELBASE.dll",
+      "path": "C:\\Windows\\System32\\KERNELBASE.dll"
+    },
+    {
+      "name": "apphelp.dll",
+      "path": "C:\\Windows\\SYSTEM32\\apphelp.dll"
+    },
+    {
+      "name": "msvcrt.dll",
+      "path": "C:\\Windows\\System32\\msvcrt.dll"
+    },
+    {
+      "name": "SHELL32.dll",
+      "path": "C:\\Windows\\System32\\SHELL32.dll"
+    },
+    {
+      "name": "Qt6Core.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\Qt6Core.dll"
+    },
+    {
+      "name": "msvcp_win.dll",
+      "path": "C:\\Windows\\System32\\msvcp_win.dll"
+    },
+    {
+      "name": "Qt6Network.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\Qt6Network.dll"
+    },
+    {
+      "name": "ADVAPI32.dll",
+      "path": "C:\\Windows\\System32\\ADVAPI32.dll"
+    },
+    {
+      "name": "ucrtbase.dll",
+      "path": "C:\\Windows\\System32\\ucrtbase.dll"
+    },
+    {
+      "name": "Qt6Gui.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\Qt6Gui.dll"
+    },
+    {
+      "name": "sechost.dll",
+      "path": "C:\\Windows\\System32\\sechost.dll"
+    },
+    {
+      "name": "USER32.dll",
+      "path": "C:\\Windows\\System32\\USER32.dll"
+    },
+    {
+      "name": "ole32.dll",
+      "path": "C:\\Windows\\System32\\ole32.dll"
+    },
+    {
+      "name": "GDI32.dll",
+      "path": "C:\\Windows\\System32\\GDI32.dll"
+    },
+    {
+      "name": "RPCRT4.dll",
+      "path": "C:\\Windows\\System32\\RPCRT4.dll"
+    },
+    {
+      "name": "win32u.dll",
+      "path": "C:\\Windows\\System32\\win32u.dll"
+    },
+    {
+      "name": "combase.dll",
+      "path": "C:\\Windows\\System32\\combase.dll"
+    },
+    {
+      "name": "wintypes.dll",
+      "path": "C:\\Windows\\System32\\wintypes.dll"
+    },
+    {
+      "name": "WS2_32.dll",
+      "path": "C:\\Windows\\System32\\WS2_32.dll"
+    },
+    {
+      "name": "gdi32full.dll",
+      "path": "C:\\Windows\\System32\\gdi32full.dll"
+    },
+    {
+      "name": "dxgi.dll",
+      "path": "C:\\Windows\\SYSTEM32\\dxgi.dll"
+    },
+    {
+      "name": "libgcc_s_seh-1.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\libgcc_s_seh-1.dll"
+    },
+    {
+      "name": "D3DCOMPILER_47.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\D3DCOMPILER_47.dll"
+    },
+    {
+      "name": "Qt6Widgets.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\Qt6Widgets.dll"
+    },
+    {
+      "name": "pdh.dll",
+      "path": "C:\\Windows\\SYSTEM32\\pdh.dll"
+    },
+    {
+      "name": "libwinpthread-1.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\libwinpthread-1.dll"
+    },
+    {
+      "name": "IPHLPAPI.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\IPHLPAPI.DLL"
+    },
+    {
+      "name": "d3d11.dll",
+      "path": "C:\\Windows\\SYSTEM32\\d3d11.dll"
+    },
+    {
+      "name": "DWrite.dll",
+      "path": "C:\\Windows\\SYSTEM32\\DWrite.dll"
+    },
+    {
+      "name": "DNSAPI.dll",
+      "path": "C:\\Windows\\SYSTEM32\\DNSAPI.dll"
+    },
+    {
+      "name": "MPR.dll",
+      "path": "C:\\Windows\\SYSTEM32\\MPR.dll"
+    },
+    {
+      "name": "NETAPI32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\NETAPI32.dll"
+    },
+    {
+      "name": "AUTHZ.dll",
+      "path": "C:\\Windows\\SYSTEM32\\AUTHZ.dll"
+    },
+    {
+      "name": "VERSION.dll",
+      "path": "C:\\Windows\\SYSTEM32\\VERSION.dll"
+    },
+    {
+      "name": "WINMM.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WINMM.dll"
+    },
+    {
+      "name": "USERENV.dll",
+      "path": "C:\\Windows\\SYSTEM32\\USERENV.dll"
+    },
+    {
+      "name": "Secur32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\Secur32.dll"
+    },
+    {
+      "name": "WINHTTP.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WINHTTP.dll"
+    },
+    {
+      "name": "UxTheme.dll",
+      "path": "C:\\Windows\\SYSTEM32\\UxTheme.dll"
+    },
+    {
+      "name": "libstdc++-6.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\libstdc++-6.dll"
+    },
+    {
+      "name": "powrprof.dll",
+      "path": "C:\\Windows\\SYSTEM32\\powrprof.dll"
+    },
+    {
+      "name": "dwmapi.dll",
+      "path": "C:\\Windows\\SYSTEM32\\dwmapi.dll"
+    },
+    {
+      "name": "CRYPTBASE.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\CRYPTBASE.DLL"
+    },
+    {
+      "name": "SSPICLI.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\SSPICLI.DLL"
+    },
+    {
+      "name": "NETUTILS.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\NETUTILS.DLL"
+    },
+    {
+      "name": "SRVCLI.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\SRVCLI.DLL"
+    },
+    {
+      "name": "IMM32.DLL",
+      "path": "C:\\Windows\\System32\\IMM32.DLL"
+    },
+    {
+      "name": "bcryptPrimitives.dll",
+      "path": "C:\\Windows\\System32\\bcryptPrimitives.dll"
+    },
+    {
+      "name": "UMPDC.dll",
+      "path": "C:\\Windows\\SYSTEM32\\UMPDC.dll"
+    },
+    {
+      "name": "NSI.dll",
+      "path": "C:\\Windows\\System32\\NSI.dll"
+    },
+    {
+      "name": "windows.storage.dll",
+      "path": "C:\\Windows\\System32\\windows.storage.dll"
+    },
+    {
+      "name": "SHCORE.dll",
+      "path": "C:\\Windows\\System32\\SHCORE.dll"
+    },
+    {
+      "name": "shlwapi.dll",
+      "path": "C:\\Windows\\System32\\shlwapi.dll"
+    },
+    {
+      "name": "profapi.dll",
+      "path": "C:\\Windows\\SYSTEM32\\profapi.dll"
+    },
+    {
+      "name": "qwindows.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\platforms\\qwindows.dll"
+    },
+    {
+      "name": "comdlg32.dll",
+      "path": "C:\\Windows\\System32\\comdlg32.dll"
+    },
+    {
+      "name": "OLEAUT32.dll",
+      "path": "C:\\Windows\\System32\\OLEAUT32.dll"
+    },
+    {
+      "name": "COMCTL32.dll",
+      "path": "C:\\Windows\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8037_none_87ebc5097a2f9e52\\COMCTL32.dll"
+    },
+    {
+      "name": "d3d9.dll",
+      "path": "C:\\Windows\\SYSTEM32\\d3d9.dll"
+    },
+    {
+      "name": "SETUPAPI.dll",
+      "path": "C:\\Windows\\System32\\SETUPAPI.dll"
+    },
+    {
+      "name": "WTSAPI32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WTSAPI32.dll"
+    },
+    {
+      "name": "CRYPT32.dll",
+      "path": "C:\\Windows\\System32\\CRYPT32.dll"
+    },
+    {
+      "name": "dxcore.dll",
+      "path": "C:\\Windows\\SYSTEM32\\dxcore.dll"
+    },
+    {
+      "name": "kernel.appcore.dll",
+      "path": "C:\\Windows\\SYSTEM32\\kernel.appcore.dll"
+    },
+    {
+      "name": "MSCTF.dll",
+      "path": "C:\\Windows\\System32\\MSCTF.dll"
+    },
+    {
+      "name": "DEVOBJ.dll",
+      "path": "C:\\Windows\\SYSTEM32\\DEVOBJ.dll"
+    },
+    {
+      "name": "cfgmgr32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\cfgmgr32.dll"
+    },
+    {
+      "name": "WINTRUST.dll",
+      "path": "C:\\Windows\\System32\\WINTRUST.dll"
+    },
+    {
+      "name": "MSASN1.dll",
+      "path": "C:\\Windows\\SYSTEM32\\MSASN1.dll"
+    },
+    {
+      "name": "qmodernwindowsstyle.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\styles\\qmodernwindowsstyle.dll"
+    },
+    {
+      "name": "qico.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\imageformats\\qico.dll"
+    },
+    {
+      "name": "qsvgicon.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\iconengines\\qsvgicon.dll"
+    },
+    {
+      "name": "Qt6Svg.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\Qt6Svg.dll"
+    },
+    {
+      "name": "qsvg.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\imageformats\\qsvg.dll"
+    },
+    {
+      "name": "IconCodecService.dll",
+      "path": "C:\\Windows\\system32\\IconCodecService.dll"
+    },
+    {
+      "name": "WindowsCodecs.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WindowsCodecs.dll"
+    },
+    {
+      "name": "qcertonlybackend.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\tls\\qcertonlybackend.dll"
+    },
+    {
+      "name": "qschannelbackend.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\tls\\qschannelbackend.dll"
+    },
+    {
+      "name": "ncrypt.dll",
+      "path": "C:\\Windows\\SYSTEM32\\ncrypt.dll"
+    },
+    {
+      "name": "bcrypt.dll",
+      "path": "C:\\Windows\\SYSTEM32\\bcrypt.dll"
+    },
+    {
+      "name": "NTASN1.dll",
+      "path": "C:\\Windows\\SYSTEM32\\NTASN1.dll"
+    },
+    {
+      "name": "dhcpcsvc6.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\dhcpcsvc6.DLL"
+    },
+    {
+      "name": "dhcpcsvc.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\dhcpcsvc.DLL"
+    },
+    {
+      "name": "clbcatq.dll",
+      "path": "C:\\Windows\\System32\\clbcatq.dll"
+    },
+    {
+      "name": "netprofm.dll",
+      "path": "C:\\Windows\\System32\\netprofm.dll"
+    },
+    {
+      "name": "mswsock.dll",
+      "path": "C:\\Windows\\system32\\mswsock.dll"
+    },
+    {
+      "name": "schannel.DLL",
+      "path": "C:\\Windows\\system32\\schannel.DLL"
+    },
+    {
+      "name": "npmproxy.dll",
+      "path": "C:\\Windows\\System32\\npmproxy.dll"
+    },
+    {
+      "name": "ncryptsslp.dll",
+      "path": "C:\\Windows\\system32\\ncryptsslp.dll"
+    },
+    {
+      "name": "cryptnet.dll",
+      "path": "C:\\Windows\\System32\\cryptnet.dll"
+    },
+    {
+      "name": "CRYPTSP.dll",
+      "path": "C:\\Windows\\SYSTEM32\\CRYPTSP.dll"
+    },
+    {
+      "name": "rsaenh.dll",
+      "path": "C:\\Windows\\system32\\rsaenh.dll"
+    },
+    {
+      "name": "WINNSI.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\WINNSI.DLL"
+    },
+    {
+      "name": "comctl32.dll",
+      "path": "C:\\Windows\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.26100.8037_none_3e092faae333b53b\\comctl32.dll"
+    },
+    {
+      "name": "imagehlp.dll",
+      "path": "C:\\Windows\\System32\\imagehlp.dll"
+    },
+    {
+      "name": "directxdatabasehelper.dll",
+      "path": "C:\\Windows\\SYSTEM32\\directxdatabasehelper.dll"
+    },
+    {
+      "name": "dataexchange.dll",
+      "path": "C:\\Windows\\system32\\dataexchange.dll"
+    },
+    {
+      "name": "twinapi.appcore.dll",
+      "path": "C:\\Windows\\system32\\twinapi.appcore.dll"
+    },
+    {
+      "name": "textinputframework.dll",
+      "path": "C:\\Windows\\SYSTEM32\\textinputframework.dll"
+    },
+    {
+      "name": "CoreMessaging.dll",
+      "path": "C:\\Windows\\SYSTEM32\\CoreMessaging.dll"
+    },
+    {
+      "name": "CoreUIComponents.dll",
+      "path": "C:\\Windows\\SYSTEM32\\CoreUIComponents.dll"
+    },
+    {
+      "name": "iFlyTsfIme.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iFlyTsfIme.dll"
+    },
+    {
+      "name": "PSAPI.DLL",
+      "path": "C:\\Windows\\System32\\PSAPI.DLL"
+    },
+    {
+      "name": "MSVCP120.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\Microsoft.Windows.PrivateCPlusPlusRuntime\\MSVCP120.dll"
+    },
+    {
+      "name": "MSVCR120.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\Microsoft.Windows.PrivateCPlusPlusRuntime\\MSVCR120.dll"
+    },
+    {
+      "name": "dbghelp.dll",
+      "path": "C:\\Windows\\SYSTEM32\\dbghelp.dll"
+    },
+    {
+      "name": "gdiplus.dll",
+      "path": "C:\\Windows\\WinSxS\\amd64_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.26100.8036_none_6ef439583dc61568\\gdiplus.dll"
+    },
+    {
+      "name": "dbgcore.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\dbgcore.DLL"
+    },
+    {
+      "name": "iflybuilder.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iflybuilder.dll"
+    },
+    {
+      "name": "iflybaselogic.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iflybaselogic.dll"
+    },
+    {
+      "name": "libxml2.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\libxml2.dll"
+    },
+    {
+      "name": "WSOCK32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WSOCK32.dll"
+    },
+    {
+      "name": "BaseGUI.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\BaseGUI.dll"
+    },
+    {
+      "name": "WININET.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WININET.dll"
+    },
+    {
+      "name": "MSIMG32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\MSIMG32.dll"
+    },
+    {
+      "name": "iflyclient.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iflyclient.dll"
+    },
+    {
+      "name": "iflycommon.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iflycommon.dll"
+    },
+    {
+      "name": "ntmarta.dll",
+      "path": "C:\\Windows\\SYSTEM32\\ntmarta.dll"
+    },
+    {
+      "name": "iFlyIMEQuickLaunch.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iFlyIMEQuickLaunch.dll"
+    },
+    {
+      "name": "MSVCP120.dll",
+      "path": "C:\\Windows\\SYSTEM32\\MSVCP120.dll"
+    },
+    {
+      "name": "MSVCR120.dll",
+      "path": "C:\\Windows\\SYSTEM32\\MSVCR120.dll"
+    },
+    {
+      "name": "uiautomationcore.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\uiautomationcore.DLL"
+    },
+    {
+      "name": "OneCoreCommonProxyStub.dll",
+      "path": "C:\\Windows\\System32\\OneCoreCommonProxyStub.dll"
+    }
+  ],
+  "qt_modules": [
+    {
+      "name": "Qt6Core.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\Qt6Core.dll"
+    },
+    {
+      "name": "Qt6Gui.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\Qt6Gui.dll"
+    },
+    {
+      "name": "Qt6Widgets.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\Qt6Widgets.dll"
+    },
+    {
+      "name": "qwindows.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\platforms\\qwindows.dll"
+    }
+  ],
+  "native": {
+    "disk_path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\FFF.Native.dll",
+    "disk_sha256": "57ca00bae99c12be3131f3bc2085d496f9ed54f747557b63117aa708d7bb135e",
+    "disk_matches_rebuilt": true,
+    "module_status": "not_loaded_empty_renderer",
+    "native_execution_tested": false
+  },
+  "startup_checks_passed": true,
+  "cleanup": {
+    "isolation": "new Windows Job Object",
+    "wm_close_pids": [
+      136648
+    ],
+    "forced_job_termination": false,
+    "remaining_owned_pids": [],
+    "player_exit_code": 0,
+    "launcher_exit_code": 0
+  },
+  "finished_utc": "2026-11-01T10:57:35.888063+00:00"
+}

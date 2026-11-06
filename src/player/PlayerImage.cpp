@@ -36,6 +36,9 @@ bool PlayerImage::supports(const QString &path) {
         QList<QByteArray>{"jpg","jpeg","jpe","jfif","png","webp","bmp","gif","tif","tiff","avif","heic","heif","jxl","jp2","j2k","j2c","jpf","jpm","jls","exr","tga","pcx","psd","psb","dds","qoi","hdr","wbmp","pbm","pgm","ppm","pnm"}.contains(suffix);
 }
 void PlayerImage::cancel() { ++generation_; }
+void PlayerImage::openPage(const QString &path,int page){
+    const auto generation=++generation_;QMetaObject::invokeMethod(worker_,[this,path,page,generation]{QImageReader reader(path);reader.setAutoTransform(true);QImage image;if(page==0 || reader.jumpToImage(page))image=reader.read();const auto error=reader.errorString();QMetaObject::invokeMethod(this,[this,generation,image,error]{if(generation!=generation_)return;if(image.isNull())emit failed(error);else emit loaded(image);},Qt::QueuedConnection);},Qt::QueuedConnection);
+}
 void PlayerImage::open(const QString &path) {
     const auto generation=++generation_;
     const auto runtime=QCoreApplication::applicationDirPath();

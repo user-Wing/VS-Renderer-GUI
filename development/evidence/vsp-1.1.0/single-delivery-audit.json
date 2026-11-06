@@ -1,0 +1,10 @@
+{
+  "bytes": 24934612,
+  "payloadBytes": 24844460,
+  "files": 89,
+  "verifiedManifestEntries": 88,
+  "sha256": "2e779ea9d953d4dc571306dfd8340851fd5fee26ce8eee672469f53974054ba6",
+  "footer": "VSLITE03",
+  "ffmpegBundled": false,
+  "userIniBundled": false
+}

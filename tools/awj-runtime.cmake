@@ -1,23 +1,23 @@
 # Keep the unmodified standalone CLI and matching source; GUI is not needed.
-set(awj_directory "${CMAKE_SOURCE_DIR}/.deps/awj/1.2.1")
+set(awj_directory "${CMAKE_SOURCE_DIR}/.deps/awj/1.3.1")
 set(awj_archive "${awj_directory}/AWJ_Win.7z")
-set(awj_source "${awj_directory}/AWJimage_1.2.1_Source.tar.gz")
+set(awj_source "${awj_directory}/AWJimage-1.3.1-source.zip")
 file(MAKE_DIRECTORY "${awj_directory}")
 if(NOT EXISTS "${awj_archive}")
-    file(DOWNLOAD "https://github.com/Dominic485649/AWJimage/releases/download/1.2.1/AWJ_Win.7z"
-        "${awj_archive}" EXPECTED_HASH SHA256=4b4431afc8f3b54a164a697fabe3589bf93bbb4388321a9459f0be0a40196fca TLS_VERIFY ON)
+    file(DOWNLOAD "https://github.com/Dominic485649/AWJimage/releases/download/1.3.1/AWJ_Win.7z"
+        "${awj_archive}" EXPECTED_HASH SHA256=5b4d2a16f7d6f7c74c84b23f88c088b77a9244671316a31dcd7826da8a74f865 TLS_VERIFY ON)
 endif()
 file(SHA256 "${awj_archive}" awj_hash)
-if(NOT awj_hash STREQUAL "4b4431afc8f3b54a164a697fabe3589bf93bbb4388321a9459f0be0a40196fca")
+if(NOT awj_hash STREQUAL "5b4d2a16f7d6f7c74c84b23f88c088b77a9244671316a31dcd7826da8a74f865")
     message(FATAL_ERROR "AWJimage archive hash mismatch")
 endif()
 file(ARCHIVE_EXTRACT INPUT "${awj_archive}" DESTINATION "${awj_directory}/bin")
 if(NOT EXISTS "${awj_source}")
-    file(DOWNLOAD "https://github.com/Dominic485649/AWJimage/releases/download/1.2.1/AWJimage_1.2.1_Source.tar.gz"
-        "${awj_source}" EXPECTED_HASH SHA256=fb77311ea822ff4425c013dfc0e4400ea859e2ae5ffd1c0f4ca765472deeb66f TLS_VERIFY ON)
+    file(DOWNLOAD "https://github.com/Dominic485649/AWJimage/releases/download/1.3.1/AWJimage-1.3.1-source.zip"
+        "${awj_source}" EXPECTED_HASH SHA256=82a33e3f54acaca830c37d03d3c671a0728473250e21b529030c44b4e4697124 TLS_VERIFY ON)
 endif()
 file(SHA256 "${awj_source}" awj_source_hash)
-if(NOT awj_source_hash STREQUAL "fb77311ea822ff4425c013dfc0e4400ea859e2ae5ffd1c0f4ca765472deeb66f")
+if(NOT awj_source_hash STREQUAL "82a33e3f54acaca830c37d03d3c671a0728473250e21b529030c44b4e4697124")
     message(FATAL_ERROR "AWJimage source archive hash mismatch")
 endif()
 add_custom_command(TARGET VSPlayer POST_BUILD

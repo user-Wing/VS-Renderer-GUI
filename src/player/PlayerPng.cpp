@@ -21,7 +21,6 @@
 #include <QDir>
 #include <QProcess>
 #include <QTemporaryDir>
-#include <QImageWriter>
 #include <future>
 #include <thread>
 #include <vector>
@@ -56,10 +55,9 @@ QString writeScreenshot(const QString &path,const QImage &input,QJsonObject meta
     const auto primaries=image.colorSpace().primaries()==QColorSpace::Primaries::Bt2020?"9":image.colorSpace().primaries()==QColorSpace::Primaries::DciP3D65?"12":"1";
     const auto transfer=hdr?(image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Hlg?"18":"16"):image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Linear?"8":image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Bt2020?"1":"13";
     auto stagedImage=image;
-    // FFmpeg propagates Qt's approximate HDR ICC as well as nclx. Supply
-    // explicit nclx below, without a contradictory inherited ICC profile.
-    if(!QFileInfo::exists(awj))stagedImage.setColorSpace({});
-    QImageWriter writer(staged,"png");writer.setCompression(70);if(!writer.write(stagedImage))return writer.errorString();
+    // Explicit PNG cICP avoids Qt's approximate ICC being rejected by AWJ's strict parser.
+    stagedImage.setColorSpace({});
+    const auto stagedError=writeScreenshotPng(staged,stagedImage,{{"pngPrimaries",QString(primaries).toInt()},{"pngTransfer",QString(transfer).toInt()}});if(!stagedError.isEmpty())return stagedError;
     if(QFileInfo::exists(awj))process.start(awj,{"-i",staged,"-o",temporary.path(),"--format","avif","--template","result","--quality","70","--avif-encoder","aom","--chroma","444","--bit-depth",hdr?"12":"10","--speed","6","--color-primaries",primaries,"--transfer-characteristics",transfer,"--matrix-coefficients",hdr?"9":"1","--color-range","1","--keep-metadata","--no-summary","--no-log"});
     else {
         const auto bundled=app.filePath("ffmpeg.exe");

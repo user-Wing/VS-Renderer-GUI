@@ -40,14 +40,15 @@ protected:
 }
 void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     auto *transport = new QGridLayout;transport->setContentsMargins(8,0,8,0);transport->setHorizontalSpacing(8);transport->setVerticalSpacing(4);transport->setColumnStretch(0,1);layout->addLayout(transport);
-    auto *slider = timeline_;transport->addWidget(slider,0,0);
-    mute_ = new QPushButton(this);mute_->setObjectName("playerMute");mute_->setCheckable(true);mute_->setFixedWidth(34);mute_->setIconSize(QSize(20,20));transport->addWidget(mute_,0,1);
-    volume_ = new QSlider(Qt::Horizontal, this); volume_->setObjectName("playerVolume"); volume_->setRange(0, 100); volume_->setValue(100); volume_->setFixedWidth(105); volume_->setToolTip(tr("音量"));transport->addWidget(volume_,0,2);
-    auto *volumePercent=new QLabel("100%",this);volumePercent->setObjectName("playerVolumePercent");volumePercent->setMinimumWidth(volumePercent->fontMetrics().horizontalAdvance("100%"));volumePercent->setAlignment(Qt::AlignRight|Qt::AlignVCenter);transport->addWidget(volumePercent,0,3);
+    auto *slider = timeline_;slider->setProperty("minimalControl",true);transport->addWidget(slider,0,0);
+    mute_ = new QPushButton(this);mute_->setObjectName("playerMute");mute_->setCheckable(true);mute_->setFixedWidth(34);mute_->setIconSize(QSize(20,20));
+    volume_ = new QSlider(Qt::Horizontal, this); volume_->setObjectName("playerVolume"); volume_->setRange(0, 200); volume_->setValue(100); volume_->setFixedWidth(130); volume_->setToolTip(tr("音量"));transport->addWidget(volume_,0,1);
+    auto *volumePercent=new QLineEdit("100%",this);volumePercent->setFixedWidth(54);volumePercent->setAlignment(Qt::AlignRight);volumePercent->setObjectName("playerVolumePercent");volumePercent->setMinimumWidth(volumePercent->fontMetrics().horizontalAdvance("100%"));
+    connect(volumePercent,&QLineEdit::editingFinished,this,[this,volumePercent]{bool ok=false;auto text=volumePercent->text();text.remove('%');const int value=text.toInt(&ok);if(ok)volume_->setValue(std::clamp(value,0,200));volumePercent->setText(QString::number(volume_->value())+"%");});
     const auto updateVolumeUi=[this,volumePercent]{volumePercent->setText(QString::number(volume_->value())+"%");mute_->setIcon(QIcon(mute_->isChecked()?":/ui/microphone-muted.svg":":/ui/microphone.svg"));mute_->setToolTip(mute_->isChecked()?tr("取消静音"):tr("静音"));mute_->setAccessibleName(mute_->toolTip());};updateVolumeUi();
     const auto volume = [this,updateVolumeUi] {updateVolumeUi();clock_->setVolume(volume_->value() / 100.0f); clock_->setMuted(lavAudio_ || mute_->isChecked()); if (lav_) lav_->volume(volume_->value() / 100.0f,!lavAudio_ || mute_->isChecked());settings_->setValue("player/volume",volume_->value());settings_->setValue("player/muted",mute_->isChecked()); };
     connect(volume_, &QSlider::valueChanged, this, volume); connect(mute_, &QPushButton::toggled, this, volume);
-    equalizerButton_=new QPushButton("EQ",this);equalizerButton_->setObjectName("playerEqualizerButton");equalizerButton_->setToolTip(tr("均衡器"));equalizerButton_->setFixedWidth(34);transport->addWidget(equalizerButton_,1,1);connect(equalizerButton_,&QPushButton::clicked,this,&PlayerWindow::showEqualizer);
+    equalizerButton_=new QPushButton("EQ",this);equalizerButton_->setObjectName("playerEqualizerButton");equalizerButton_->setToolTip(tr("均衡器"));equalizerButton_->setFixedWidth(34);auto *audioFooter=new QWidget(controls_);audioFooter->setObjectName("playerVolumeFooter");audioFooter->setProperty("minimalControl",true);auto *audioRow=new QHBoxLayout(audioFooter);audioRow->setContentsMargins(0,0,0,0);audioRow->setSpacing(4);audioRow->addWidget(mute_);audioRow->addWidget(equalizerButton_);audioRow->addWidget(volumePercent);transport->addWidget(audioFooter,1,1);connect(equalizerButton_,&QPushButton::clicked,this,&PlayerWindow::showEqualizer);
     timelinePreview_=new QTimer(this);timelinePreview_->setInterval(16);
     connect(timelinePreview_,&QTimer::timeout,this,[this]{
         if(!timelineDragging_ || timelineTarget_<0){timelinePreview_->stop();return;}
@@ -79,13 +80,14 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     });
     auto *row = new QHBoxLayout; row->setContentsMargins(0, 0, 0, 0); row->setSpacing(4); transport->addLayout(row,1,0);
     const auto button = [this, row](const QString &text, const QString &tooltip, auto action) {
-        auto *b = new QPushButton(text, this); b->setToolTip(tooltip); b->setFixedWidth(34); row->addWidget(b); connect(b, &QPushButton::clicked, this, action); return b;
+        auto *b = new QPushButton(text, this); b->setToolTip(tooltip); b->setFixedWidth(34); row->addWidget(b);b->setProperty("minimalControl",text=="▶" || text=="−1s" || text=="+1s"); connect(b, &QPushButton::clicked, this, action); return b;
     };
     play_ = button(QStringLiteral("▶"), tr("播放 / 暂停 · Space"), [this] { togglePlayback(); }); play_->setObjectName("playerPlay");
     button("|‹", tr("退一帧"), [this] { stepFrame(-1); });
     button("›|", tr("进一帧"), [this] { stepFrame(1); });
     button("−1s", tr("退一秒"), [this] { seekTime(position() - 10000000); });
     button("+1s", tr("进一秒"), [this] { seekTime(position() + 10000000); });
+    minimalButton_=button("·",tr("进入 / 退出极简音频模式 · ."),[this]{setMinimalMode(!minimalMode_);});minimalButton_->setObjectName("playerMinimal");minimalButton_->setProperty("minimalControl",true);
     const auto keyframe = [this](int direction) {
         suspendQualityCheck();
         manualFrame_ = -1;
@@ -110,10 +112,11 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     rate_ = new RateSpinBox(this); rate_->setObjectName("playerSpeed"); rate_->setRange(0.1, 16); rate_->setDecimals(2); rate_->setSingleStep(.05); rate_->setValue(1); rate_->setSuffix("×"); rate_->setButtonSymbols(QAbstractSpinBox::NoButtons); rate_->setKeyboardTracking(false); rate_->setFixedWidth(65); row->addWidget(rate_);
     rate_->setStyleSheet("QDoubleSpinBox{background:rgba(48,50,56,180);border:1px solid #70747b;} QDoubleSpinBox QLineEdit{background:transparent;border:none;}");
     connect(rate_, &QDoubleSpinBox::valueChanged, this, &PlayerWindow::setRate);
-    speedButton_=button("▾", tr("倍速配置"), [this] { showSpeedPopup(); }); speedButton_->setObjectName("playerSpeedPopupButton");
-    const auto badge = [this, row](const QString &text) { auto *label = new QLabel(text, this); label->setProperty("playerBadge",true); row->addWidget(label); return label; };
+    for(auto *widget:QList<QWidget*>{mute_,volume_,volumePercent,rate_})widget->setProperty("minimalControl",true);
+    speedButton_=button("▾", tr("倍速配置"), [this] { showSpeedPopup(); }); speedButton_->setObjectName("playerSpeedPopupButton");speedButton_->setProperty("minimalControl",true);
+    const auto badge = [this, row](const QString &text) { auto *label = new QLabel(text, this); label->setProperty("playerBadge",true);label->setFixedHeight(28); row->addWidget(label); return label; };
     videoBadge_ = badge("—"); audioBadge_ = badge("—");
-    decoderBadge_ = new QPushButton("3FP-HW", this); decoderBadge_->setObjectName("playerDecoder"); decoderBadge_->setToolTip(tr("切换 3FP 硬件 / 软件解码")); row->addWidget(decoderBadge_);
+    decoderBadge_ = new QPushButton("3FP-HW", this); decoderBadge_->setObjectName("playerDecoder");decoderBadge_->setFixedHeight(28); decoderBadge_->setToolTip(tr("切换 3FP 硬件 / 软件解码")); row->addWidget(decoderBadge_);
     connect(decoderBadge_, &QPushButton::clicked, this, [this] { if (lavVideo_) { showSettings(); return; } const auto current=source_.isEmpty()?settings_->value("decode/mode",2).toUInt():clock_->snapshot().decodeMode;const auto mode = current == 2 ? 1u : 2u; if (clock_->setDecodeMode(mode)) {settings_->setValue("decode/mode",mode);if(!source_.isEmpty())openFile(source_);} });
     hdrBadge_ = badge("SDR"); rendererBadge_ = badge("VS");algorithmBadge_=badge("Jinc");algorithmBadge_->setObjectName("playerAlgorithm");algorithmBadge_->setToolTip(tr("算法"));interpolationBadge_=badge({});interpolationBadge_->setObjectName("playerInterpolationAlgorithm");interpolationBadge_->setToolTip(tr("补帧算法"));interpolationBadge_->hide();row->addStretch();
 }

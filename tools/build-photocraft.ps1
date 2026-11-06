@@ -1,8 +1,8 @@
-param([string]$TargetDirectory = 'build/photocraft/target')
+param([string]$TargetDirectory = 'build/photocraft110-target', [string]$SourceDirectory = '.deps/photocraft-vsp110')
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $pin = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'photocraft-source.json') -Raw | ConvertFrom-Json
-$source = Join-Path $root '.deps/photocraft'
+$source = [IO.Path]::GetFullPath((Join-Path $root $SourceDirectory))
 $patch = Join-Path $root 'patches/photocraft-vsp-integration.patch'
 if (-not (Test-Path -LiteralPath $source)) {
     & git clone $pin.repository $source
@@ -54,7 +54,7 @@ retain their respective licenses in this folder. No proprietary ArtCraft Marks a
     }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'photocraft-source.json') -Destination $payload -Force
     $size = (Get-ChildItem -LiteralPath $payload -File | Measure-Object Length -Sum).Sum
-    if ($size -gt $pin.maximumComponentBytes) { throw "PhotoCraft component exceeds 45 MB: $size bytes" }
+    if ($size -gt $pin.maximumComponentBytes) { throw "PhotoCraft component exceeds its pinned size budget: $size bytes" }
     Write-Output "PhotoCraft runtime: $size bytes; Rust/Cargo and CLI are not runtime dependencies"
 } finally {
     $env:CARGO_TARGET_DIR = $previousTarget

@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 
 p = argparse.ArgumentParser()
 p.add_argument('--root', required=True)
@@ -118,6 +119,11 @@ for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', 'playerlite-runtime')]
                 shutil.copytree(source, target / directory,
                     ignore=shutil.ignore_patterns('qcertonlybackend.dll') if directory == 'tls' else None)
     copy(native, target / 'FFF.Native.dll')
+    tiff = root / 'build/qtimageformats110/plugins/imageformats/qtiff.dll'
+    if tiff.is_file():
+        copy(tiff, target / 'imageformats/qtiff.dll')
+        for name in ('LGPL-3.0-only.txt', 'libtiff.txt'):
+            copy(root / '.deps/qtimageformats110/LICENSES' / name, target / 'licenses/qtimageformats' / name)
     if edition == 'Full' and (runtime / 'licenses').is_dir():
         shutil.copytree(runtime / 'licenses', target / 'licenses', dirs_exist_ok=True)
     for name in ('anime4k-a-fast.glsl', 'anime4k-no-cnn.glsl'):
@@ -152,6 +158,7 @@ for edition, folder in [('Full', 'VS-GUI-Full'), ('Lite', 'playerlite-runtime')]
     if edition == 'Lite':
         for name in ['libstdc++-6.dll', 'libgcc_s_seh-1.dll', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Network.dll', 'Qt6Concurrent.dll']:
             subprocess.run([str(mingw / 'strip.exe'), '--strip-unneeded', str(target / name)], check=True)
+    subprocess.run([sys.executable, str(root / 'tools/stage-shader-tools.py'), '--output', str(target)], check=True)
     files = sorted(f for f in target.rglob('*') if f.is_file())
     total = sum(f.stat().st_size for f in files)
     app_dependencies = closure(target, [target / name for name in programs] + [target / 'FFF.Native.dll'] + plugins, True)

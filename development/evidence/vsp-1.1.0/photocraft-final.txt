@@ -1,0 +1,15 @@
+********* Start testing of TestPhotoCraft *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+QINFO  : TestPhotoCraft::initTestCase() PhotoCraft evidence: C:/Users/ARXChem/AppData/Local/Temp/vsp-photocraft-test-MCxihd
+PASS   : TestPhotoCraft::initTestCase()
+QINFO  : TestPhotoCraft::nativeEntryMultidocumentPrecisionAndTools() 24 MP native open ms: 344 bicubic resize ms: 269
+PASS   : TestPhotoCraft::nativeEntryMultidocumentPrecisionAndTools()
+QWARN  : TestPhotoCraft::streamedImportPrecision() engine.execute {"error":"automation command `edit.colorSettings` uses ambient filesystem paths and is disabled; use capability-scoped document methods","id":"engine.execute","ok":false}
+FAIL!  : TestPhotoCraft::streamedImportPrecision() 'call("engine.execute",{{"command","edit.colorSettings"},{"params",QJsonObject{{"askOnMismatch",false},{"policyRgb","preserve"}}}}).value("ok").toBool()' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPhotoCraft.cpp(107) : failure location
+SKIP   : TestPhotoCraft::largeImageOriginalDecoder() Set VSR_PHOTOCRAFT_LARGE_MANIFEST for the 48000x32000 image
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPhotoCraft.cpp(123) : failure location
+PASS   : TestPhotoCraft::editorSurvivesPlayerProcessExit()
+PASS   : TestPhotoCraft::cleanupTestCase()
+Totals: 4 passed, 1 failed, 1 skipped, 0 blacklisted, 21031ms
+********* Finished testing of TestPhotoCraft *********

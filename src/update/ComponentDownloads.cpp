@@ -30,8 +30,8 @@
 #endif
 namespace vsr {
 namespace {
-const QStringList ids{"VS-GUI","ffmpeg","mkvtoolnix","MadVR","LAV-Filters","aria2-next"};
-QString title(const QString &id){return id=="VS-GUI"?QStringLiteral("软件本体"):id;}
+const QStringList ids{"VS-GUI","ffmpeg","mkvtoolnix","MadVR","LAV-Filters","aria2-next","AI-Subtitles"};
+QString title(const QString &id){return id=="VS-GUI"?QStringLiteral("软件本体"):id=="AI-Subtitles"?QStringLiteral("AI 实时字幕 · Qwen3-ASR"):id;}
 QString tool(const QString &name){return QDir(QCoreApplication::applicationDirPath()).filePath("runtime/tools/"+name);}
 QJsonObject json(const QString &path){QFile f(path);return f.open(QIODevice::ReadOnly)?QJsonDocument::fromJson(f.readAll()).object():QJsonObject();}
 QString digest(const QString &path){QFile f(path);QCryptographicHash hash(QCryptographicHash::Sha256);if(!f.open(QIODevice::ReadOnly))return {};while(!f.atEnd()){const auto bytes=f.read(8*1024*1024);if(bytes.isEmpty())return {};hash.addData(bytes);}return QString::fromLatin1(hash.result().toHex());}
@@ -62,7 +62,7 @@ ComponentDownloads::ComponentDownloads(QWidget *parent):QWidget(parent),network_
     connect(&process_,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){if(error==QProcess::FailedToStart)fail(process_.errorString());});refresh();
 }
 ComponentDownloads::~ComponentDownloads(){if(process_.state()!=QProcess::NotRunning){process_.kill();process_.waitForFinished(3000);}}
-QString ComponentDownloads::destination(const QString &id){if(id=="ffmpeg")return ".";if(id=="mkvtoolnix")return "runtime/mkvtoolnix";if(id=="MadVR")return "madVR09217";if(id=="LAV-Filters")return "LAVFilters64";if(id=="aria2-next")return "runtime/tools";return {};}
+QString ComponentDownloads::destination(const QString &id){if(id=="ffmpeg")return ".";if(id=="mkvtoolnix")return "runtime/mkvtoolnix";if(id=="MadVR")return "madVR09217";if(id=="LAV-Filters")return "LAVFilters64";if(id=="aria2-next")return "runtime/tools";if(id=="AI-Subtitles")return "runtime/ai-subtitles";return {};}
 bool ComponentDownloads::newer(const QString &a,const QString &b){return !a.isEmpty() && (b.isEmpty() || QVersionNumber::compare(QVersionNumber::fromString(a).normalized(),QVersionNumber::fromString(b).normalized())>0);}
 QList<ComponentRelease> ComponentDownloads::releases(const QString &id,const QJsonArray &files){
     QList<ComponentRelease> result;for(const auto &value:files){const auto f=value.toObject();const auto path=f.value("Path").toString();if(f.value("Type").toString()!="blob" || !path.startsWith(id+"/",Qt::CaseInsensitive))continue;
@@ -78,6 +78,7 @@ QList<ComponentRelease> ComponentDownloads::releases(const QString &id,const QJs
 }
 QString ComponentDownloads::localVersion(const QString &id)const{
     if(id=="VS-GUI")return VSR_VERSION;const auto app=QCoreApplication::applicationDirPath();const auto installed=json(QDir(app).filePath("components.json")).value(id).toString();
+    if(id=="AI-Subtitles")return QFileInfo::exists(QDir(app).filePath("runtime/ai-subtitles/ai-subtitles.json"))?installed:QString();
     if(id=="mkvtoolnix" && !QFileInfo::exists(QDir(app).filePath("runtime/mkvtoolnix/mkvmerge.exe")) && QFileInfo::exists(QDir(app).filePath("runtime/mkvtoolnix.zip"))){QFile receipt(QDir(app).filePath("runtime/mkvtoolnix.version"));return receipt.open(QIODevice::ReadOnly)?QString::fromUtf8(receipt.readAll()).trimmed():installed;}
     QString file=id=="mkvtoolnix"?"runtime/mkvtoolnix/mkvmerge.exe":id=="ffmpeg"?"ffmpeg.exe":id=="aria2-next"?"runtime/tools/aria2-next.exe":id=="MadVR"?"madVR09217/madVR64.ax":"LAVFilters64/LAVVideo.ax";
     if(!QFileInfo(QDir(app).filePath(file)).isFile())return {};if(id=="MadVR" || id=="LAV-Filters")return fileVersion(QDir(app).filePath(file));if(id=="ffmpeg" && !installed.isEmpty())return installed;
@@ -113,8 +114,8 @@ void ComponentDownloads::unpack(){
         process_.disconnect(this);connect(&process_,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){if(error==QProcess::FailedToStart)fail(process_.errorString());});connect(&process_,&QProcess::finished,this,[this](int result,QProcess::ExitStatus exit){if(result || exit!=QProcess::NormalExit){fail(tr("解压失败"));return;}extracted();});process_.start(tool("7z.exe"),{"x","-y","-o"+staging_,archive_});});process_.start(tool("7z.exe"),{"l","-slt","-sccUTF-8",archive_});
 }
 QString ComponentDownloads::payloadDirectory(const QString &id,const QString &root){
-    const QString primary=id=="ffmpeg"?"ffmpeg.exe":id=="mkvtoolnix"?"mkvmerge.exe":id=="MadVR"?"madVR64.ax":id=="LAV-Filters"?"LAVVideo.ax":"aria2-next.exe";QStringList found;QDirIterator it(root,{primary},QDir::Files|QDir::NoSymLinks,QDirIterator::Subdirectories);
-    while(it.hasNext()){const auto file=it.next();if(!x64(file))continue;const auto folder=QFileInfo(file).absolutePath();bool complete=true;const auto needed=id=="LAV-Filters"?QStringList{"LAVAudio.ax","LAVSplitter.ax"}:id=="MadVR"?QStringList{"madHcCtrl.exe"}:QStringList{};for(const auto &name:needed)complete&=QFileInfo(QDir(folder).filePath(name)).isFile();if(complete)found<<folder;}return found.size()==1?found.first():QString();
+    const QString primary=id=="AI-Subtitles"?"ai-subtitles.json":id=="ffmpeg"?"ffmpeg.exe":id=="mkvtoolnix"?"mkvmerge.exe":id=="MadVR"?"madVR64.ax":id=="LAV-Filters"?"LAVVideo.ax":"aria2-next.exe";QStringList found;QDirIterator it(root,{primary},QDir::Files|QDir::NoSymLinks,QDirIterator::Subdirectories);
+    while(it.hasNext()){const auto file=it.next();if(id=="AI-Subtitles"){const auto folder=QFileInfo(file).absolutePath();const auto manifest=json(file);if(manifest.value("version").toInt()==2 && QFileInfo(QDir(folder).filePath("runtime/python/python.exe")).isFile() && QFileInfo(QDir(folder).filePath("models/conv_frontend.onnx")).isFile())found<<folder;continue;}if(!x64(file))continue;const auto folder=QFileInfo(file).absolutePath();bool complete=true;const auto needed=id=="LAV-Filters"?QStringList{"LAVAudio.ax","LAVSplitter.ax"}:id=="MadVR"?QStringList{"madHcCtrl.exe"}:QStringList{};for(const auto &name:needed)complete&=QFileInfo(QDir(folder).filePath(name)).isFile();if(complete)found<<folder;}return found.size()==1?found.first():QString();
 }
 void ComponentDownloads::extracted(){const auto payload=payloadDirectory(selected_.id,staging_);if(payload.isEmpty()){fail(tr("没有找到唯一完整的 64 位组件目录/主程序；包未安装：%1").arg(archive_));return;}for(int i=plan_.size()-1;i>=0;--i)if(plan_[i].toObject().value("id").toString()==selected_.id)plan_.removeAt(i);plan_<<QJsonObject{{"id",selected_.id},{"version",selected_.version},{"source",payload},{"archive",archive_},{"sha256",selected_.sha256}};emit componentPrepared(selected_.id,selected_.version,payload);finishDownload();}
 void ComponentDownloads::finishDownload(){downloadNext();}

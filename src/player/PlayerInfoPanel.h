@@ -26,7 +26,7 @@ private:
 class PlayerInfoPanel : public QLabel {
 public:
     explicit PlayerInfoPanel(QWidget *parent):QLabel(parent){
-        setObjectName("playerInfoPanel");setWindowFlags(Qt::Tool|Qt::FramelessWindowHint|Qt::WindowDoesNotAcceptFocus);setAttribute(Qt::WA_ShowWithoutActivating);setAttribute(Qt::WA_TranslucentBackground);setTextFormat(Qt::PlainText);
+        setObjectName("playerInfoPanel");setWindowFlags(Qt::Tool|Qt::FramelessWindowHint|Qt::WindowDoesNotAcceptFocus|Qt::WindowStaysOnTopHint);setAttribute(Qt::WA_ShowWithoutActivating);setAttribute(Qt::WA_TranslucentBackground);setTextFormat(Qt::PlainText);
         for(auto *widget=parent;widget;widget=widget->parentWidget())widget->installEventFilter(this);
         setAlignment(Qt::AlignTop|Qt::AlignLeft);setMargin(12);setContentsMargins(0,0,0,30);
         baseFont_=QFont("Comic Sans MS",9);setFont(baseFont_);
@@ -43,7 +43,7 @@ public:
     void showAudioPixmap(const QPixmap &pixmap){text_->setPixmap(pixmap);text_->resize(pixmap.size());const auto content=pixmap.size()+QSize(48,70);baseSize_=(content+QSize(0,qRound(content.height()*.05))).boundedTo(maximumSize());setMinimumSize(baseSize_);resize(size().expandedTo(baseSize_));layoutControls();}
     void setWidthLimit(int width){widthLimit_=width;}
     void setOverlayInsets(int top,int bottom){const bool changed=topInset_!=top || bottomInset_!=bottom;topInset_=top;bottomInset_=bottom;const auto available=availableSize();if(!changed && maximumSize()==available)return;setMaximumSize(available);setMinimumSize(baseSize_.boundedTo(available));resize(size().boundedTo(available));layoutControls();}
-    void hidePanel(){restore_=false;hide();}
+    void hidePanel(){hide();}
     void setRightSide(bool right){right_=right;audioMode_->hide();positionPanel();}
     void showText(const QString &text){
         QLabel::setText(text);text_->setText(text);setFont(baseFont_);QFontMetrics metrics(baseFont_,this);int width=0;
@@ -55,10 +55,6 @@ public:
     }
 protected:
     bool eventFilter(QObject *object,QEvent *event) override {
-        if(parentWidget() && object==parentWidget()->window()){
-            if(event->type()==QEvent::WindowDeactivate){restore_=isVisible();hide();}
-            else if(event->type()==QEvent::WindowActivate && restore_){restore_=false;show();}
-        }
         if(isVisible()&&(event->type()==QEvent::Move||event->type()==QEvent::Resize))positionPanel();return QLabel::eventFilter(object,event);
     }
     void paintEvent(QPaintEvent *) override {QPainter painter(this);painter.fillRect(rect(),QColor(23,25,30,(100-opacity_->value())*255/100));painter.setPen(QColor(145,150,160));painter.drawRect(rect().adjusted(0,0,-1,-1));}
@@ -79,7 +75,7 @@ private:
         setStyleSheet(QString("QLabel#playerInfoPanel{font-size:%1pt;background:transparent;color:#f4f4f4;} QLabel,QSlider,QSizeGrip,QScrollArea,QScrollArea QWidget{font-size:%1pt;background:transparent;color:#f4f4f4;} QComboBox{background:#303238;color:#f4f4f4;} QSlider::groove:horizontal{background:#666;height:4px;} QSlider::handle:horizontal{background:#c8d4ea;width:12px;margin:-4px 0;}").arg(font.pointSizeF()));update();
         positionPanel();
     }
-    QSlider *opacity_=nullptr;QLabel *opacityText_=nullptr,*percent_=nullptr;QSizeGrip *grip_=nullptr;QFont baseFont_;QSize baseSize_{0,0};bool initialized_=false,restore_=false;
+    QSlider *opacity_=nullptr;QLabel *opacityText_=nullptr,*percent_=nullptr;QSizeGrip *grip_=nullptr;QFont baseFont_;QSize baseSize_{0,0};bool initialized_=false;
     QScrollArea *scroll_=nullptr;QLabel *text_=nullptr;QComboBox *audioMode_=nullptr;bool right_=false;
     int widthLimit_=0,topInset_=0,bottomInset_=0;
 };

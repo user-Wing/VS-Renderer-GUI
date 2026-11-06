@@ -1,0 +1,37 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+FAIL!  : TestPlayer::fullNativeAnimeAndEditedPresetFallback() 'player.nativeBuiltinCompatible()' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(140) : failure location
+PASS   : TestPlayer::generatedVpyHlslAndUnsupportedHookFallback()
+PASS   : TestPlayer::animeStageSelection(CNN-enhanced-420-10)
+PASS   : TestPlayer::animeStageSelection(CNN-422-10)
+PASS   : TestPlayer::animeStageSelection(no-CNN-enhanced-444-10)
+PASS   : TestPlayer::animeStageSelection(no-CNN-420-10)
+PASS   : TestPlayer::animeStageSelection(Jinc)
+PASS   : TestPlayer::animeStageSelection(D3D11)
+FAIL!  : TestPlayer::fixedAnimePresets(CNN-enhanced-420-10) Compared values are not the same
+   Actual   (checked): 4
+   Expected (1)      : 1
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1421) : failure location
+FAIL!  : TestPlayer::fixedAnimePresets(CNN-422-10) Compared values are not the same
+   Actual   (checked): 4
+   Expected (1)      : 1
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1421) : failure location
+FAIL!  : TestPlayer::fixedAnimePresets(no-CNN-enhanced-444-10) Compared values are not the same
+   Actual   (checked): 4
+   Expected (1)      : 1
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1421) : failure location
+FAIL!  : TestPlayer::fixedAnimePresets(no-CNN-420-10) Compared values are not the same
+   Actual   (checked): 4
+   Expected (1)      : 1
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1421) : failure location
+FAIL!  : TestPlayer::fixedAnimePresets(Jinc) Compared values are not the same
+   Actual   (checked): 4
+   Expected (1)      : 1
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1421) : failure location
+FAIL!  : TestPlayer::fixedAnimePresets(D3D11) 'player.findChild<QLabel *>("playerStatus")->text().contains(QStringLiteral("D3D11 原生直通"))' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1419) : failure location
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 9 passed, 7 failed, 0 skipped, 0 blacklisted, 24195ms
+********* Finished testing of TestPlayer *********

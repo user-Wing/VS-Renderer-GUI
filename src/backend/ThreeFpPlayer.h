@@ -22,6 +22,9 @@ public:
     bool openFile(const QString &path);
     bool play();
     bool pause();
+    void setLoudnessNormalization(bool enabled);
+    QSize processingSize() const;
+    bool setDecodeBuffer(quint64 bytes,unsigned frames);
     bool setClockOnly(bool enabled);
     bool setSoftwarePreScale(int height);
     void stop();
@@ -43,6 +46,8 @@ public:
     bool setVrrPresent(bool enabled);
     bool setVrrPacing(bool enabled);
     bool setScalingAlgorithms(ThreeFpScalingAlgorithm upscale, ThreeFpScalingAlgorithm downscale);
+    void setSecondaryScaling(int algorithm);
+    bool setCustomShader(const QString &packagePath, int outputWidth = 0, int outputHeight = 0);
     bool setChromaAlgorithm(int algorithm);
     void setView(float zoom, float panX, float panY);
     void redraw();
@@ -69,6 +74,7 @@ private:
     bool createSession();
     bool check(ThreeFpResult result, const QString &operation);
 
+    int secondaryScaling_ = -1;
     ThreeFpApi &api_;
     QWidget *surface_ = nullptr;
     void *handle_ = nullptr;
@@ -85,6 +91,8 @@ private:
     bool customColorSettings_ = false;
     bool antiRinging_ = false;
     QString outputFormat_;
+    QString customShaderPath_;
+    int customShaderWidth_ = 0, customShaderHeight_ = 0;
     quint64 subtitleSequence_ = 0;
     bool vrrPresent_ = false;
     bool vrrPacing_ = false;

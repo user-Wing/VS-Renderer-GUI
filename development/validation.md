@@ -1,6 +1,6 @@
 # 版本测试台账
 
-核对日期：2026-11-01。历史轮次整理自仓库已留存报告；本轮 1.0.16 单独列出。当前源码为 1.0.16；旧版本、旧 DLL、不同设备、电源状态或不同输出尺寸的结果不自动继承到当前产物。
+核对日期：2026-11-06。历史轮次整理自仓库已留存报告；本轮 1.1.0 单独列出。当前源码为 1.1.0（本地开发，未发布）；旧版本、旧 DLL、不同设备、电源状态或不同输出尺寸的结果不自动继承到当前产物。
 
 ## 如何读结论
 
@@ -11,6 +11,76 @@
 - 同版本多轮续修按轮次记录，旧失败须有后续相同路径的验证才能关闭，失败证据仍保留。
 
 原报告原样合并至 [history.md](history.md)，按原文件名索引，每份保留字节数和 SHA-256。原文中的“当前”、路径和发布状态属于记录当时。`build/` 不是持久证据库：报告引用该目录，不保证换机器后日志仍可读。1.0.12 精选 CSV/日志保存在 [evidence](evidence/player-kernel-1.0.12/summary.json)。
+
+## 1.1.0 基础修正续轮（2026-11-06）
+
+按维护者要求，这轮不启动播放器/GUI/媒体测试、内存压力测试或回归套件，GBC第二集2:15–2:35留待之后验收。仅做源码核对、构建、离线shader编译、部署哈希与Git核对；不把本轮界面、响度或内存修正写成实机通过。
+
+常规缓冲改为8帧预算，尖峰临近时最多48帧且2GiB；Tab/状态/最简/设置/音量控件与多路同步已修源码。100%主观响度差异没有听测确认，原生1.0增益与旧代码一致；修复EQ的100%上限对200%主音量的钳制，不人为添加未经测量的固定增益。
+
+输出只覆盖既有`dist/VS-GUI-Full`，保存配置、VPY及色彩文件；发布状态不变。本轮Qt Renderer/Full Player/Lite Player/VSCap构建通过；915份文件离线逐个处理，266份可打包（231份复用已验证字节码，35份新增编译），649份执行语义或编译不兼容，0份超时。只确认编译，不确认新增shader画面等价。详细逐文件结果留在`build/vsp110-basicfix-20261106/shader-batch-report.json`。以下数字均属于此前轮次，不能继承为当前产物验证。
+
+## 1.1.0：本地开发与全量回归尝试（2026-11-06）
+
+**当前未达到发布验收。** 全部25组CTest已执行，完成轮次为20组通过/5组失败，包含两组异常退出；续修专项与最终状态见[逐项交付清单](evidence/vsp-1.1.0/README.md)及[机器摘要](evidence/vsp-1.1.0/summary.json)。不将修复后的局部通过折算为25组全量通过。
+
+| 验证 | 结果与限制 |
+| --- | --- |
+| 构建/上游重放 | Qt Full/Lite/Renderer/Cap与Native通过；干净上游checkout应用1.1.0汇总补丁并重建通过 |
+| Shader | 15通过/0失败；231/915份预编译可用，684份未支持；HLSL亮度R16改动48组实际像素对照通过 |
+| Lite | 最后整套37通过/0失败/5跳过；实际PCM100%→200%电平由0.0707068升至0.141421；最简不解码视频、真实HDR切换恢复通过 |
+| PhotoCraft | 最后5通过/0失败/1跳过；保留嵌入颜色配置后8/16/32位宽图精度通过；1.536Gpixel样本未提供 |
+| Renderer处理路 | 聚焦4通过/0失败，含独立输出、隐藏后重新验证不重启输出、启动预算；完整套件另有下载/居中失败并超时 |
+| Full原生启动/定位/8K硬解 | 聚焦9通过/0失败，含单CPU软解定位；8K48硬解约10秒485/486帧、零掉帧，显示区域1182×665；D3D11名义档实际原生shader路径 |
+| 8K48软件解码 | 3840×2160显示区域测量用例执行通过，实际逐帧实时未达标，有掉帧/音频欠载；以summary.json和CSV实际数据为准 |
+| GLSL性能 | A/B/B/A无稳定收益，异步上传实验已撤回；不能声称本轮GLSL性能改善 |
+| AI/NCNN/新增滤镜 | 真实日语ASR与原生音频tap通过，RTF约0.14；21个NCNN模型真实子进程及VS单帧/实时跳过通过；QTGMC/SMDegrain/FFT3DFilter/BM3D均实际取帧 |
+| 图片/截图/主题 | AWJ RAW缩放、格式转换及HDR截图专项通过；GIF/TIFF动画通过；主题实际绘制测试通过。完整套件中的图片布局失败另有7通过/0失败/1跳过专项重测 |
+| 色彩/完整交互 | 原生BT.2020 CL仍9通过/1失败；Full浮层额外redraw、音频Tab面板布局及Renderer完整回归未关闭 |
+
+码率探测在播放器析构后的回调曾导致异常退出，已改为释放播放对象前停止探测并断开回调；保留修复前日志，最终完整播放器复测以机器摘要为准。不能从单项成功推出连续整套生命周期通过。
+
+AI组件ZIP已单独准备，上传`ARXChem/Software-List`的`AI-Subtitles/1.1.0/AI-Subtitles-1.1.0.zip`，大小/哈希见[上传收据](evidence/vsp-1.1.0/ai-upload.json)，本轮未上传。Full和单文件位于独立1.1.0路径；最终资源、生命周期与原有46项配置/预设/色彩哈希核对见机器摘要。
+
+明确延期：FFmpeg重编译/MoeSR/教程与Pareto/NuxBox。仍未完成：PawnIO真实功耗及下载入口、VideoEnhancer式HDR参数、指定GBC第二集尖峰验收、GLSL性能目标及780M48fps目标；LAV超过100%的真实增强未实现/未验收。
+
+## 1.0.17：Full 与自定义 HLSL 本地更新（2026-11-01）
+
+本轮将 Full 的 Anime 八档播放路径接入原生执行器：六个固定增强档使用 HLSL，Jinc/D3D11 两档保持原生直通；兼容的自定义 GLSL/HLSL 可导入、转换并缓存。Full 的自定义 VPY 与 Renderer 预览只提取可验证生成图的末尾 shader，前序 VS 处理继续执行，编码导出保留完整 VPY。最终证据、产物哈希和失败历史见 [本轮摘要](evidence/release-1.0.17/summary.json)。
+
+**覆盖边界：本轮并未把全部内置 GLSL 都迁移。** 四个 `Super-*` 超分补帧组合仍执行原 VPY/GLSL，不能把 RIFE 前的 shader 移到链末；三个独立 `sharpen_edges`、`crispen_edges`、`enhance_detail` 节点的任意参数和原 Y 域 LUMA/色度语义仍保留原实现。固定 Anime 增强档内的专用 LUMA 实现不代表通用导入已支持 LUMA。多个 shader 串联仅提取兼容尾节点；仅存在于 shader 归档中、没有磁盘文件的库条目会明确回退。
+
+| 专项 | 最终结果 | 覆盖与边界 |
+| --- | --- | --- |
+| 原生与 Qt 构建 | 通过 | MSVC Native、Full/Lite Player、Renderer、Cap；原 128 个 Native 导出全部保留，仅新增 `VSR3FP_SetCustomShader`，总计 129 |
+| Shader 编译与缓存 | 13 passed / 0 failed / 0 skipped | 原生 HLSL、实际随包 Anime shader、Unicode 路径、缓存复用/失效/截断修复、严格拒绝不支持语义 |
+| 图与 VPY 提取 | 17 passed / 0 failed / 0 skipped | 末尾节点、处理顺序、前序尺寸、修改过的 Python、多时间组与输出尺寸检查 |
+| 参数编辑器 | 5 passed / 0 failed / 0 skipped | 高级参数 HLSL 开关及保存恢复 |
+| Lite 播放专项 | 23 passed / 0 failed / 0 skipped | 导入菜单、原生/多 pass/PREKERNEL/COMPONENTS 实际像素、失败保留旧 shader、源副本与重启缓存、真实 PQ→SDR 恢复、真实动画八档及缩小清屏 |
+| Full 播放专项 | 16 passed / 0 failed / 0 skipped | 内置原生路径、CRLF 正文匹配、修改正文保留 Python、自定义 VPY 的 HLSL 实际画面、不支持 hook 的 GLSL 回退及档位选择 |
+| Renderer 专项 | 5 passed / 0 failed / 0 skipped | HLSL 预览、前序 VS resize 与节点 OUTPUT 尺寸、LUMA 回退、保留原导出、编辑正文保护及 128/1024/8192 倍实际像素间距 |
+| 语言资源 | 613 条通过 | 中英文键覆盖和参数占位符匹配 |
+| 产物与原有文件 | 13/13 项检查通过 | Full 632 项清单；Single 85 项内嵌资源、CRC/SHA、暂存逐项一致；转换工具/许可齐全；25 个原有 INI/VPY/色彩及相关文件哈希不变；无新增发布压缩包 |
+| 最终程序启动 | 通过 | Full Renderer 空白主窗口响应并正常退出；最终单文件副本首次冷解包、新 GLSL 缓存、实际 HLSL 播放时间前进、加载本次 Native、正常退出及用户配置保持 |
+
+QtTest 计数包含 init/cleanup；上述为不同专项，不相加宣称全量回归。Full 空白主窗口启动不等于媒体播放验证，实际 Native/VS 路径由对应 QtTest 像素与播放用例覆盖。
+
+### 本轮失败与修复的对应证据
+
+- Full 首轮因内置期望正文未同步规范化 CRLF，正确预设未进入原生链；两侧正文统一换行后通过，修改正文的反例仍保留 VPY。旧档位测试把其它菜单组的选中项算入，改为检查实际八档 QActionGroup 的排他性与唯一选择。
+- 首个 FFV1 测试素材没有保留 PQ transfer/BT.2020 primaries，不能用它要求 HDR 标志。最终 fixture 采用 HEVC 编码后显式颜色参数 remux，并在播放前由 ffprobe 断言流包含 PQ/BT.2020；Native 也实际报告 HDR10。
+- 真正的 HDR→SDR 连续换源曾在返回 SDR 时未恢复 shader：`SetCustomShader` 在新源首帧前错误读取上一 HDR 的颜色缓存。仅将该预检限制为有效缓存画面，实际逐帧颜色保护未放宽。原 RGB 恢复断言最终通过；无音轨重开也不再调用无效的 `selectAudio(-1)` 或 Failed 状态的 Stop。
+- 初次测试缺少媒体/Qt 运行依赖导致启动失败；补全对应测试目录依赖后重新验证，最终产物另做独立启动。失败日志仍保留，不把这些轮次当作通过。
+
+### 本地产物与可行性结论
+
+干净 Full 位于 `dist/VS-GUI-Full-1.0.17`；保留正在使用的旧 `dist/VS-GUI-Full`。单文件为 `dist/VS-Player.exe`，34,028,319 字节（约 32.45 MiB），没有嵌入用户 INI、Python/VapourSynth 或 FFmpeg 专用文件，继续使用外置 FFmpeg。原单文件备份在 `build/release-1.0.17/backup`。Full、Single 和本次重建目录中的 FFF.Native.dll 的 SHA-256 均为 `57ca00bae99c12be3131f3bc2085d496f9ed54f747557b63117aa708d7bb135e`。
+
+通用导入当前支持 MAIN/PREKERNEL 像素 pass、纹理依赖与保存、条件和尺寸表达式、COMPONENTS；NATIVE 仅提供尺寸。HDR/广色域或额外颜色变换、LUMA 通用 hook、计算 shader、外部纹理等保留原链或明确拒绝。直接播放中的不兼容 shader 停用后继续视频；Full/Renderer 可以回到原 GLSL。
+
+任意 VPY 是 Python 和插件执行图，并非单份 shader 语言。可继续扩展显式算子白名单及相应 GPU 实现，但不能仅靠 SPIRV-Cross 把任意 Python、逐帧回调、时域滤镜或 AI 插件自动转换成等价 HLSL。本轮没有重测“八倍”性能，不将原单文件的样本收益推广到所有滤镜；HDR 仅验证切换、回退与恢复，未做色准、长时间稳定性或核显/4K 实时性能验收。
+
+本轮只保留本地源码与运行产物，没有 push、上传、创建 PR/Release 或生成独立 ZIP/7z 发布包。既有删除与实验文件保持原状态。
 
 ## 1.0.16：缩小套叠修复与统一内核（2026-11-01）
 
@@ -317,3 +387,9 @@ Y412最终使用24工作线程/24帧上下文，对照旧32/32，60秒窗口私�
 10月17日该轮仅整理文档和文档复制路径；未构建、未启动播放器、未重新测性能、未更新dist或Release，不能把历史数字当作该轮执行结果。
 
 2026-10-17 文档校验通过：87份归档逐份核对字节数/SHA-256，并与Git HEAD原文比对（仅容许Git工作区换行转换）；14份证据、3份第三方文件内容保留；103处本地链接/锚点有效；11节项目骨架、13个倒序版本完整；2份Python语法、5份PowerShell语法和`git diff --check`通过。隔离目录复制10份指南、4份许可/清单成功，指南哈希与源文件一致。检查摘要在本机`build/doc-reorganization-check.json`；没有执行完整部署或打包脚本。
+
+## 1.0.17局部续修：单文件多pass HLSL（2026-11-06）
+
+仅为本机MoeSR 52-pass模型增加原生HLSL的HOOK分段读取，普通单pass导入保持兼容。ShaderPackage专项QtTest为14通过、0失败；加入多pass用例后先观察到旧路径资源重定义失败，再修复为逐段编译。测试日志、真实52-pass文件导入及三种D3D11数值用例保存在本机`EnhanceModel-Test-New/GLSL-Student/Production-3d-20261101/acceptance-20261106`，入口为该目录的ImportProbe.cpp和HlslProbe.cpp。
+
+真实1920×1080→3840×2160输出相对同权重PyTorch AMP的最大RGB绝对误差0.00146484、平均0.00013364；GPU执行计时约47.29ms，排除解码、显示和回读，不能当作播放器实测帧率。VSPlayerLite构建成功，另存`dist/VS-Player-MoeSR.exe`；原`dist/VS-Player.exe`SHA256保持`4609364236946011ce13d3857784ad222580f6ee73774534c4c7fc471f263015`。未执行播放器菜单/视频播放验收或整套回归，未改版本、提交、发布。

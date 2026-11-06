@@ -12,6 +12,7 @@ public:
     ~PlayerImage() override;
     static bool supports(const QString &path);
     void open(const QString &path);
+    void openPage(const QString &path,int page);
     void cancel();
 signals:
     void loaded(const QImage &image);

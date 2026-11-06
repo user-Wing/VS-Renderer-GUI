@@ -69,6 +69,20 @@ FilterGraph PresetStore::graph(const QJsonObject &data)
     }
     return graph;
 }
+bool PresetStore::verifiedGraph(const QString &script,FilterGraph *output,SourceFilter *filter) {
+    const auto data=metadata(script);const int schema=data.value("schema").toInt();
+    if((schema!=1 && schema!=2) || (schema==2 && data.value("timeGroups").toArray().size()!=1))return false;
+    const auto groups=timeGroups(data);if(groups.size()!=1 || groups.first().startSeconds!=0 || !groups.first().script.isEmpty())return false;
+    const auto graph=groups.first().graph;
+    const auto nodes=data.value("schema").toInt()==2?data.value("timeGroups").toArray().first().toObject().value("nodes").toArray():data.value("nodes").toArray();
+    if(nodes.size()!=graph.nodes().size())return false;
+    const auto sourceFilter=static_cast<SourceFilter>(data.value("sourceFilter").toInt());
+    if(sourceFilter!=SourceFilter::Ffms2 && sourceFilter!=SourceFilter::Lsmas)return false;
+    auto expected=data.value("schema").toInt()==2?create(groups,sourceFilter,data.value("sourcePath").toString(),data.value("note").toString()):create(graph,sourceFilter,data.value("sourcePath").toString(),data.value("note").toString());
+    const auto body=[](QString text){text.replace("\r\n","\n");if(!text.startsWith("# VSR_PRESET "))return QString();return text.mid(text.indexOf('\n')+1).trimmed();};
+    if(body(script).isEmpty() || body(script)!=body(expected))return false;
+    *output=graph;*filter=sourceFilter;return true;
+}
 ScriptBuildResult PresetStore::load(const QString &path, const QString &source)
 {
     ScriptBuildResult result;

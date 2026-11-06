@@ -161,10 +161,16 @@ struct ThreeFpSnapshot {
     std::uint64_t uploadCount;
     std::uint64_t uploadCopyBytes;
     std::uint32_t uploadPath;
+    std::uint64_t videoDecode100ns, demuxRead100ns, trueHdrBlit100ns, vsrBlit100ns, mainDraw100ns, scalePass100ns;
+    std::uint64_t corruptPackets, timestampAnomalies, slowReads, readErrors, decodeErrors, incompleteReads;
+    std::int64_t availableDuration100ns;
+    std::uint32_t durationKnown, waitingForInput;
+    double playbackRate;
+    std::uint64_t audioFailures;
 };
 
 static_assert(sizeof(ThreeFpConfiguration) == 112);
-static_assert(sizeof(ThreeFpSnapshot) == 464);
+static_assert(sizeof(ThreeFpSnapshot) == 592);
 static_assert(offsetof(ThreeFpSnapshot, audioDelay100ns) == 400);
 static_assert(offsetof(ThreeFpSnapshot, uploadCount) == 440);
 static_assert(offsetof(ThreeFpSnapshot, uploadPath) == 456);
@@ -236,6 +242,10 @@ public:
     ThreeFpResult open(void *handle, const char *pathUtf8) const;
     ThreeFpResult play(void *handle) const;
     ThreeFpResult pause(void *handle) const;
+    ThreeFpResult setLoudnessNormalization(void *handle,bool enabled) const;
+    QImage resampleImage(const QImage &image,const QSize &size,unsigned algorithm) const;
+    QSize processingSize(void *handle) const;
+    ThreeFpResult setDecodeBuffer(void *handle,quint64 bytes,unsigned frames) const;
     ThreeFpResult setClockOnly(void *handle, bool enabled) const;
     ThreeFpResult setSoftwarePreScale(void *handle, int height) const;
     ThreeFpResult stop(void *handle) const;
@@ -257,6 +267,7 @@ public:
     ThreeFpResult setViewTransform(void *handle, float zoom, float panX, float panY) const;
     ThreeFpResult setScalingAlgorithms(void *handle, ThreeFpScalingAlgorithm upscale,
                                        ThreeFpScalingAlgorithm downscale) const;
+    ThreeFpResult setCustomShader(void *handle, const char *packagePath, int width, int height) const;
     ThreeFpResult snapshot(void *handle, ThreeFpSnapshot *snapshot) const;
     ThreeFpResult setColorSettings(void *handle, const VsrColorSettings *settings) const;
     ThreeFpResult colorStatus(void *handle, VsrColorStatus *status) const;

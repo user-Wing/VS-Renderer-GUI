@@ -22,8 +22,8 @@ function Test-DownloadedArchive([string]$Path,[string]$Expected) {
 try {
     if ($installRoot -eq [IO.Path]::GetPathRoot($installRoot).TrimEnd('\') -or !(Test-Path -LiteralPath (Join-Path $installRoot $Launch))) {throw 'Invalid portable installation'}
     $entries=Get-Content -LiteralPath $Plan -Raw | ConvertFrom-Json
-    $destinations=@{'ffmpeg'='.';'mkvtoolnix'='runtime\mkvtoolnix';'MadVR'='madVR09217';'LAV-Filters'='LAVFilters64';'aria2-next'='runtime\tools'}
-    $programs=@{'ffmpeg'='ffmpeg.exe';'mkvtoolnix'='mkvmerge.exe';'MadVR'='madVR64.ax';'LAV-Filters'='LAVVideo.ax';'aria2-next'='aria2-next.exe'}
+    $destinations=@{'ffmpeg'='.';'mkvtoolnix'='runtime\mkvtoolnix';'MadVR'='madVR09217';'LAV-Filters'='LAVFilters64';'aria2-next'='runtime\tools';'AI-Subtitles'='runtime\ai-subtitles'}
+    $programs=@{'ffmpeg'='ffmpeg.exe';'mkvtoolnix'='mkvmerge.exe';'MadVR'='madVR64.ax';'LAV-Filters'='LAVVideo.ax';'aria2-next'='aria2-next.exe';'AI-Subtitles'='ai-subtitles.json'}
     if (!$entries.Count) {throw 'Empty component plan'}
     foreach($entry in $entries){
         if (!$destinations.ContainsKey($entry.id) -or $entry.version -notmatch '^\d+(\.\d+){0,3}$') {throw 'Invalid component identity/version'}

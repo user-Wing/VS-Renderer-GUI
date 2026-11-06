@@ -13,9 +13,10 @@ QImage PlayerImageTools::resample(const QImage &input,const QSize &size,const QS
     if(input.size()==size)return input;
     if(algorithm=="nearest")return input.scaled(size,Qt::IgnoreAspectRatio,Qt::FastTransformation);
     if(algorithm=="bilinear")return input.scaled(size,Qt::IgnoreAspectRatio,Qt::SmoothTransformation);
+    const bool floating=input.pixelFormat().typeInterpretation()==QPixelFormat::FloatingPoint;
     const bool wide=input.depth()>32;
-    const auto image=wide?input.convertToFormat(QImage::Format_RGBA64_Premultiplied):input.format()==QImage::Format_RGB32?input:input.convertToFormat(QImage::Format_ARGB32_Premultiplied);
-    QImage output(size,wide?QImage::Format_RGBA64_Premultiplied:QImage::Format_ARGB32_Premultiplied);if(output.isNull())return {};
+    const auto image=floating?input.convertToFormat(QImage::Format_RGBA32FPx4_Premultiplied):wide?input.convertToFormat(QImage::Format_RGBA64_Premultiplied):input.format()==QImage::Format_RGB32?input:input.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    QImage output(size,floating?QImage::Format_RGBA32FPx4_Premultiplied:wide?QImage::Format_RGBA64_Premultiplied:QImage::Format_ARGB32_Premultiplied);if(output.isNull())return {};
     output.setColorSpace(input.colorSpace());
     for(const auto &key:input.textKeys())output.setText(key,input.text(key));
     const bool jinc=algorithm=="jinc";const double support=jinc?2:algorithm=="lanczos3"?3:4;
@@ -30,10 +31,12 @@ QImage PlayerImageTools::resample(const QImage &input,const QSize &size,const QS
         for(int x=0;x<size.width();++x){const double cx=(x+.5)*rx-.5;std::array<double,4> total{};double sum=0;
             for(int py=firstY;py<=lastY;++py){const double dy=(py-cy)/sy;const double wy=jinc?1:weight(dy);if(wy==0)continue;const auto *row=image.constScanLine(std::clamp(py,0,image.height()-1));
                 for(int px=int(std::ceil(cx-support*sx));px<=int(std::floor(cx+support*sx));++px){const double dx=(px-cx)/sx,w=jinc?weight(std::sqrt(dx*dx+dy*dy)):weight(dx)*wy;if(w==0)continue;const int column=std::clamp(px,0,image.width()-1);sum+=w;
-                    if(wide){const auto c=reinterpret_cast<const QRgba64 *>(row)[column];total[0]+=w*c.red();total[1]+=w*c.green();total[2]+=w*c.blue();total[3]+=w*c.alpha();}
+                    if(floating){const auto *c=reinterpret_cast<const float*>(row)+column*4;for(int n=0;n<4;++n)total[n]+=w*c[n];}
+                    else if(wide){const auto c=reinterpret_cast<const QRgba64 *>(row)[column];total[0]+=w*c.red();total[1]+=w*c.green();total[2]+=w*c.blue();total[3]+=w*c.alpha();}
                     else{const auto c=reinterpret_cast<const QRgb *>(row)[column];total[0]+=w*qRed(c);total[1]+=w*qGreen(c);total[2]+=w*qBlue(c);total[3]+=w*qAlpha(c);}
                 }
             }
+            if(floating){auto *pixel=reinterpret_cast<float*>(target+y*stride)+x*4;for(int n=0;n<3;++n)pixel[n]=float(total[n]/sum);pixel[3]=std::clamp(float(total[3]/sum),0.f,1.f);continue;}
             const int maximum=wide?65535:255;const int alpha=std::clamp(qRound(total[3]/sum),0,maximum);const auto component=[&](int n){return std::clamp(qRound(total[n]/sum),0,alpha);};
             if(wide)reinterpret_cast<QRgba64 *>(target+y*stride)[x]=QRgba64::fromRgba64(component(0),component(1),component(2),alpha);
             else reinterpret_cast<QRgb *>(target+y*stride)[x]=qRgba(component(0),component(1),component(2),alpha);

@@ -1,0 +1,5 @@
+Failed to load C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\mingw-release\runtime\python\Lib\site-packages\vapoursynth\plugins\vsrplacebo.dll. GetLastError() returned 126. The file you tried to load or one of its dependencies is probably missing.
+QTGMC PASS 128 72 16
+SMDegrain PASS 128 72 8
+FFT3DFilter PASS 128 72 8
+BM3D FAIL 'bm3d.Basic: input clip: sub-sampled format is not supported when chroma is processed, convert it to YUV444 or RGB first. For the best quality, RGB colorspace is recommended as input.'

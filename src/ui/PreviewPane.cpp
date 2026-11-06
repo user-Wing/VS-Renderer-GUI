@@ -121,6 +121,7 @@ PreviewPane::PreviewPane(const QString &title, const QString &badge, QWidget *pa
     stack_->setStackingMode(QStackedLayout::StackOne);
 
     placeholder_ = new QLabel(QStringLiteral("等待打开视频\n3FP 运行时未激活"), stage);
+    placeholder_->setObjectName("previewPlaceholder");
     placeholder_->setAlignment(Qt::AlignCenter);
     placeholder_->setStyleSheet(QStringLiteral("background:#101010;color:#9a9a9a;"));
 

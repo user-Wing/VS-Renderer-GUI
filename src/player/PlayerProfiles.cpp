@@ -4,6 +4,9 @@
 #include "backend/ThreeFpPlayer.h"
 #include "graph/PresetStore.h"
 #include "ui/PreviewPane.h"
+#include "render/ShaderPackage.h"
+#include <QCryptographicHash>
+#include <QSaveFile>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -42,7 +45,7 @@ int PlayerWindow::fixedAnimeStage() const {
 }
 int PlayerWindow::initialQualityStage() const {
 #ifdef VSR_LITE_PLAYER
-    return std::clamp(settings_->value("player/animeStage",5).toInt(),0,7);
+    if(!settings_->value("player/animeAuto",false).toBool())return std::clamp(settings_->value("player/animeStage",5).toInt(),0,7);
 #endif
     if(interpolationStage()>=0)return 4;
     const int fixed=fixedAnimeStage();
@@ -62,13 +65,15 @@ int PlayerWindow::superInterpolationStage() const {
     return QStringList{"Super-0-A4K-RIFE-A4K.vpy","Super-1-A4K-RIFE-Jinc.vpy","Super-2-A4K-RIFE-D3D11.vpy","Super-3-RIFE-A4K.vpy"}.indexOf(file.fileName());
 }
 void PlayerWindow::updateAlgorithmBadges(){
-    message_->setVisible(!message_->text().isEmpty());
-    const bool video=!imageMode_ && !audioMode_ && !madvrMode() && !(discMenu_ && discMenu_->active());algorithmBadge_->setVisible(video);interpolationBadge_->hide();if(!video)return;
+    message_->setVisible(statusTimer_ && statusTimer_->isActive() && !minimalMode_ && !message_->text().isEmpty());
+    const bool video=!minimalMode_ && !imageMode_ && !audioMode_ && !madvrMode() && !(discMenu_ && discMenu_->active());algorithmBadge_->setVisible(video);interpolationBadge_->hide();if(!video)return;
     const int interpolation=interpolationStage();
     if(superInterpolationStage()>=0 && !direct_){algorithmBadge_->setText(superInterpolationStage()==2?"D3D11":superInterpolationStage()==1?"Jinc":"A4K");interpolationBadge_->setText("RIFE 960×540");interpolationBadge_->show();}
     else if(interpolation>=0 && !direct_){algorithmBadge_->setText(interpolationRenderer()?"D3D11":"Jinc");interpolationBadge_->setText(QStringList{"RIFE+","RIFE","MVT+","MVT"}.at(interpolation));interpolationBadge_->show();}
     else if(!direct_ && profile()=="Anime")algorithmBadge_->setText(QStringList{"A4KCNN+","A4KCNN","A4K+","A4K","Jinc","D3D11","A4K-1X-Jinc","A4K-1X-D3D11"}.at(std::clamp(qualityStage_,0,7)));
+    else if(!customShaderPackage_.isEmpty() && !hlslFailed_ && hlslFallback_.isEmpty())algorithmBadge_->setText("HLSL");
     else algorithmBadge_->setText(QStringList{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","SuperXbr","D3D11","Lanczos4","A4KCNN","A4KCNN+","A4K+","A4K","A4K-1X-Jinc","A4K-1X-D3D11"}.value(scalingAlgorithm(),"Jinc"));
+    if(algorithmBadge_->text()=="HLSL")algorithmBadge_->hide();
 }
 int PlayerWindow::interpolationStage() const {
     const QFileInfo file(preset_);
@@ -89,6 +94,7 @@ void PlayerWindow::setInterpolation(int stage,bool automatic,int renderer) {
     return;
 #endif
     if(madvrMode() || imageMode_ || networkSource())return;
+    settings_->remove("render/customShader");customShaderPackage_.clear();hlslParameters_.clear();hlslFallback_.clear();hlslFailed_=false;nativeAnime_=false;clock_->setCustomShader({});output_->setCustomShader({});
     const QStringList names{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};
     if(stage>=4){stage-=4;renderer=1;}
     if(automatic){const auto allowed=interpolationStages(renderer);while(stage<4 && !allowed.contains(QString::number(stage)))++stage;if(stage>=4)return;}
@@ -108,7 +114,7 @@ bool PlayerWindow::advanceInterpolation() {
     const auto allowed=interpolationStages(interpolationRenderer());int next=stage+1;while(next<4 && !allowed.contains(QString::number(next)))++next;
     if(next>=4){showInterpolationWarning(true);return false;}
     if(resumeAt_<0)resumeAt_=position();autoPlay_=playing_ || autoPlay_;
-    setInterpolation(next,true,interpolationRenderer());message_->setText(tr("自动补帧：切换到 %1。").arg(interpolationNames().at(next)));return true;
+    setInterpolation(next,true,interpolationRenderer());showStatus(tr("自动补帧：切换到 %1。").arg(interpolationNames().at(next)));return true;
 }
 void PlayerWindow::showInterpolationWarning(bool visible) {
     interpolationWarning_->setVisible(visible);if(visible){interpolationWarning_->adjustSize();interpolationWarning_->raise();}
@@ -172,7 +178,7 @@ void PlayerWindow::ensureProfiles() {
                     text.replace(oldProcessing,processing);text.replace("_stage < 2\n","_stage < 4\n");const auto backup=path+".before-six-stage";
                     if(QFile::exists(backup) || QFile::copy(path,backup))PresetStore::write(path,text);
                 }
-            }continue;
+            }
         }
         QString script="# VSR_PLAYER_PROFILE "+mode+'\n'+PresetStore::create(FilterGraph(),SourceFilter::Ffms2,{},mode);
         QFile helper(":/filters/gpu-sharpen.py");if(mode=="Anime" && helper.open(QIODevice::ReadOnly))script.replace("clip = src",QString::fromUtf8(helper.readAll())+"\nclip = src");
@@ -206,31 +212,32 @@ void PlayerWindow::ensureProfiles() {
             "_g = math.gcd(_sn, _sd)\n"
             "clip = core.std.SetFrameProps(clip, _SARNum=_sn // _g, _SARDen=_sd // _g)\n"
             "clip.set_output(0)").arg(mode=="Anime"?"True":"False",processing));
-        PresetStore::write(path,script);
+        builtinScripts_.insert(mode+".vpy",script);
+        if(!QFileInfo::exists(path))PresetStore::write(path,script);
     }
-    QFile anime(builtin.filePath("Anime.vpy"));
-    if(anime.open(QIODevice::ReadOnly)) {
-        const auto automatic=QString::fromUtf8(anime.readAll());
+    {
+        const auto automatic=builtinScripts_.value("Anime.vpy");
         const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy"};
         for(int stage=0;stage<names.size();++stage) {
-            const auto path=builtin.filePath(names[stage]);if(QFileInfo::exists(path))continue;
+            const auto path=builtin.filePath(names[stage]);
             auto script=automatic;
             script.replace("# VSR_PLAYER_PROFILE Anime\n",QString("# VSR_PLAYER_PROFILE Anime\n# VSR_PLAYER_FIXED_STAGE %1\n").arg(stage));
             script.replace("_stage = int(globals().get('_vsr_quality_stage', 0))",QString("_stage = %1").arg(stage));
             script.replace("_anime = True and clip.width < 3840 and clip.height < 2160 and _stage < 4","_anime = _stage < 4");
-            PresetStore::write(path,script);
+            builtinScripts_.insert(names[stage],script);
+            if(!QFileInfo::exists(path))PresetStore::write(path,script);
         }
     }
     for(int stage:{6,7}) {
         const auto path=builtin.filePath(stage==6?"Anime-6-1X-Jinc.vpy":"Anime-7-1X-D3D11.vpy");
-        if(QFileInfo::exists(path))continue;
         auto script=PresetStore::create(FilterGraph(),SourceFilter::Ffms2,{},{});
         script.prepend(QString("# VSR_PLAYER_PROFILE Anime\n# VSR_PLAYER_FIXED_STAGE %1\n").arg(stage));
         script.replace("clip.set_output(0)",QStringLiteral(
             "if clip.format.bits_per_sample != 16: clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16))\n"
             "clip = getattr(core, 'vsrplacebo', core.placebo).Shader(clip, shader=os.path.join(_vsr_directory, 'shaders', 'anime4k-a-fast.glsl'), width=clip.width, height=clip.height)\n"
             "clip.set_output(0)"));
-        PresetStore::write(path,script);
+        builtinScripts_.insert(QFileInfo(path).fileName(),script);
+        if(!QFileInfo::exists(path))PresetStore::write(path,script);
     }
     const auto descriptions=QDir(PresetStore::directory()).filePath("preset-descriptions.json");
     QFile descriptionFile(descriptions);QJsonObject entries;bool changed=!descriptionFile.exists();
@@ -241,6 +248,53 @@ void PlayerWindow::ensureProfiles() {
     }else if(descriptionFile.exists())return;
     for(const auto &name:builtin.entryList({"*.vpy"},QDir::Files))if(!entries.contains("builtin/"+name)){entries.insert("builtin/"+name,QString());changed=true;}
     if(changed)PresetStore::write(descriptions,QString::fromUtf8(QJsonDocument(entries).toJson(QJsonDocument::Indented)));
+}
+bool PlayerWindow::nativeBuiltinCompatible() const {
+#ifdef VSR_LITE_PLAYER
+    return true;
+#else
+    if(!settings_->value("render/hlsl",true).toBool() || profile()!="Anime")return false;
+    QFile file(preset_);if(!file.open(QIODevice::ReadOnly))return false;
+    auto actual=QString::fromUtf8(file.readAll());actual.replace("\r\n","\n");
+    auto expected=builtinScripts_.value(QFileInfo(preset_).fileName());expected.replace("\r\n","\n");
+    return !expected.isEmpty() && actual.trimmed()==expected.trimmed();
+#endif
+}
+bool PlayerWindow::hlslColorCompatible() const {
+    const auto snap=clock_->snapshot();
+    if(snap.isHdrSource || settings_->value("color/engine",0).toInt()!=0)return false;
+    for(const auto &entry:media_.value("streams").toArray()){
+        const auto stream=entry.toObject();
+        if(stream.value("type").toString()!="video" || (snap.selectedVideoStream>=0 && stream.value("index").toInt(-1)!=snap.selectedVideoStream))continue;
+        const int transfer=stream.value("colorTransfer").toInt(2),primaries=stream.value("colorPrimaries").toInt(2),matrix=stream.value("colorSpace").toInt(2);
+        // 1 is BT.709; 2 is unspecified and remains subject to the native per-frame check.
+        if(transfer==16 || transfer==18 || matrix==9 || matrix==10 || (primaries!=1 && primaries!=2))return false;
+    }
+    return true;
+}
+QString PlayerWindow::customShaderDirectory() const {
+    return settings_->value("render/shaderDirectory",QDir(QFileInfo(settings_->fileName()).absolutePath()).filePath("shaders/custom")).toString();
+}
+bool PlayerWindow::importCustomShader(const QString &path) {
+    if(madvrMode()){setError(tr("请切换到 D3D11 播放后再启用着色器。"));return false;}
+    if(imageMode_ || audioMode_ || networkSource()){setError(tr("请在本地视频模式导入自定义着色器。"));return false;}
+    if(!hlslColorCompatible()){setError(tr("自定义 HLSL 当前仅支持原生 SDR 色彩路径。"));return false;}
+    QFile source(path);if(!source.open(QIODevice::ReadOnly)){setError(source.errorString());return false;}
+    const auto bytes=source.readAll();const auto suffix=QFileInfo(path).suffix().toLower();
+    if(!QStringList{"hlsl","glsl","hook"}.contains(suffix)){setError(tr("请选择 GLSL 或 HLSL 着色器。"));return false;}
+    const QDir directory(customShaderDirectory());if(!QDir().mkpath(directory.path())){setError(tr("无法创建着色器存储目录。"));return false;}
+    const auto name=QFileInfo(path).completeBaseName()+"-"+QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex().left(12))+'.'+suffix;
+    const auto stored=QFileInfo(path).absolutePath()==directory.absolutePath()?QFileInfo(path).absoluteFilePath():directory.filePath(name);
+    const auto package=ShaderPackage::prepare(path,directory.filePath("cache"));
+    if(package.packagePath.isEmpty()){setError(tr("HLSL 导入失败：%1").arg(package.error));return false;}
+    if(!QFileInfo::exists(stored)){QSaveFile copy(stored);if(!copy.open(QIODevice::WriteOnly) || copy.write(bytes)!=bytes.size() || !copy.commit()){setError(copy.errorString());return false;}}
+    // Validate before changing the selected preset or the remembered shader.
+    if(!clock_->setCustomShader(package.packagePath)){setError(clock_->lastError());return false;}
+    customShaderPackage_=package.packagePath;hlslParameters_.clear();hlslFallback_.clear();hlslFailed_=false;nativeAnime_=false;
+    settings_->setValue("render/customShader",stored);settings_->setValue("render/shaderDirectory",directory.absolutePath());
+    preset_.clear();settings_->setValue("player/preset",QString());interpolationAuto_=false;settings_->setValue("player/interpolationAuto",false);
+    qualityStage_=5;if(!source_.isEmpty() && !imageMode_)refreshScript();else applyScaling();
+    showStatus(tr("HLSL：%1").arg(QFileInfo(path).fileName()));updateAlgorithmBadges();return true;
 }
 QSize PlayerWindow::profileTarget() const {
     QSize source(clip_.width,clip_.height);
@@ -281,20 +335,22 @@ void PlayerWindow::updateProfile() {
     const bool overloaded=double(missed)/(frames+missed)>.05 || (!direct_ && lag>.2);
     if(interpolationStage()>=0){if(!interpolationAuto_)showInterpolationWarning(overloaded);else if(overloaded)advanceInterpolation();else showInterpolationWarning(false);return;}
     if(!overloaded)return;
-    if(direct_)qualityStage_=4;
+    if(direct_ && !nativeAnime_)qualityStage_=4;
     const QList<int> order{0,1,2,3,6,7,4,5};
     int next=order.indexOf(qualityStage_)+1;
     const auto allowed=settings_->value("player/animeStages",QStringList{"0","1","2","3","6","7","4","5"}).toStringList();
     while(next<order.size()-1 && !allowed.contains(QString::number(order[next])))++next;
     resumeAt_=position();autoPlay_=true;qualityStage_=order.value(next,5);refreshScript();
-    message_->setText(tr("丢帧超过 5%：切换到 %1。").arg(qualityNames().at(qualityStage_)));
+    showStatus(tr("丢帧超过 5%：切换到 %1。").arg(qualityNames().at(qualityStage_)));
 }
 void PlayerWindow::suspendQualityCheck() {qualityTimer_.invalidate();qualitySettling_.restart();}
 int PlayerWindow::scalingAlgorithm(bool downscale) const {
-#ifdef VSR_LITE_PLAYER
-    if(direct_){const int algorithms[]{10,9,11,12,4,7,13,14};if(qualityStage_!=4 && qualityStage_!=5)return algorithms[std::clamp(qualityStage_,0,7)];}
-#endif
-    if(direct_ && qualityStage_==5)return std::clamp(settings_->value(downscale?"render/d3d11Downscale":"render/d3d11Upscale",7).toInt(),0,8);
+    if(downscale)return std::clamp(settings_->value("render/downscale",4).toInt(),0,8);
+    if(!customShaderPackage_.isEmpty() && !hlslFailed_)return 7;
+    if(direct_ && nativeAnime_){const int algorithms[]{10,9,11,12,4,7,13,14};if(qualityStage_!=4 && qualityStage_!=5)return algorithms[std::clamp(qualityStage_,0,7)];}
+    if(direct_ && qualityStage_==5)return std::clamp(settings_->value("render/upscale",settings_->value("render/d3d11Upscale",7)).toInt(),0,8);
+    if(direct_ && qualityStage_==4)return std::clamp(settings_->value("render/upscale",4).toInt(),0,8);
+    if(!direct_)return std::clamp(settings_->value("render/secondUpscale",4).toInt(),0,8);
     if(qualityStage_==7 || superInterpolationStage()==2 || (interpolationStage()>=0 && interpolationRenderer()==1))return 7;
     return 4;
 }
@@ -302,7 +358,17 @@ void PlayerWindow::applyScaling() {
     auto *visible=direct_?clock_.get():output_.get();const bool native=scalingAlgorithm()==7;
     visible->setVideoEnhancement(false,settings_->value("render/rtxVsr",false).toBool());
     visible->setVideoEnhancement(true,direct_ && native && settings_->value("render/trueHdr",false).toBool());
-    visible->setAntiRinging(!native && settings_->value("render/antiring",true).toBool());
+    visible->setSecondaryScaling(settings_->value("render/secondUpscale",4).toInt());
+    visible->setAntiRinging(settings_->value("render/antiring",true).toBool());
     visible->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(scalingAlgorithm()),static_cast<ThreeFpScalingAlgorithm>(scalingAlgorithm(true)));
+    if(hlslParameters_.isEmpty()){
+        // A new source must publish its own metadata before reusing the remembered shader.
+        const bool sourceReady=source_.isEmpty() || positionRestored_;
+        const bool compatible=sourceReady && !hlslFailed_ && !imageMode_ && !audioMode_ && !networkSource() && hlslColorCompatible();
+        if(!visible->setCustomShader(compatible?customShaderPackage_:QString()) && compatible && !customShaderPackage_.isEmpty()){
+            hlslFallback_=tr("自定义 HLSL 未启用：%1").arg(visible->lastError());visible->setCustomShader({});
+        }
+        if(sourceReady && !compatible && !hlslFailed_ && !customShaderPackage_.isEmpty())hlslFallback_=tr("当前色彩路径不兼容，自定义 HLSL 已停用。");
+    }
 }
 }

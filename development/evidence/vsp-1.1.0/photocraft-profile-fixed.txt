@@ -1,0 +1,13 @@
+********* Start testing of TestPhotoCraft *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+QINFO  : TestPhotoCraft::initTestCase() PhotoCraft evidence: C:/Users/ARXChem/AppData/Local/Temp/vsp-photocraft-test-qRsMLh
+PASS   : TestPhotoCraft::initTestCase()
+QINFO  : TestPhotoCraft::nativeEntryMultidocumentPrecisionAndTools() 24 MP native open ms: 367 bicubic resize ms: 264
+PASS   : TestPhotoCraft::nativeEntryMultidocumentPrecisionAndTools()
+PASS   : TestPhotoCraft::streamedImportPrecision()
+SKIP   : TestPhotoCraft::largeImageOriginalDecoder() Set VSR_PHOTOCRAFT_LARGE_MANIFEST for the 48000x32000 image
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPhotoCraft.cpp(127) : failure location
+PASS   : TestPhotoCraft::editorSurvivesPlayerProcessExit()
+PASS   : TestPhotoCraft::cleanupTestCase()
+Totals: 5 passed, 0 failed, 1 skipped, 0 blacklisted, 22478ms
+********* Finished testing of TestPhotoCraft *********

@@ -1,0 +1,1532 @@
+{
+  "started_utc": "2026-11-01T10:57:35.966124+00:00",
+  "run_directory": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\smoke\\20261101T105735Z-16bc9e36",
+  "passed": true,
+  "executed": true,
+  "checks": [
+    {
+      "check": "exact final EXE copy",
+      "passed": true,
+      "details": {
+        "source": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-Player.exe",
+        "copy": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\smoke\\20261101T105735Z-16bc9e36\\VS-Player.exe",
+        "sha256": "4609364236946011ce13d3857784ad222580f6ee73774534c4c7fc471f263015"
+      }
+    },
+    {
+      "check": "payload and cache identity",
+      "passed": true,
+      "details": {
+        "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca",
+        "fingerprint": "ff527617cf159ae37ce5a7ca",
+        "existed_before": false,
+        "startup_kind": "cold",
+        "ready_before": false,
+        "player_before": false,
+        "native_before": {
+          "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\FFF.Native.dll",
+          "exists": false,
+          "sha256": null
+        },
+        "existing_cache_deleted": false
+      }
+    },
+    {
+      "check": "isolated environment",
+      "passed": true,
+      "details": {
+        "removed_variables": [],
+        "forbidden_inheritance": [
+          "QT_PLUGIN_PATH",
+          "QT_QPA_PLATFORM",
+          "QT_QPA_PLATFORM_PLUGIN_PATH",
+          "VSR_3FP_DLL",
+          "VSR_PLAYER_CONFIG",
+          "VSR_PLAYER_NEW_CONFIG",
+          "VSR_SINGLE_PLAYER_PATH"
+        ],
+        "external_ffmpeg": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full"
+      }
+    },
+    {
+      "check": "loaded rebuilt native from payload cache",
+      "passed": true,
+      "details": {
+        "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\FFF.Native.dll",
+        "sha256": "57ca00bae99c12be3131f3bc2085d496f9ed54f747557b63117aa708d7bb135e"
+      }
+    },
+    {
+      "check": "fresh GLSL compilation cache",
+      "passed": true,
+      "details": {
+        "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\smoke\\20261101T105735Z-16bc9e36\\shaders\\cache\\4d92e85fbe1a010f459283534b0d081ff9b19f84d55bb3b653bdeb83927aebc2.vsrhlsl",
+        "bytes": 791,
+        "sha256": "ce44d7787ba4d6d4f18a9dec1ac828087addcb1ec5a7f0002399b1c9060762cf"
+      }
+    },
+    {
+      "check": "real playback progress",
+      "passed": true,
+      "details": {
+        "title": "VS Player — smoke-sdr.mkv",
+        "hwnd": 13244506,
+        "position_before_ms": 805,
+        "position_after_ms": 3225,
+        "responsive": true,
+        "hlsl_badge": true
+      }
+    },
+    {
+      "check": "final EXE and user configs preserved",
+      "passed": true,
+      "details": {
+        "sha256": "4609364236946011ce13d3857784ad222580f6ee73774534c4c7fc471f263015",
+        "configs": 3
+      }
+    }
+  ],
+  "uia_samples": [
+    {
+      "title": "VS Player — smoke-sdr.mkv",
+      "pid": 134712,
+      "items": [
+        {
+          "type": "ControlType.Pane",
+          "name": "VS Player",
+          "id": "QApplication.playerControls",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Slider",
+          "name": "",
+          "id": "QApplication.playerControls.playerTimeline",
+          "value": "654"
+        },
+        {
+          "type": "ControlType.CheckBox",
+          "name": "Unmute",
+          "id": "QApplication.playerControls.playerMute",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Slider",
+          "name": "",
+          "id": "QApplication.playerControls.playerVolume",
+          "value": "100"
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "100%",
+          "id": "QApplication.playerControls.playerVolumePercent",
+          "value": null
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "EQ",
+          "id": "QApplication.playerControls.playerEqualizerButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "Ⅱ",
+          "id": "QApplication.playerControls.playerPlay",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "|‹",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "›|",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "−1s",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "+1s",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "K‹",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "›K",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "|◀",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "▶|",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Edit",
+          "name": "",
+          "id": "QApplication.playerControls.playerPosition",
+          "value": "00:00:00.805"
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "/ 00:02:00.000",
+          "id": "QApplication.playerControls.QLabel",
+          "value": null
+        },
+        {
+          "type": "ControlType.Edit",
+          "name": "",
+          "id": "QApplication.playerControls.playerFrame",
+          "value": "19"
+        },
+        {
+          "type": "ControlType.Spinner",
+          "name": "",
+          "id": "QApplication.playerControls.playerSpeed",
+          "value": "1.00"
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "▾",
+          "id": "QApplication.playerControls.playerSpeedPopupButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "ffv1",
+          "id": "QApplication.playerControls.QLabel",
+          "value": null
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "—",
+          "id": "QApplication.playerControls.QLabel",
+          "value": null
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "3FP-SW",
+          "id": "QApplication.playerControls.playerDecoder",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "SDR",
+          "id": "QApplication.playerControls.QLabel",
+          "value": null
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "3FP",
+          "id": "QApplication.playerControls.QLabel",
+          "value": null
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "HLSL",
+          "id": "QApplication.playerControls.playerAlgorithm",
+          "value": null
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "HLSL",
+          "id": "QApplication.playerControls.playerStatus",
+          "value": null
+        },
+        {
+          "type": "ControlType.Group",
+          "name": "",
+          "id": "QApplication.vsr::PlayerWindow.QWidget",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Custom",
+          "name": "",
+          "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Group",
+          "name": "",
+          "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit.previewPane",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Group",
+          "name": "",
+          "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit.previewPane.QWidget",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Group",
+          "name": "",
+          "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit.previewPane.QWidget.QWidget",
+          "value": ""
+        }
+      ],
+      "position_ms": 805,
+      "hlsl_badge": true,
+      "observed_utc": "2026-11-01T10:57:39.931604+00:00"
+    },
+    {
+      "title": "VS Player — smoke-sdr.mkv",
+      "pid": 134712,
+      "items": [
+        {
+          "type": "ControlType.Pane",
+          "name": "VS Player",
+          "id": "QApplication.playerControls",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Slider",
+          "name": "",
+          "id": "QApplication.playerControls.playerTimeline",
+          "value": "2679"
+        },
+        {
+          "type": "ControlType.CheckBox",
+          "name": "Unmute",
+          "id": "QApplication.playerControls.playerMute",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Slider",
+          "name": "",
+          "id": "QApplication.playerControls.playerVolume",
+          "value": "100"
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "100%",
+          "id": "QApplication.playerControls.playerVolumePercent",
+          "value": null
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "EQ",
+          "id": "QApplication.playerControls.playerEqualizerButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "Ⅱ",
+          "id": "QApplication.playerControls.playerPlay",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "|‹",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "›|",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "−1s",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "+1s",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "K‹",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "›K",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "|◀",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "▶|",
+          "id": "QApplication.playerControls.QPushButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Edit",
+          "name": "",
+          "id": "QApplication.playerControls.playerPosition",
+          "value": "00:00:03.225"
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "/ 00:02:00.000",
+          "id": "QApplication.playerControls.QLabel",
+          "value": null
+        },
+        {
+          "type": "ControlType.Edit",
+          "name": "",
+          "id": "QApplication.playerControls.playerFrame",
+          "value": "77"
+        },
+        {
+          "type": "ControlType.Spinner",
+          "name": "",
+          "id": "QApplication.playerControls.playerSpeed",
+          "value": "1.00"
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "▾",
+          "id": "QApplication.playerControls.playerSpeedPopupButton",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "ffv1",
+          "id": "QApplication.playerControls.QLabel",
+          "value": null
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "—",
+          "id": "QApplication.playerControls.QLabel",
+          "value": null
+        },
+        {
+          "type": "ControlType.Button",
+          "name": "3FP-SW",
+          "id": "QApplication.playerControls.playerDecoder",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "SDR",
+          "id": "QApplication.playerControls.QLabel",
+          "value": null
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "3FP",
+          "id": "QApplication.playerControls.QLabel",
+          "value": null
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "HLSL",
+          "id": "QApplication.playerControls.playerAlgorithm",
+          "value": null
+        },
+        {
+          "type": "ControlType.Text",
+          "name": "HLSL",
+          "id": "QApplication.playerControls.playerStatus",
+          "value": null
+        },
+        {
+          "type": "ControlType.Group",
+          "name": "",
+          "id": "QApplication.vsr::PlayerWindow.QWidget",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Custom",
+          "name": "",
+          "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Group",
+          "name": "",
+          "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit.previewPane",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Group",
+          "name": "",
+          "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit.previewPane.QWidget",
+          "value": ""
+        },
+        {
+          "type": "ControlType.Group",
+          "name": "",
+          "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit.previewPane.QWidget.QWidget",
+          "value": ""
+        }
+      ],
+      "position_ms": 3225,
+      "hlsl_badge": true,
+      "observed_utc": "2026-11-01T10:57:42.339837+00:00"
+    }
+  ],
+  "cache": {
+    "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca",
+    "fingerprint": "ff527617cf159ae37ce5a7ca",
+    "existed_before": false,
+    "startup_kind": "cold",
+    "ready_before": false,
+    "player_before": false,
+    "native_before": {
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\FFF.Native.dll",
+      "exists": false,
+      "sha256": null
+    },
+    "existing_cache_deleted": false
+  },
+  "fixtures": {
+    "media": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\smoke\\20261101T105735Z-16bc9e36\\smoke-sdr.mkv",
+    "shader": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\smoke\\20261101T105735Z-16bc9e36\\shaders\\smoke-invert.glsl",
+    "config": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\smoke\\20261101T105735Z-16bc9e36\\player.ini",
+    "shader_cache_before": [],
+    "media_sha256": "bdfc5be45d1ed09d5a4bff0636ffeb04eade29e1bb9fdf1095ea8b2166b564e3"
+  },
+  "launcher_pid": 133468,
+  "player_pid": 134712,
+  "last_windows": [
+    {
+      "hwnd": 152767974,
+      "title": "VS Player"
+    },
+    {
+      "hwnd": 13244506,
+      "title": "VS Player — smoke-sdr.mkv"
+    }
+  ],
+  "last_uia": {
+    "title": "VS Player — smoke-sdr.mkv",
+    "pid": 134712,
+    "items": [
+      {
+        "type": "ControlType.Pane",
+        "name": "VS Player",
+        "id": "QApplication.playerControls",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Slider",
+        "name": "",
+        "id": "QApplication.playerControls.playerTimeline",
+        "value": "654"
+      },
+      {
+        "type": "ControlType.CheckBox",
+        "name": "Unmute",
+        "id": "QApplication.playerControls.playerMute",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Slider",
+        "name": "",
+        "id": "QApplication.playerControls.playerVolume",
+        "value": "100"
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "100%",
+        "id": "QApplication.playerControls.playerVolumePercent",
+        "value": null
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "EQ",
+        "id": "QApplication.playerControls.playerEqualizerButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "Ⅱ",
+        "id": "QApplication.playerControls.playerPlay",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "|‹",
+        "id": "QApplication.playerControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "›|",
+        "id": "QApplication.playerControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "−1s",
+        "id": "QApplication.playerControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "+1s",
+        "id": "QApplication.playerControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "K‹",
+        "id": "QApplication.playerControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "›K",
+        "id": "QApplication.playerControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "|◀",
+        "id": "QApplication.playerControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "▶|",
+        "id": "QApplication.playerControls.QPushButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Edit",
+        "name": "",
+        "id": "QApplication.playerControls.playerPosition",
+        "value": "00:00:00.805"
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "/ 00:02:00.000",
+        "id": "QApplication.playerControls.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Edit",
+        "name": "",
+        "id": "QApplication.playerControls.playerFrame",
+        "value": "19"
+      },
+      {
+        "type": "ControlType.Spinner",
+        "name": "",
+        "id": "QApplication.playerControls.playerSpeed",
+        "value": "1.00"
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "▾",
+        "id": "QApplication.playerControls.playerSpeedPopupButton",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "ffv1",
+        "id": "QApplication.playerControls.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "—",
+        "id": "QApplication.playerControls.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Button",
+        "name": "3FP-SW",
+        "id": "QApplication.playerControls.playerDecoder",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "SDR",
+        "id": "QApplication.playerControls.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "3FP",
+        "id": "QApplication.playerControls.QLabel",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "HLSL",
+        "id": "QApplication.playerControls.playerAlgorithm",
+        "value": null
+      },
+      {
+        "type": "ControlType.Text",
+        "name": "HLSL",
+        "id": "QApplication.playerControls.playerStatus",
+        "value": null
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::PlayerWindow.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Custom",
+        "name": "",
+        "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit.previewPane",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit.previewPane.QWidget",
+        "value": ""
+      },
+      {
+        "type": "ControlType.Group",
+        "name": "",
+        "id": "QApplication.vsr::PlayerWindow.QWidget.playerVideoSplit.previewPane.QWidget.QWidget",
+        "value": ""
+      }
+    ],
+    "position_ms": 805,
+    "hlsl_badge": true,
+    "observed_utc": "2026-11-01T10:57:39.931604+00:00"
+  },
+  "loaded_modules": [
+    {
+      "name": "vs-player.exe",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\vs-player.exe"
+    },
+    {
+      "name": "ntdll.dll",
+      "path": "C:\\Windows\\SYSTEM32\\ntdll.dll"
+    },
+    {
+      "name": "KERNEL32.DLL",
+      "path": "C:\\Windows\\System32\\KERNEL32.DLL"
+    },
+    {
+      "name": "KERNELBASE.dll",
+      "path": "C:\\Windows\\System32\\KERNELBASE.dll"
+    },
+    {
+      "name": "apphelp.dll",
+      "path": "C:\\Windows\\SYSTEM32\\apphelp.dll"
+    },
+    {
+      "name": "Qt6Concurrent.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\Qt6Concurrent.dll"
+    },
+    {
+      "name": "msvcrt.dll",
+      "path": "C:\\Windows\\System32\\msvcrt.dll"
+    },
+    {
+      "name": "SHELL32.dll",
+      "path": "C:\\Windows\\System32\\SHELL32.dll"
+    },
+    {
+      "name": "msvcp_win.dll",
+      "path": "C:\\Windows\\System32\\msvcp_win.dll"
+    },
+    {
+      "name": "ucrtbase.dll",
+      "path": "C:\\Windows\\System32\\ucrtbase.dll"
+    },
+    {
+      "name": "USER32.dll",
+      "path": "C:\\Windows\\System32\\USER32.dll"
+    },
+    {
+      "name": "win32u.dll",
+      "path": "C:\\Windows\\System32\\win32u.dll"
+    },
+    {
+      "name": "GDI32.dll",
+      "path": "C:\\Windows\\System32\\GDI32.dll"
+    },
+    {
+      "name": "gdi32full.dll",
+      "path": "C:\\Windows\\System32\\gdi32full.dll"
+    },
+    {
+      "name": "wintypes.dll",
+      "path": "C:\\Windows\\System32\\wintypes.dll"
+    },
+    {
+      "name": "combase.dll",
+      "path": "C:\\Windows\\System32\\combase.dll"
+    },
+    {
+      "name": "RPCRT4.dll",
+      "path": "C:\\Windows\\System32\\RPCRT4.dll"
+    },
+    {
+      "name": "Qt6Network.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\Qt6Network.dll"
+    },
+    {
+      "name": "ADVAPI32.dll",
+      "path": "C:\\Windows\\System32\\ADVAPI32.dll"
+    },
+    {
+      "name": "sechost.dll",
+      "path": "C:\\Windows\\System32\\sechost.dll"
+    },
+    {
+      "name": "ole32.dll",
+      "path": "C:\\Windows\\System32\\ole32.dll"
+    },
+    {
+      "name": "WS2_32.dll",
+      "path": "C:\\Windows\\System32\\WS2_32.dll"
+    },
+    {
+      "name": "D3DCOMPILER_47.dll",
+      "path": "C:\\Windows\\SYSTEM32\\D3DCOMPILER_47.dll"
+    },
+    {
+      "name": "dxgi.dll",
+      "path": "C:\\Windows\\SYSTEM32\\dxgi.dll"
+    },
+    {
+      "name": "libgcc_s_seh-1.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\libgcc_s_seh-1.dll"
+    },
+    {
+      "name": "libstdc++-6.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\libstdc++-6.dll"
+    },
+    {
+      "name": "Qt6Widgets.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\Qt6Widgets.dll"
+    },
+    {
+      "name": "pdh.dll",
+      "path": "C:\\Windows\\SYSTEM32\\pdh.dll"
+    },
+    {
+      "name": "libwinpthread-1.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\libwinpthread-1.dll"
+    },
+    {
+      "name": "DNSAPI.dll",
+      "path": "C:\\Windows\\SYSTEM32\\DNSAPI.dll"
+    },
+    {
+      "name": "IPHLPAPI.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\IPHLPAPI.DLL"
+    },
+    {
+      "name": "Secur32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\Secur32.dll"
+    },
+    {
+      "name": "WINHTTP.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WINHTTP.dll"
+    },
+    {
+      "name": "Qt6Core.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\Qt6Core.dll"
+    },
+    {
+      "name": "cryptsp.dll",
+      "path": "C:\\Windows\\SYSTEM32\\cryptsp.dll"
+    },
+    {
+      "name": "dwmapi.dll",
+      "path": "C:\\Windows\\SYSTEM32\\dwmapi.dll"
+    },
+    {
+      "name": "UxTheme.dll",
+      "path": "C:\\Windows\\SYSTEM32\\UxTheme.dll"
+    },
+    {
+      "name": "powrprof.dll",
+      "path": "C:\\Windows\\SYSTEM32\\powrprof.dll"
+    },
+    {
+      "name": "MPR.dll",
+      "path": "C:\\Windows\\SYSTEM32\\MPR.dll"
+    },
+    {
+      "name": "AUTHZ.dll",
+      "path": "C:\\Windows\\SYSTEM32\\AUTHZ.dll"
+    },
+    {
+      "name": "NETAPI32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\NETAPI32.dll"
+    },
+    {
+      "name": "VERSION.dll",
+      "path": "C:\\Windows\\SYSTEM32\\VERSION.dll"
+    },
+    {
+      "name": "USERENV.dll",
+      "path": "C:\\Windows\\SYSTEM32\\USERENV.dll"
+    },
+    {
+      "name": "WINMM.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WINMM.dll"
+    },
+    {
+      "name": "CRYPTBASE.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\CRYPTBASE.DLL"
+    },
+    {
+      "name": "NETUTILS.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\NETUTILS.DLL"
+    },
+    {
+      "name": "SRVCLI.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\SRVCLI.DLL"
+    },
+    {
+      "name": "Qt6Gui.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\Qt6Gui.dll"
+    },
+    {
+      "name": "d3d11.dll",
+      "path": "C:\\Windows\\SYSTEM32\\d3d11.dll"
+    },
+    {
+      "name": "DWrite.dll",
+      "path": "C:\\Windows\\SYSTEM32\\DWrite.dll"
+    },
+    {
+      "name": "SSPICLI.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\SSPICLI.DLL"
+    },
+    {
+      "name": "IMM32.DLL",
+      "path": "C:\\Windows\\System32\\IMM32.DLL"
+    },
+    {
+      "name": "bcryptPrimitives.dll",
+      "path": "C:\\Windows\\System32\\bcryptPrimitives.dll"
+    },
+    {
+      "name": "UMPDC.dll",
+      "path": "C:\\Windows\\SYSTEM32\\UMPDC.dll"
+    },
+    {
+      "name": "NSI.dll",
+      "path": "C:\\Windows\\System32\\NSI.dll"
+    },
+    {
+      "name": "kernel.appcore.dll",
+      "path": "C:\\Windows\\SYSTEM32\\kernel.appcore.dll"
+    },
+    {
+      "name": "windows.storage.dll",
+      "path": "C:\\Windows\\System32\\windows.storage.dll"
+    },
+    {
+      "name": "SHCORE.dll",
+      "path": "C:\\Windows\\System32\\SHCORE.dll"
+    },
+    {
+      "name": "shlwapi.dll",
+      "path": "C:\\Windows\\System32\\shlwapi.dll"
+    },
+    {
+      "name": "profapi.dll",
+      "path": "C:\\Windows\\SYSTEM32\\profapi.dll"
+    },
+    {
+      "name": "qwindows.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\platforms\\qwindows.dll"
+    },
+    {
+      "name": "comdlg32.dll",
+      "path": "C:\\Windows\\System32\\comdlg32.dll"
+    },
+    {
+      "name": "COMCTL32.dll",
+      "path": "C:\\Windows\\WinSxS\\amd64_microsoft.windows.common-controls_6595b64144ccf1df_5.82.26100.8037_none_87ebc5097a2f9e52\\COMCTL32.dll"
+    },
+    {
+      "name": "d3d9.dll",
+      "path": "C:\\Windows\\SYSTEM32\\d3d9.dll"
+    },
+    {
+      "name": "OLEAUT32.dll",
+      "path": "C:\\Windows\\System32\\OLEAUT32.dll"
+    },
+    {
+      "name": "SETUPAPI.dll",
+      "path": "C:\\Windows\\System32\\SETUPAPI.dll"
+    },
+    {
+      "name": "dxcore.dll",
+      "path": "C:\\Windows\\SYSTEM32\\dxcore.dll"
+    },
+    {
+      "name": "WTSAPI32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WTSAPI32.dll"
+    },
+    {
+      "name": "CRYPT32.dll",
+      "path": "C:\\Windows\\System32\\CRYPT32.dll"
+    },
+    {
+      "name": "MSCTF.dll",
+      "path": "C:\\Windows\\System32\\MSCTF.dll"
+    },
+    {
+      "name": "DEVOBJ.dll",
+      "path": "C:\\Windows\\SYSTEM32\\DEVOBJ.dll"
+    },
+    {
+      "name": "cfgmgr32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\cfgmgr32.dll"
+    },
+    {
+      "name": "WINTRUST.dll",
+      "path": "C:\\Windows\\System32\\WINTRUST.dll"
+    },
+    {
+      "name": "MSASN1.dll",
+      "path": "C:\\Windows\\SYSTEM32\\MSASN1.dll"
+    },
+    {
+      "name": "qmodernwindowsstyle.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\styles\\qmodernwindowsstyle.dll"
+    },
+    {
+      "name": "qico.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\imageformats\\qico.dll"
+    },
+    {
+      "name": "qsvgicon.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\iconengines\\qsvgicon.dll"
+    },
+    {
+      "name": "Qt6Svg.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\Qt6Svg.dll"
+    },
+    {
+      "name": "FFF.Native.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\FFF.Native.dll"
+    },
+    {
+      "name": "d2d1.dll",
+      "path": "C:\\Windows\\SYSTEM32\\d2d1.dll"
+    },
+    {
+      "name": "AVRT.dll",
+      "path": "C:\\Windows\\SYSTEM32\\AVRT.dll"
+    },
+    {
+      "name": "MSVCP140_2.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\MSVCP140_2.dll"
+    },
+    {
+      "name": "VCRUNTIME140_1.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\VCRUNTIME140_1.dll"
+    },
+    {
+      "name": "dbghelp.dll",
+      "path": "C:\\Windows\\SYSTEM32\\dbghelp.dll"
+    },
+    {
+      "name": "VCRUNTIME140.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\VCRUNTIME140.dll"
+    },
+    {
+      "name": "MSVCP140.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\MSVCP140.dll"
+    },
+    {
+      "name": "cryptnet.dll",
+      "path": "C:\\Windows\\SYSTEM32\\cryptnet.dll"
+    },
+    {
+      "name": "imagehlp.dll",
+      "path": "C:\\Windows\\System32\\imagehlp.dll"
+    },
+    {
+      "name": "rsaenh.dll",
+      "path": "C:\\Windows\\system32\\rsaenh.dll"
+    },
+    {
+      "name": "bcrypt.dll",
+      "path": "C:\\Windows\\SYSTEM32\\bcrypt.dll"
+    },
+    {
+      "name": "directxdatabasehelper.dll",
+      "path": "C:\\Windows\\SYSTEM32\\directxdatabasehelper.dll"
+    },
+    {
+      "name": "clbcatq.dll",
+      "path": "C:\\Windows\\System32\\clbcatq.dll"
+    },
+    {
+      "name": "dataexchange.dll",
+      "path": "C:\\Windows\\system32\\dataexchange.dll"
+    },
+    {
+      "name": "twinapi.appcore.dll",
+      "path": "C:\\Windows\\system32\\twinapi.appcore.dll"
+    },
+    {
+      "name": "wldp.dll",
+      "path": "C:\\Windows\\SYSTEM32\\wldp.dll"
+    },
+    {
+      "name": "drvstore.dll",
+      "path": "C:\\Windows\\SYSTEM32\\drvstore.dll"
+    },
+    {
+      "name": "nvspcap64.dll",
+      "path": "C:\\Windows\\system32\\nvspcap64.dll"
+    },
+    {
+      "name": "ntmarta.dll",
+      "path": "C:\\Windows\\SYSTEM32\\ntmarta.dll"
+    },
+    {
+      "name": "nvppex.dll",
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvamsi.inf_amd64_e6537d0cc841801c\\nvppex.dll"
+    },
+    {
+      "name": "textinputframework.dll",
+      "path": "C:\\Windows\\SYSTEM32\\textinputframework.dll"
+    },
+    {
+      "name": "CoreMessaging.dll",
+      "path": "C:\\Windows\\SYSTEM32\\CoreMessaging.dll"
+    },
+    {
+      "name": "CoreUIComponents.dll",
+      "path": "C:\\Windows\\SYSTEM32\\CoreUIComponents.dll"
+    },
+    {
+      "name": "iFlyTsfIme.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iFlyTsfIme.dll"
+    },
+    {
+      "name": "PSAPI.DLL",
+      "path": "C:\\Windows\\System32\\PSAPI.DLL"
+    },
+    {
+      "name": "MSVCR120.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\Microsoft.Windows.PrivateCPlusPlusRuntime\\MSVCR120.dll"
+    },
+    {
+      "name": "MSVCP120.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\Microsoft.Windows.PrivateCPlusPlusRuntime\\MSVCP120.dll"
+    },
+    {
+      "name": "gdiplus.dll",
+      "path": "C:\\Windows\\WinSxS\\amd64_microsoft.windows.gdiplus_6595b64144ccf1df_1.1.26100.8036_none_6ef439583dc61568\\gdiplus.dll"
+    },
+    {
+      "name": "dbgcore.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\dbgcore.DLL"
+    },
+    {
+      "name": "iflybuilder.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iflybuilder.dll"
+    },
+    {
+      "name": "iflybaselogic.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iflybaselogic.dll"
+    },
+    {
+      "name": "libxml2.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\libxml2.dll"
+    },
+    {
+      "name": "WSOCK32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WSOCK32.dll"
+    },
+    {
+      "name": "BaseGUI.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\BaseGUI.dll"
+    },
+    {
+      "name": "MSIMG32.dll",
+      "path": "C:\\Windows\\SYSTEM32\\MSIMG32.dll"
+    },
+    {
+      "name": "WININET.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WININET.dll"
+    },
+    {
+      "name": "iflyclient.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iflyclient.dll"
+    },
+    {
+      "name": "iflycommon.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iflycommon.dll"
+    },
+    {
+      "name": "iFlyIMEQuickLaunch.dll",
+      "path": "C:\\Program Files (x86)\\iFlytek\\iFlyIME\\3.0.1750\\x64\\iFlyIMEQuickLaunch.dll"
+    },
+    {
+      "name": "MSVCP120.dll",
+      "path": "C:\\Windows\\SYSTEM32\\MSVCP120.dll"
+    },
+    {
+      "name": "MSVCR120.dll",
+      "path": "C:\\Windows\\SYSTEM32\\MSVCR120.dll"
+    },
+    {
+      "name": "qgif.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\imageformats\\qgif.dll"
+    },
+    {
+      "name": "qjpeg.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\imageformats\\qjpeg.dll"
+    },
+    {
+      "name": "qsvg.dll",
+      "path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca\\imageformats\\qsvg.dll"
+    },
+    {
+      "name": "avutil-61.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\avutil-61.dll"
+    },
+    {
+      "name": "vulkan-1.dll",
+      "path": "C:\\Windows\\SYSTEM32\\vulkan-1.dll"
+    },
+    {
+      "name": "libunwind.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libunwind.dll"
+    },
+    {
+      "name": "avcodec-63.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\avcodec-63.dll"
+    },
+    {
+      "name": "swresample-7.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\swresample-7.dll"
+    },
+    {
+      "name": "libglib-2.0-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libglib-2.0-0.dll"
+    },
+    {
+      "name": "libgobject-2.0-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libgobject-2.0-0.dll"
+    },
+    {
+      "name": "libcairo-2.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libcairo-2.dll"
+    },
+    {
+      "name": "libintl-8.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libintl-8.dll"
+    },
+    {
+      "name": "libgio-2.0-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libgio-2.0-0.dll"
+    },
+    {
+      "name": "libpango-1.0-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libpango-1.0-0.dll"
+    },
+    {
+      "name": "libpangocairo-1.0-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libpangocairo-1.0-0.dll"
+    },
+    {
+      "name": "libpcre2-8-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libpcre2-8-0.dll"
+    },
+    {
+      "name": "zlib1.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\zlib1.dll"
+    },
+    {
+      "name": "libffi-8.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libffi-8.dll"
+    },
+    {
+      "name": "libpng16-16.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libpng16-16.dll"
+    },
+    {
+      "name": "libfontconfig-1.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libfontconfig-1.dll"
+    },
+    {
+      "name": "libfreetype-6.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libfreetype-6.dll"
+    },
+    {
+      "name": "libpixman-1-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libpixman-1-0.dll"
+    },
+    {
+      "name": "libc++.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libc++.dll"
+    },
+    {
+      "name": "libiconv-2.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libiconv-2.dll"
+    },
+    {
+      "name": "libgmodule-2.0-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libgmodule-2.0-0.dll"
+    },
+    {
+      "name": "libfribidi-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libfribidi-0.dll"
+    },
+    {
+      "name": "libthai-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libthai-0.dll"
+    },
+    {
+      "name": "libpangoft2-1.0-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libpangoft2-1.0-0.dll"
+    },
+    {
+      "name": "libharfbuzz-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libharfbuzz-0.dll"
+    },
+    {
+      "name": "libpangowin32-1.0-0.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libpangowin32-1.0-0.dll"
+    },
+    {
+      "name": "libexpat-1.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libexpat-1.dll"
+    },
+    {
+      "name": "libbz2-1.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libbz2-1.dll"
+    },
+    {
+      "name": "libbrotlidec.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libbrotlidec.dll"
+    },
+    {
+      "name": "USP10.dll",
+      "path": "C:\\Windows\\SYSTEM32\\USP10.dll"
+    },
+    {
+      "name": "libdatrie-1.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libdatrie-1.dll"
+    },
+    {
+      "name": "libgraphite2.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libgraphite2.dll"
+    },
+    {
+      "name": "libbrotlicommon.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\libbrotlicommon.dll"
+    },
+    {
+      "name": "nvldumdx.dll",
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvamsi.inf_amd64_e6537d0cc841801c\\nvldumdx.dll"
+    },
+    {
+      "name": "nvgpucomp64.dll",
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvamsi.inf_amd64_e6537d0cc841801c\\nvgpucomp64.dll"
+    },
+    {
+      "name": "NvMemMapStoragex.dll",
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvamsi.inf_amd64_e6537d0cc841801c\\NvMemMapStoragex.dll"
+    },
+    {
+      "name": "nvwgf2umx.dll",
+      "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvamsi.inf_amd64_e6537d0cc841801c\\nvwgf2umx.dll"
+    },
+    {
+      "name": "avformat-63.dll",
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\avformat-63.dll"
+    },
+    {
+      "name": "ncrypt.dll",
+      "path": "C:\\Windows\\SYSTEM32\\ncrypt.dll"
+    },
+    {
+      "name": "NTASN1.dll",
+      "path": "C:\\Windows\\SYSTEM32\\NTASN1.dll"
+    },
+    {
+      "name": "dcomp.dll",
+      "path": "C:\\Windows\\SYSTEM32\\dcomp.dll"
+    },
+    {
+      "name": "Microsoft.Internal.WarpPal.dll",
+      "path": "C:\\Windows\\SYSTEM32\\Microsoft.Internal.WarpPal.dll"
+    },
+    {
+      "name": "xmllite.dll",
+      "path": "C:\\Windows\\SYSTEM32\\xmllite.dll"
+    },
+    {
+      "name": "AppXDeploymentClient.dll",
+      "path": "C:\\Windows\\System32\\AppXDeploymentClient.dll"
+    },
+    {
+      "name": "Windows.ApplicationModel.dll",
+      "path": "C:\\Windows\\System32\\Windows.ApplicationModel.dll"
+    },
+    {
+      "name": "Windows.StateRepositoryPS.dll",
+      "path": "C:\\Windows\\System32\\Windows.StateRepositoryPS.dll"
+    },
+    {
+      "name": "Windows.StateRepositoryBroker.dll",
+      "path": "C:\\Windows\\System32\\Windows.StateRepositoryBroker.dll"
+    },
+    {
+      "name": "ExplorerPatcher.amd64.dll",
+      "path": "C:\\Program Files\\ExplorerPatcher\\ExplorerPatcher.amd64.dll"
+    },
+    {
+      "name": "OLEACC.dll",
+      "path": "C:\\Windows\\SYSTEM32\\OLEACC.dll"
+    },
+    {
+      "name": "RstrtMgr.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\RstrtMgr.DLL"
+    },
+    {
+      "name": "PROPSYS.dll",
+      "path": "C:\\Windows\\SYSTEM32\\PROPSYS.dll"
+    },
+    {
+      "name": "ExplorerFrame.dll",
+      "path": "C:\\Windows\\SYSTEM32\\ExplorerFrame.dll"
+    },
+    {
+      "name": "Windows.UI.FileExplorer.dll",
+      "path": "C:\\Windows\\SYSTEM32\\Windows.UI.FileExplorer.dll"
+    },
+    {
+      "name": "WinUICohabitation.dll",
+      "path": "C:\\Windows\\SYSTEM32\\WinUICohabitation.dll"
+    },
+    {
+      "name": "NetworkExplorer.dll",
+      "path": "C:\\Windows\\system32\\NetworkExplorer.dll"
+    },
+    {
+      "name": "mrmcorer.dll",
+      "path": "C:\\Windows\\SYSTEM32\\mrmcorer.dll"
+    },
+    {
+      "name": "iertutil.dll",
+      "path": "C:\\Windows\\SYSTEM32\\iertutil.dll"
+    },
+    {
+      "name": "windows.staterepositorycore.dll",
+      "path": "C:\\Windows\\SYSTEM32\\windows.staterepositorycore.dll"
+    },
+    {
+      "name": "Windows.UI.dll",
+      "path": "C:\\Windows\\System32\\Windows.UI.dll"
+    },
+    {
+      "name": "bcp47mrm.dll",
+      "path": "C:\\Windows\\SYSTEM32\\bcp47mrm.dll"
+    },
+    {
+      "name": "uiautomationcore.DLL",
+      "path": "C:\\Windows\\SYSTEM32\\uiautomationcore.DLL"
+    },
+    {
+      "name": "OneCoreCommonProxyStub.dll",
+      "path": "C:\\Windows\\System32\\OneCoreCommonProxyStub.dll"
+    },
+    {
+      "name": "windows.staterepositoryclient.dll",
+      "path": "C:\\Windows\\SYSTEM32\\windows.staterepositoryclient.dll"
+    }
+  ],
+  "screenshot": {
+    "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\smoke\\20261101T105735Z-16bc9e36\\player-window.bmp",
+    "width": 1295,
+    "height": 889,
+    "method": "PrintWindow; GPU surface pixels may not be captured"
+  },
+  "functional_checks_passed": true,
+  "cleanup": {
+    "isolation": "new Windows Job Object",
+    "wm_close_pids": [
+      134712
+    ],
+    "forced_job_termination": false,
+    "remaining_owned_pids": [],
+    "player_exit_code": 0,
+    "launcher_exit_code": 0
+  },
+  "protected_user_configs": {
+    "before": [
+      {
+        "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\player.ini",
+        "exists": true,
+        "sha256": "e0002c6e1bf705138c8ff05287006dec7100dd749f4fc79e395be39bf5c2c0a1"
+      },
+      {
+        "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\player.ini",
+        "exists": false,
+        "sha256": null
+      },
+      {
+        "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\player.ini",
+        "exists": true,
+        "sha256": "c32129ed5d24d8d7202095f03e0976c6abb0e2d812cd5d60917325c9389aa589"
+      }
+    ],
+    "after": [
+      {
+        "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\player.ini",
+        "exists": true,
+        "sha256": "e0002c6e1bf705138c8ff05287006dec7100dd749f4fc79e395be39bf5c2c0a1"
+      },
+      {
+        "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\player.ini",
+        "exists": false,
+        "sha256": null
+      },
+      {
+        "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full\\player.ini",
+        "exists": true,
+        "sha256": "c32129ed5d24d8d7202095f03e0976c6abb0e2d812cd5d60917325c9389aa589"
+      }
+    ],
+    "unchanged": true
+  },
+  "finished_utc": "2026-11-01T10:57:42.583238+00:00"
+}

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.0.16 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,6 +32,13 @@ target_compile_definitions(vsr_components PRIVATE VSR_VERSION="${PROJECT_VERSION
 if(WIN32)
     target_link_libraries(vsr_components PUBLIC version)
 endif()
+qt_add_library(vsr_shaders STATIC src/render/ShaderPackage.cpp src/render/ShaderPackage.h)
+target_include_directories(vsr_shaders PUBLIC src)
+target_link_libraries(vsr_shaders PUBLIC Qt6::Core PRIVATE d3dcompiler dxguid)
+
+add_executable(vsr_shader_precompile tools/precompile-shaders.cpp)
+target_link_libraries(vsr_shader_precompile PRIVATE vsr_shaders)
+
 include(tools/color-runtime.cmake)
 include(tools/planar-shader.cmake)
 add_library(vsr_image_zlib STATIC
@@ -74,7 +81,7 @@ qt_add_executable(VSRenderer WIN32
     src/ui/PresetCommunityDialog.cpp
     src/ui/PresetCommunityDialog.h
     src/main.cpp
-    src/app/MainWindowPresets.cpp
+    src/app/MainWindowPresets.cpp src/app/MainWindowRoutes.cpp
     src/app/MainWindowTimeGroups.cpp
     src/player/PlayerResources.cpp
     src/player/PlayerLanguage.cpp
@@ -148,7 +155,7 @@ qt_add_executable(VSPlayer WIN32
     src/player/PlayerNetworkInput.cpp src/player/PlayerNetworkInput.h
     src/player/PlayerProfiles.cpp src/player/PlayerCache.cpp src/player/PlayerLanguage.cpp src/player/PlayerAssociations.cpp
     src/player/PlayerAiSubtitles.cpp src/player/PlayerAiSubtitles.h
-    src/player/PlayerResources.cpp src/player/PlayerResources.h
+    src/player/PlayerResources.cpp src/player/PlayerResources.h src/player/PlayerDecodeBuffer.cpp
     src/player/PlayerSubtitles.cpp src/player/PlayerSubtitles.h
     src/backend/LavPlayback.cpp src/backend/LavPlayback.h
     src/backend/ThreeFpApi.cpp src/backend/ThreeFpPlayer.cpp src/backend/VapourSynthFrameServer.cpp
@@ -166,7 +173,7 @@ foreach(program VSRenderer VSPlayer)
                 --color "${CMAKE_BINARY_DIR}/color" VERBATIM)
     endif()
 endforeach()
-foreach(ai_asset asr_worker.py README.md UPSTREAM-LICENSE.txt ai-subtitles.example.json)
+foreach(ai_asset asr_worker.py qwen3_ort.py README.md UPSTREAM-LICENSE.txt ai-subtitles.example.json)
     configure_file("assets/ai-subtitles/${ai_asset}" "runtime/ai-subtitles/${ai_asset}" COPYONLY)
 endforeach()
 foreach(program VSRenderer VSPlayer)
@@ -194,7 +201,7 @@ target_link_libraries(VSCap PRIVATE vsr_jxl)
 target_sources(vsr_image_core PRIVATE src/image/ImageHdr.cpp src/image/ImageHdr.h)
 qt_add_library(vsr_image_decoder STATIC src/player/PlayerImage.cpp src/player/PlayerImage.h src/player/PlayerPng.cpp src/player/PlayerPng.h)
 target_include_directories(vsr_image_decoder PUBLIC src)
-target_link_libraries(vsr_image_decoder PUBLIC Qt6::Core Qt6::Gui PRIVATE avif vsr_turbojpeg vsr_image_core libdeflate_static vsr_jxl)
+target_link_libraries(vsr_image_decoder PUBLIC Qt6::Core Qt6::Gui PRIVATE avif vsr_turbojpeg vsr_image_core libdeflate_static vsr_jxl vsr_optional_runtime)
 target_link_libraries(vsr_image_editor PRIVATE vsr_image_decoder)
 include(tools/awj-runtime.cmake)
 target_sources(VSPlayer PRIVATE src/player/PhotoCraftEditor.cpp src/player/PhotoCraftEditor.h)
@@ -235,9 +242,21 @@ if(MINGW)
     target_link_options(VSPlayerLite PRIVATE -Wl,--gc-sections)
 endif()
 
+if(Python3_EXECUTABLE AND EXISTS "${CMAKE_SOURCE_DIR}/.deps/color/ucrt64/bin/glslc.exe")
+    foreach(program VSRenderer VSPlayer VSPlayerLite)
+        add_custom_command(TARGET ${program} POST_BUILD
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/stage-shader-tools.py"
+                --output "$<TARGET_FILE_DIR:${program}>" VERBATIM)
+    endforeach()
+endif()
+
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Test Network)
+    qt_add_executable(vsr_shader_tests tests/TestShaderPackage.cpp)
+    target_include_directories(vsr_shader_tests PRIVATE src)
+    target_link_libraries(vsr_shader_tests PRIVATE vsr_shaders Qt6::Core Qt6::Test)
+    add_test(NAME native-shader-packages COMMAND vsr_shader_tests)
     add_executable(vsr_update_probe WIN32 tests/UpdateProbe.cpp)
     target_link_libraries(vsr_update_probe PRIVATE user32)
     if(MINGW)
@@ -292,6 +311,7 @@ if(BUILD_TESTING)
     qt_add_executable(vsr_graph_tests
         assets/startup.qrc
         tests/TestVpyScript.cpp
+        src/graph/PresetStore.cpp
         src/graph/FilterCatalog.cpp
         src/graph/FilterCatalog.h
         src/graph/FilterGraph.cpp
@@ -406,3 +426,9 @@ if(BUILD_TESTING)
             PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     endif()
 endif()
+
+foreach(program VSRenderer VSPlayer VSPlayerLite vsr_graph_tests vsr_parameter_tests vsr_analysis_tests vsr_player_tests vsr_player_lite_tests)
+    if(TARGET ${program})
+        target_link_libraries(${program} PRIVATE vsr_shaders)
+    endif()
+endforeach()

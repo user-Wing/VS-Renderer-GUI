@@ -26,7 +26,7 @@ class Pipeline {
         ComPtr<ID3D11Texture2D> texture;
         ComPtr<ID3D11RenderTargetView> target;
         ComPtr<ID3D11ShaderResourceView> view;
-        unsigned width=0, height=0;
+        unsigned width=0, height=0;DXGI_FORMAT format=DXGI_FORMAT_UNKNOWN;
     };
     static constexpr unsigned passCount=unsigned(std::size(anime4kPasses));
     std::array<Surface,passCount+3> surfaces_;
@@ -39,16 +39,16 @@ class Pipeline {
     ID3D11Device* device_=nullptr;
     Surface* processed_=nullptr;
 
-    bool surface(ID3D11Device* device, Surface& s, unsigned w, unsigned h) {
-        if(s.texture && s.width==w && s.height==h)return true;
+    bool surface(ID3D11Device* device, Surface& s, unsigned w, unsigned h,DXGI_FORMAT format=DXGI_FORMAT_R16G16B16A16_FLOAT) {
+        if(s.texture && s.width==w && s.height==h && s.format==format)return true;
         s={};
         D3D11_TEXTURE2D_DESC d{};d.Width=w;d.Height=h;d.MipLevels=d.ArraySize=1;
-        d.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;d.SampleDesc.Count=1;
+        d.Format=format;d.SampleDesc.Count=1;
         d.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
         if(FAILED(device->CreateTexture2D(&d,nullptr,&s.texture)) ||
            FAILED(device->CreateRenderTargetView(s.texture.Get(),nullptr,&s.target)) ||
            FAILED(device->CreateShaderResourceView(s.texture.Get(),nullptr,&s.view)))return false;
-        s.width=w;s.height=h;return true;
+        s.width=w;s.height=h;s.format=format;return true;
     }
     bool initialize(ID3D11Device* device) {
         if(device_==device && vertex_)return true;
@@ -111,7 +111,7 @@ public:
         const unsigned program=algorithm==11 || algorithm==12?1:0;
         std::unordered_map<std::string,Surface*> saved{{"MAIN",&input}, {"NATIVE",&input}};
         if(enhanced){
-            auto& luma=surfaces_[passCount+1];if(!surface(device_,luma,input.width,input.height))return false;
+            auto& luma=surfaces_[passCount+1];if(!surface(device_,luma,input.width,input.height,DXGI_FORMAT_R16_FLOAT))return false;
             const float coefficients[]{kr,1-kr-kb,kb,yOffset,yScale,0,0,0};
             c->UpdateSubresource(lumaConstants_.Get(),0,nullptr,coefficients,0,0);
             auto* buffer=lumaConstants_.Get();c->PSSetConstantBuffers(0,1,&buffer);
@@ -140,7 +140,7 @@ public:
             const auto& p=anime4kPasses[i];if(p.program!=(std::string(hook)=="LUMA"?2:program) || std::string(p.hook)!=hook || !eval(p.when))continue;
             saved["HOOKED"]=saved[std::string(hook)=="LUMA"?"LUMA":"MAIN"];
             const auto width=unsigned(std::lround(eval(p.width))),height=unsigned(std::lround(eval(p.height)));
-            if(!width || !height || width>16384 || height>16384 || !surface(device_,surfaces_[i],width,height))return false;
+            if(!width || !height || width>16384 || height>16384 || !surface(device_,surfaces_[i],width,height,std::string(p.hook)=="LUMA" && std::string(p.save)=="LUMA"?DXGI_FORMAT_R16_FLOAT:DXGI_FORMAT_R16G16B16A16_FLOAT))return false;
             ID3D11ShaderResourceView* views[8]{};
             for(unsigned b=0;b<p.bindingCount;++b){auto it=saved.find(p.bindings[b]);if(it==saved.end())return false;views[b]=it->second->view.Get();}
             draw(c,surfaces_[i].target.Get(),shaders_[i].Get(),views,p.bindingCount,0,0,float(width),float(height));

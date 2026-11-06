@@ -12,26 +12,26 @@ Renderer 设置或 Player“设置 → 基本设置”中检查更新。完整�
 
 从1.0.13起只提供Full目录与单文件播放器，范围见 [README](../README.md)。不要把Full更新包覆盖到独立播放器；单文件按其分发方式替换。
 
-单文件 `VS-Player.exe` 首次运行展开到 `%LOCALAPPDATA%/VSPlayerLite/<payload-hash>/`，`player.ini` 留在启动器旁。它内置 Qt/Native 等播放器依赖，但 FFmpeg 从 EXE 同目录或 PATH 查找。需要：
+1.1.0 单文件每次运行展开到启动器旁的 `.vs-player-run-<payload-hash>-<PID>/`，正常退出后删除；异常退出留下的自有目录在下次启动时清理，仍被运行中子进程持锁的目录保留。`player.ini` 留在启动器旁。它内置 Qt/Native 等播放器依赖，但 FFmpeg 从 EXE 同目录或 PATH 查找。需要：
 
 - `ffmpeg.exe`、`ffprobe.exe`；
 - 匹配的 shared x64 DLL：`avcodec-63`、`avformat-63`、`avutil-61`、`swresample-7`、`swscale-10`、`avfilter-12` 及其依赖。
 
-只有静态版 `ffmpeg.exe` 不够。缺少时按启动提示补齐同一套组件，不混搭不同 major ABI。单文件是自动展开的分发形式，需可写的配置与缓存目录。
+只有静态版 `ffmpeg.exe` 不够。缺少时按启动提示补齐同一套组件，不混搭不同 major ABI。启动器所在目录必须可写，并需要支持 XZ 的 Windows `tar.exe`。
 
 ## 维护者部署
 
 从 1.0.14 的单文件代码起，启动后检查 GitHub 上游版本；发现可验证的新单文件附件时提示下载，核对大小与 SHA-256 后等待播放器退出，只替换启动器原 EXE 并重启。失败保留旧文件或备份；不使用 Full 更新包、不更新外置 FFmpeg。只有由单文件启动器传入原始路径的进程才启用此检查，普通 Lite 缓存 EXE 不执行替换。
 
-单文件构建工具按CMake版本生成FileVersion/ProductVersion资源。打包后分别核对ZIP/清单、启动器与子进程、本地配置保留；本地构建和真实网络更新安装的验证结果分别记入测试台账。
+单文件构建工具按CMake版本生成FileVersion/ProductVersion资源。打包后分别核对 tar.xz/清单、启动器与子进程、本地配置保留；本地构建和真实网络更新安装的验证结果分别记入测试台账。
 
-当前Full固定为 `dist/VS-GUI-Full`；精简播放器只暂存在 `build/playerlite-runtime`，最终输出 `dist/VS-Player.exe`。`tools/deploy-local-runtime.py` 面向已存在的这两套运行目录，更新产物、备份旧文件并核对 INI/VPY/ICC/LUT 哈希；执行前先读脚本里的源目录与目标。`tools/stage-portable.ps1` 是较早的环境组装入口，默认目录和本机路径也必须显式核对。
+本轮 Full 为独立的 `dist/VS-GUI-Full-1.1.0`，单文件为 `dist/VS-Player-1.1.0.exe`；旧目录保留。`tools/deploy-local-runtime.py` 面向已存在的这两套运行目录，更新产物、备份旧文件并核对 INI/VPY/ICC/LUT 哈希；执行前先读脚本里的源目录与目标。`tools/stage-portable.ps1` 是较早的环境组装入口，默认目录和本机路径也必须显式核对。
 
 只同步当前 guides 和许可，不部署 `development/` 历史测试数据。旧运行目录可能已有历史报告，本轮脚本调整不会自动清理这些既存文件；清理须另行核对，不能删除配置或媒体。`aria2-next.exe` 是有效依赖，不能按 `-next` 后缀一并清除。
 
 ## Full按需工具
 
-Full的 `runtime/awj.zip` 保存AWJ 1.2.1独立CLI，`runtime/mkvtoolnix.zip` 保存四个MKV命令行工具及许可/英文文档。首次实际转换或Remux时，通过随包7-Zip展开到用户缓存的内容哈希目录；后续复用，不在普通播放时展开，也不要求安装目录可写。更新组件后新的归档哈希使用独立缓存，已有的显式外部工具路径仍可使用。AWJ对应源码及许可证在 `runtime/awj-source`；VLC仅保留BD菜单所需插件，未压缩其运行中加载链。
+Full的 `runtime/awj.zip` 保存AWJ 1.3.1独立CLI，`runtime/mkvtoolnix.zip` 保存四个MKV命令行工具及许可/英文文档。首次实际转换或Remux时，通过随包7-Zip展开到用户缓存的内容哈希目录；后续复用，不在普通播放时展开，也不要求安装目录可写。更新组件后新的归档哈希使用独立缓存，已有的显式外部工具路径仍可使用。AWJ对应源码及许可证在 `runtime/awj-source`；VLC仅保留BD菜单所需插件，未压缩其运行中加载链。
 
 ## 打包与交付
 

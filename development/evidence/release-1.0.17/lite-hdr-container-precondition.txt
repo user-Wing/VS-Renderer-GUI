@@ -1,0 +1,11 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+QINFO  : TestPlayer::customShaderImportPersistenceAndHdrRecovery() HDR fixture ffprobe {"avg_frame_rate":"24/1","bit_rate":"5497","chroma_location":"left","codec_long_name":"H.265 / HEVC (High Efficiency Video Coding)","codec_name":"hevc","codec_tag":"0x31766568","codec_tag_string":"hev1","codec_type":"video","coded_height":192,"coded_width":320,"color_range":"tv","color_space":"bt2020nc","display_aspect_ratio":"16:9","disposition":{"attached_pic":0,"captions":0,"clean_effects":0,"comment":0,"default":1,"dependent":0,"descriptions":0,"dub":0,"forced":0,"hearing_impaired":0,"karaoke":0,"lyrics":0,"metadata":0,"multilayer":0,"non_diegetic":0,"original":0,"still_image":0,"timed_thumbnails":0,"visual_impaired":0},"duration":"8.000000","duration_ts":98304,"extradata_size":2396,"field_order":"progressive","has_b_frames":2,"height":180,"id":"0x1","index":0,"level":60,"nb_frames":"192","pix_fmt":"yuv420p10le","profile":"Main 10","r_frame_rate":"24/1","sample_aspect_ratio":"1:1","start_pts":0,"start_time":"0.000000","tags":{"encoder":"Lavc63.1.102 libx265","handler_name":"VideoHandler","language":"und"},"time_base":"1/12288","view_ids_available":"","view_pos_available":"","width":320}
+FAIL!  : TestPlayer::customShaderImportPersistenceAndHdrRecovery() Compared values are not the same
+   Actual   (hdrStream.value("color_transfer").toString()): ""
+   Expected (QString("smpte2084"))                        : "smpte2084"
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayerLite.cpp(123) : failure location
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 2 passed, 1 failed, 0 skipped, 0 blacklisted, 299ms
+********* Finished testing of TestPlayer *********

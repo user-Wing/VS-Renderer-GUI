@@ -1,0 +1,10 @@
+{
+  "normalExitCleaned": true,
+  "runtimeBesideLauncher": true,
+  "activeChildSurvivedBootstrapTermination": true,
+  "nextLaunchPreservedActiveChildRuntime": true,
+  "staleRuntimeCleanedAtNextLaunch": true,
+  "remainingRuntimeDirectories": 0,
+  "configurationPreserved": true,
+  "launches": 3
+}

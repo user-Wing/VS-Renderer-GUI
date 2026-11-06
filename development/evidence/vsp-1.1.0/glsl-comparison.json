@@ -1,0 +1,130 @@
+[
+  {
+    "plugin": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\runtime\\python\\Lib\\site-packages\\vapoursynth\\plugins\\vsrplacebo.dll",
+    "shader": "copy",
+    "frames": 48,
+    "seconds": 0.7793080999981612,
+    "fps": 61.59309777495352,
+    "input": [
+      1920,
+      1080
+    ],
+    "output": [
+      3840,
+      2160
+    ],
+    "build": "old"
+  },
+  {
+    "plugin": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\mingw-release\\runtime\\python\\Lib\\site-packages\\vapoursynth\\plugins\\vsrplacebo.dll",
+    "shader": "copy",
+    "frames": 48,
+    "seconds": 0.8644407000392675,
+    "fps": 55.527232808241884,
+    "input": [
+      1920,
+      1080
+    ],
+    "output": [
+      3840,
+      2160
+    ],
+    "build": "new"
+  },
+  {
+    "plugin": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\mingw-release\\runtime\\python\\Lib\\site-packages\\vapoursynth\\plugins\\vsrplacebo.dll",
+    "shader": "copy",
+    "frames": 48,
+    "seconds": 0.7923351000063121,
+    "fps": 60.58042865905803,
+    "input": [
+      1920,
+      1080
+    ],
+    "output": [
+      3840,
+      2160
+    ],
+    "build": "new"
+  },
+  {
+    "plugin": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\runtime\\python\\Lib\\site-packages\\vapoursynth\\plugins\\vsrplacebo.dll",
+    "shader": "copy",
+    "frames": 48,
+    "seconds": 0.8452857999363914,
+    "fps": 56.78552745546187,
+    "input": [
+      1920,
+      1080
+    ],
+    "output": [
+      3840,
+      2160
+    ],
+    "build": "old"
+  },
+  {
+    "plugin": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\runtime\\python\\Lib\\site-packages\\vapoursynth\\plugins\\vsrplacebo.dll",
+    "shader": "cnn",
+    "frames": 48,
+    "seconds": 0.8049358000280336,
+    "fps": 59.63208494184045,
+    "input": [
+      1920,
+      1080
+    ],
+    "output": [
+      3840,
+      2160
+    ],
+    "build": "old"
+  },
+  {
+    "plugin": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\mingw-release\\runtime\\python\\Lib\\site-packages\\vapoursynth\\plugins\\vsrplacebo.dll",
+    "shader": "cnn",
+    "frames": 48,
+    "seconds": 0.8036458001006395,
+    "fps": 59.727805451094284,
+    "input": [
+      1920,
+      1080
+    ],
+    "output": [
+      3840,
+      2160
+    ],
+    "build": "new"
+  },
+  {
+    "plugin": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\mingw-release\\runtime\\python\\Lib\\site-packages\\vapoursynth\\plugins\\vsrplacebo.dll",
+    "shader": "cnn",
+    "frames": 48,
+    "seconds": 0.8140625000232831,
+    "fps": 58.96353166817922,
+    "input": [
+      1920,
+      1080
+    ],
+    "output": [
+      3840,
+      2160
+    ],
+    "build": "new"
+  },
+  {
+    "plugin": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\runtime\\python\\Lib\\site-packages\\vapoursynth\\plugins\\vsrplacebo.dll",
+    "shader": "cnn",
+    "frames": 48,
+    "seconds": 0.8020297000184655,
+    "fps": 59.84815774140892,
+    "input": [
+      1920,
+      1080
+    ],
+    "output": [
+      3840,
+      2160
+    ],
+    "build": "old"
+  }
+]

@@ -22,6 +22,7 @@
 namespace vsr {
 void PlayerWindow::updateInfo() {
     updateAlgorithmBadges();
+    if(minimalMode_){infoVisible_=false;static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();return;}
     static_cast<PlayerInfoPanel *>(info_)->setWidthLimit(settings_->value("info/audioDetailed",false).toBool() && !imageMode_?std::max(320,pane_->surface()->width()-524):0);
     if(!infoVisible_ || imageMode_ || (discMenu_ && discMenu_->active()))audioInfo_->hidePanel();
     if(discMenu_ && discMenu_->active()){
@@ -85,6 +86,8 @@ void PlayerWindow::updateInfo() {
     const double sourceFps = video.value("averageFrameRateDenominator").toInt() > 0 ? video.value("averageFrameRateNumerator").toDouble() / video.value("averageFrameRateDenominator").toInt() : fps;
     const double frameTime = clip_.fpsNumerator > 0 ? lastFrame_ * 10000000.0 * clip_.fpsDenominator / clip_.fpsNumerator : 0;
     const auto fitted = QSize(clip_.width, clip_.height).scaled(pane_->surface()->size()*pane_->surface()->devicePixelRatioF(), Qt::KeepAspectRatio) * pane_->zoom();
+    const auto processing=(direct_?clock_:output_)->processingSize();
+    const bool hlsl=direct_ || !customShaderPackage_.isEmpty() && !hlslFailed_ && hlslFallback_.isEmpty();
     const auto outputBits = audio.value("outputValidBitsPerSample").toInt();
     const bool lavAudio=lavAudio_;
     const auto audioOutput = lavAudio ? tr("由 LAV / DirectShow 协商") : QString("%1 · %2 Hz · %3 声道 · %4 bit")
@@ -95,6 +98,7 @@ void PlayerWindow::updateInfo() {
              .arg(QDateTime::currentDateTime().toString("HH:mm:ss"), formatTime(at), formatTime(source.duration100ns))
              .arg(source.duration100ns > 0 ? at * 100.0 / source.duration100ns : 0, 0, 'f', 1).arg(lastFrame_).arg(clip_.totalFrames)
           << tr("CPU：%1 · GPU：%2 · 内存：%3 MiB").arg(usage_.processCpu>=0?QString::number(usage_.processCpu,'f',1)+"%":tr("采样中"),usage_.gpu>=0?QString::number(usage_.gpu,'f',1)+"%":tr("未提供")).arg(usage_.memoryMiB)
+          << tr("功耗：CPU N/A · GPU N/A")
           << ""
           << tr("视频解码器：%1 · VS 源：%2").arg(decoder, direct_ ? tr("原生直通") : preset_.isEmpty() ? "FFMS2" : tr("VPY 定义"))
           << tr("输入：%1 · %2×%3 · %4-%5 · 帧率：%6 · 位率：%7")
@@ -111,8 +115,9 @@ void PlayerWindow::updateInfo() {
               .arg(rendered.frameTimeBaseDenominator>0?qMax(0.0,(at-rendered.framePts*double(rendered.frameTimeBaseNumerator)*1e7/rendered.frameTimeBaseDenominator)/10000):0,0,'f',1)
           << ((madvrMode() || direct_)?tr("  VS 处理：未启用 · 原生直通"):tr("  VS 请求耗时：%1 ms · 同步偏移：%2 ms · 平均呈现等待：%3 ms · 预解码：%4 帧")
               .arg(frameMilliseconds_,0,'f',1).arg((frameTime-at)/10000,0,'f',1).arg(rendered.swapChainPresents?rendered.presentWait100ns/10000.0/rendered.swapChainPresents:0,0,'f',2).arg(prefetchCount()))
-          << tr("视频帧大小：源 %5×%6 → VS 输出 %3×%4 → 当前呈现 %1×%2")
-             .arg(fitted.width()).arg(fitted.height()).arg(clip_.width).arg(clip_.height).arg(video.value("width").toInt()).arg(video.value("height").toInt())
+          << tr("视频帧大小：源 %1×%2 → %3 输出 %4×%5 → 显示 %6×%7")
+             .arg(video.value("width").toInt()).arg(video.value("height").toInt()).arg(hlsl?"HLSL":"VS")
+             .arg(hlsl && !processing.isEmpty()?processing.width():clip_.width).arg(hlsl && !processing.isEmpty()?processing.height():clip_.height).arg(fitted.width()).arg(fitted.height())
           << ""
           << tr("音频解码器：%1").arg(lavAudio ? "LAV Audio Decoder" : "3FP / FFmpeg")
           << tr("输入：%1 · %2 Hz · %3 声道 · %4 · %5 bit · %6")
@@ -126,8 +131,11 @@ void PlayerWindow::updateInfo() {
           << "" << tr("倍速：%1× · %2").arg(speed_,0,'f',2).arg(preset_.isEmpty() ? tr("原画") : QFileInfo(preset_).fileName());
     lines << tr("补帧：%1").arg(interpolationStage()>=0?interpolationNames().at(interpolationStage())+(interpolationAuto_?tr(" · 自动降档"):tr(" · 手动固定")):tr("未启用"));
     const QStringList algorithms{"Nearest Neighbour","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11","Lanczos4",qualityNames().at(1),qualityNames().at(0),qualityNames().at(2),qualityNames().at(3),qualityNames().at(6),qualityNames().at(7)};
-    const QString scalingName=madvrMode()?QString("madVR"):direct_?algorithms.value(scalingAlgorithm()):interpolationStage()>=0?(interpolationRenderer()?tr("D3D11"):tr("Jinc 直通")):profile()=="Anime"?qualityNames().at(std::clamp(qualityStage_,0,7)):algorithms.value(scalingAlgorithm());
-    lines << tr("缩放滤镜：%1").arg(scalingName);
+    const QString scalingName=!customShaderPackage_.isEmpty() && !hlslFailed_ && hlslFallback_.isEmpty()?QString("HLSL"):madvrMode()?QString("madVR"):direct_?algorithms.value(scalingAlgorithm()):interpolationStage()>=0?(interpolationRenderer()?tr("D3D11"):tr("Jinc 直通")):profile()=="Anime"?qualityNames().at(std::clamp(qualityStage_,0,7)):algorithms.value(scalingAlgorithm());
+    lines << tr("上采样：%1 · 第二上采样：%2 · 下采样：%3")
+        .arg(!preset_.isEmpty() && profile().isEmpty()?QString("N/A"):scalingName,algorithms.value(settings_->value("render/secondUpscale",4).toInt()),algorithms.value(scalingAlgorithm(true)));
+    lines << tr("当前 VPY：%1").arg(preset_.isEmpty()?tr("未启用"):profile().isEmpty()?preset_:QString("%1 · %2（内置预设）").arg(qualityStage_+1).arg(QFileInfo(preset_).fileName()));
+    if(decodePoolBytes_)lines << tr("动态缓冲池：上限 %1 MiB · 目标 %2 帧 · %3").arg(decodePoolBytes_/1048576).arg(decodePoolFrames_).arg(decodePoolFrames_>8?tr("尖峰前瞻"):tr("常规"));
 
     if(madvrMode())lines << tr("色彩引擎：madVR");
     else {

@@ -1,0 +1,37 @@
+Internal ctest changing into directory: C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/build/mingw-release
+Test project C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/build/mingw-release
+    Start 21: direct-video-comparison
+1/3 Test #21: direct-video-comparison ..........***Failed  147.79 sec
+
+
+
+
+
+
+
+
+    Start 22: vs-player-playback
+2/3 Test #22: vs-player-playback ...............***Exception: SegFault165.37 sec
+[queue] animated bytesPerFrame=0 pipeline=0 limit=8
+[hevc @ 0000021be85becc0] Error parsing NAL unit #4.
+[av1 @ 0000021bda164bc0] Your platform doesn't support hardware accelerated AV1 decoding.
+[av1 @ 0000021bda164bc0] Failed to get pixel format.
+[av1 @ 0000021bda164bc0] Get current frame error
+[av1 @ 0000021bda1640c0] Your platform doesn't support hardware accelerated AV1 decoding.
+[av1 @ 0000021bda1640c0] Failed to get pixel format.
+[av1 @ 0000021bda1640c0] Get current frame error
+[libdav1d @ 0000021bda1640c0] Application has requested 32 threads. Using a thread count greater than 16 is not recommended.
+
+    Start 23: lite-native-playback
+3/3 Test #23: lite-native-playback .............***Failed  200.56 sec
+
+
+0% tests passed, 3 tests failed out of 3
+
+Total Test time (real) = 513.73 sec
+
+The following tests FAILED:
+	 21 - direct-video-comparison (Failed)
+	 22 - vs-player-playback (SEGFAULT)
+	 23 - lite-native-playback (Failed)
+Errors while running CTest

@@ -1,12 +1,12 @@
 {
-  "version": 1,
-  "name": "外置 Qwen3-ASR",
+  "version": 2,
+  "name": "Qwen3-ASR-0.6B INT8",
   "worker": "asr_worker.py",
-  "python": "C:/YourPython/python.exe",
-  "llamaServer": "C:/YourLlama/llama-server.exe",
-  "model": "C:/YourModels/Qwen3-ASR-0.6B-Q8_0.gguf",
-  "mmproj": "C:/YourModels/mmproj-Qwen3-ASR-0.6B-Q8_0.gguf",
-  "device": "auto",
+  "python": "runtime/python/python.exe",
+  "modelDirectory": "models",
+  "engine": "onnx",
+  "device": "cpu",
   "window": 5,
-  "step": 5
+  "step": 5,
+  "language": "auto"
 }

@@ -18,6 +18,9 @@ public:
                          const QString &leftTitle = QStringLiteral("源视频"),
                          const QString &rightTitle = QStringLiteral("处理后"));
 
+    PreviewPane *addProcessedPane();
+    void removeProcessedPane(int route);
+    void setRouteVisible(int route,bool visible);
     PreviewPane *sourcePane() const;
     PreviewPane *processedPane() const;
     CompareMode mode() const;
@@ -32,6 +35,9 @@ protected:
 private:
     void updateLayout();
 
+    QList<QWidget*> additionalClips_;
+    QList<PreviewPane*> additionalPanes_;
+    bool firstRouteVisible_=true;
     PreviewPane *sourcePane_ = nullptr;
     PreviewPane *processedPane_ = nullptr;
     QWidget *sourceClip_ = nullptr;

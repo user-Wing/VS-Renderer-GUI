@@ -1,6 +1,8 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-11-01。源码版本 **1.0.16**，以 `CMakeLists.txt` 为准；Native 固定 API20 / 上游 main `146b5e03c784a01215bcc21b5dee60c97dabb089` + 启动 PR48 `cc545d2afc3f7b45058f47434628db6a703c7b07`，保留本地 AI 字幕 #36/#37 Native 补丁。本文件提供开发入口，使用步骤见 [docs](docs/README.md)，版本变化见 [changelog](changelog.md)，版本测试结论见 [台账](development/validation.md)。
+核对日期：2026-11-06。源码版本 **1.1.0（本地开发，未发布）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
+
+历史续修记录：`src/render/ShaderPackage.cpp`增加单文件多pass HLSL导入；含`//!HOOK`的HLSL复用现有MAIN/PREKERNEL指令解析，每段独立编译并保留资源反射检查。普通单pass HLSL契约与Native二进制包格式不变，缓存语义键升级v7。`tests/TestShaderPackage.cpp`覆盖重复main的多段输入；本地独立产物`dist/VS-Player-MoeSR.exe`保留原`dist/VS-Player.exe`，未改版本或发布。
 
 ## 1. 发心与边界
 
@@ -33,9 +35,11 @@
 | 比对源像素与显示值分开 | `AnalysisPage::updatePixelReadouts` 按源坐标联动；`SourcePixelProbe.h` 和 Native 比对扩展提供转换前码值 | YUV 不由渲染 RGB 反算；交互重绘不继承静态图片媒体帧率；缩放移除固定倍率上限，Native 裁剪视口并映射 UV |
 | 启动期库预读 | `src/player/main.cpp` 用128KiB缓冲在低优先级线程读取FFmpeg；单文件解包后的Qt子进程共用 | 不照搬.NET图标和LakeUI设备预热，不额外提高进程优先级；首次解包单独计时 |
 | 软件播放同步与内存预算 | 上游线程/帧池/CPU 域按负载逐级调整；音频从60ms起按告警升至240ms，呈现允许最多250ms的平滑节奏容差；保留VSP的8K关键包参考帧追赶 | 不把显示器限帧记为解码丢帧；CPU预缩放仍默认关闭，8K逐帧实时按素材验收 |
-| AI 字幕外置推理 | 固定 main + #36/#37 Native 音频 tap；Qt 有界传 PCM 到外置 worker，跳转按 generation 隔离 | 模型与 llama-server 不随包下载；不移植上游 VB 页面，不将未装模型测试当作识别验收 |
+| AI 字幕外置推理 | 固定 main + #36/#37 Native 音频 tap；Qt 有界传 PCM 到外置 worker，跳转按 generation 隔离 | 模型独立打包并由组件下载器安装；保留旧 GGUF 配置兼容，不移植上游 VB 页面 |
 | Shader 平面输出 | `third_party/vsr-placebo` 直接回读 YUV 平面、合并增强 hooks，独立命名空间与 color 依赖 | 保留标准 placebo 插件作为缺少组件时的兼容路径；不把 VS 吞吐当作 Native 播放帧率 |
-| Lite 原生 Anime4K | `src/render/Anime4KFast.h` 执行 Fast 27、no CNN 16、亮度增强2个转换pass；算法9～14对应六种增强变体，1X按源尺寸处理后复用原生缩放器 | 不引入 VS/Python 播放依赖或通用 GLSL 加载器；新增shader需重新转换、构建内核并验证像素 |
+| Full/Lite 原生 Anime4K | `src/render/Anime4KFast.h` 执行 Fast 27、no CNN 16、亮度增强 2 个转换 pass；算法 9～14 对应六种增强变体，1X 按源尺寸处理后复用原生缩放器 | 内置字节码更新仍须重建并验证像素；Full 对修改过正文或不兼容的内置 VPY 保留原执行路径 |
+| 通用 GLSL/HLSL 导入 | `ShaderPackage` 编译并缓存，`CustomShader.h` 执行多 pass；兼容文件无需重建 DLL，播放不引入 VS/Python 依赖 | 当前支持 LUMA/MAIN/PREKERNEL 像素 pass、参数默认值与 gather；NATIVE 只提供尺寸，计算/外部纹理等明确拒绝，详见 Player 指南 |
+| Full/Renderer 提取末尾 shader | 核对本项目图元数据与实际 Python 正文，再将兼容的末尾节点交给原生执行器 | 前序滤镜仍由 VS 执行；不兼容时回退原 GLSL，编码导出保留完整 VPY，不实现任意 VPY→HLSL |
 
 ## 4. 目录地图与改动入口
 
@@ -49,7 +53,7 @@
 | `src/cap/` | `main.cpp` 负责截图/标注/贴图，`DesktopCapture` 捕获，`UiAccess` 启动 |
 | `src/bluray/` | `BlurayCatalog` 解析节目，`BlurayWidget` 提供共用界面 |
 | `src/color/`、`src/image/` | 色彩桥、高精度图片、PSD/HDR/JXL 与保留的 Qt 编辑实现 |
-| `src/render/Anime4KFast.h` | Lite 原生 Anime4K Fast；转换入口 `tools/convert-anime4k-fast.py`，Native 补丁及构建见 API20 指南 |
+| `src/render/` | `Anime4KFast.h` 运行内置增强；`ShaderPackage.*` 负责自定义源解析、转换与缓存，`CustomShader.h` 负责原生多 pass；补丁及构建见 API20 指南 |
 | `src/update/` | `PortableUpdater`、`ComponentDownloads` |
 | `assets/`、`third_party/` | 图标/语言/滤镜资源与第三方来源、运行时说明和许可 |
 | `patches/`、`tools/` | 固定上游补丁；构建、部署、打包和测量脚本 |
@@ -57,6 +61,8 @@
 | `docs/` | 按任务组织的现行操作指南，不放逐版本测试/发布流水 |
 | `development/` | 源码工作区测试台账、合并历史原文与证据；不随运行包复制 |
 | `.deps/`、`build/`、`dist/` | 忽略的依赖、构建/原始日志、本地运行产物；不等于已发布附件 |
+
+1.1.0 改动入口：`src/app/MainWindowRoutes.cpp` / `RenderRoute.h` 管理处理路；`PlayerDecodeBuffer.cpp` 管理按需软解缓冲（常规8帧、尖峰最多48帧/2GiB，预算仅是上限）；`PlayerShortcuts.h` 定义快捷键；`ui/PageTheme.h` 复用页面背景；`assets/ncnn-filter.py` 仅处理 Renderer 单帧，实时 Player 注入跳过标志。AI 音频桥仍为 `PlayerAiSubtitles.cpp`，包说明见 [组件指南](assets/ai-subtitles/README.md)。
 
 ## 5. UI 地图
 
@@ -77,9 +83,10 @@
 | Qt | 6.8+；本地记录 6.10.2，MinGW；CMake 查找 | 编译或 GUI 启动失败 |
 | VapourSynth / Python | VS API4 / R81；构建和 stage 脚本，`update-vapoursynth-runtime.py` 锁定哈希 | VS 链不可用；直通路径独立 |
 | VS 插件 | BM3D 11.0、BM3Dvk2 1.0、BestSource 22；其余随运行时保留 | 对应滤镜不可用；不能用 API3 DLL 替代 |
-| FFF.Native | API20 / main `146b5e0` + PR48 `cc545d2`；`build-native-api20.ps1` 应用完整补丁及比对扩展，配置112字节、snapshot464字节，动态 C ABI | 原生播放/呈现不可用；旧库缺少原始 YUV 接口 |
+| FFF.Native | API20 / main `72af915`；标准脚本应用 1.1.0 汇总补丁并复制本库头文件；配置 112 字节、snapshot v22 / 592 字节，动态 C ABI | 原生播放/呈现不可用；缺少可选扩展的旧库不能提供原始 YUV 或自定义 shader |
 | FFmpeg | 当前 shared ABI：63/63/61/7/10/12；Native SDK 与运行 DLL 配套 | 相应解码/导出失败，单文件启动器先检查组件 |
 | GLSL / RIFE | 随包 shader 与 NCNN 模型，`stage-shaders.ps1` / `install-analysis-plugins.ps1` | 相应增强不可用；RIFE 需要 Vulkan |
+| GLSL 转换组件 | `runtime/shader-tools/` 中的 glslc、SPIRV-Cross 及配套依赖，由 `tools/stage-shader-tools.py` 整理；HLSL 用 D3DCompiler 编译 | 缺失时不能导入 GLSL；原生 HLSL 不调用 GLSL 转换工具，逐帧播放仅执行已编译字节码 |
 | libVLC / LAV / madVR | Full 可选后端，stage 脚本及各自许可 | 对应后端不可用，PlayerLite 不包含 |
 | PhotoCraft | 固定源与补丁见 `tools/photocraft-source.json`、`build-photocraft.ps1` | 详细编辑不可用，基础查看独立 |
 | JXL / AWJ / 图片库 | `tools/jxl-runtime.cmake`、`awj-runtime.cmake`、`image-runtime.cmake` | 对应格式/转换不可用；AWJ 需 AVX2 |
@@ -92,9 +99,10 @@
 | 数据 | 位置 / 所属模块 | 兼容原则 |
 | --- | --- | --- |
 | 处理链/时间组 | `FilterGraph`、`FilterTimeGroup` | 整秒起点分段；每组独立链，输出规格一致 |
-| Renderer 项目 | `*.vsr.json` / `MainWindow` | `schemaVersion=1`；读取能力以代码为准，未知节点不保证无损往返 |
+| Renderer 项目 | `*.vsr.json` / `MainWindow` | `schemaVersion=2`，保存各处理路、可见性与当前编辑路，兼容旧单路；未知节点不保证无损往返 |
 | VPY 预设 | 程序旁 `vpy/` / `PresetStore` | `# VSR_PRESET` Base64 JSON；时间组 metadata `schema=2`，兼容旧单链；不能与项目 schema 混淆 |
 | Player 配置 | `player.ini` / `PlayerSettings` | 保留用户显式选择；单文件放启动器旁 |
+| 自定义 shader | 配置旁 `shaders/custom` 或 `render/shaderDirectory`，所选源为 `render/customShader`；子目录 `cache` 存 `.vsrhlsl` | 格式 1、语义版本 v8（参数默认值与 gather；兼容已验证的 v7 字节码）；源内容、扩展名、转换器及 D3DCompiler 标识参与缓存键，结构损坏重建；导入失败保持旧选择 |
 | Renderer / 社区设置 | QSettings；`community/sourceUrl`、`appearance/dark`、`appearance/language` | 源/主题/语言在同一滚动页；主题即时生效 |
 | 说明 / 命令 / AI | `vpy/preset-descriptions.json`；QSettings `export/commandHistory`；`player.ini` 的 `ai/package` | 说明只补空键；命令历史最多 50 条；模型路径指向外置清单 |
 | 临时脚本/索引 | QStandardPaths、媒体索引缓存 | 可再生；导出冻结脚本、源和参数，不删除用户 VPY |
@@ -112,7 +120,7 @@
 
 1. 明确变更范围，复现问题；修改相关模块，构建并运行对应测试。测试选择与结果写入 [版本测试台账](development/validation.md)，步骤见 [构建](docs/dependencies.md) / [测量](docs/performance-debugging.md)。
 2. Native 用 API20 固定脚本和补丁；历史 API14/18 脚本只用于对应基线。GUI 使用 CMake preset。
-3. 当前 Full 固定运行目录 `dist/VS-GUI-Full`，单文件为 `dist/VS-Player.exe`；精简播放器仅暂存在 `build/playerlite-runtime`，不再生成 PlayerLite 发行目录。`tools/deploy-local-runtime.py` 增量部署并核对 INI/VPY/ICC/LUT 哈希；它会修改运行目录，文档整理时不运行。
+3. 本轮基础修正直接部署现有 `dist/VS-GUI-Full`，保留用户配置、预设与色彩文件；不创建新的发行目录或单文件附件。精简播放器仅暂存在 `build/playerlite-runtime`，不再生成 PlayerLite 发行目录。`tools/deploy-local-runtime.py` 增量部署并核对 INI/VPY/ICC/LUT 哈希；它会修改运行目录，文档整理时不运行。
 4. 打包前明确 Full、历史 Lite 或当前 PlayerLite；`package-portable.ps1 -Edition Lite` 是历史 Full 删减版，不能充当当前 PlayerLite。单文件从构建暂存用 `package-playerlite-single.ps1` 生成；完整流程见 [便携更新](docs/portable-updates.md)。
 5. 解压、依赖、启动、配置和清单验证后才可报告包完成；源码推送、草稿、附件上传、正式发布分别记录，需要相应任务授权。
 
@@ -120,7 +128,7 @@
 
 ## 10. 当前状态
 
-1.0.16 整合精简版八档原生Anime4K与Renderer多路图像比对，修复Anime4K缩小后交换链旧画面套叠。Native标准构建顺序为VSP基础补丁 → 比对扩展 → Anime4K，Full/Lite共用包含源像素接口与原生增强的API20 DLL。当前正在使用的1.0.15 Full保留；供上传的干净Full目录为 `dist/VS-GUI-Full-1.0.16`，单文件为 `dist/VS-Player.exe`。版本验收见台账；本轮只创建Release草稿，附件由维护者上传。
+1.1.0 已落地三段缩放、最多三路处理输出、单帧 NCNN、页面主题、音量/快捷键和动态缓冲等功能；Native、PhotoCraft、AWJ 已更新。本轮基础修正部署至既有 `dist/VS-GUI-Full`；AI ZIP与此前单文件附件不重新制作。全量回归仍有失败、超时及异常退出历史，续修结果分别留存，当前不作为发布验收通过；GBC第二集2:15–2:35按要求暂不测试，PawnIO功耗采集及性能达标项尚未完成，详见台账。
 
 1.0.15 同步近期3FP内核和可迁移的启动优化，保留多轨视频硬解试探修复；单文件使用更高压缩率。Full输出至 `dist/VS-GUI-Full`，单文件为 `dist/VS-Player.exe`；具体测试范围、启动采样及限制见测试台账。运行中的VSCap原文件保留，发行压缩包与附件由维护者手动制作、上传。
 
@@ -149,6 +157,7 @@
 | Qt 配置或构建失败 | `QT_ROOT`、MinGW PATH、CMake preset；[构建指南](docs/dependencies.md) |
 | Native 黑屏/ABI 错误 | API20 补丁、FFmpeg shared DLL、`VSR_3FP_DLL`；[原生构建](docs/native-api20-build.md) |
 | VS 缺插件/预览失败 | API4 运行时、模型和 `VSR_VSSCRIPT_DLL`；[Renderer](docs/renderer.md) |
+| GLSL/HLSL 导入或执行失败 | `runtime/shader-tools`、Native 自定义扩展、完整编译错误及 hook/色彩/尺寸边界；[Player](docs/player.md#当前支持边界) |
 | seek/音画时间不同步 | `FrameTimeline.h`、`PlayerSession`、请求代次；[性能排查](docs/performance-debugging.md) |
 | HDR 色偏/截图异常 | `src/color/`、`HdrPreview.h`、源屏幕 SDR 白位；[色彩](docs/color-management.md) |
 | VSCap 模态/文字/贴图异常 | `src/cap/main.cpp`；[截图](docs/capture-images.md) |

@@ -23,7 +23,7 @@ private:
     void receive();
     ThreeFpPlayer *player_=nullptr;
     QProcess worker_;QTimer timer_;QByteArray lines_;
-    quint64 generation_=0;bool stamped_=false;
+    quint64 generation_=0;bool stamped_=false,flushed_=false;
     qint64 captionUntil_=0;
 };
 }

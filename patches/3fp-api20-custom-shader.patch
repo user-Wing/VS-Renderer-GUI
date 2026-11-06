@@ -1,0 +1,184 @@
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -453,6 +453,12 @@
+     const FFF3FPScalingAlgorithm upscale,
+     const FFF3FPScalingAlgorithm downscale) noexcept {
+     return player ? static_cast<PlayerSession*>(player)->SetScalingAlgorithms(upscale, downscale)
++        : FFFResult::InvalidArgument;
++}
++
++extern "C" __declspec(dllexport) FFFResult VSR3FP_SetCustomShader(const FFF3FPHandle player,
++    const char* path, std::uint32_t width, std::uint32_t height) noexcept {
++    return player ? static_cast<PlayerSession*>(player)->SetCustomShader(path, width, height)
+         : FFFResult::InvalidArgument;
+ }
+ 
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -190,6 +190,7 @@
+     FFFResult GetRenderTargetInfo(FFF3FPRenderTargetInfo& info) noexcept;
+     // Re-present the last cached frame (host calls it after a child HWND resize).
+     FFFResult SetScalingAlgorithms(FFF3FPScalingAlgorithm, FFF3FPScalingAlgorithm) noexcept;
++    FFFResult SetCustomShader(const char*, std::uint32_t, std::uint32_t) noexcept;
+     FFFResult SubmitExternalVideoFrame(const FFF3FPExternalVideoFrame&) noexcept;
+     FFFResult SetExternalOutputFormat(const char*) noexcept;
+     std::atomic<int> externalOutputFormat_{-1};
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -7714,6 +7714,19 @@
+     return redrawResult == FFFResult::InvalidState ? FFFResult::Success : redrawResult;
+ }
+ 
++FFFResult PlayerSession::SetCustomShader(const char* path, std::uint32_t width, std::uint32_t height) noexcept {
++    const auto result = videoRenderer_.SetCustomShader(path, width, height);
++    if (result != FFFResult::Success) {
++        ReportError(result, videoRenderer_.LastError(), "CustomShader");
++        return result;
++    }
++    { std::lock_guard lock(errorMutex_); lastError_.clear(); }
++    const auto redrawResult = videoRenderer_.Redraw();
++    if (redrawResult != FFFResult::Success && redrawResult != FFFResult::InvalidState)
++        ReportError(redrawResult, videoRenderer_.LastError(), "CustomShader");
++    return redrawResult == FFFResult::InvalidState ? FFFResult::Success : redrawResult;
++}
++
+ FFFResult PlayerSession::SetExternalOutputFormat(const char* format) noexcept {
+     const auto value = !format || !*format ? AV_PIX_FMT_NONE : av_get_pix_fmt(format);
+     if (format && *format && (value == AV_PIX_FMT_NONE || !sws_isSupportedOutput(value))) return FFFResult::NotSupported;
+--- a/FFF.Native/3FP/Render/VideoRenderer.h
++++ b/FFF.Native/3FP/Render/VideoRenderer.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ #include "3FP/Render/NativeColorEngine.h"
+ #include "3FP/Render/Anime4KFast.h"
++#include "3FP/Render/CustomShader.h"
+ 
+ #include "3FP/Api/FFF.Player.Api.h"
+ #include "3FP/Hdr/HdrProcessor.h"
+@@ -197,6 +198,7 @@
+     void SetDiscAspect(double aspect) noexcept { discAspect_.store(static_cast<float>(aspect)); }
+     void SetInteractiveMove(bool enabled) noexcept;
+     FFFResult SetScalingAlgorithms(FFF3FPScalingAlgorithm, FFF3FPScalingAlgorithm) noexcept;
++    FFFResult SetCustomShader(const char*, std::uint32_t, std::uint32_t) noexcept;
+     NativeColorEngine colorEngine_;
+     std::atomic<std::uint32_t> upscaleAlgorithm_{4}, downscaleAlgorithm_{4};
+     FFFResult SetScalingQuality(FFF3FPVideoScalingQuality quality) noexcept;
+@@ -792,6 +794,7 @@
+     ID3D11PixelShader* timedTextPixelShader_;
+     ID3D11PixelShader* scalePixelShader_;
+     vsr::anime4k::Pipeline anime4kFast_;
++    vsr::shader::Pipeline customShader_;
+     ID3D11SamplerState* sampler_;
+     ID3D11SamplerState* pointSampler_;
+     ID3D11SamplerState* panoramaSampler_;
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -8796,18 +8796,26 @@
+         destination.height = static_cast<std::uint32_t>(zoomedHeight);
+     }
+     const auto animeAlgorithm = upscaleAlgorithm_.load() & 255u;
+-    if (animeAlgorithm >= 9u && animeAlgorithm <= 14u && !sourceCoverArt_) {
++    const bool customShader = customShader_.active();
++    if (customShader && (decodedTransfer_.load(std::memory_order_acquire) != 0 || colorEngine_.settings.engine || projection360 ||
++        cachedVideoSettings_.gamut != 0 || actualMode_ != FFF3FPColorMode::MapToSdr || cachedTransformEnabled_)) {
++        SetError("Custom HLSL currently supports SDR BT.709 native-colour playback without colour transforms or 360 projection; use the GLSL fallback for this source.");
++        return FFFResult::NotSupported;
++    }
++    if ((customShader || (animeAlgorithm >= 9u && animeAlgorithm <= 14u)) && !sourceCoverArt_) {
+         // This branch returns before the common compositor clear. Every target,
+         // including a reused swap-chain buffer after zoom-out, needs a background.
+         constexpr float black[] = {0, 0, 0, 1};
+         context_->ClearRenderTargetView(target, black);
+         videoSuperResolutionActive_.store(false, std::memory_order_release);
+         videoTrueHdrActive_.store(false, std::memory_order_release);
+-        auto* input = anime4kFast_.input(device_, sourceWidth_, sourceHeight_);
++        auto* input = customShader ? customShader_.input(device_, sourceWidth_, sourceHeight_)
++                                  : anime4kFast_.input(device_, sourceWidth_, sourceHeight_);
+         if (!input || DrawWithShader(input, 0, 0, float(sourceWidth_), float(sourceHeight_), 0) != FFFResult::Success ||
+-            !anime4kFast_.process(context_, destination.width, destination.height, animeAlgorithm,
+-                cachedVideoSettings_.kr, cachedVideoSettings_.kb, cachedVideoSettings_.yOffset, 1.0f / cachedVideoSettings_.yScale)) {
+-            SetError("Anime4K D3D11 processing failed.");
++            !(customShader ? customShader_.process(context_, destination.width, destination.height) :
++              anime4kFast_.process(context_, destination.width, destination.height, animeAlgorithm,
++                cachedVideoSettings_.kr, cachedVideoSettings_.kb, cachedVideoSettings_.yOffset, 1.0f / cachedVideoSettings_.yScale))) {
++            SetError(customShader ? customShader_.error() : "Anime4K D3D11 processing failed.");
+             return FFFResult::DeviceFailure;
+         }
+         // The intermediate is already colour-converted RGB. Reuse the native
+@@ -8816,10 +8824,12 @@
+         settings.colorMode = 1; settings.transfer = settings.gamut = settings.reserved = 0;
+         settings.inputLayout = 0; settings.sampleScale = 1;
+         settings.projection360 = 0; settings.viewRotation = 0; settings.imageModeX = 0;
+-        settings.sourceWidth = float(anime4kFast_.width()); settings.sourceHeight = float(anime4kFast_.height());
++        settings.sourceWidth = float(customShader ? customShader_.width() : anime4kFast_.width());
++        settings.sourceHeight = float(customShader ? customShader_.height() : anime4kFast_.height());
+         settings.outputWidth = float(destination.width); settings.outputHeight = float(destination.height);
+-        settings.vsrUpscale = (animeAlgorithm == 13u ? 4u : animeAlgorithm == 14u ? 7u : 1u) | (upscaleAlgorithm_.load() & 65536u);
+-        settings.vsrDownscale = settings.vsrUpscale & 255u;
++        settings.vsrUpscale = (customShader ? (animeAlgorithm <= 8u ? animeAlgorithm : 1u) :
++            animeAlgorithm == 13u ? 4u : animeAlgorithm == 14u ? 7u : 1u) | (upscaleAlgorithm_.load() & 65536u);
++        settings.vsrDownscale = customShader ? downscaleAlgorithm_.load() & 255u : settings.vsrUpscale & 255u;
+         context_->UpdateSubresource(constants_, 0, nullptr, &settings, 0, 0);
+         context_->OMSetRenderTargets(1, &target, nullptr);
+         const D3D11_VIEWPORT viewport{float(destination.x), float(destination.y), float(destination.width), float(destination.height), 0, 1};
+@@ -8827,7 +8837,7 @@
+         context_->VSSetShader(vertexShader_, nullptr, 0); context_->PSSetShader(pixelShader_, nullptr, 0);
+         context_->PSSetConstantBuffers(0, 1, &constants_);
+         ID3D11Buffer* noDynamic = nullptr; context_->PSSetConstantBuffers(2, 1, &noDynamic);
+-        ID3D11ShaderResourceView* views[]{anime4kFast_.output(), nullptr, nullptr};
++        ID3D11ShaderResourceView* views[]{customShader ? customShader_.output() : anime4kFast_.output(), nullptr, nullptr};
+         context_->PSSetShaderResources(0, 3, views); context_->PSSetShaderResources(8, 1, &jincWeightsView_);
+         ID3D11SamplerState* samplers[]{sampler_, pointSampler_, panoramaSampler_}; context_->PSSetSamplers(0, 3, samplers);
+         context_->Draw(3, 0);
+@@ -9408,6 +9418,7 @@
+     ReleaseCom(coverBackdropPixelShader_);
+     ReleaseCom(timedTextPixelShader_);
+     anime4kFast_.reset();
++    customShader_.reset();
+     ReleaseCom(vertexShader_);
+     ReleaseCom(clippedVertexShader_);
+     ReleaseCom(viewConstants_);
+@@ -9765,3 +9776,43 @@
+     scaledVideoGeneration_ = UINT64_MAX;
+     return FFFResult::Success;
+ }
++
++FFFResult PlayerVideoRenderer::SetCustomShader(const char* path, std::uint32_t width, std::uint32_t height) noexcept {
++    try {
++        std::lock_guard lock(deviceMutex_);
++        // Before the new source's first frame, cached colour fields may still
++        // describe the previous media. DrawCachedVideo validates the actual frame.
++        if (path && *path && (colorEngine_.settings.engine ||
++            projection360Enabled_.load(std::memory_order_acquire) ||
++            (hasCachedVideo_ && (decodedTransfer_.load(std::memory_order_acquire) != 0 ||
++                cachedVideoSettings_.gamut != 0 || actualMode_ != FFF3FPColorMode::MapToSdr ||
++                cachedTransformEnabled_)))) {
++            SetError("Custom HLSL currently supports SDR BT.709 native-colour playback without colour transforms or 360 projection; use the GLSL fallback for this source.");
++            return FFFResult::NotSupported;
++        }
++        vsr::shader::Pipeline candidate;
++        if (!candidate.load(path, width, height, device_)) {
++            SetError(candidate.error());
++            return FFFResult::InvalidArgument;
++        }
++        // Redraw is asynchronous. Validate the replacement on the cached frame
++        // before committing it, so size/WHEN/binding failures keep the old shader.
++        if (candidate.active() && hasCachedVideo_ && device_ && context_) {
++            auto* input = candidate.input(device_, sourceWidth_, sourceHeight_);
++            const auto targetWidth = std::max(1u, lastDestWidth_.load());
++            const auto targetHeight = std::max(1u, lastDestHeight_.load());
++            if (!input || DrawWithShader(input, 0, 0, float(sourceWidth_), float(sourceHeight_), 0) != FFFResult::Success ||
++                !candidate.process(context_, targetWidth, targetHeight)) {
++                SetError(candidate.error().empty() ? "Custom shader preflight failed." : candidate.error());
++                return FFFResult::InvalidArgument;
++            }
++        }
++        customShader_ = std::move(candidate);
++        scaledVideoGeneration_ = UINT64_MAX;
++        SetError({});
++        return FFFResult::Success;
++    } catch (...) {
++        SetError("Cannot load custom shader package.");
++        return FFFResult::NativeFailure;
++    }
++}

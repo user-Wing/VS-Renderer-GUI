@@ -13,7 +13,7 @@
 | fmtconv、RemoveGrain、AddGrain、VSZip、nlm-ispc、CAS、Zsmooth、Deblock、ZNEDI3、EEDI3、SangNom、Bwdif、VIVTC | VapourSynth 处理插件 | 通过 PyPI/VSRepo 获取；许可证及源码链接见各项目包元数据 |
 | vs-placebo 2.0.4 / libplacebo | VapourSynth 中执行 Anime4K 等 mpv GLSL | [vs-placebo](https://github.com/Lypheo/vs-placebo)、[libplacebo](https://github.com/haasn/libplacebo)；LGPL-2.1+ |
 | vsrplacebo 平面 Shader | 减少着色器串联的回读与拆包 | 基于 vs-placebo `06389c9a41abaf668ee2e469dd562231a8af297d`；LGPL-2.1+；修改源码与许可在 `third_party/vsr-placebo`，本地 Full 同附 `licenses/vsr-placebo-source` |
-| AWJimage 1.2.1 | 独立原生图片压缩转换CLI | [AWJimage](https://github.com/Dominic485649/AWJimage/releases/tag/1.2.1)；AGPL-3.0，随包保留许可证、完整上游NOTICE和固定修订对应源码；不链接进本项目 |
+| AWJimage 1.3.1 | 独立原生图片压缩转换CLI | [AWJimage](https://github.com/Dominic485649/AWJimage/releases/tag/1.3.1)；AGPL-3.0，随包保留许可证、完整上游NOTICE和固定修订对应源码；不链接进本项目 |
 
 发布包内同时保留 Qt、Python、VapourSynth 等组件随附的许可证文件。重新分发前请核对你所替换的 FFmpeg 和 VapourSynth 插件构建配置。
 
@@ -23,6 +23,10 @@
 
 源码可从 [libplacebo](https://github.com/haasn/libplacebo/tree/v7.360.1)、[LittleCMS](https://github.com/mm2/Little-CMS)、[MSYS2 包工程](https://github.com/msys2/MINGW-packages) 获取，其他包来源见各固定包的 MSYS2 元数据。为避免与 Qt / VS 的 GCC runtime 冲突，仅修改 PE 导入名和部署文件名为 `v3_` 前缀，不修改可执行代码。第三方 DLL 动态链接并保持可替换，不改变其独立许可证；重新分发者应保留修改说明与对应源码获取路径。
 
+
+## GLSL / HLSL 导入工具
+
+`runtime/shader-tools/` 携带 MSYS2 UCRT64 的 `glslc`、SPIRV-Cross 及其配套 GCC / winpthreads 运行库，用于首次导入 GLSL 时生成 HLSL。包版本、来源与 SHA-256 沿用 `third_party/color/packages.json`，随工具复制为 `packages.json`；原始许可证保留于同目录 `licenses/`。这些工具以独立进程运行，未修改其可执行代码，运行库留在工具目录中。HLSL / 缓存字节码执行使用 Windows D3D11 / D3DCompiler，不依赖 Python、VapourSynth 或 Windows SDK。
 
 ## Super-XBR 单阶段色度 / 放大核
 
@@ -80,3 +84,12 @@ FFF.Native 的 IAMF / OBR 构建静态链接 libiamf、OAR/OBR、Abseil、Eigen�
 ## VapourSynth R81 runtime update (1.0.11)
 
 The Windows runtime uses the official VapourSynth R81 ABI3 wheel (LGPL-2.1-or-later), BM3D 11.0 (MIT), BM3Dvk2 1.0 (GPL-3.0), and BestSource 22 (MIT; its bundled FFmpeg build carries additional FFmpeg licensing). Sources: https://github.com/vapoursynth/vapoursynth/tree/R81, https://github.com/HomeOfVapourSynthEvolution/VapourSynth-BM3D, https://github.com/HolyWu/VapourSynth-bm3dvk2, https://github.com/vapoursynth/bestsource. Package license texts and the pinned component hashes are installed under `runtime/python/Lib/site-packages/vapoursynth/licenses/` and `runtime-components.json`.
+
+## 1.1.0 本地资源更新
+
+- 3FP 固定 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，MIT；本地汇总补丁见 `patches/3fp-vsp-1.1.0.patch`。
+- PhotoCraft 0.20.1 固定 `8f7d916ba5ce6d94f2334d47bb23b84ff6cbaff2`，保留上游 MIT/Apache、字体/图标/词典声明及本地集成补丁，不修改模型或导出算法。
+- Qt ImageFormats 6.10.2 TIFF 插件使用对应 Qt 源码与内含 libtiff；完整许可随 `licenses/qtimageformats` 分发，构建入口见 `tools/build-extra-imageformats.ps1`。
+- Qwen3-ASR-0.6B INT8、sherpa-onnx、numpy 与 Python 放在独立 AI-Subtitles ZIP；来源、精确文件哈希及各依赖许可证在包内 `SOURCES.json` / `resource-manifest.json` / `licenses`。
+- 单帧 NCNN 使用用户已安装 VideoEnhancer 的 upscale-ncnn-py 1.2.0 Windows CPython 3.12 wheel 与 Param-Bin 模型资源，未引入 Torch；wrapper BSD-3-Clause 原许可和元数据保留于 `runtime/ncnn/licenses`。模型文件逐项哈希见该目录 manifest，模型各依原作者许可，不统一标作本项目 MIT。
+- 新增 havsfunc/adjust/nnedi3_resample/vsutil/mvsfunc 脚本与 FFT3DFilter、MiscFilters API4 DLL；保留原文件版权头、包 dist-info 和运行时哈希。旧 API3 插件未加入本轮运行目录。

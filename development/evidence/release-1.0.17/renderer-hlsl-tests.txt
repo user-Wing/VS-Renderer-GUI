@@ -1,0 +1,12 @@
+********* Start testing of TestAnalysis *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestAnalysis::initTestCase()
+PASS   : TestAnalysis::rendererHlslPreviewAndGlslFallback()
+PASS   : TestAnalysis::rendererEditedVpyKeepsPython()
+QINFO  : TestAnalysis::nativeImageZoomBeyondViewportBounds() Requested zoom 128 source pixel screen span 128
+QINFO  : TestAnalysis::nativeImageZoomBeyondViewportBounds() Requested zoom 1024 source pixel screen span 1024
+QINFO  : TestAnalysis::nativeImageZoomBeyondViewportBounds() Requested zoom 8192 source pixel screen span 8192
+PASS   : TestAnalysis::nativeImageZoomBeyondViewportBounds()
+PASS   : TestAnalysis::cleanupTestCase()
+Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 3416ms
+********* Finished testing of TestAnalysis *********

@@ -30,6 +30,9 @@ CompareView::CompareView(QWidget *parent, const QString &leftTitle, const QStrin
     updateLayout();
 }
 
+PreviewPane *CompareView::addProcessedPane(){auto *clip=new QWidget(this);clip->setAttribute(Qt::WA_NativeWindow);auto *pane=new PreviewPane(QString("路 %1").arg(additionalPanes_.size()+2),QStringLiteral("VS · 待渲染"),clip);clip->setProperty("routeVisible",true);additionalClips_<<clip;additionalPanes_<<pane;updateLayout();return pane;}
+void CompareView::removeProcessedPane(int route){if(route<1 || route>additionalClips_.size())return;delete additionalClips_.takeAt(route-1);additionalPanes_.removeAt(route-1);updateLayout();}
+void CompareView::setRouteVisible(int route,bool visible){if(route==0)firstRouteVisible_=visible;else if(route<=additionalClips_.size())additionalClips_[route-1]->setProperty("routeVisible",visible);updateLayout();}
 PreviewPane *CompareView::sourcePane() const { return sourcePane_; }
 PreviewPane *CompareView::processedPane() const { return processedPane_; }
 CompareMode CompareView::mode() const { return mode_; }
@@ -85,6 +88,14 @@ void CompareView::updateLayout()
 {
     const int w = width();
     const int h = height();
+    QList<QPair<QWidget*,PreviewPane*>> visible{{sourceClip_,sourcePane_}};
+    if(firstRouteVisible_)visible.append({processedClip_,processedPane_});else processedClip_->hide();
+    for(int i=0;i<additionalClips_.size();++i){auto *clip=additionalClips_[i];if(clip->property("routeVisible").toBool())visible.append({clip,additionalPanes_[i]});else clip->hide();}
+    if(visible.size()!=2 || !additionalClips_.isEmpty() || !firstRouteVisible_){
+        const int columns=visible.size()==4?2:visible.size(),rows=visible.size()==4?2:1;
+        for(int i=0;i<visible.size();++i){const int column=i%columns,row=i/columns;QRect cell(column*w/columns,row*h/rows,(column+1)*w/columns-column*w/columns,(row+1)*h/rows-row*h/rows);visible[i].first->setGeometry(cell);visible[i].second->setGeometry(QRect(QPoint(),cell.size()));visible[i].first->show();visible[i].second->show();}sliderHandle_->hide();return;
+    }
+    sourceClip_->show();processedClip_->show();
     if (mode_ == CompareMode::SideBySide) {
         const int leftWidth = w / 2;
         sourceClip_->setGeometry(0, 0, leftWidth, h);

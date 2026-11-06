@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QSet>
 #include <QFile>
+#include <QFileInfo>
 #include <QUrl>
 #include <QRegularExpression>
 
@@ -89,6 +90,7 @@ QString emitNode(const FilterNode &node, bool gpu = true)
         return QString("clip = core.resize.%1(clip, width=%2, height=%3%4)")
             .arg(kernel, number(p, "width"), number(p, "height"), suffix);
     }
+    if(node.definitionId=="ncnn_still")return QString("clip = _vsr_ncnn(clip, globals().get('_vsr_directory', %1), %2, %3)").arg(VpyScriptBuilder::pythonString(QCoreApplication::applicationDirPath()),VpyScriptBuilder::pythonString(p.value("model").toString()),number(p,"gpu"));
     if (node.definitionId == "anime4k") {
         const double scale = std::clamp(p.value("scale").toString().section(QChar(0x00d7), 0, 0).toDouble(), .5, 4.0);
         QString dimensions=QString("width=max(2, int(clip.width * %1)), height=max(2, int(clip.height * %1))").arg(scale);
@@ -126,6 +128,13 @@ QString emitNode(const FilterNode &node, bool gpu = true)
                  : QString("os.path.join(globals().get('_vsr_directory', %1), 'shaders', %2)")
                      .arg(VpyScriptBuilder::pythonString(QCoreApplication::applicationDirPath()), VpyScriptBuilder::pythonString(p.value("mode").toString())))).arg(dimensions);
     }
+    if (node.definitionId == "qtgmc" || node.definitionId == "smdegrain") {
+        const auto prepare=QStringLiteral("import havsfunc as haf\nclip = core.resize.Point(clip, format=vs.YUV444P16, **({'matrix': _vsr_matrix(clip)} if clip.format.color_family == vs.RGB else {}))\n");
+        if(node.definitionId=="qtgmc")return prepare+QString("clip = core.std.SetFrameProps(clip, _FieldBased=%1)\nclip = haf.QTGMC(clip, Preset=%2, TFF=%3, FPSDivisor=%4)").arg(p.value("tff").toBool()?2:1).arg(VpyScriptBuilder::pythonString(p.value("preset").toString()),booleanValue(p,"tff")).arg(p.value("half_rate").toBool()?2:1);
+        return prepare+QString("clip = haf.SMDegrain(clip, tr=%1, thSAD=%2, chroma=%3)").arg(number(p,"radius"),number(p,"threshold"),booleanValue(p,"chroma"));
+    }
+    if(node.definitionId=="bm3d")return QString("clip = core.resize.Point(clip, format=vs.YUV444P16, **({'matrix': _vsr_matrix(clip)} if clip.format.color_family == vs.RGB else {}))\n_bm3d_source = clip\nclip = core.bm3d.Basic(clip, sigma=[%1]*3, profile=%2)\n%3").arg(realNumber(p,"sigma"),VpyScriptBuilder::pythonString(p.value("profile").toString()),p.value("refine").toBool()?QString("clip = core.bm3d.Final(_bm3d_source, ref=clip, sigma=[%1]*3, profile=%2)").arg(realNumber(p,"sigma"),VpyScriptBuilder::pythonString(p.value("profile").toString())):QString());
+    if(node.definitionId=="fft3d")return QString("clip = core.fft3dfilter.FFT3DFilter(clip, sigma=%1, bt=%2)").arg(realNumber(p,"sigma"),number(p,"temporal"));
     if (node.definitionId == "remove_grain")
         return QString("clip = core.rgvs.RemoveGrain(clip, mode=%1)").arg(number(p, "mode"));
     if (node.definitionId == "bilateral")
@@ -296,7 +305,7 @@ ScriptBuildResult VpyScriptBuilder::build(const QString &sourcePath, SourceFilte
         "    return core.std.ModifyFrame(c, clips=[c, next_stats, prev_stats], selector=mark)\n");
     if (std::any_of(graph.nodes().cbegin(), graph.nodes().cend(), [](const FilterNode &node) {
         return node.enabled && (node.definitionId == "anime4k" || node.definitionId == "ccd" ||
-                               node.definitionId == "rife" || node.definitionId == "mvtools");
+                               node.definitionId == "rife" || node.definitionId == "mvtools" || node.definitionId == "qtgmc" || node.definitionId == "smdegrain" || node.definitionId == "bm3d");
     })) body << QStringLiteral(R"PY(
 def _vsr_matrix(c):
     props = c.get_frame(0).props
@@ -309,7 +318,7 @@ def _vsr_matrix(c):
     body << QStringLiteral("clip = src");
 
     const bool hasInterpolation = std::any_of(graph.nodes().cbegin(), graph.nodes().cend(), [](const FilterNode &node) {
-        return node.enabled && (node.definitionId == "rife" || node.definitionId == "mvtools");
+        return node.enabled && (node.definitionId == "rife" || node.definitionId == "mvtools" || node.definitionId == "qtgmc" || node.definitionId == "smdegrain" || node.definitionId == "bm3d");
     });
     if (hasInterpolation)
         body << QStringLiteral(R"PY(
@@ -374,7 +383,9 @@ def _vsr_rife(c, model, factor, gpu, threads, scene, scale):
             result.errors.append(QString("未知滤镜节点：%1").arg(node.definitionId));
             continue;
         }
+        if(node.definitionId=="anime4k" && QFileInfo(node.parameters.value("shader").toString()).suffix().compare("hlsl",Qt::CaseInsensitive)==0){result.errors.append(QStringLiteral("原生 HLSL 需要位于处理链末尾并启用原生预览；VapourSynth 编码导出请选择 GLSL。"));continue;}
         namespaces.insert(definition->pluginNamespace);
+        if(node.definitionId=="qtgmc"){namespaces.insert("znedi3");namespaces.insert("rgvs");namespaces.insert("misc");}
         if(node.definitionId=="sharpen_edges" || node.definitionId=="crispen_edges" || node.definitionId=="enhance_detail") namespaces.insert(QStringLiteral("placebo"));
         if (node.definitionId == QStringLiteral("deband"))
             namespaces.insert(QStringLiteral("fmtc"));
@@ -395,6 +406,7 @@ def _vsr_rife(c, model, factor, gpu, threads, scene, scale):
     body.insert(1, QString("# Required namespaces: %1").arg(result.requiredNamespaces.join(", ")));
     result.script = body.join('\n') + '\n';
     if(result.script.contains("clip = _vsr_sharpen(")) {QFile helper(":/filters/gpu-sharpen.py");if(helper.open(QIODevice::ReadOnly))result.script.prepend(QString::fromUtf8(helper.readAll())+'\n');}
+    if(result.script.contains("clip = _vsr_ncnn(")){QFile helper(":/filters/ncnn-filter.py");if(helper.open(QIODevice::ReadOnly))result.script.prepend(QString::fromUtf8(helper.readAll())+'\n');}
     result.script = networkSource(fuseSharpen(result.script),sourcePath);
     return result;
 }

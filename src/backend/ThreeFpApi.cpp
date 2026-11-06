@@ -1,3 +1,4 @@
+#include <QColorSpace>
 #include "backend/ThreeFpApi.h"
 
 #include <QCoreApplication>
@@ -115,7 +116,13 @@ ThreeFpResult ThreeFpApi::setPresentConfig(void *h, bool e) const { return avail
 ThreeFpResult ThreeFpApi::setPacingConfig(void *h, bool e) const { return available() && setPacingConfig_ ? setPacingConfig_(h, e ? 1u : 0u) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setViewTransform(void *h, float z, float x, float y) const { return available() ? setViewTransform_(h, z, x, y) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setScalingAlgorithms(void *h, ThreeFpScalingAlgorithm u, ThreeFpScalingAlgorithm d) const { return available() ? setScalingAlgorithms_(h, u, d) : ThreeFpResult::NativeFailure; }
-ThreeFpResult ThreeFpApi::snapshot(void *h, ThreeFpSnapshot *s) const { if(!available())return ThreeFpResult::NativeFailure;s->version=apiVersion()>=20?20:8;return snapshot_(h,s); }
+ThreeFpResult ThreeFpApi::setCustomShader(void *h,const char *path,int width,int height) const {
+    if(!available())return ThreeFpResult::NativeFailure;
+    using Fn=ThreeFpResult(*)(void*,const char*,std::uint32_t,std::uint32_t);
+    const auto call=reinterpret_cast<Fn>(library_.resolve("VSR3FP_SetCustomShader"));
+    return call?call(h,path,std::uint32_t(width),std::uint32_t(height)):ThreeFpResult::NotSupported;
+}
+ThreeFpResult ThreeFpApi::snapshot(void *h, ThreeFpSnapshot *s) const { if(!available())return ThreeFpResult::NativeFailure;s->version=apiVersion()>=20?22:8;return snapshot_(h,s); }
 ThreeFpResult ThreeFpApi::setColorSettings(void *h, const VsrColorSettings *s) const { return setColorSettings_ ? setColorSettings_(h,s) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::colorStatus(void *h, VsrColorStatus *s) const { return colorStatus_ ? colorStatus_(h,s) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::readPixel(void *h, ThreeFpPixelProbe *p) const { if(!available())return ThreeFpResult::NativeFailure;p->version=apiVersion()>=20?20:1;return readPixel_(h,p); }
@@ -202,3 +209,13 @@ QString ThreeFpApi::resultText(ThreeFpResult result)
 }
 
 }
+
+namespace vsr {
+ThreeFpResult ThreeFpApi::setDecodeBuffer(void *handle,quint64 bytes,unsigned frames) const {using Fn=ThreeFpResult(*)(void*,quint64,unsigned);const auto call=reinterpret_cast<Fn>(library_.resolve("VSR3FP_SetDecodeBuffer"));return call?call(handle,bytes,frames):ThreeFpResult::NotSupported;}
+}
+
+namespace vsr {QSize ThreeFpApi::processingSize(void *handle) const {using Fn=ThreeFpResult(*)(void*,unsigned*,unsigned*);const auto call=reinterpret_cast<Fn>(library_.resolve("VSR3FP_GetProcessingSize"));unsigned w=0,h=0;if(call)call(handle,&w,&h);return QSize(int(w),int(h));}}
+
+namespace vsr {ThreeFpResult ThreeFpApi::setLoudnessNormalization(void *handle,bool enabled) const {using Fn=ThreeFpResult(*)(void*,unsigned);const auto call=reinterpret_cast<Fn>(library_.resolve("VSR3FP_SetLoudnessNormalization"));return call?call(handle,enabled):ThreeFpResult::NotSupported;}}
+
+namespace vsr {QImage ThreeFpApi::resampleImage(const QImage &image,const QSize &size,unsigned algorithm) const {using Fn=ThreeFpResult(*)(const float*,unsigned,unsigned,unsigned,float*,unsigned,unsigned,unsigned,unsigned);const auto call=reinterpret_cast<Fn>(library_.resolve("VSR3FP_ResampleImage"));if(!call || image.isNull() || size.isEmpty())return {};const auto input=image.convertToFormat(QImage::Format_RGBA32FPx4_Premultiplied);QImage output(size,QImage::Format_RGBA32FPx4_Premultiplied);if(output.isNull() || call(reinterpret_cast<const float*>(input.constBits()),input.width(),input.height(),input.bytesPerLine(),reinterpret_cast<float*>(output.bits()),size.width(),size.height(),output.bytesPerLine(),algorithm)!=ThreeFpResult::Success)return {};output.setColorSpace(image.colorSpace());return output;}}

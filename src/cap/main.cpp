@@ -704,14 +704,16 @@ private:
         const QString work=QDir(QDir::tempPath()).filePath("vscap-"+QUuid::createUuid().toString(QUuid::WithoutBraces));
         if(!QDir().mkpath(work))return false;
         const QString input=QDir(work).filePath("input.png"),encoded=QDir(work).filePath("result.avif");
-        if(!savePng(cap::pngPixels(image),input)){
+        const bool hdr=image.text("capHdr")=="scRGB-FP16";
+        auto pixels=cap::pngPixels(image);pixels.setColorSpace({});
+        QImageWriter inputWriter(input,"png");
+        if(!hdr && !inputWriter.write(pixels)){
             QDir(work).removeRecursively();tray_.showMessage("VS Cap",QStringLiteral("AVIF 输入图像写入失败"));return false;
         }
         QString backendError;const auto encoder=vsr::optionalRuntimeExecutable("awj","AWJ.com",true,&backendError);
         if(encoder.isEmpty()){
             QDir(work).removeRecursively();tray_.showMessage("VS Cap",QStringLiteral("无法准备 AWJ.com：")+backendError);return false;
         }
-        const bool hdr=image.text("capHdr")=="scRGB-FP16";
         QStringList args{"-i",input,"-o",work,"--format","avif","--template","result",
             "--quality",QString::number(settings_.value("avif/quality",70).toInt()),
             "--avif-encoder","aom","--avif-color-representation","yuv",
@@ -720,6 +722,7 @@ private:
             "--alpha","auto","--image-size-limit","none","--keep-metadata","--no-summary","--no-log"};
         if(hdr)args<< "--color-primaries"<<"9"<<"--transfer-characteristics"<<"16"
                     <<"--matrix-coefficients"<<"9"<<"--color-range"<<"1";
+        if(hdr){args.removeFirst();args.removeFirst();args<<"--stdin-wgc-rgba16f"<<QString("%1x%2").arg(image.width()).arg(image.height());}
         auto *process=new QProcess(this);process->setWorkingDirectory(work);
         process->setProcessChannelMode(QProcess::MergedChannels);
         connect(process,&QProcess::errorOccurred,this,[this,process,work](QProcess::ProcessError error){
@@ -748,6 +751,7 @@ private:
                     process->deleteLater();
                 });
         process->start(encoder,args);
+        if(hdr){const auto raw=image.convertToFormat(QImage::Format_RGBA16FPx4);for(int y=0;y<raw.height();++y)process->write(reinterpret_cast<const char*>(raw.constScanLine(y)),raw.width()*8);process->closeWriteChannel();}
         return true;
     }
     bool output(QImage image, bool pin, const QString &format, bool copy) {

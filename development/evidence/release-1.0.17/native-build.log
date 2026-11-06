@@ -1,0 +1,73 @@
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-00.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-01.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-02.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-03.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-04.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-05.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-06.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-07.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-08.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-09.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-10.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-11.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-12.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-13.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-14.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-15.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-16.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-17.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-18.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-19.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-20.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-21.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-22.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-23.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-24.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-25.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-26.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-27.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-28.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-29.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-30.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-31.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-32.cso
+C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-33.hlsl(54,35-169): warning X3556: integer divides may be much slower, try using uints if possible.
+
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-33.cso
+C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-34.hlsl(54,35-169): warning X3556: integer divides may be much slower, try using uints if possible.
+
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-34.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-35.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-36.cso
+C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-37.hlsl(33,5-31): warning X3557: loop only executes for 1 iteration(s), forcing loop to unroll
+
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-37.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-38.cso
+C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-39.hlsl(54,35-169): warning X3556: integer divides may be much slower, try using uints if possible.
+
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-39.cso
+C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-40.hlsl(56,35-169): warning X3556: integer divides may be much slower, try using uints if possible.
+
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-40.cso
+C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-41.hlsl(54,35-169): warning X3556: integer divides may be much slower, try using uints if possible.
+
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-41.cso
+C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-42.hlsl(54,35-169): warning X3556: integer divides may be much slower, try using uints if possible.
+
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-42.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-43.cso
+compilation object save succeeded; see C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\anime4k-native\shaders\pass-44.cso
+Compiled 45 passes into Anime4KFastShaders.h.
+
+  PlayerApi.cpp
+  DecodeDeviceSelection.cpp
+  PlayerSession.cpp
+  PlayerSessionDisc.cpp
+  VideoRenderer.cpp
+    正在创建库 C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\.deps\fff-avif-20261101\FFF.Native\x64\Release\FFF.Native.lib 和对象 C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\.deps\fff-avif-20261101\FFF.Native\x64\Release\FFF.Native.exp
+  正在生成代码
+  4 of 10146 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    74 functions had inline decision re-evaluated but remain unchanged
+  已完成代码的生成
+  FFF.Native.vcxproj -> C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\.deps\fff-avif-20261101\FFF.Native\x64\Release\FFF.Native.dll

@@ -1,4 +1,6 @@
 #include "app/MainWindow.h"
+#include "app/RenderRoute.h"
+#include "ui/PageTheme.h"
 #include "app/Style.h"
 #include "player/PlayerLanguage.h"
 #include "ui/About.h"
@@ -10,6 +12,8 @@
 #include "bluray/BlurayWidget.h"
 #include <QProcess>
 #include "graph/PresetStore.h"
+#include "graph/HlslPreview.h"
+#include "render/ShaderPackage.h"
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QStyle>
@@ -136,6 +140,14 @@ MainWindow::MainWindow(QWidget *parent)
     content->setStretchFactor(1, 0);
     content->setStretchFactor(2, 1);
     rootLayout->addWidget(content, 1);
+    auto *routeRow=new QGridLayout;routeChoice_=new QComboBox(root);routeChoice_->setObjectName("rendererRouteChoice");routeRow->addWidget(routeChoice_,0,0,1,4);
+    addRouteButton_=new QPushButton(QStringLiteral("加路"),root);addRouteButton_->setObjectName("rendererAddRoute");removeRouteButton_=new QPushButton(QStringLiteral("减路"),root);routeRow->addWidget(addRouteButton_,1,0);routeRow->addWidget(removeRouteButton_,1,1);
+    auto *showRoute=new QPushButton(QStringLiteral("显示"),root),*hideRoute=new QPushButton(QStringLiteral("隐藏"),root);showRoute->setObjectName("rendererShowRoute");hideRoute->setObjectName("rendererHideRoute");routeRow->addWidget(showRoute,1,2);routeRow->addWidget(hideRoute,1,3);qobject_cast<QVBoxLayout*>(featureOne_->layout())->addLayout(routeRow);
+    connect(addRouteButton_,&QPushButton::clicked,this,[this]{addRoute();});connect(removeRouteButton_,&QPushButton::clicked,this,&MainWindow::removeRoute);connect(routeChoice_,&QComboBox::currentIndexChanged,this,&MainWindow::selectRoute);
+    const auto visibility=[this](bool visible){routes_[routeIndex_].visible=visible;compareView_->setRouteVisible(routeIndex_,visible);if(routeIndex_>0)additionalRoutes_[routeIndex_-1]->setVisible(visible);else if(!visible){frameServer_->unloadScript();processedPlayer_->stop();vsScriptReady_=false;}else validateScript();updateRouteChoices();};
+    connect(showRoute,&QPushButton::clicked,this,[visibility]{visibility(true);});connect(hideRoute,&QPushButton::clicked,this,[visibility]{visibility(false);});updateRouteChoices();
+
+
     auto *shell = new QWidget(this);
     auto *shellLayout = new QHBoxLayout(shell);
     shellLayout->setContentsMargins(0, 0, 0, 0);
@@ -201,6 +213,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     statusBar()->setFixedHeight(24);
     taskStatus_ = new QLabel(this);
+    taskStatusTimer_=new QTimer(this);taskStatusTimer_->setSingleShot(true);taskStatusTimer_->setInterval(3000);connect(taskStatusTimer_,&QTimer::timeout,taskStatus_,&QWidget::hide);
     frameStatus_ = new QLabel(QStringLiteral("帧 --  |  VS --  |  3FP --"), this);
     statusBar()->addWidget(taskStatus_, 1);
     statusBar()->addPermanentWidget(frameStatus_);
@@ -223,6 +236,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(frameServer_.get(), &VapourSynthFrameServer::scriptLoaded, this,
             [this](const VapourSynthClipInfo &processed, const VapourSynthClipInfo &source) {
+        if(!hlslPreviewPackage_.isEmpty()){
+            const auto size=hlslOutputSize(hlslPreviewParameters_,QSize(processed.width,processed.height));
+            if(size.isEmpty() || !hlslAspectCompatible(hlslPreviewParameters_,QSize(processed.width,processed.height),size) || !processedPlayer_->setCustomShader(hlslPreviewPackage_,size.width(),size.height())){
+                hlslPreviewRetryGlSl_=true;hlslPreviewFallback_=QStringLiteral("HLSL 输出不兼容，已回退原 GLSL。");validateScript();return;
+            }
+        }
         vsScriptReady_ = true;
         sourceTotalFrames_ = source.totalFrames;
         sourceFpsNumerator_ = source.fpsNumerator;
@@ -233,12 +252,12 @@ MainWindow::MainWindow(QWidget *parent)
         requestedVsFrame_ = -1;
         lastVsFrame_ = -1;
         vsFramePending_ = false;
-        processedPane_->setBadge(QStringLiteral("VS · %1 · 首帧渲染中").arg(processed.formatName));
+        processedPane_->setBadge((hlslPreviewPackage_.isEmpty()?QStringLiteral("VS"):QStringLiteral("VS + HLSL"))+QStringLiteral(" · %1 · 首帧渲染中").arg(processed.formatName));
         processedPane_->setSurfaceActive(true);
         processedPlayer_->redraw();
         setStatus(QStringLiteral("VPY 已载入：源 %1 帧，处理后 %2×%3 / %4 帧 / %5；正在定位当前帧。")
             .arg(source.totalFrames).arg(processed.width).arg(processed.height)
-            .arg(processed.totalFrames).arg(processed.formatName));
+            .arg(processed.totalFrames).arg(processed.formatName)+(hlslPreviewFallback_.isEmpty()?QString():"\n"+hlslPreviewFallback_));
         const auto snap = sourcePlayer_->snapshot();
         requestProcessedFrame(static_cast<int>(frameAtPosition100ns(
             snap.position100ns, vsTotalFrames_, vsFpsNumerator_, vsFpsDenominator_)));
@@ -248,6 +267,9 @@ MainWindow::MainWindow(QWidget *parent)
         vsFramePending_ = false;
         if (timelineSeekPending_ || requestedVsFrame_ < 0 || frame.frameIndex != requestedVsFrame_)
             return;
+        if(!hlslPreviewPackage_.isEmpty() && (frame.colorTransfer==16 || frame.colorTransfer==18 || frame.colorMatrix==9 || frame.colorMatrix==10 || (frame.colorPrimaries!=1 && frame.colorPrimaries!=2))){
+            hlslPreviewRetryGlSl_=true;hlslPreviewFallback_=QStringLiteral("当前色彩设置不兼容 HLSL 预览，已回退 GLSL。");validateScript();return;
+        }
         bool recoveredDevice = false;
         bool submitted = processedPlayer_->submitFrame(frame);
         if (!submitted && processedPlayer_->lastError().contains(QStringLiteral("DeviceFailure"))) {
@@ -258,10 +280,13 @@ MainWindow::MainWindow(QWidget *parent)
                 recoveredDevice = submitted;
             }
         }
+        if(!submitted && !hlslPreviewPackage_.isEmpty()){
+            hlslPreviewRetryGlSl_=true;hlslPreviewFallback_=QStringLiteral("HLSL 执行失败，已回退 GLSL：%1").arg(processedPlayer_->lastError());validateScript();return;
+        }
         if (submitted) {
             lastVsFrame_ = static_cast<int>(frame.frameIndex);
             processedPane_->setSurfaceActive(true);
-            processedPane_->setBadge(QStringLiteral("VS · 实时 · 帧 %1").arg(frame.frameIndex));
+            processedPane_->setBadge((hlslPreviewPackage_.isEmpty()?QStringLiteral("VS"):QStringLiteral("VS + HLSL"))+QStringLiteral(" · 实时 · 帧 %1").arg(frame.frameIndex));
             if (recoveredDevice)
                 setStatus(QStringLiteral("右侧渲染设备已重建，处理链继续实时预览。"));
             const auto source = sourcePlayer_->snapshot();
@@ -339,12 +364,14 @@ void MainWindow::dropEvent(QDropEvent *event)
         return;
     }
     const QString path = event->mimeData()->urls().first().toLocalFile();
+    if(QFileInfo(path).isDir()){scanWorkingFolder(path);event->acceptProposedAction();return;}
     if (!path.isEmpty() && QFileInfo(path).isFile() && loadSource(path))
         event->acceptProposedAction();
 }
 
 void MainWindow::selectPage(int index)
 {
+    QTimer::singleShot(0,this,[this,index]{if(index>=0 && index<pages_->count())applyPageTheme(pages_->widget(index),QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini"),QStringList{"VSR-Main","VSR-Compare","VSR-Settings","VSR-BDRemux"}.value(index));});
     if (index == 1 && !analysisPage_) {
         analysisPage_ = std::make_unique<AnalysisPage>(api_);
         auto *placeholder = pages_->widget(1);
@@ -393,6 +420,10 @@ QWidget *MainWindow::buildSettingsPage()
     auto *hint = new QLabel(QStringLiteral("用于 VS 预览与导出。更改后重新生成并验证脚本生效。"), page);
     hint->setWordWrap(true); layout->addWidget(hint);
     layout->addWidget(new QLabel(QStringLiteral("语言和主题"), page));
+    const auto skinPath=QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini");
+    auto *skinButton=new QPushButton(QStringLiteral("多页面背景主题…"),page);skinButton->setObjectName("rendererPageThemes");layout->addWidget(skinButton);
+    connect(skinButton,&QPushButton::clicked,this,[this,skinPath]{if(editPageThemes(this,skinPath,{"VSR-Main","VSR-Compare","VSR-BDRemux","VSR-Settings","VSR-About"}))for(int i=0;i<pages_->count();++i)applyPageTheme(pages_->widget(i),skinPath,QStringList{"VSR-Main","VSR-Compare","VSR-Settings","VSR-BDRemux"}.value(i));});
+    auto *scanDepth=new QSpinBox(page);scanDepth->setObjectName("rendererScanDepth");scanDepth->setRange(0,16);scanDepth->setValue(QSettings().value("source/scanDepth",3).toInt());layout->addWidget(new QLabel(QStringLiteral("工作文件夹递归深度（0 仅当前目录）"),page));layout->addWidget(scanDepth);connect(scanDepth,&QSpinBox::valueChanged,this,[](int depth){QSettings().setValue("source/scanDepth",depth);});
     auto *language=new QComboBox(page);language->setObjectName("rendererLanguage");language->addItem(QStringLiteral("中文"),"zh_CN");language->addItem("English","en_US");language->setCurrentIndex(qMax(0,language->findData(QSettings().value("appearance/language","zh_CN"))));layout->addWidget(language);
     connect(language,&QComboBox::currentIndexChanged,this,[this,language]{const auto name=language->currentData().toString();QSettings().setValue("appearance/language",name);language_->setLanguage(name);language_->updateWidgets(this);});
     auto *theme = new QComboBox(page);
@@ -457,7 +488,7 @@ void MainWindow::buildToolbar()
     auto *about = bar->addAction(QStringLiteral("关于"));
     connect(about,&QAction::triggered,this,[this]{
         QDialog dialog(this);dialog.setWindowTitle(QStringLiteral("关于 VS Renderer"));
-        QVBoxLayout layout(&dialog);layout.addWidget(aboutLabel("VS Renderer",&dialog));dialog.exec();
+        QVBoxLayout layout(&dialog);layout.addWidget(aboutLabel("VS Renderer",&dialog));applyPageTheme(&dialog,QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini"),"VSR-About");dialog.exec();
     });
     for(int index=0;index<2;++index){
         auto *toggle=bar->addAction(QStringLiteral("隐藏功能区%1").arg(index+1));toggle->setCheckable(true);toggle->setChecked(true);toggle->setObjectName(QString("rendererToggleArea%1").arg(index+1));
@@ -520,7 +551,7 @@ QWidget *MainWindow::buildSidebar()
     sourcePath_->setAcceptDrops(false);
     sourcePath_->setPlaceholderText(QStringLiteral("选择或拖入视频"));
     fileInput_->setMinimumWidth(120);
-    fileInput_->setMaximumWidth(320);
+    fileInput_->setMaximumWidth(360);
     fileInput_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
     auto *inputRow = new QHBoxLayout;
     sourceFilter_ = new QComboBox(this);
@@ -531,8 +562,12 @@ QWidget *MainWindow::buildSidebar()
     auto *browse = compactButton(QStringLiteral("浏览…"), input);
     browse->setObjectName(QStringLiteral("rendererBrowse"));
     sourceFilter_->setCurrentIndex(QSettings().value(QStringLiteral("sourceFilter"),0).toInt());
-    inputRow->addWidget(sourcePath_, 1);
-    inputRow->addWidget(browse);
+    sourceInputStack_=new QStackedWidget(input);sourceInputStack_->setMinimumWidth(0);sourceInputStack_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);sourceInputStack_->addWidget(sourcePath_);
+    sourceChoice_=new QComboBox(input);sourceChoice_->setObjectName("rendererSourceChoice");sourceChoice_->setMinimumContentsLength(6);sourceChoice_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);sourceInputStack_->addWidget(sourceChoice_);
+    inputRow->addWidget(sourceInputStack_,1);
+    auto *folder=new QPushButton(QStringLiteral("文件夹…"),input);folder->setObjectName("rendererFolderImport");connect(folder,&QPushButton::clicked,this,[this]{scanWorkingFolder();});
+    connect(sourceChoice_,&QComboBox::currentIndexChanged,this,[this](int index){if(index>=0)loadSource(sourceChoice_->itemData(index).toString());});
+    inputRow->addWidget(browse);inputRow->addWidget(folder);
     inputLayout->addLayout(inputRow);
     connect(browse, &QPushButton::clicked, this, &MainWindow::openSource);
     connect(sourceFilter_, &QComboBox::currentIndexChanged, this, [this] { setStatus(QStringLiteral("源滤镜已更改，脚本待验证。")); });
@@ -557,7 +592,8 @@ QWidget *MainWindow::buildSidebar()
     nodeButtons->addWidget(up);
     nodeButtons->addWidget(down);
     nodeButtons->addWidget(remove);
-    filtersLayout->addWidget(catalogSearch_);
+    catalogCategory_=new QComboBox(filters);catalogCategory_->setObjectName("rendererCatalogCategory");catalogCategory_->addItem(QStringLiteral("全部"));catalogCategory_->addItems(FilterCatalog::categories());
+    filtersLayout->addWidget(catalogSearch_);filtersLayout->addWidget(catalogCategory_);
     filtersLayout->addWidget(catalogList_, 3);
     filtersLayout->addWidget(add);
     pipelinePanel_=new QWidget(this);pipelinePanel_->setObjectName("rendererPipelinePanel");
@@ -565,13 +601,15 @@ QWidget *MainWindow::buildSidebar()
     chainLayout->addWidget(new QLabel(QStringLiteral("当前时间组已导入的滤镜"),pipelinePanel_));
     pipelineList_->setObjectName("rendererPipeline");chainLayout->addWidget(pipelineList_,1);chainLayout->addLayout(nodeButtons);
 
-    connect(catalogSearch_, &QLineEdit::textChanged, this, [this](const QString &text) {
-        for (int i = 0; i < catalogList_->count(); ++i)
-            catalogList_->item(i)->setHidden(!catalogList_->item(i)->data(Qt::UserRole + 1).toString().contains(text, Qt::CaseInsensitive));
-    });
+    const auto filterCatalog=[this]{
+        const auto text=catalogSearch_->text();const auto category=catalogCategory_->currentText();
+        for(int i=0;i<catalogList_->count();++i){auto *item=catalogList_->item(i);item->setHidden(!item->data(Qt::UserRole+1).toString().contains(text,Qt::CaseInsensitive) || (catalogCategory_->currentIndex()>0 && item->data(Qt::UserRole+2).toString()!=category));}
+        if(catalogList_->currentItem() && catalogList_->currentItem()->isHidden())catalogList_->setCurrentRow(-1);
+    };
+    connect(catalogSearch_,&QLineEdit::textChanged,this,filterCatalog);connect(catalogCategory_,&QComboBox::currentTextChanged,this,filterCatalog);
     connect(add, &QPushButton::clicked, this, [this] {
         const auto *item = catalogList_->currentItem();
-        if (!item)
+        if (!item || item->isHidden())
             return;
         activePreset_.clear();
         const int row = graph_.add(item->data(Qt::UserRole).toString());
@@ -819,6 +857,7 @@ void MainWindow::connectPlayback()
             if (syncView_->isChecked()) {
                 other->adoptView(zoom, x, y);
                 second->setView(zoom, x, y);
+                for(auto &route:additionalRoutes_)route->setView(zoom,x,y);
             }
         });
     };
@@ -841,7 +880,7 @@ void MainWindow::populateCatalog()
         auto *item = new QListWidgetItem(definition.name, catalogList_);
         textWidth = std::max(textWidth, catalogList_->fontMetrics().horizontalAdvance(definition.name));
         item->setData(Qt::UserRole, definition.id);
-        item->setData(Qt::UserRole + 1, definition.name + ' ' + definition.category);
+        item->setData(Qt::UserRole + 1, definition.name + ' ' + definition.category);item->setData(Qt::UserRole+2,definition.category);
         item->setToolTip(QStringLiteral("%1 · %2\n%3\n依赖 namespace: %4").arg(definition.name, definition.category, definition.description, definition.pluginNamespace));
     }
     auto *sidebar = findChild<QWidget *>(QStringLiteral("processingSidebar"));
@@ -903,6 +942,7 @@ void MainWindow::openSource()
 
 bool MainWindow::loadSource(const QString &path)
 {
+    const int folderIndex=sourceChoice_->findData(path);const QSignalBlocker sourceBlocker(sourceChoice_);sourceInputStack_->setCurrentIndex(folderIndex<0?0:1);if(folderIndex>=0)sourceChoice_->setCurrentIndex(folderIndex);
     if (QFileInfo(path).suffix().compare("vpy", Qt::CaseInsensitive) == 0) { loadPreset(path); return true; }
     if (!QFileInfo(path).isFile()) {
         setStatus(QStringLiteral("源文件不存在：%1").arg(path), true);
@@ -938,6 +978,7 @@ bool MainWindow::loadSource(const QString &path)
     sourcePrimeStarted_ = false;
     setStatus(left ? QStringLiteral("源已打开；正在预取首帧，点击“渲染预览”可生成右侧 VS 输出。")
                    : QStringLiteral("3FP 打开源失败。"), !left);
+    if(left && !additionalRoutes_.empty()){const int editing=routeIndex_;for(int i=1;i<routes_.size();++i){selectRoute(i);renderAdditionalRoute(i);}selectRoute(editing);}
     if (left && !activePreset_.isEmpty()) QTimer::singleShot(0, this, &MainWindow::validateScript);
     return left;
 }
@@ -969,19 +1010,39 @@ void MainWindow::showScript()
 
 void MainWindow::validateScript()
 {
+    if(routeIndex_>0){renderAdditionalRoute(routeIndex_);return;}
+    if(!routes_[0].visible){frameServer_->unloadScript();processedPlayer_->stop();vsScriptReady_=false;return;}
+    if(!routes_.first().visible)return;
     frameServer_->initialize();
     if (frameServer_->initializing()) {pendingPreview_=true;setStatus(QStringLiteral("正在初始化 VS / Python…"));return;}
-    QString error;
-    const QString path = writePreviewScript(&error);
-    if (path.isEmpty()) {
-        setStatus(error, true);
-        return;
+    if (!frameServer_->available()) {setStatus(frameServer_->errorString(), true);return;}
+    auto result=currentScript();
+    hlslPreviewPackage_.clear();hlslPreviewParameters_.clear();
+    processedPlayer_->setCustomShader({});
+    if(!hlslPreviewRetryGlSl_){
+        hlslPreviewFallback_.clear();auto groups=currentTimeGroups();
+        bool compatible=activePreset_.isEmpty() && groups.size()==1 && groups.first().script.isEmpty();
+        if(!activePreset_.isEmpty()){
+            QFile file(activePreset_);FilterGraph graph;SourceFilter filter=SourceFilter::Ffms2;
+            compatible=file.open(QIODevice::ReadOnly) && PresetStore::verifiedGraph(QString::fromUtf8(file.readAll()),&graph,&filter);
+            if(compatible)groups={{QStringLiteral("全片"),0,graph}};
+        }
+        if(compatible){
+            const auto plan=hlslPreviewPlan(groups.first().graph);hlslPreviewFallback_=plan.error;
+            if(!plan.shaderPath.isEmpty()){
+                if(sourcePlayer_->snapshot().isHdrSource)hlslPreviewFallback_=QStringLiteral("HDR 着色器保留 GLSL 色彩顺序。");
+                else {
+                    const auto package=ShaderPackage::prepare(plan.shaderPath);
+                    if(package.packagePath.isEmpty())hlslPreviewFallback_=QStringLiteral("HLSL 不兼容，已回退 GLSL：%1").arg(package.error);
+                    else {hlslPreviewPackage_=package.packagePath;hlslPreviewParameters_=plan.parameters;groups.first().graph=plan.graph;
+                        result=VpyScriptBuilder::buildGroups(sourcePath_->text(),static_cast<SourceFilter>(sourceFilter_->currentData().toInt()),groups);}
+                }
+            }
+        }else hlslPreviewFallback_=QStringLiteral("自定义 VPY 或多时间组保留原处理顺序。");
     }
-    if (!frameServer_->available()) {
-        setStatus(frameServer_->errorString(), true);
-        return;
-    }
-    const auto result = currentScript();
+    hlslPreviewRetryGlSl_=false;
+    QString error;const QString path=writePreviewScript(&error,result.script);
+    if(path.isEmpty()){setStatus(error,true);return;}
     vsScriptReady_ = false;
     sourceTotalFrames_ = 0;
     sourceFpsNumerator_ = 0;
@@ -1013,9 +1074,14 @@ void MainWindow::exportCurrentResult()
             setStatus(message);
         });
         exportWindow_->setScriptBuilder([this](const QString &source) {
-            return currentScript(source);
+            const int index=exportWindow_->selectedRoute();
+            if(index<0 || index>=routes_.size())return ScriptBuildResult{{},{QStringLiteral("所选路已移除，请重新选择。")},{}};
+            if(index==routeIndex_)return currentScript(source);
+            if(!routes_[index].preset.isEmpty()){return PresetStore::load(routes_[index].preset,source);}
+            return VpyScriptBuilder::buildGroups(source,static_cast<SourceFilter>(sourceFilter_->currentData().toInt()),routes_[index].groups);
         });
     }
+    exportWindow_->setRoutes(routes_.size(),routeIndex_);
     exportWindow_->setCurrentSource(sourcePath_->text());
     exportWindow_->showNormal();
     exportWindow_->raise();
@@ -1080,9 +1146,9 @@ void MainWindow::requestProcessedFrame(int frameIndex)
     frameServer_->requestFrame(requestedVsFrame_, lastVsFrame_ < 0 ? 6 : 0);
 }
 
-QString MainWindow::writePreviewScript(QString *error) const
+QString MainWindow::writePreviewScript(QString *error,const QString &script) const
 {
-    const auto result = currentScript();
+    const auto result = script.isEmpty()?currentScript():ScriptBuildResult{script,{},{}};
     if (!result.errors.isEmpty()) {
         if (error) *error = result.errors.join('\n');
         return {};
@@ -1108,11 +1174,15 @@ void MainWindow::saveProject()
     if (path.isEmpty())
         return;
     QJsonObject root;
-    root.insert(QStringLiteral("schemaVersion"), 1);
+    root.insert(QStringLiteral("schemaVersion"), 2);
     root.insert(QStringLiteral("sourcePath"), sourcePath_->text());
     root.insert(QStringLiteral("sourceFilter"), sourceFilter_->currentData().toInt());
     const auto data=PresetStore::metadata(currentTimeGroups(),static_cast<SourceFilter>(sourceFilter_->currentData().toInt()),sourcePath_->text(),{});
     root.insert("nodes",data.value("nodes"));root.insert("timeGroups",data.value("timeGroups"));
+    routes_[routeIndex_].groups=currentTimeGroups();routes_[routeIndex_].preset=activePreset_;
+    QJsonArray routeData;
+    for(const auto &route:routes_){auto entry=PresetStore::metadata(route.groups,static_cast<SourceFilter>(sourceFilter_->currentData().toInt()),sourcePath_->text(),{});entry.insert("visible",route.visible);entry.insert("preset",route.preset);routeData.append(entry);}
+    root.insert("routes",routeData);root.insert("editingRoute",routeIndex_);
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0 || !file.commit()) {
         setStatus(QStringLiteral("项目保存失败：%1").arg(file.errorString()), true);
@@ -1139,8 +1209,12 @@ void MainWindow::openProject()
         return;
     }
     const auto root = document.object();
-    activePreset_.clear();
-    replaceTimeGroups(PresetStore::timeGroups(root));
+    additionalRoutes_.clear();while(routes_.size()>1){compareView_->removeProcessedPane(routes_.size()-1);routes_.removeLast();}
+    auto entries=root.value("routes").toArray();if(entries.isEmpty())entries.append(root);
+    routes_.clear();
+    for(int i=0;i<qMin(3,entries.size());++i){const auto entry=entries[i].toObject();RouteState route;route.groups=PresetStore::timeGroups(entry);route.preset=entry.value("preset").toString();route.visible=entry.value("visible").toBool(true);routes_.append(route);if(i>0)additionalRoutes_.push_back(std::make_unique<RenderRoute>(api_,compareView_->addProcessedPane(),this));}
+    routeIndex_=qBound(0,root.value("editingRoute").toInt(),int(routes_.size())-1);activePreset_=routes_[routeIndex_].preset;replaceTimeGroups(routes_[routeIndex_].groups);
+    for(int i=0;i<routes_.size();++i)compareView_->setRouteVisible(i,routes_[i].visible);updateRouteChoices();
     sourceFilter_->setCurrentIndex(sourceFilter_->findData(root.value(QStringLiteral("sourceFilter")).toInt()));
     refreshPipeline(graph_.nodes().isEmpty() ? -1 : 0);
     const QString source = root.value(QStringLiteral("sourcePath")).toString();
@@ -1153,6 +1227,7 @@ void MainWindow::openProject()
 
 void MainWindow::updatePlaybackState()
 {
+    if(sourcePlayer_)for(auto &route:additionalRoutes_)route->sync(sourcePlayer_->snapshot());
     if (!sourcePlayer_ || sourcePath_->text().isEmpty())
         return;
     const auto snap = sourcePlayer_->snapshot();
@@ -1214,7 +1289,8 @@ void MainWindow::setStatus(const QString &text, bool error)
 {
     if (!taskStatus_)
         return;
-    taskStatus_->setText(text);
+    if(taskStatus_->text()==text)return;
+    taskStatus_->setText(text);taskStatus_->show();taskStatusTimer_->start();
     taskStatus_->setStyleSheet(error ? QStringLiteral("color:#b10e1e;") : QString());
 }
 

@@ -1,0 +1,8 @@
+{
+  "singleNativeMatchesBuild": true,
+  "singlePlayerMatchesBuildExcludingStripTimestampAndChecksum": true,
+  "playerNormalizedSha256": "d51144a767bfefbc5a8375e76bb4845035a0d990a0828e33d6f4c20e75a53830",
+  "aiZipSha256Verified": true,
+  "aiZipAllCrcVerified": true,
+  "aiZipEntries": 1452
+}

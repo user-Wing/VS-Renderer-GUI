@@ -13,6 +13,7 @@
 #include "ui/MultiCompareView.h"
 #include "ui/PreviewPane.h"
 #include "app/MainWindow.h"
+#include "app/RenderRoute.h"
 #include "app/Style.h"
 #include "backend/VapourSynthFrameServer.h"
 #include "backend/ThreeFpPlayer.h"
@@ -73,6 +74,22 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void independentVideoRoutes(){
+        QTemporaryDir directory;const auto file=directory.filePath("routes.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=128x72:rate=24","-t","3","-c:v","ffv1",file});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
+        MainWindow window;window.show();QVERIFY(window.loadSource(file));
+        auto resized=[](int width,int height){FilterGraph graph;const int node=graph.add("resize");graph.setParameter(node,"width",width);graph.setParameter(node,"height",height);return graph;};
+        window.replaceTimeGroups({{QStringLiteral("One"),0,resized(64,36)}});window.validateScript();
+        QTRY_VERIFY_WITH_TIMEOUT(window.processedPlayer_->snapshot().presentedVideoFrames>0,20000);
+        QVERIFY(window.addRoute());window.replaceTimeGroups({{QStringLiteral("Two"),0,resized(48,24)}});window.validateScript();
+        QVERIFY(window.addRoute());window.replaceTimeGroups({{QStringLiteral("Three"),0,resized(32,18)}});window.validateScript();QVERIFY(!window.addRoute());
+        QTRY_VERIFY_WITH_TIMEOUT(window.additionalRoutes_[0]->snapshot().presentedVideoFrames>0,20000);
+        QTRY_VERIFY_WITH_TIMEOUT(window.additionalRoutes_[1]->snapshot().presentedVideoFrames>0,20000);
+        QCOMPARE(window.processedPlayer_->snapshot().videoWidth,64u);QCOMPARE(window.additionalRoutes_[0]->snapshot().videoWidth,48u);QCOMPARE(window.additionalRoutes_[1]->snapshot().videoWidth,32u);
+        window.selectRoute(1);QVERIFY(window.currentScript().script.contains("width=48"));window.selectRoute(0);QVERIFY(window.currentScript().script.contains("width=64"));
+        window.findChild<QPushButton*>("rendererHideRoute")->click();QVERIFY(!window.vsScriptReady_);window.validateScript();QVERIFY(!window.vsScriptReady_);window.findChild<QPushButton*>("rendererShowRoute")->click();
+        window.removeRoute();QCOMPARE(window.routes_.size(),2);QVERIFY(window.currentScript().script.contains("width=48"));
+    }
+
     void nativeImageZoomBeyondViewportBounds() {
         QTemporaryDir directory;QImage image(64,48,QImage::Format_RGB32);image.fill(Qt::green);
         for(int y=0;y<image.height();++y)image.setPixelColor(32,y,Qt::red);
@@ -177,6 +194,62 @@ private slots:
         QWheelEvent wheel(anchor,s->mapToGlobal(anchor),{},QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
         for(int step=0;step<20;++step)QApplication::sendEvent(s,&wheel);
         for(int i=0;i<3;++i){QVERIFY(view->pane(i)->zoom()>128);QCOMPARE(view->pane(i)->zoom(),view->pane(1)->zoom());}
+    }
+    void rendererHlslPreviewAndGlslFallback(){
+        QTemporaryDir directory;QVERIFY(directory.isValid());
+        const auto source=directory.filePath("renderer-hlsl.mkv"),shader=directory.filePath("renderer.glsl");
+        QProcess encoder;
+        encoder.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),
+            {"-v","error","-f","lavfi","-i","color=c=blue:size=320x180:rate=24:duration=3",
+             "-color_primaries","bt709","-color_trc","bt709","-colorspace","bt709","-c:v","ffv1","-y",source});
+        QVERIFY(encoder.waitForFinished(10000));QVERIFY2(encoder.exitCode()==0,encoder.readAllStandardError().constData());
+        QVERIFY(PresetStore::write(shader,"//!DESC Red output\n//!HOOK MAIN\n//!BIND HOOKED\n//!WIDTH OUTPUT.w\n//!HEIGHT OUTPUT.h\nvec4 hook(){return vec4(1.0,0.0,0.0,1.0);}\n"));
+        FilterGraph graph;const int resize=graph.add("resize"),node=graph.add("anime4k");
+        graph.setParameter(resize,"width",160);graph.setParameter(resize,"height",90);
+        graph.setParameter(node,"mode","自定义 GLSL");graph.setParameter(node,"shader",shader);graph.setParameter(node,"hlsl",true);
+        graph.setParameter(node,"output_mode","指定分辨率");graph.setParameter(node,"width",640);graph.setParameter(node,"height",360);graph.setParameter(node,"keep_aspect",true);
+        MainWindow window;window.resize(1300,800);window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+        window.replaceTimeGroups({{QStringLiteral("全片"),0,graph}});
+        QVERIFY(window.loadSource(source));
+        QTRY_VERIFY2_WITH_TIMEOUT(window.sourcePlayer_->snapshot().presentedVideoFrames>0,qPrintable(window.taskStatus_->text()),15000);
+        const auto fullScript=window.currentScript(source);QVERIFY(fullScript.errors.isEmpty());QVERIFY(fullScript.script.contains(".Shader(clip"));
+        window.validateScript();
+        QTRY_VERIFY2_WITH_TIMEOUT(window.vsScriptReady_ && window.lastVsFrame_>=0 && window.processedPlayer_->snapshot().presentedVideoFrames>0,qPrintable(window.taskStatus_->text()),25000);
+        QVERIFY2(!window.hlslPreviewPackage_.isEmpty(),qPrintable(window.hlslPreviewFallback_));
+        QCOMPARE(window.processedPlayer_->snapshot().videoWidth,160u); // Earlier VS resize still executes.
+        QCOMPARE(window.hlslPreviewParameters_.value("width").toInt(),640);
+        const auto surface=window.processedPane_->surface()->size()*window.processedPane_->surface()->devicePixelRatioF();
+        ThreeFpPixelProbe pixel{};QVERIFY(window.processedPlayer_->samplePixel(surface.width()/2,surface.height()/2,pixel));
+        QVERIFY2(pixel.red>.9f && pixel.green<.1f && pixel.blue<.1f,"Renderer did not execute the native red shader");
+        QFile preview(QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).filePath("preview.vpy"));
+        QVERIFY(preview.open(QIODevice::ReadOnly));const auto previewScript=preview.readAll();preview.close();
+        QVERIFY(!previewScript.contains(".Shader(clip"));
+        // ExportWindow uses currentScript(source); preview extraction must not mutate that graph/script.
+        QCOMPARE(window.currentScript(source).script,fullScript.script);
+        const auto saved=PresetStore::create(window.currentTimeGroups(),SourceFilter::Ffms2,source,{});
+        QVERIFY(saved.contains(".Shader(clip"));QVERIFY(saved.contains(VpyScriptBuilder::pythonString(shader)));
+        QVERIFY(PresetStore::write(shader,"//!DESC Chroma passthrough\n//!HOOK CHROMA\n//!BIND HOOKED\nvec4 hook(){return HOOKED_tex(HOOKED_pos);}\n"));
+        window.validateScript();
+        QTRY_VERIFY2_WITH_TIMEOUT(window.vsScriptReady_ && window.lastVsFrame_>=0 && window.processedPlayer_->snapshot().presentedVideoFrames>0,qPrintable(window.taskStatus_->text()),25000);
+        QVERIFY(window.hlslPreviewPackage_.isEmpty());QVERIFY(window.hlslPreviewFallback_.contains("GLSL"));QVERIFY(window.hlslPreviewFallback_.contains("CHROMA"));
+        QCOMPARE(window.processedPlayer_->snapshot().videoWidth,640u); // Original shader output dimensions are restored.
+        QVERIFY(window.processedPlayer_->samplePixel(surface.width()/2,surface.height()/2,pixel));
+        QVERIFY2(pixel.blue>.7f && pixel.red<.2f,"GLSL fallback did not restore the original blue source");
+        QVERIFY(preview.open(QIODevice::ReadOnly));QVERIFY(preview.readAll().contains(".Shader(clip"));
+        QCOMPARE(window.currentScript(source).script,fullScript.script);
+    }
+    void rendererEditedVpyKeepsPython(){
+        QTemporaryDir directory;FilterGraph existing,imported;existing.add("crop");imported.add("resize");
+        const auto path=directory.filePath("edited.vpy");
+        const auto script=PresetStore::create(imported,SourceFilter::Ffms2,{},{})+"\nclip = core.std.Invert(clip)\nclip.set_output(0)\n";
+        QVERIFY(PresetStore::write(path,script));
+        MainWindow window;window.replaceTimeGroups({{QStringLiteral("Existing"),0,existing}});
+        window.loadPreset(path,true);
+        QCOMPARE(window.currentTimeGroups().first().graph.nodes().first().definitionId,QString("crop"));
+        QVERIFY(window.taskStatus_->text().contains(QStringLiteral("正文已修改")));
+        window.loadPreset(path);
+        QCOMPARE(window.activePreset_,path);
+        QVERIFY(window.currentScript(directory.filePath("input.mkv")).script.contains("clip = core.std.Invert(clip)"));
     }
     void rendererTimeGroupLayout(){
         MainWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));

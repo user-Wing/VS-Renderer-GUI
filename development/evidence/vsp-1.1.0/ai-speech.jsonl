@@ -1,0 +1,5 @@
+{"type": "status", "state": "loading", "detail": "engine=onnx device=cpu 候选=cpu threads=6"}
+{"type": "status", "state": "ready", "detail": "window=5.0s step=5.0s device=cpu provider=cpu threads=6 lang=auto [cpu 无需确认]"}
+{"type": "final", "generation": 1, "start100ns": 0, "end100ns": 50000000, "text": "抜群の運動神経を持ち合わせ、どんな要求にも応えてきた。", "text2": "", "bilingual": false, "language": "", "target": "", "matched": true}
+{"type": "final", "generation": 1, "start100ns": 50000000, "end100ns": 100000000, "text": "抜群の運動神経を用い合わせ、どんな要求にも応えてきた。", "text2": "", "bilingual": false, "language": "", "target": "", "matched": true}
+{"type": "stats", "rtf": 0.145, "windows": 2, "dropped": 0}

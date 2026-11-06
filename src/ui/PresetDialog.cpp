@@ -26,7 +26,7 @@
 namespace vsr {
 PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, std::function<void(const QString &)> load,
                            std::function<void()> reset, QWidget *parent,
-                           std::function<void(const QString &)> loadCurrentGroup) : QDialog(parent)
+                           std::function<void(const QString &)> loadCurrentGroup, std::function<void(const QString &)> loadNewRoute) : QDialog(parent)
 {
     setWindowTitle(QStringLiteral("预设管理 · VPY")); resize(980, 640);
     auto *layout = new QVBoxLayout(this);
@@ -113,6 +113,7 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
         QString message; if (!PresetStore::write(path, text, &message)) error(message); else { refresh(); selectPath(path); }
     });
     button(loadCurrentGroup?QStringLiteral("导入所有时间组"):QStringLiteral("读取"), [=] { if (!selected().isEmpty()) load(selected()); });
+    if(loadNewRoute)button(QStringLiteral("导入到新路"),[=]{if(!selected().isEmpty())loadNewRoute(selected());});
     if(loadCurrentGroup)button(QStringLiteral("导入当前时间组"),[=]{if(!selected().isEmpty())loadCurrentGroup(selected());});
     connect(list, &QTreeWidget::itemDoubleClicked, this, [=] { if(!selected().isEmpty())load(selected()); });
     button(QStringLiteral("导入"), [=] {

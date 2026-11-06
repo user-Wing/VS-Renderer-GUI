@@ -12,44 +12,18 @@ $LibiamfRoot=(Resolve-Path -LiteralPath $LibiamfRoot).Path
 $checkout=(& git -C $NativeRoot rev-parse --show-toplevel).Trim()
 if($LASTEXITCODE -ne 0 -or (Resolve-Path -LiteralPath $checkout).Path -ne $NativeRoot){throw 'NativeRoot must be a separate FFF_Project Git checkout.'}
 $commit=(& git -C $NativeRoot rev-parse HEAD).Trim()
-if($commit -ne 'cc545d2afc3f7b45058f47434628db6a703c7b07'){throw 'Checkout the pinned API 20 startup PR48 commit cc545d2afc3f7b45058f47434628db6a703c7b07 (main 146b5e0) first.'}
-$patch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches\3fp-api20-vsrenderer-1.0.10.patch'
-$analysisPatch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches\3fp-api20-analysis-probe.patch'
-$animePatch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches\3fp-api20-anime4k-fast.patch'
+if($commit -ne '72af915f8bf2567155c1f87851a6fa263f73b14f'){throw 'Checkout the pinned upstream commit 72af915f8bf2567155c1f87851a6fa263f73b14f first.'}
+$patch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches/3fp-vsp-1.1.0.patch'
 $ErrorActionPreference='Continue'
-& git -C $NativeRoot apply --reverse --check $animePatch 2>$null
-$animeApplied=$LASTEXITCODE -eq 0
+& git -C $NativeRoot apply --reverse --check $patch 2>$null
+$applied=$LASTEXITCODE -eq 0
 $ErrorActionPreference='Stop'
-if($animeApplied){
-    & git -C $NativeRoot apply --reverse $animePatch
-    if($LASTEXITCODE -ne 0){throw 'Could not temporarily remove the Anime4K extension for base patch verification.'}
-}
-$ErrorActionPreference='Continue'
-& git -C $NativeRoot apply --reverse --check $analysisPatch 2>$null
-$analysisApplied=$LASTEXITCODE -eq 0
-$ErrorActionPreference='Stop'
-if($analysisApplied){
-    & git -C $NativeRoot apply --reverse $analysisPatch
-    if($LASTEXITCODE -ne 0){throw 'Could not temporarily remove the analysis extension for base patch verification.'}
-}
-try {
-$savedPreference=$ErrorActionPreference
-$ErrorActionPreference='Continue'
-try { & git -C $NativeRoot apply --reverse --check $patch 2>$null; $applied=$LASTEXITCODE -eq 0 }
-finally { $ErrorActionPreference=$savedPreference }
 if(!$applied){
     & git -C $NativeRoot apply --check $patch
-    if($LASTEXITCODE -ne 0){throw 'API 20 patch conflicts with the native checkout.'}
+    if($LASTEXITCODE -ne 0){throw 'VSP 1.1.0 patch conflicts with the native checkout.'}
     & git -C $NativeRoot apply $patch
-    if($LASTEXITCODE -ne 0){throw 'API 20 patch failed.'}
+    if($LASTEXITCODE -ne 0){throw 'VSP 1.1.0 patch failed.'}
 }
-} catch {
-    if($analysisApplied){ & git -C $NativeRoot apply $analysisPatch }
-    if($animeApplied){ & git -C $NativeRoot apply $animePatch }
-    throw
-}
-& git -C $NativeRoot apply $analysisPatch
-if($LASTEXITCODE -ne 0){throw 'Analysis source-pixel / interactive redraw patch failed.'}
 $projectRoot=Split-Path $PSScriptRoot -Parent
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/SourcePixelProbe.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/SourcePixelProbe.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/color/ColorBridge.h'), (Join-Path $projectRoot 'src/color/NativeColorEngine.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Render') -Force

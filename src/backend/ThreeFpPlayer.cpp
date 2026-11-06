@@ -50,10 +50,12 @@ bool ThreeFpPlayer::createSession()
         return false;
     if(clockOnly_)api_.setClockOnly(handle_,true);
     if(softwarePreScaleHeight_)check(api_.setSoftwarePreScale(handle_,softwarePreScaleHeight_),QStringLiteral("CPU pre-scale"));
-    if (!check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale_) | ((chromaAlgorithm_ + 1) << 8) | (antiRinging_ ? 65536u : 0u)), downscale_), QStringLiteral("设置缩放算法")))
+    if (!check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale_) | ((chromaAlgorithm_ + 1) << 8) | (unsigned(secondaryScaling_ + 1) << 24) | (antiRinging_ ? 65536u : 0u)), downscale_), QStringLiteral("设置缩放算法")))
         return false;
     check(api_.setVolume(handle_, volume_, muted_ ? 1u : 0u), QStringLiteral("音量"));
     if (!outputFormat_.isEmpty()) api_.setExternalOutputFormat(handle_, outputFormat_.toUtf8().constData());
+    if (!customShaderPath_.isEmpty() && !check(api_.setCustomShader(handle_, customShaderPath_.toUtf8().constData(), customShaderWidth_, customShaderHeight_), QStringLiteral("加载 HLSL 着色器")))
+        return false;
     if (customColorSettings_) api_.setColorSettings(handle_, &colorSettings_);
     if(videoSuperResolution_)api_.setVideoEnhancement(handle_,false,true);
     if(videoAutoHdr_)api_.setVideoEnhancement(handle_,true,true);
@@ -203,7 +205,7 @@ bool ThreeFpPlayer::setScalingAlgorithms(ThreeFpScalingAlgorithm upscale,
 {
     upscale_ = upscale;
     downscale_ = downscale;
-    return !handle_ || check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale) | ((chromaAlgorithm_ + 1) << 8) | (antiRinging_ ? 65536u : 0u)), downscale),
+    return !handle_ || check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale) | ((chromaAlgorithm_ + 1) << 8) | (unsigned(secondaryScaling_ + 1) << 24) | (antiRinging_ ? 65536u : 0u)), downscale),
                             QStringLiteral("设置缩放算法"));
 }
 
@@ -212,6 +214,18 @@ bool ThreeFpPlayer::setChromaAlgorithm(int algorithm)
     if (algorithm < 0 || algorithm > 10) return false;
     chromaAlgorithm_ = algorithm;
     return setScalingAlgorithms(upscale_, downscale_);
+}
+
+void ThreeFpPlayer::setSecondaryScaling(int algorithm) {
+    secondaryScaling_=std::clamp(algorithm,-1,8);
+}
+bool ThreeFpPlayer::setCustomShader(const QString &path,int width,int height)
+{
+    if(width<0 || height<0 || width>16384 || height>16384 || bool(width)!=bool(height))return false;
+    if(path.isEmpty() && !handle_){customShaderPath_.clear();customShaderWidth_=customShaderHeight_=0;return true;}
+    if(!createSession() || !check(api_.setCustomShader(handle_,path.toUtf8().constData(),width,height),QStringLiteral("加载 HLSL 着色器")))return false;
+    customShaderPath_=path;customShaderWidth_=width;customShaderHeight_=height;
+    return true;
 }
 
 void ThreeFpPlayer::setView(float zoom, float panX, float panY)
@@ -328,3 +342,9 @@ bool ThreeFpPlayer::check(ThreeFpResult result, const QString &operation)
 bool ThreeFpPlayer::audioLevels(ThreeFpAudioLevels &levels,bool input) const {return handle_ && api_.audioLevels(handle_,&levels,input)==ThreeFpResult::Success;}
 
 }
+
+namespace vsr {bool ThreeFpPlayer::setDecodeBuffer(quint64 bytes,unsigned frames){return handle_ && api_.setDecodeBuffer(handle_,bytes,frames)==ThreeFpResult::Success;}}
+
+namespace vsr {QSize ThreeFpPlayer::processingSize() const {return handle_?api_.processingSize(handle_):QSize();}}
+
+namespace vsr {void ThreeFpPlayer::setLoudnessNormalization(bool enabled){if(handle_)api_.setLoudnessNormalization(handle_,enabled);}}

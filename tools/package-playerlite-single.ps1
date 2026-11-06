@@ -15,7 +15,7 @@ $compiler = 'C:\Private\Soft\QT\Tools\mingw1310_64\bin\gcc.exe'
 if (!(Test-Path -LiteralPath $compiler)) { throw "Missing compiler: $compiler" }
 $work = Join-Path $root 'build\playerlite-single'
 $stage = Join-Path $work 'stage'
-$zip = Join-Path $work 'payload.zip'
+$zip = Join-Path $work 'payload.tar.xz'
 $runner = Join-Path $work 'launcher.exe'
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 $stage = [IO.Path]::GetFullPath($stage)
@@ -55,12 +55,12 @@ Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $_.Name -ne 'r
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'resource-manifest.json') -Encoding UTF8
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 $compress = @'
-import pathlib, sys, zipfile
+import pathlib, sys, tarfile, lzma
 source = pathlib.Path(sys.argv[1])
-with zipfile.ZipFile(sys.argv[2], 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+with tarfile.open(sys.argv[2], 'w:xz', preset=9 | lzma.PRESET_EXTREME) as archive:
     for path in sorted(source.rglob('*')):
         if path.is_file():
-            archive.write(path, path.relative_to(source).as_posix())
+            archive.add(path, arcname=path.relative_to(source).as_posix(), recursive=False)
 '@
 & python -c $compress $stage $zip
 if ($LASTEXITCODE -ne 0) { throw 'Cannot compress the single-player runtime' }
@@ -104,7 +104,7 @@ $stream = [IO.File]::Open($temp,[IO.FileMode]::Append,[IO.FileAccess]::Write)
 try {
     $archive = [IO.File]::OpenRead($zip)
     try { $archive.CopyTo($stream) } finally { $archive.Dispose() }
-    $marker = [Text.Encoding]::ASCII.GetBytes('VSLITE02')
+    $marker = [Text.Encoding]::ASCII.GetBytes('VSLITE03')
     $stream.Write($marker,0,$marker.Length)
     $count = [BitConverter]::GetBytes([uint64](Get-Item -LiteralPath $zip).Length)
     $stream.Write($count,0,$count.Length)
@@ -116,5 +116,5 @@ $pending = $destination + '.new'
 Copy-Item -LiteralPath $temp -Destination $pending -Force
 Move-Item -LiteralPath $pending -Destination $destination -Force
 Write-Output ('Single EXE: {0} ({1:N2} MiB)' -f $OutputFile,((Get-Item -LiteralPath $OutputFile).Length / 1MB))
-Write-Output ('FFmpeg bundled: no; cache LOCALAPPDATA\VSPlayerLite\{0}' -f $hash)
+Write-Output 'FFmpeg bundled: no; temporary runtime beside launcher, removed after player exits.'
 Write-Output 'Configuration: player.ini beside the launcher, preserved across updates.'

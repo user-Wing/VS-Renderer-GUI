@@ -1,0 +1,27 @@
+[
+  {
+    "name": "photocraft-final",
+    "exit": 1,
+    "seconds": 21.12
+  },
+  {
+    "name": "software8k-final",
+    "exit": 0,
+    "seconds": 23.61
+  },
+  {
+    "name": "analysis-postfix",
+    "exit": "timeout",
+    "seconds": 180.09
+  },
+  {
+    "name": "lite-postfix",
+    "exit": 0,
+    "seconds": 44.64
+  },
+  {
+    "name": "player-postfix",
+    "exit": 3221225477,
+    "seconds": 177.72
+  }
+]

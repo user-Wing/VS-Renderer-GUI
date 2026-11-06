@@ -1,0 +1,149 @@
+[
+  {
+    "name": "AnimeJaNai-V2-2x-Compact-36K",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.781,
+    "error": ""
+  },
+  {
+    "name": "AnimeJaNai-V3-2x-HD-Sharp1-Compact-430K",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.757,
+    "error": ""
+  },
+  {
+    "name": "AniSD-DC-SPAN-2x-92500",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.748,
+    "error": ""
+  },
+  {
+    "name": "CUGAN-Conservative-2x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.828,
+    "error": ""
+  },
+  {
+    "name": "DenoiseH264-SuperUltraCompact-1x-float16",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.742,
+    "error": ""
+  },
+  {
+    "name": "DnCNN-ColorBlind-1x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.742,
+    "error": ""
+  },
+  {
+    "name": "ModernSpanimation-V2-2x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.755,
+    "error": ""
+  },
+  {
+    "name": "Nomos8k-span-otf-4x-medium",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.754,
+    "error": ""
+  },
+  {
+    "name": "Nomos8k-span-otf-4x-strong",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.804,
+    "error": ""
+  },
+  {
+    "name": "OpenProteus-Compact-i2-2x-70K",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.753,
+    "error": ""
+  },
+  {
+    "name": "RealESRGAN-AnimeVideoV3-2x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.735,
+    "error": ""
+  },
+  {
+    "name": "RealESRGAN-AnimeVideoV3-3x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.773,
+    "error": ""
+  },
+  {
+    "name": "RealESRGAN-AnimeVideoV3-4x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.768,
+    "error": ""
+  },
+  {
+    "name": "RealESRGAN-General-x4v3",
+    "passed": true,
+    "exit": 0,
+    "seconds": 1.392,
+    "error": ""
+  },
+  {
+    "name": "RealESRGAN-x4plus-Anime-4x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 1.189,
+    "error": ""
+  },
+  {
+    "name": "Waifu2x-2x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 1.064,
+    "error": ""
+  },
+  {
+    "name": "Waifu2x-Noise0-2x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.774,
+    "error": ""
+  },
+  {
+    "name": "Waifu2x-Noise1-2x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.773,
+    "error": ""
+  },
+  {
+    "name": "Waifu2x-Noise2-2x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.781,
+    "error": ""
+  },
+  {
+    "name": "Waifu2x-Noise3-2x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.778,
+    "error": ""
+  },
+  {
+    "name": "Waifu2x-Photo-2x",
+    "passed": true,
+    "exit": 0,
+    "seconds": 0.802,
+    "error": ""
+  }
+]

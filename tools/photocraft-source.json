@@ -1,8 +1,8 @@
 {
   "repository": "https://github.com/storytold/photocraft.git",
-  "commit": "7eb3b2e072aa3110da2a329bb49109744292a87b",
-  "version": "0.2.0",
+  "commit": "8f7d916ba5ce6d94f2334d47bb23b84ff6cbaff2",
+  "version": "0.20.1",
   "profile": "vsp-release",
   "license": "MIT",
-  "maximumComponentBytes": 45000000
+  "maximumComponentBytes": 80000000
 }

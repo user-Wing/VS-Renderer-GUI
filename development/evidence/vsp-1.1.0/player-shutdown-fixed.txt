@@ -1,0 +1,331 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+PASS   : TestPlayer::animatedGifAndTiff()
+PASS   : TestPlayer::resizedRawAwjOutput()
+SKIP   : TestPlayer::realAiSubtitlePackage() Set VSR_AI_TEST_PACKAGE and VSR_AI_TEST_AUDIO for real inference.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(112) : failure location
+QINFO  : TestPlayer::headlessOpenSkipsRgbConversion() headless-convert-100ns 0
+PASS   : TestPlayer::headlessOpenSkipsRgbConversion()
+QINFO  : TestPlayer::upstreamHardwarePreference(ChouKaguya432048-Part.mkv) hardware-preference "D:/Video Compress Test/PlayerTest/ChouKaguya432048-Part.mkv" actual 2 "{\"bitRate\":117346296,\"chapters\":[],\"compatibleBrands\":\"\",\"decodeBufferBytes\":0,\"decodeBufferFrames\":0,\"duration100ns\":1118740000,\"fileSize\":1640999953,\"format\":\"matroska,webm\",\"formatCodecId\":\"\",\"formatLongName\":\"Matroska / WebM\",\"hardwareDecodable\":false,\"metadata\":{\"ENCODER\":\"Lavf63.5.101\"},\"probeScore\":100,\"softwareVideoDecodeAsync\":false,\"softwareVideoHandoffSlots\":1,\"softwareVideoRealtimeSwitches\":0,\"softwareVideoReferenceOnly\":false,\"startTime100ns\":0,\"staticImage\":false,\"streams\":[{\"attachedPicture\":false,\"averageFrameRateDenominator\":146,\"averageFrameRateNumerator\":7001,\"bitDepth\":10,\"bitRate\":0,\"chromaLocation\":0,\"chromaSubsampling\":\"4:2:0\",\"codec\":\"av1\",\"codecConfigurationBox\":\"av1C\",\"codecLongName\":\"Alliance for Open Media AV1\",\"codecTag\":\"\",\"colorModel\":\"YUV\",\"colorPrimaries\":1,\"colorRange\":1,\"colorSpace\":1,\"colorTransfer\":1,\"decoderBitDepth\":10,\"decoderPixelFormat\":\"d3d11\",\"decoderSurfaceFormat\":\"p010le\",\"default\":false,\"displayAspectDenominator\":9,\"displayAspectNumerator\":16,\"disposition\":\"\",\"duration100ns\":0,\"dynamicHdrMetadata\":false,\"extradataSize\":21,\"fieldOrder\":1,\"forced\":false,\"frameRateMode\":\"constant\",\"frames\":0,\"hardwareAcceleration\":\"DXVA (D3D11VA)\",\"hdr\":false,\"hdrCompatibility\":\"\",\"hdrFallback\":false,\"hdrFormat\":\"SDR\",\"hdrProcessingPath\":\"None\",\"height\":4320,\"index\":0,\"language\":\"\",\"level\":23,\"lossless\":false,\"metadata\":{\"DURATION\":\"00:01:49.485000000\",\"ENCODER\":\"Lavc62.34.101 av1_nvenc\"},\"nominalFrameRateDenominator\":146,\"nominalFrameRateNumerator\":7001,\"pixelFormat\":\"yuv420p10le\",\"profile\":\"Main\",\"sampleAspectDenominator\":1,\"sampleAspectNumerator\":1,\"startTime100ns\":0,\"streamId\":0,\"streamSize\":0,\"timeBaseDenominator\":1000,\"timeBaseNumerator\":1,\"title\":\"\",\"type\":\"video\",\"width\":7680},{\"bitRate\":0,\"bitsPerCodedSample\":32,\"channelLayout\":\"6 channels\",\"channels\":6,\"codec\":\"aac\",\"codecLongName\":\"AAC (Advanced Audio Coding)\",\"codecTag\":\"\",\"compressionMode\":\"ÓÐËð\",\"default\":false,\"disposition\":\"\",\"duration100ns\":0,\"extradataSize\":26,\"forced\":false,\"frameSize\":1024,\"frames\":0,\"index\":1,\"initialPadding\":1024,\"language\":\"jpn\",\"lossless\":false,\"metadata\":{\"BPS\":\"317509\",\"DURATION\":\"00:01:49.511000000\",\"NUMBER_OF_BYTES\":\"338275295\",\"NUMBER_OF_FRAMES\":\"399526\",\"_STATISTICS_TAGS\":\"BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES\",\"_STATISTICS_WRITING_APP\":\"mkvmerge v93.0 ('Goblu') 64-bit\",\"_STATISTICS_WRITING_DATE_UTC\":\"2026-02-28 19:54:14\",\"language\":\"jpn\"},\"outputBitsPerSample\":32,\"outputChannels\":2,\"outputFloat\":true,\"outputSampleRate\":48000,\"outputValidBitsPerSample\":32,\"profile\":\"LC\",\"rawSampleBits\":32,\"sampleFormat\":\"fltp\",\"sampleRate\":48000,\"seekPreroll\":0,\"startTime100ns\":290000,\"streamId\":0,\"streamSize\":0,\"timeBaseDenominator\":1000,\"timeBaseNumerator\":1,\"title\":\"\",\"trailingPadding\":0,\"type\":\"audio\"},{\"bitRate\":0,\"codec\":\"ass\",\"codecLongName\":\"ASS (Advanced SSA) subtitle\",\"codecTag\":\"\",\"default\":false,\"disposition\":\"\",\"duration100ns\":1118740000,\"extradataSize\":13356,\"forced\":false,\"frames\":0,\"index\":2,\"language\":\"chi\",\"lossless\":false,\"metadata\":{\"BPS\":\"2678\",\"DURATION\":\"00:01:51.874000000\",\"ENCODER\":\"Lavc62.34.101 ssa\",\"NUMBER_OF_BYTES\":\"2813065\",\"NUMBER_OF_FRAMES\":\"21295\",\"_STATISTICS_TAGS\":\"BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES\",\"_STATISTICS_WRITING_APP\":\"mkvmerge v93.0 ('Goblu') 64-bit\",\"_STATISTICS_WRITING_DATE_UTC\":\"2026-02-28 19:54:14\",\"language\":\"chi\",\"title\":\"JPSC\"},\"startTime100ns\":0,\"streamId\":0,\"streamSize\":0,\"timeBaseDenominator\":1000,\"timeBaseNumerator\":1,\"title\":\"JPSC\",\"type\":\"subtitle\"}],\"tileGrid\":false,\"tileGridHeight\":0,\"tileGridTileCount\":0,\"tileGridWidth\":0,\"videoDecoderDelayFrames\":0,\"videoDecoderThreads\":1}"
+PASS   : TestPlayer::upstreamHardwarePreference(ChouKaguya432048-Part.mkv)
+QINFO  : TestPlayer::upstreamHardwarePreference(RebellionHEVC444p10-700MBPS-SoftwareLast.mkv) hardware-preference "D:/Video Compress Test/PlayerTest/RebellionHEVC444p10-700MBPS-SoftwareLast.mkv" actual 2 "{\"bitRate\":216221856,\"chapters\":[{\"start100ns\":0,\"startTime100ns\":0,\"title\":\"Chapter 26\"},{\"start100ns\":2830870000,\"startTime100ns\":2830870000,\"title\":\"Chapter 27\"},{\"start100ns\":5322530000,\"startTime100ns\":5322530000,\"title\":\"Chapter 28\"},{\"start100ns\":8386010000,\"startTime100ns\":8386010000,\"title\":\"Chapter 29\"},{\"start100ns\":11462410000,\"startTime100ns\":11462410000,\"title\":\"Chapter 30\"}],\"compatibleBrands\":\"\",\"decodeBufferBytes\":0,\"decodeBufferFrames\":0,\"duration100ns\":940520000,\"fileSize\":2542012252,\"format\":\"matroska,webm\",\"formatCodecId\":\"\",\"formatLongName\":\"Matroska / WebM\",\"hardwareDecodable\":true,\"metadata\":{\"ENCODER\":\"Lavf63.5.101\"},\"probeScore\":100,\"softwareVideoDecodeAsync\":false,\"softwareVideoHandoffSlots\":1,\"softwareVideoRealtimeSwitches\":0,\"softwareVideoReferenceOnly\":false,\"startTime100ns\":0,\"staticImage\":false,\"streams\":[{\"attachedPicture\":false,\"averageFrameRateDenominator\":1001,\"averageFrameRateNumerator\":24000,\"bitDepth\":10,\"bitRate\":0,\"chromaLocation\":1,\"chromaSubsampling\":\"4:4:4\",\"codec\":\"hevc\",\"codecConfigurationBox\":\"hvcC\",\"codecLongName\":\"H.265 / HEVC (High Efficiency Video Coding)\",\"codecTag\":\"\",\"colorModel\":\"YUV\",\"colorPrimaries\":2,\"colorRange\":1,\"colorSpace\":2,\"colorTransfer\":2,\"decoderBitDepth\":10,\"decoderPixelFormat\":\"cuda\",\"decoderSurfaceFormat\":\"yuv444p10msble\",\"default\":true,\"displayAspectDenominator\":9,\"displayAspectNumerator\":16,\"disposition\":\"default\",\"duration100ns\":0,\"dynamicHdrMetadata\":false,\"extradataSize\":129,\"fieldOrder\":0,\"forced\":false,\"frameRateMode\":\"constant\",\"frames\":0,\"hardwareAcceleration\":\"cuda\",\"hdr\":false,\"hdrCompatibility\":\"\",\"hdrFallback\":false,\"hdrFormat\":\"SDR\",\"hdrProcessingPath\":\"None\",\"height\":2160,\"index\":0,\"language\":\"\",\"level\":150,\"lossless\":false,\"metadata\":{\"BPS\":\"89816369\",\"DURATION\":\"00:01:34.052000000\",\"NUMBER_OF_BYTES\":\"78362604462\",\"NUMBER_OF_FRAMES\":\"167348\",\"_STATISTICS_TAGS\":\"BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES\",\"_STATISTICS_WRITING_APP\":\"mkvmerge v99.0 ('Buka') 64-bit\",\"_STATISTICS_WRITING_DATE_UTC\":\"2026-07-22 03:57:57\"},\"nominalFrameRateDenominator\":1001,\"nominalFrameRateNumerator\":24000,\"pixelFormat\":\"yuv444p10le\",\"profile\":\"Rext\",\"sampleAspectDenominator\":1,\"sampleAspectNumerator\":1,\"startTime100ns\":0,\"streamId\":0,\"streamSize\":0,\"timeBaseDenominator\":1000,\"timeBaseNumerator\":1,\"title\":\"\",\"type\":\"video\",\"width\":3840},{\"bitRate\":0,\"bitsPerCodedSample\":24,\"channelLayout\":\"5.1(side)\",\"channels\":6,\"codec\":\"dts\",\"codecLongName\":\"DCA (DTS Coherent Acoustics)\",\"codecTag\":\"\",\"compressionMode\":\"ÓÐËð\",\"default\":true,\"disposition\":\"default\",\"duration100ns\":0,\"extradataSize\":0,\"forced\":false,\"frameSize\":0,\"frames\":0,\"index\":1,\"initialPadding\":0,\"language\":\"jpn\",\"lossless\":false,\"metadata\":{\"BPS\":\"4184845\",\"DURATION\":\"00:01:33.851000000\",\"NUMBER_OF_BYTES\":\"3651372312\",\"NUMBER_OF_FRAMES\":\"654392\",\"_STATISTICS_TAGS\":\"BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES\",\"_STATISTICS_WRITING_APP\":\"mkvmerge v99.0 ('Buka') 64-bit\",\"_STATISTICS_WRITING_DATE_UTC\":\"2026-07-22 03:57:57\",\"language\":\"jpn\",\"title\":\"Japanese 5.1ch (JP BD)\"},\"outputBitsPerSample\":32,\"outputChannels\":2,\"outputFloat\":true,\"outputSampleRate\":48000,\"outputValidBitsPerSample\":32,\"profile\":\"DTS-HD MA\",\"rawSampleBits\":24,\"sampleFormat\":\"s32p\",\"sampleRate\":48000,\"seekPreroll\":0,\"startTime100ns\":50000,\"streamId\":0,\"streamSize\":0,\"timeBaseDenominator\":1000,\"timeBaseNumerator\":1,\"title\":\"Japanese 5.1ch (JP BD)\",\"trailingPadding\":0,\"type\":\"audio\"}],\"tileGrid\":false,\"tileGridHeight\":0,\"tileGridTileCount\":0,\"tileGridWidth\":0,\"videoDecoderDelayFrames\":0,\"videoDecoderThreads\":1}"
+PASS   : TestPlayer::upstreamHardwarePreference(RebellionHEVC444p10-700MBPS-SoftwareLast.mkv)
+QINFO  : TestPlayer::upstreamHardwarePreference(OP-yuv444p12-SWTest.mkv) hardware-preference "D:/Video Compress Test/PlayerTest/OP-yuv444p12-SWTest.mkv" actual 1 "{\"bitRate\":81946474,\"chapters\":[],\"compatibleBrands\":\"\",\"decodeBufferBytes\":0,\"decodeBufferFrames\":0,\"duration100ns\":920900000,\"fileSize\":943306349,\"format\":\"matroska,webm\",\"formatCodecId\":\"\",\"formatLongName\":\"Matroska / WebM\",\"hardwareDecodable\":false,\"metadata\":{\"ENCODER\":\"Lavf63.1.102\",\"creation_time\":\"2025-01-19T21:10:58.000000Z\",\"title\":\"GIRLS BAND CRY - OP\"},\"probeScore\":100,\"softwareVideoDecodeAsync\":true,\"softwareVideoHandoffSlots\":1,\"softwareVideoRealtimeSwitches\":0,\"softwareVideoReferenceOnly\":false,\"startTime100ns\":0,\"staticImage\":false,\"streams\":[{\"attachedPicture\":false,\"averageFrameRateDenominator\":146,\"averageFrameRateNumerator\":7001,\"bitDepth\":12,\"bitRate\":0,\"chromaLocation\":0,\"chromaSubsampling\":\"4:4:4\",\"codec\":\"av1\",\"codecConfigurationBox\":\"av1C\",\"codecLongName\":\"Alliance for Open Media AV1\",\"codecTag\":\"\",\"colorModel\":\"YUV\",\"colorPrimaries\":2,\"colorRange\":1,\"colorSpace\":2,\"colorTransfer\":2,\"decoderBitDepth\":12,\"decoderFrameDelay\":32,\"decoderPixelFormat\":\"yuv444p12le\",\"decoderSurfaceFormat\":\"yuv444p12le\",\"default\":false,\"displayAspectDenominator\":9,\"displayAspectNumerator\":16,\"disposition\":\"\",\"duration100ns\":0,\"dynamicHdrMetadata\":false,\"extradataSize\":18,\"fieldOrder\":1,\"forced\":false,\"frameRateMode\":\"constant\",\"frames\":0,\"hdr\":false,\"hdrCompatibility\":\"\",\"hdrFallback\":false,\"hdrFormat\":\"SDR\",\"hdrProcessingPath\":\"None\",\"height\":2160,\"index\":0,\"language\":\"\",\"level\":13,\"lossless\":false,\"metadata\":{\"DURATION\":\"00:01:32.071000000\",\"ENCODER\":\"Lavc63.1.102 libsvtav1\"},\"nominalFrameRateDenominator\":146,\"nominalFrameRateNumerator\":7001,\"pixelFormat\":\"yuv444p12le\",\"profile\":\"Professional\",\"sampleAspectDenominator\":1,\"sampleAspectNumerator\":1,\"startTime100ns\":0,\"streamId\":0,\"streamSize\":0,\"timeBaseDenominator\":1000,\"timeBaseNumerator\":1,\"title\":\"\",\"type\":\"video\",\"width\":3840},{\"bitRate\":0,\"bitsPerCodedSample\":24,\"channelLayout\":\"stereo\",\"channels\":2,\"codec\":\"flac\",\"codecLongName\":\"FLAC (Free Lossless Audio Codec)\",\"codecTag\":\"\",\"compressionMode\":\"ÎÞËð\",\"default\":true,\"disposition\":\"default\",\"duration100ns\":0,\"extradataSize\":34,\"forced\":false,\"frameSize\":0,\"frames\":0,\"index\":1,\"initialPadding\":0,\"language\":\"jpn\",\"lossless\":true,\"md5\":\"64E44A52F9417C221D2B63A670E7BEB8\",\"metadata\":{\"BPS\":\"1669821\",\"DURATION\":\"00:01:32.090000000\",\"ENCODER\":\"Lavc63.1.102 flac\",\"NUMBER_OF_BYTES\":\"19221738\",\"NUMBER_OF_FRAMES\":\"1080\",\"_STATISTICS_TAGS\":\"BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES\",\"_STATISTICS_WRITING_APP\":\"mkvmerge v89.0 ('And the Melody Still Lingers On (Night in Tunisia)') 64-bit\",\"_STATISTICS_WRITING_DATE_UTC\":\"2025-01-19 21:10:58\",\"language\":\"jpn\"},\"outputBitsPerSample\":32,\"outputChannels\":2,\"outputFloat\":true,\"outputSampleRate\":48000,\"outputValidBitsPerSample\":32,\"rawSampleBits\":24,\"sampleFormat\":\"s32\",\"sampleRate\":48000,\"seekPreroll\":0,\"startTime100ns\":0,\"streamId\":0,\"streamSize\":0,\"timeBaseDenominator\":1000,\"timeBaseNumerator\":1,\"title\":\"\",\"trailingPadding\":0,\"type\":\"audio\"},{\"bitRate\":0,\"codec\":\"ass\",\"codecLongName\":\"ASS (Advanced SSA) subtitle\",\"codecTag\":\"\",\"default\":true,\"disposition\":\"default\",\"duration100ns\":920900000,\"extradataSize\":2219,\"forced\":false,\"frames\":0,\"index\":2,\"language\":\"eng\",\"lossless\":false,\"metadata\":{\"BPS\":\"568791\",\"DURATION\":\"00:01:24.400000000\",\"NUMBER_OF_BYTES\":\"5916145\",\"NUMBER_OF_FRAMES\":\"8655\",\"_STATISTICS_TAGS\":\"BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES\",\"_STATISTICS_WRITING_APP\":\"mkvmerge v89.0 ('And the Melody Still Lingers On (Night in Tunisia)') 64-bit\",\"_STATISTICS_WRITING_DATE_UTC\":\"2025-01-19 21:10:58\",\"language\":\"eng\",\"title\":\"SobsPlease\"},\"startTime100ns\":0,\"streamId\":0,\"streamSize\":0,\"timeBaseDenominator\":1000,\"timeBaseNumerator\":1,\"title\":\"SobsPlease\",\"type\":\"subtitle\"}],\"tileGrid\":false,\"tileGridHeight\":0,\"tileGridTileCount\":0,\"tileGridWidth\":0,\"videoDecoderDelayFrames\":32,\"videoDecoderThreads\":32}"
+PASS   : TestPlayer::upstreamHardwarePreference(OP-yuv444p12-SWTest.mkv)
+SKIP   : TestPlayer::upstreamHardwarePreference(multitrack) Set VSR_KERNEL_MEDIA_ROOT and VSR_KERNEL_MULTITRACK_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(128) : failure location
+QINFO  : TestPlayer::rtxRequestsKeepPlaybackWorking() rtx-request false true active 0 rejected 0 reason 4
+QINFO  : TestPlayer::rtxRequestsKeepPlaybackWorking() rtx-request false false active 0 rejected 0 reason 1
+QINFO  : TestPlayer::rtxRequestsKeepPlaybackWorking() rtx-request true true active 0 rejected 0 reason 5
+QINFO  : TestPlayer::rtxRequestsKeepPlaybackWorking() rtx-request true false active 0 rejected 0 reason 1
+PASS   : TestPlayer::rtxRequestsKeepPlaybackWorking()
+PASS   : TestPlayer::generatedVpyHlslAndUnsupportedHookFallback()
+PASS   : TestPlayer::fullNativeAnimeAndEditedPresetFallback()
+PASS   : TestPlayer::eightStagesAndExternalDescriptions()
+PASS   : TestPlayer::audioTapGenerationAndDisable()
+SKIP   : TestPlayer::superInterpolationPerformance() Set VSR_SUPER_SOURCE for real 2160p48 presentation benchmark
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(186) : failure location
+SKIP   : TestPlayer::frameButtonsAfterTimeSeek(SW-Jinc) Set VSR_FRAME_STEP_SOURCE to the reported long video
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(203) : failure location
+SKIP   : TestPlayer::frameButtonsAfterTimeSeek(SW-D3D11) Set VSR_FRAME_STEP_SOURCE to the reported long video
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(203) : failure location
+SKIP   : TestPlayer::frameButtonsAfterTimeSeek(HW-Jinc) Set VSR_FRAME_STEP_SOURCE to the reported long video
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(203) : failure location
+SKIP   : TestPlayer::frameButtonsAfterTimeSeek(HW-D3D11) Set VSR_FRAME_STEP_SOURCE to the reported long video
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(203) : failure location
+PASS   : TestPlayer::nativeVfrSteppingAcrossIndexGaps()
+PASS   : TestPlayer::desktopHdrPreviewUsesWhite()
+SKIP   : TestPlayer::hdrScreenshotStartup() Set VSR_TEST_HDR_PNG for actual screenshot loading.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(246) : failure location
+PASS   : TestPlayer::hdrImagePreviewKeepsSource()
+QINFO  : TestPlayer::imageStartupBudget() image-startup-ms 196 construction-ms 29 decode-ms "6"
+PASS   : TestPlayer::imageStartupBudget()
+SKIP   : TestPlayer::hevc444HardwareFallback() Set VSR_HEVC444_SOURCE for NVDEC regression
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(276) : failure location
+QINFO  : TestPlayer::directStartupClock(original) startup-clock-first-frame-ms 230 source-fps 47.9521 display-hz 165 decode-mode 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 0.504 position 0.551395 pts 542 accepted 27 presents 30 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 1.012 position 1.05931 pts 1043 accepted 51 presents 56 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 1.522 position 1.56884 pts 1564 accepted 76 presents 81 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 2.028 position 2.07565 pts 2065 accepted 100 presents 105 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 2.529 position 2.57636 pts 2565 accepted 124 presents 129 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock open wall 3.043 position 3.09022 pts 3086 accepted 149 presents 154 generation 1
+QINFO  : TestPlayer::directStartupClock(original) startup-clock-summary open wall 3.043 media 3.04349 accepted-fps 47.979 frame-clock-error -0.0042884 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 0.508 position 5.54214 pts 5526 accepted 175 presents 181 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 1.009 position 6.04281 pts 6027 accepted 199 presents 205 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 1.51 position 6.54372 pts 6527 accepted 223 presents 229 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 2.011 position 7.04464 pts 7028 accepted 247 presents 253 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 2.524 position 7.5574 pts 7549 accepted 272 presents 278 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock seek wall 3.028 position 8.06182 pts 8050 accepted 296 presents 302 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock-summary seek wall 3.028 media 3.02864 accepted-fps 47.8864 frame-clock-error -0.0118806 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 0.509 position 8.571 pts 8550 accepted 320 presents 326 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 1.009 position 9.0714 pts 9072 accepted 345 presents 351 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 1.51 position 9.57189 pts 9572 accepted 369 presents 375 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 2.016 position 10.0785 pts 10073 accepted 393 presents 399 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 2.517 position 10.5791 pts 10573 accepted 417 presents 423 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock resume wall 3.017 position 11.0792 pts 11074 accepted 441 presents 447 generation 2
+QINFO  : TestPlayer::directStartupClock(original) startup-clock-summary resume wall 3.017 media 3.01733 accepted-fps 48.061 frame-clock-error -0.0052344 dropped 0 coalesced 0
+PASS   : TestPlayer::directStartupClock(original)
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock-first-frame-ms 205 source-fps 47.9521 display-hz 165 decode-mode 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 0.51 position 0.546219 pts 542 accepted 27 presents 29 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 1.018 position 1.05406 pts 1043 accepted 51 presents 53 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 1.526 position 1.56154 pts 1543 accepted 75 presents 77 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 2.026 position 2.0617 pts 2044 accepted 99 presents 101 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 2.531 position 2.56701 pts 2565 accepted 124 presents 126 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock open wall 3.031 position 3.06712 pts 3066 accepted 148 presents 150 generation 1
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock-summary open wall 3.031 media 3.03169 accepted-fps 48.1689 frame-clock-error -0.0011645 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 0.506 position 5.54199 pts 5526 accepted 174 presents 177 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 1.016 position 6.05202 pts 6048 accepted 199 presents 202 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 1.522 position 6.55803 pts 6548 accepted 223 presents 226 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 2.023 position 7.05853 pts 7049 accepted 247 presents 250 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 2.531 position 7.56732 pts 7549 accepted 271 presents 274 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock seek wall 3.032 position 8.06747 pts 8050 accepted 295 presents 298 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock-summary seek wall 3.032 media 3.03213 accepted-fps 47.8232 frame-clock-error -0.0175391 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 0.508 position 8.57592 pts 8571 accepted 320 presents 323 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 1.008 position 9.07642 pts 9072 accepted 344 presents 347 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 1.514 position 9.58166 pts 9572 accepted 368 presents 371 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 2.025 position 10.0929 pts 10073 accepted 392 presents 395 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 2.526 position 10.5944 pts 10594 accepted 417 presents 420 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock resume wall 3.032 position 11.1005 pts 11094 accepted 441 presents 444 generation 2
+QINFO  : TestPlayer::directStartupClock(D3D11) startup-clock-summary resume wall 3.032 media 3.03294 accepted-fps 48.153 frame-clock-error -0.0065228 dropped 0 coalesced 0
+PASS   : TestPlayer::directStartupClock(D3D11)
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock-first-frame-ms 229 source-fps 47.9521 display-hz 165 decode-mode 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 0.5 position 0.531335 pts 521 accepted 26 presents 27 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 1.008 position 1.03965 pts 1022 accepted 50 presents 51 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 1.518 position 1.54936 pts 1543 accepted 75 presents 76 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 2.018 position 2.04976 pts 2044 accepted 99 presents 100 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 2.519 position 2.55095 pts 2544 accepted 123 presents 124 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock open wall 3.032 position 3.06375 pts 3045 accepted 147 presents 148 generation 1
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock-summary open wall 3.032 media 3.03251 accepted-fps 47.8232 frame-clock-error -0.0187986 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 0.506 position 5.54061 pts 5526 accepted 173 presents 175 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 1.007 position 6.04126 pts 6027 accepted 197 presents 199 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 1.509 position 6.54308 pts 6527 accepted 221 presents 223 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 2.009 position 7.04373 pts 7028 accepted 245 presents 247 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 2.51 position 7.54452 pts 7528 accepted 269 presents 271 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock seek wall 3.012 position 8.0468 pts 8029 accepted 293 presents 295 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock-summary seek wall 3.012 media 3.01292 accepted-fps 47.8088 frame-clock-error -0.017845 dropped 0 coalesced 0
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 0.501 position 8.55024 pts 8550 accepted 318 presents 320 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 1.003 position 9.05235 pts 9051 accepted 342 presents 344 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 1.51 position 9.5596 pts 9551 accepted 366 presents 368 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 2.011 position 10.0602 pts 10052 accepted 390 presents 392 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 2.527 position 10.576 pts 10573 accepted 415 presents 417 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock resume wall 3.033 position 11.0828 pts 11074 accepted 439 presents 441 generation 2
+QINFO  : TestPlayer::directStartupClock(Jinc) startup-clock-summary resume wall 3.033 media 3.03398 accepted-fps 48.1372 frame-clock-error -0.0088562 dropped 0 coalesced 0
+PASS   : TestPlayer::directStartupClock(Jinc)
+FAIL!  : TestPlayer::overlayControlsStayUsableDuringPlayback(native) Compared values are not the same
+   Actual   (redraw.size()): 1
+   Expected (0)            : 0
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(300) : failure location
+FAIL!  : TestPlayer::overlayControlsStayUsableDuringPlayback(VS) Compared values are not the same
+   Actual   (redraw.size()): 1
+   Expected (0)            : 0
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(300) : failure location
+PASS   : TestPlayer::screenshotPathsAndSettings()
+PASS   : TestPlayer::algorithmBadgesReflectCurrentStages()
+PASS   : TestPlayer::screenshotPng16RoundTrip()
+PASS   : TestPlayer::jxlScRgbScreenshot()
+QINFO  : TestPlayer::screenshotFormats(png-SDR) "png" false "PNG RGBA16" QColorSpace(QColorSpace::SRgb, QColorSpace::Primaries::SRgb, QColorSpace::TransferFunction::SRgb)
+PASS   : TestPlayer::screenshotFormats(png-SDR)
+QINFO  : TestPlayer::screenshotFormats(png-HDR) "png" true "PNG RGBA16" QColorSpace(QColorSpace::Bt2100Pq, QColorSpace::Primaries::Bt2020, QColorSpace::TransferFunction::St2084)
+PASS   : TestPlayer::screenshotFormats(png-HDR)
+QINFO  : TestPlayer::screenshotFormats(avif-SDR) "avif" false "YUV444 ¡¤ CICP 1/13/1" QColorSpace(QColorSpace::SRgb, QColorSpace::Primaries::SRgb, QColorSpace::TransferFunction::SRgb)
+PASS   : TestPlayer::screenshotFormats(avif-SDR)
+QINFO  : TestPlayer::screenshotFormats(avif-HDR) "avif" true "YUV444 ¡¤ CICP 9/16/9" QColorSpace(QColorSpace::Bt2100Pq, QColorSpace::Primaries::Bt2020, QColorSpace::TransferFunction::St2084)
+PASS   : TestPlayer::screenshotFormats(avif-HDR)
+QINFO  : TestPlayer::screenshotFormats(jxl-SDR) "jxl" false "JPEG XL RGBA" QColorSpace(QColorSpace::SRgb, QColorSpace::Primaries::SRgb, QColorSpace::TransferFunction::SRgb)
+PASS   : TestPlayer::screenshotFormats(jxl-SDR)
+QINFO  : TestPlayer::screenshotFormats(jxl-HDR) "jxl" true "JPEG XL RGBA" QColorSpace(QColorSpace::Bt2100Pq, QColorSpace::Primaries::Bt2020, QColorSpace::TransferFunction::St2084)
+PASS   : TestPlayer::screenshotFormats(jxl-HDR)
+PASS   : TestPlayer::hdrScreenshotKeepsFloatSamples()
+PASS   : TestPlayer::sourceScreenshotPreserves16BitGradient(SDR)
+PASS   : TestPlayer::sourceScreenshotPreserves16BitGradient(PQ)
+PASS   : TestPlayer::sourceScreenshotYuvRange(709-full)
+PASS   : TestPlayer::sourceScreenshotYuvRange(709-limited)
+PASS   : TestPlayer::sourceScreenshotYuvRange(unspecified)
+PASS   : TestPlayer::sourceScreenshotYuvRange(PQ)
+PASS   : TestPlayer::sourceScreenshotYuvRange(HLG)
+PASS   : TestPlayer::imageScreenshotsKeep16BitPixels()
+PASS   : TestPlayer::nativeSourceScreenshot()
+PASS   : TestPlayer::floatingImageScreenshotsKeepExtendedRange()
+PASS   : TestPlayer::hdrRenderedScreenshotReadback()
+PASS   : TestPlayer::infoCountsPresentedFramesOnce()
+PASS   : TestPlayer::separateThemeTransparencyControls()
+PASS   : TestPlayer::windowedControlsBelowVideo()
+PASS   : TestPlayer::transparentChromeAndFullscreenReveal()
+FAIL!  : TestPlayer::audioInputOutputMetersAndTab() 'player.info_->geometry().right()<player.audioInfo_->geometry().left()' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(461) : failure location
+PASS   : TestPlayer::softwareCodecPipeline(HEVC)
+PASS   : TestPlayer::softwareCodecPipeline(AV1)
+QINFO  : TestPlayer::hardware8kQueueLookAhead(D3D11) 8K queue peak 0 accepted 490 dropped 0
+PASS   : TestPlayer::hardware8kQueueLookAhead(D3D11)
+QINFO  : TestPlayer::hardware8kQueueLookAhead(Jinc) 8K queue peak 0 accepted 486 dropped 0
+PASS   : TestPlayer::hardware8kQueueLookAhead(Jinc)
+SKIP   : TestPlayer::bdMenuSubtitleSelection(0) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(492) : failure location
+SKIP   : TestPlayer::bdMenuSubtitleSelection(1) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(492) : failure location
+SKIP   : TestPlayer::bdMenuSubtitleSelection(2) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(492) : failure location
+SKIP   : TestPlayer::bdMenuSubtitleSelection(3) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(492) : failure location
+SKIP   : TestPlayer::bdMenuSubtitleSelection(4) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(492) : failure location
+SKIP   : TestPlayer::bdSubtitleLanguages() Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(501) : failure location
+PASS   : TestPlayer::bluRayModeDialogWidth()
+SKIP   : TestPlayer::bdDragCommitsFinalPosition(paused) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(512) : failure location
+SKIP   : TestPlayer::bdDragCommitsFinalPosition(playing) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(512) : failure location
+QINFO  : TestPlayer::mouseSeekRendering(video-SW-paused) Mouse click false 1 false 6.0212 ms 51 PTS 6042
+QINFO  : TestPlayer::mouseSeekRendering(video-SW-paused) Mouse click false 1 false 1.17032 ms 57 PTS 1208
+QINFO  : TestPlayer::mouseSeekRendering(video-SW-paused) Mouse click false 1 false 7.23 ms 60 PTS 7250
+QINFO  : TestPlayer::mouseSeekRendering(video-SW-paused) Mouse click false 1 false 2.38688 ms 53 PTS 2417
+QINFO  : TestPlayer::mouseSeekRendering(video-SW-paused) Mouse drag release false 1 false 51
+PASS   : TestPlayer::mouseSeekRendering(video-SW-paused)
+QINFO  : TestPlayer::mouseSeekRendering(video-SW-playing) Mouse click false 1 true 6.0212 ms 58 PTS 6042
+QINFO  : TestPlayer::mouseSeekRendering(video-SW-playing) Mouse click false 1 true 1.17032 ms 57 PTS 1208
+QINFO  : TestPlayer::mouseSeekRendering(video-SW-playing) Mouse click false 1 true 7.23 ms 109 PTS 7292
+QINFO  : TestPlayer::mouseSeekRendering(video-SW-playing) Mouse click false 1 true 2.38688 ms 63 PTS 2417
+QINFO  : TestPlayer::mouseSeekRendering(video-SW-playing) Mouse drag release false 1 true 61
+PASS   : TestPlayer::mouseSeekRendering(video-SW-playing)
+QINFO  : TestPlayer::mouseSeekRendering(video-HW-paused) Mouse click false 2 false 6.0212 ms 172 PTS 6042
+QINFO  : TestPlayer::mouseSeekRendering(video-HW-paused) Mouse click false 2 false 1.17032 ms 56 PTS 1208
+QINFO  : TestPlayer::mouseSeekRendering(video-HW-paused) Mouse click false 2 false 7.23 ms 187 PTS 7250
+QINFO  : TestPlayer::mouseSeekRendering(video-HW-paused) Mouse click false 2 false 2.38688 ms 59 PTS 2417
+QINFO  : TestPlayer::mouseSeekRendering(video-HW-paused) Mouse drag release false 2 false 162
+PASS   : TestPlayer::mouseSeekRendering(video-HW-paused)
+QINFO  : TestPlayer::mouseSeekRendering(video-HW-playing) Mouse click false 2 true 6.0212 ms 108 PTS 6042
+QINFO  : TestPlayer::mouseSeekRendering(video-HW-playing) Mouse click false 2 true 1.17032 ms 53 PTS 1208
+QINFO  : TestPlayer::mouseSeekRendering(video-HW-playing) Mouse click false 2 true 7.23 ms 180 PTS 7250
+QINFO  : TestPlayer::mouseSeekRendering(video-HW-playing) Mouse click false 2 true 2.38688 ms 113 PTS 2458
+QINFO  : TestPlayer::mouseSeekRendering(video-HW-playing) Mouse drag release false 2 true 164
+PASS   : TestPlayer::mouseSeekRendering(video-HW-playing)
+SKIP   : TestPlayer::mouseSeekRendering(BD-SW-paused) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(526) : failure location
+SKIP   : TestPlayer::mouseSeekRendering(BD-SW-playing) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(526) : failure location
+SKIP   : TestPlayer::mouseSeekRendering(BD-HW-paused) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(526) : failure location
+SKIP   : TestPlayer::mouseSeekRendering(BD-HW-playing) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(526) : failure location
+PASS   : TestPlayer::fileChapterPositions()
+SKIP   : TestPlayer::bdReturnToTopMenu() Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(551) : failure location
+SKIP   : TestPlayer::bdMenuContinuousVs(CNN-before-menu) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(567) : failure location
+SKIP   : TestPlayer::bdMenuContinuousVs(CNN-in-menu) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(567) : failure location
+SKIP   : TestPlayer::bdMenuContinuousVs(CNN-after-handoff) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(567) : failure location
+SKIP   : TestPlayer::bdMenuContinuousVs(CNNplus-before-menu) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(567) : failure location
+PASS   : TestPlayer::builtinAnimeResolutionLimit()
+PASS   : TestPlayer::builtinAnimeSkips8kSourceScan()
+QINFO  : TestPlayer::software8kPlaybackMeasurement() open to first frames ms 681 subtitle enabled false surface QSize(3840, 2160) quality stage 5 scaling mode 0 decoder workers QJsonValue(double, 8)
+QINFO  : TestPlayer::software8kPlaybackMeasurement() wall 10.006 media 10.0056 video 10.823 max-lag 1.46769
+PASS   : TestPlayer::software8kPlaybackMeasurement()
+SKIP   : TestPlayer::bdMenuEpisodeSelection(8) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(662) : failure location
+SKIP   : TestPlayer::bdMenuEpisodeSelection(9) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(662) : failure location
+SKIP   : TestPlayer::bdMenuEpisodeSelection(10) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(662) : failure location
+SKIP   : TestPlayer::bdMenuEpisodeSelection(11) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(662) : failure location
+SKIP   : TestPlayer::bdMenuEpisodeSelection(12) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(662) : failure location
+SKIP   : TestPlayer::bdMenuEpisodeSelection(13) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(662) : failure location
+PASS   : TestPlayer::recursiveImageFolderAndWrap()
+PASS   : TestPlayer::bottomControlsDoNotOpenPlaylist()
+SKIP   : TestPlayer::externalPlainLyricsTakePriority() Set VSR_LYRIC_KIT
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(681) : failure location
+SKIP   : TestPlayer::fullBluRaySeekPerformance() Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(685) : failure location
+SKIP   : TestPlayer::discMenuProgrammeRestoresProcessing() Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(690) : failure location
+SKIP   : TestPlayer::bluRayPresetProducesFilteredFrames() Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(694) : failure location
+SKIP   : TestPlayer::bdMenuFromEmptyWindow() Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(699) : failure location
+SKIP   : TestPlayer::bdSwitchTimings(HW) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(707) : failure location
+SKIP   : TestPlayer::bdSwitchTimings(SW) Set VSR_FULL_BD_SOURCE
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(707) : failure location
+PASS   : TestPlayer::stableViewportForAllPopups()
+SKIP   : TestPlayer::bdSubtitlesShortTitlesAndMenu() Set VSR_FULL_BD_SOURCE to test original BD
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(720) : failure location
+PASS   : TestPlayer::emptyDecoderAndDirectBluRay()
+SKIP   : TestPlayer::softwareUploadAndBilinearMatchReference() Set VSR_REFERENCE_DLL to the unoptimized native DLL
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(731) : failure location
+SKIP   : TestPlayer::bluRayNativePlaybackAndChapters() Set VSR_BD_PLAYER_SOURCE to a complete local BD folder
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(781) : failure location
+FAIL!  : TestPlayer::frameEditTakesPriorityAndPrefetchKeepsGpuBusy() '!player.frameEditPending_' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(795) : failure location
+PASS   : TestPlayer::informationPanelResizesWithoutWrapping()
+PASS   : TestPlayer::nativeAudioClockDoesNotDecodeVideo()
+QINFO  : TestPlayer::interpolationPerformance() interpolation-performance 0 7680 4320 95.9041 prefetch 0
+FAIL!  : TestPlayer::interpolationPerformance() 'player.playing_' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(833) : failure location
+QINFO  : TestPlayer::directOpenWithoutIndex(original) direct-open -1 first-frame-ms 294 source-bytes 962002 decode-mode 1
+PASS   : TestPlayer::directOpenWithoutIndex(original)
+QINFO  : TestPlayer::directOpenWithoutIndex(jinc) direct-open 4 first-frame-ms 164 source-bytes 962002 decode-mode 1
+PASS   : TestPlayer::directOpenWithoutIndex(jinc)
+QINFO  : TestPlayer::directOpenWithoutIndex(d3d11) direct-open 5 first-frame-ms 156 source-bytes 962002 decode-mode 1
+PASS   : TestPlayer::directOpenWithoutIndex(d3d11)
+SKIP   : TestPlayer::nativeRecoveryPerformance() Set VSR_RECOVERY_SOURCE for real software/AAC recovery measurements.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(859) : failure location
+SKIP   : TestPlayer::softwareAv1SeekRecovery() Set VSR_RECOVERY_SOURCE to the AV1 12-bit regression video.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(899) : failure location
+SKIP   : TestPlayer::softwareAv1Gui() Set VSR_RECOVERY_SOURCE to the AV1 12-bit regression video.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(939) : failure location
+SKIP   : TestPlayer::croppedSubtitlePixels() Set VSR_RECOVERY_SOURCE for native subtitle placement checks.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(970) : failure location
+FAIL!  : TestPlayer::directNativePerformance() 'player.outputSnapshot().timelineGeneration>0 && player.position()>=1200000000' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1004) : failure location
+SKIP   : TestPlayer::hardwareNativeAndShaderCapture() Set VSR_HARDWARE_CAPTURE_SOURCE for decoder-surface capture checks.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1046) : failure location
+PASS   : TestPlayer::mkvTrackNamesAndDefaults()
+FAIL!  : TestPlayer::compressedShaderPipeline() '!QFileInfo::exists(runtime.filePath("shaders/"+QString(shader)))' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1072) : failure location
+PASS   : TestPlayer::enhancedFfmpegAvs3Playback()
+PASS   : TestPlayer::lanczos4NativeRender()
+PASS   : TestPlayer::imageRefinementAlgorithms()
+PASS   : TestPlayer::interpolationLowestWarning()
+PASS   : TestPlayer::imageToolsViewAndDialogs()
+PASS   : TestPlayer::imageToolsExportTransforms()
+PASS   : TestPlayer::imageToolsNativeConversion(avif)
+PASS   : TestPlayer::imageToolsNativeConversion(webp)
+PASS   : TestPlayer::imageToolsNativeConversion(jxl)
+PASS   : TestPlayer::imageToolsNativeConversion(jpgli)
+PASS   : TestPlayer::imageToolsNativeConversion(png)
+PASS   : TestPlayer::imageToolsNativeConversion(webp-visual)
+QINFO  : TestPlayer::timelineSingleJump(SW) preview generation 2 3 target 60000000 75000 80000000
+QINFO  : TestPlayer::timelineSingleJump(SW) SW timeline click jump ms 68
+PASS   : TestPlayer::timelineSingleJump(SW)
+QINFO  : TestPlayer::timelineSingleJump(SW-one-CPU) preview generation 2 3 target 60000000 75000 80000000
+QINFO  : TestPlayer::timelineSingleJump(SW-one-CPU) SW timeline click jump ms 201
+PASS   : TestPlayer::timelineSingleJump(SW-one-CPU)
+SKIP   : TestPlayer::timelinePerformance() Set VSR_SCRUB_SOURCE for real 2160p scrubbing measurements.
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1159) : failure location
+PASS   : TestPlayer::directTimelinePreview(jinc-paused)
+PASS   : TestPlayer::directTimelinePreview(d3d11-paused)
+PASS   : TestPlayer::directTimelinePreview(jinc-playing)
+PASS   : TestPlayer::directTimelinePreview(d3d11-playing)
+PASS   : TestPlayer::embeddedIconsAndTypedAssociations()
+PASS   : TestPlayer::stillImagesBypassVideoAndBrowse()
+PASS   : TestPlayer::jpegMetadataAndOrientation()
+PASS   : TestPlayer::imageInfoAndDeepZoom()
+PASS   : TestPlayer::externalNameMatching()
+PASS   : TestPlayer::externalSubtitleVariants()
+PASS   : TestPlayer::volumeMuteAndEqualizerPopup()
+QINFO  : TestPlayer::nativeEqualizerProcessesAudio(gain-wave) Native EQ gain/WAV peak 0.0265137 0.0528442 0.0264397
+PASS   : TestPlayer::nativeEqualizerProcessesAudio(gain-wave)
+QINFO  : TestPlayer::nativeEqualizerProcessesAudio(delay-surround) Native EQ gain/WAV peak 0.0265137 0.0528259 0.0264399
+FAIL!  : TestPlayer::nativeEqualizerProcessesAudio(delay-surround) 'snapshot().audioInsertedSilenceFrames>=4000' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1306) : failure location
+FAIL!  : TestPlayer::audioTracksEffectsAndDrops() 'player.findChild<QWidget *>("playerEqualizer")' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestPlayer.cpp(1327) : failure location
+PASS   : TestPlayer::avifGridAndAlpha()
+PASS   : TestPlayer::avifGbrColors()

@@ -1,13 +1,17 @@
 #include "runtime/OptionalRuntime.h"
+#include "backend/ThreeFpApi.h"
 #include "player/PlayerImageTools.h"
 #include "ui/PreviewPane.h"
 #include "player/PhotoCraftEditor.h"
 #include "image/ImageHdr.h"
 #include "player/PlayerPng.h"
 #include <QComboBox>
+#include <QCheckBox>
+#include <QSignalBlocker>
 #include <QColorSpace>
 #include <QCoreApplication>
 #include <QDialog>
+#include <QDataStream>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
@@ -143,7 +147,7 @@ QString PlayerImageTools::writeEditorImport(const QImage &image,const QString &p
 ImageOutput PlayerImageTools::currentOutput() const {ImageOutput output;output.source=source_;output.image=pane_->image();output.transform=pane_->imageTransform();return output;}
 QString PlayerImageTools::backendPath() {return optionalRuntimeExecutable("awj","AWJ.com");}
 QStringList PlayerImageTools::conversionArguments(const ImageOutput &o,const QString &input,const QString &directory) {
-    QStringList args{"-i",input,"-o",directory,"--format",o.format,"--template","result",o.visualQuality?"--visual-quality":"--quality",QString::number(o.quality),"--alpha",o.alpha,"--image-size-limit","none","--keep-metadata","--no-summary","--no-log"};
+    QStringList args{"-i",input,"-o",directory,"--format",extension(o.format),"--template","result",o.visualQuality?"--visual-quality":"--quality",QString::number(o.quality),"--alpha",o.alpha,"--image-size-limit","none","--keep-metadata","--no-summary","--no-log"};
     if(o.format=="avif"){int bits=o.image.text("sourceBitDepth").toInt();if(bits<=0)bits=o.image.depth()>32?16:8;const auto depth=o.bitDepth=="auto"?QString::number(bits<=10?10:12):o.bitDepth;args<<"--avif-encoder"<<"aom"<<"--avif-color-representation"<<"yuv"<<"--chroma"<<o.chroma<<"--bit-depth"<<depth;}
     if(o.format=="jpgli")args<<"--chroma"<<o.chroma;
     if(o.format=="avif" || o.format=="webp" || o.format=="jxl")args<<"--speed"<<QString::number(o.speed);
@@ -165,7 +169,11 @@ QString PlayerImageTools::writeOutput(const ImageOutput &o) {
         if(!o.size.isEmpty() && o.resizeAlgorithm!="anime4k"){
             const bool swap=std::abs(o.transform.m12())>.5;
             const QSize size=swap?QSize(o.size.height(),o.size.width()):o.size;
+#ifdef VSR_LITE_PLAYER
+            ThreeFpApi api;api.available();image=api.resampleImage(image,size,unsigned(QStringList{"nearest","bilinear","jinc","lanczos3","lanczos4"}.indexOf(o.resizeAlgorithm)));
+#else
             image=resample(image,size,o.resizeAlgorithm);
+#endif
         }
         image=image.transformed(o.transform);
         if(image.isNull())return tr("图像处理失败，内存不足或尺寸无效。");
@@ -186,10 +194,48 @@ QString PlayerImageTools::writeOutput(const ImageOutput &o) {
         if(!destination.open(QIODevice::WriteOnly))return destination.errorString();QImageWriter writer(&destination,o.destination.endsWith(".bmp",Qt::CaseInsensitive)?"bmp":"png");
         if(!writer.write(image))return writer.errorString();return destination.commit()?QString():destination.errorString();
     }
+#ifdef VSR_LITE_PLAYER
+    const auto resultPath=temporary.filePath("result."+extension(o.format));
+    QProcess ff;const auto floatImage=image.convertToFormat(QImage::Format_RGBA32FPx4);
+    QStringList args{"-v","error","-f","rawvideo","-pixel_format","gbrapf32le","-video_size",QString("%1x%2").arg(image.width()).arg(image.height()),"-i","pipe:0","-frames:v","1"};
+    if(o.format=="avif")args<<"-c:v"<<"libaom-av1"<<"-still-picture"<<"1"<<"-crf"<<QString::number((100-o.quality)*63/100)<<"-cpu-used"<<QString::number(std::clamp(o.speed,0,8))<<"-pix_fmt"<<"yuv444p10le";
+    else if(o.format=="webp")args<<"-c:v"<<"libwebp"<<"-quality"<<QString::number(o.quality);
+    else if(o.format=="jxl")args<<"-c:v"<<"libjxl"<<"-distance"<<QString::number((100-o.quality)/10.);
+    else if(o.format=="jpgli")args<<"-c:v"<<"mjpeg"<<"-q:v"<<QString::number(std::clamp(2+(100-o.quality)*29/100,2,31));
+    else args<<"-pix_fmt"<<"rgba64be";
+    args<<"-y"<<resultPath;const auto bundled=QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe");ff.start(QFileInfo::exists(bundled)?bundled:QString("ffmpeg.exe"),args);if(!ff.waitForStarted())return ff.errorString();
+    QByteArray row(image.width()*4,Qt::Uninitialized);
+    for(int component:{1,2,0,3})for(int y=0;y<image.height();++y){auto *line=reinterpret_cast<float*>(row.data());const auto *pixels=reinterpret_cast<const float*>(floatImage.constScanLine(y));for(int x=0;x<image.width();++x)line[x]=pixels[x*4+component];ff.write(row);while(ff.bytesToWrite()>4*1024*1024){if(QThread::currentThread()->isInterruptionRequested()){ff.kill();ff.waitForFinished();return tr("已取消输出。");}if(!ff.waitForBytesWritten(1000) && ff.state()==QProcess::NotRunning)return QString::fromUtf8(ff.readAllStandardError());}}
+    ff.closeWriteChannel();while(!ff.waitForFinished(100)){if(QThread::currentThread()->isInterruptionRequested()){ff.kill();ff.waitForFinished();return tr("已取消输出。");}}
+    if(ff.exitStatus()!=QProcess::NormalExit || ff.exitCode()!=0)return tr("FFmpeg 图片转换失败：%1").arg(QString::fromUtf8(ff.readAllStandardError()));
+    QFile liteResult(resultPath);if(!liteResult.open(QIODevice::ReadOnly) || !destination.open(QIODevice::WriteOnly))return tr("无法读取或保存 FFmpeg 图片输出。");while(!liteResult.atEnd()){const auto bytes=liteResult.read(4*1024*1024);if(bytes.isEmpty() || destination.write(bytes)!=bytes.size())return tr("图片输出写入失败。");}return destination.commit()?QString():destination.errorString();
+#endif
     QString input=o.source;
-    if(edited){input=temporary.filePath("input.png");ImageSaveFile staged(input);if(!staged.open(QIODevice::WriteOnly))return staged.errorString();QImageWriter writer(&staged,"png");if(!writer.write(image))return writer.errorString();if(!staged.commit())return staged.errorString();}
     QProcess process;process.setWorkingDirectory(temporary.path());process.setProcessChannelMode(QProcess::MergedChannels);
-    process.start(backendPath(),conversionArguments(o,input,temporary.path()));if(!process.waitForStarted())return tr("无法启动 AWJimage：%1").arg(process.errorString());
+    auto arguments=conversionArguments(o,input,temporary.path());
+    QImage raw;
+    const bool hdr=image.pixelFormat().typeInterpretation()==QPixelFormat::FloatingPoint || image.colorSpace().transferFunction()==QColorSpace::TransferFunction::St2084 || image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Hlg;
+    if(!hdr){
+        if(image.colorSpace().isValid() && image.colorSpace()!=QColorSpace(QColorSpace::SRgb))image=image.convertedToColorSpace(QColorSpace::SRgb);
+        input=temporary.filePath("input.awsraw");QFile pixels(input);if(!pixels.open(QIODevice::WriteOnly))return pixels.errorString();
+        const auto rgba=image.convertToFormat(QImage::Format_RGBA64);QDataStream header(&pixels);header.setByteOrder(QDataStream::LittleEndian);header.writeRawData("AWSRAW1\0",8);header<<quint32(rgba.width())<<quint32(rgba.height())<<quint32(1)<<quint32(1)<<quint32(16)<<quint32(rgba.width()*8)<<quint64(rgba.width())*rgba.height()*8;
+        for(int y=0;y<rgba.height();++y)if(pixels.write(reinterpret_cast<const char*>(rgba.constScanLine(y)),rgba.width()*8)!=rgba.width()*8)return pixels.errorString();pixels.close();arguments=conversionArguments(o,input,temporary.path());
+        if(o.format=="png" && image.depth()>32)arguments<<"--bit-depth"<<"16";
+    }
+    if(hdr){
+        auto tagged=image;if(!tagged.colorSpace().isValid())tagged.setColorSpace(QColorSpace::SRgb);
+        raw=tagged.convertedToColorSpace(QColorSpace::SRgbLinear,QImage::Format_RGBA16FPx4);
+        if(raw.isNull())return tr("无法准备 RAW 中间图像。");
+        arguments.removeFirst();arguments.removeFirst();arguments<<"--stdin-wgc-rgba16f"<<QString("%1x%2").arg(raw.width()).arg(raw.height());
+    }
+    process.start(backendPath(),arguments);if(!process.waitForStarted())return tr("无法启动 AWJimage：%1").arg(process.errorString());
+    if(!raw.isNull()){
+        for(int y=0;y<raw.height();++y){
+            if(process.write(reinterpret_cast<const char*>(raw.constScanLine(y)),qint64(raw.width())*8)<0){process.kill();process.waitForFinished();return tr("RAW 中间图像写入失败。");}
+            while(process.bytesToWrite()>4*1024*1024){if(QThread::currentThread()->isInterruptionRequested()){process.kill();process.waitForFinished();return tr("已取消输出。");}if(!process.waitForBytesWritten(1000) && process.state()==QProcess::NotRunning)return tr("AWJimage 提前退出：%1").arg(QString::fromUtf8(process.readAll()));}
+        }
+        process.closeWriteChannel();
+    }
     QByteArray log;
     while(!process.waitForFinished(100)){
         log+=process.readAll();if(log.size()>65536)log=log.right(65536);
@@ -213,7 +259,7 @@ void PlayerImageTools::startOutput(const ImageOutput &output,bool desktop) {
     task_->setParent(this);connect(task_,&QThread::finished,this,[this]{auto *finished=task_;task_=nullptr;finished->deleteLater();setReady(ready_);});setReady(ready_);task_->start();
 }
 void PlayerImageTools::convertImage() {
-    auto output=currentOutput();auto *dialog=new QDialog(window());dialog->setAttribute(Qt::WA_DeleteOnClose);dialog->setWindowTitle(tr("压缩和转换格式 · AWJimage"));dialog->setMinimumWidth(640);auto *form=new QFormLayout(dialog);
+    auto output=currentOutput();auto *dialog=new QDialog(window());dialog->setAttribute(Qt::WA_DeleteOnClose);dialog->setWindowTitle(tr("缩放、压缩和转换格式"));dialog->setMinimumWidth(640);auto *form=new QFormLayout(dialog);
     auto *format=new QComboBox(dialog);format->setObjectName("imageConvertFormat");for(const auto &id:QStringList{"avif","webp","jxl","jpgli","png"})format->addItem(id=="jpgli"?QStringLiteral("JPEG(JPEGli)"):id.toUpper(),id);
     auto *mode=new QComboBox(dialog);mode->addItems({tr("固定编码质量"),tr("目标视觉质量(自动搜索)")});mode->setObjectName("imageConvertMode");
     auto *quality=new QSpinBox(dialog);quality->setRange(1,100);quality->setValue(70);quality->setObjectName("imageConvertQuality");
@@ -221,10 +267,19 @@ void PlayerImageTools::convertImage() {
     auto *chroma=new QComboBox(dialog);chroma->addItems({"420","422","444","auto"});chroma->setToolTip(tr("AVIF 使用 YUV；4:2:0 为兼容优先，auto 跟随源采样。"));
     auto *depth=new QComboBox(dialog);depth->setObjectName("imageConvertDepth");depth->addItem(tr("自动(8→10，最高12bit)"),"auto");for(const auto &bits:QStringList{"8","10","12"})depth->addItem(bits,bits);auto *alpha=new QComboBox(dialog);alpha->addItem(tr("自动保留透明"),"auto");alpha->addItem(tr("强制保留"),"force");alpha->addItem(tr("移除透明"),"off");
     form->addRow(tr("输出格式"),format);form->addRow(tr("压缩模式"),mode);form->addRow(tr("质量(1–100)"),quality);form->addRow(tr("速度(0慢/10快)"),speed);form->addRow(tr("色度采样"),chroma);form->addRow(tr("AVIF 位深"),depth);form->addRow(tr("Alpha"),alpha);
+    auto *resize=new QCheckBox(tr("调整输出尺寸"),dialog);resize->setObjectName("imageConvertResize");form->addRow(resize);
+    const auto original=transformedBounds(output).size().toSize();
+    auto *width=new QSpinBox(dialog),*height=new QSpinBox(dialog);width->setRange(1,65535);height->setRange(1,65535);width->setValue(original.width());height->setValue(original.height());width->setObjectName("imageConvertWidth");height->setObjectName("imageConvertHeight");
+    auto *aspect=new QCheckBox(tr("固定比例（取消后拉伸）"),dialog);aspect->setChecked(true);
+    auto *algorithm=new QComboBox(dialog);algorithm->setObjectName("imageConvertResample");for(const auto &name:QStringList{"jinc","lanczos3","lanczos4","bilinear","nearest"})algorithm->addItem(name,name);
+    form->addRow(tr("宽度"),width);form->addRow(tr("高度"),height);form->addRow(aspect);form->addRow(tr("重新采样"),algorithm);
+    const auto resizeEnabled=[=](bool enabled){width->setEnabled(enabled);height->setEnabled(enabled);aspect->setEnabled(enabled);algorithm->setEnabled(enabled);};connect(resize,&QCheckBox::toggled,dialog,resizeEnabled);resizeEnabled(false);
+    connect(width,&QSpinBox::valueChanged,dialog,[=](int value){if(aspect->isChecked()){const QSignalBlocker block(height);height->setValue(qMax(1,qRound(value*double(original.height())/qMax(1,original.width()))));}});
+    connect(height,&QSpinBox::valueChanged,dialog,[=](int value){if(aspect->isChecked()){const QSignalBlocker block(width);width->setValue(qMax(1,qRound(value*double(original.width())/qMax(1,original.height()))));}});
     auto *note=new QLabel(tr("固定质量只编码一次；视觉质量会反复编码并测量，适合追求体积。\nAVIF 使用 AOM，默认 YUV 4:2:0；GPU 仅加速视觉质量指标。\nPNG 100 无损；JPEG 100 为最高质量，仍为有损。"),dialog);note->setWordWrap(true);form->addRow(note);
     const auto update=[=]{const auto id=format->currentData().toString();speed->setEnabled(id=="avif"||id=="webp"||id=="jxl");chroma->setEnabled(id=="avif"||id=="jpgli");depth->setEnabled(id=="avif");alpha->setEnabled(id!="jpgli");if(id=="jpgli")alpha->setCurrentIndex(2);if(id=="png"){mode->setCurrentIndex(0);quality->setValue(100);}mode->setEnabled(id!="png");};connect(format,&QComboBox::currentIndexChanged,dialog,update);update();
     auto *buttons=saveButtons(dialog);form->addRow(buttons);connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
-    connect(buttons,&QDialogButtonBox::accepted,this,[=,this]() mutable {output.format=format->currentData().toString();output.destination=chooseOutput(dialog,output.source,extension(output.format));if(output.destination.isEmpty())return;output.quality=quality->value();output.speed=speed->value();output.visualQuality=mode->currentIndex()==1;output.chroma=chroma->currentText();output.bitDepth=depth->currentData().toString();output.alpha=alpha->currentData().toString();startOutput(output);dialog->accept();});dialog->show();
+    connect(buttons,&QDialogButtonBox::accepted,this,[=,this]() mutable {if(resize->isChecked()){output.size=QSize(width->value(),height->value());output.resizeAlgorithm=algorithm->currentData().toString();}output.format=format->currentData().toString();output.destination=chooseOutput(dialog,output.source,extension(output.format));if(output.destination.isEmpty())return;output.quality=quality->value();output.speed=speed->value();output.visualQuality=mode->currentIndex()==1;output.chroma=chroma->currentText();output.bitDepth=depth->currentData().toString();output.alpha=alpha->currentData().toString();startOutput(output);dialog->accept();});dialog->show();
 }
 void PlayerImageTools::recycleImage() {
     const auto path=source_;if(QMessageBox::question(this,tr("删除到回收站"),tr("将 %1 移入回收站？").arg(QFileInfo(path).fileName()))!=QMessageBox::Yes)return;

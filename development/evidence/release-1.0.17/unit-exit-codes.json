@@ -1,0 +1,14 @@
+﻿[
+    {
+        "test":  "vsr_shader_tests",
+        "exitCode":  0
+    },
+    {
+        "test":  "vsr_graph_tests",
+        "exitCode":  0
+    },
+    {
+        "test":  "vsr_parameter_tests",
+        "exitCode":  0
+    }
+]

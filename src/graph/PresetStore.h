@@ -15,6 +15,7 @@ public:
     static QList<FilterTimeGroup> timeGroups(const QJsonObject &metadata);
     static QJsonObject metadata(const QString &script);
     static FilterGraph graph(const QJsonObject &metadata);
+    static bool verifiedGraph(const QString &script, FilterGraph *graph, SourceFilter *filter);
     static ScriptBuildResult load(const QString &path, const QString &source = {});
     static bool write(const QString &path, const QString &script, QString *error = nullptr);
 };

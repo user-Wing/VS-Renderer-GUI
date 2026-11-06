@@ -28,6 +28,9 @@ class TestPhotoCraft final : public QObject {
     QTemporaryDir artifacts_{QDir::tempPath()+"/vsp-photocraft-test-XXXXXX"};
     quint16 port_ = 0;
     QByteArray token_;
+    QByteArray oldPreferences_;
+    bool hadPreferences_ = false;
+    QString preferencesPath() const {return QFileInfo(PhotoCraftEditor::executablePath()).absolutePath()+"/PhotoCraftData/preferences.json";}
     QJsonObject call(const QString &method,const QJsonObject &params={}) {
         control_.write(QJsonDocument(QJsonObject{{"id",method},{"method",method},{"params",params}}).toJson(QJsonDocument::Compact)+'\n');control_.flush();
         QElapsedTimer timer;timer.start();
@@ -51,9 +54,13 @@ private slots:
         qputenv("PHOTOCRAFT_CONTROL_PORT",QByteArray::number(port_));qputenv("PHOTOCRAFT_CONTROL_TOKEN",token_);
         qputenv("PHOTOCRAFT_AUTOMATION_READ_ROOT",artifacts_.path().toUtf8());qputenv("PHOTOCRAFT_AUTOMATION_WRITE_ROOT",artifacts_.path().toUtf8());
         qputenv("PHOTOCRAFT_LOCALE","zh-CN");
+        QFile preferences(preferencesPath());hadPreferences_=preferences.exists();if(preferences.open(QIODevice::ReadOnly)){oldPreferences_=preferences.readAll();preferences.close();}
+        auto values=QJsonDocument::fromJson(oldPreferences_).object();auto colors=values.value("colorSettings").toObject();colors.insert("askOnMismatch",false);colors.insert("policyRgb","preserve");values.insert("colorSettings",colors);
+        QDir().mkpath(QFileInfo(preferencesPath()).absolutePath());QVERIFY(preferences.open(QIODevice::WriteOnly));preferences.write(QJsonDocument(values).toJson());
     }
+    void cleanupTestCase(){control_.abort();QTest::qWait(500);QFile preferences(preferencesPath());if(hadPreferences_){QVERIFY(preferences.open(QIODevice::WriteOnly));preferences.write(oldPreferences_);}else preferences.remove();}
     void nativeEntryMultidocumentPrecisionAndTools() {
-        const auto cleanup=qScopeGuard([this]{if(control_.state()==QTcpSocket::ConnectedState){call("app.quit");control_.waitForDisconnected(5000);}control_.abort();});
+        const auto cleanup=qScopeGuard([this]{if(control_.state()==QTcpSocket::ConnectedState){call("app.quit");control_.waitForDisconnected(5000);}control_.abort();QTest::qWait(500);});
         QImage image(320,240,QImage::Format_RGBA64);image.setColorSpace(QColorSpace::SRgb);
         for(int y=0;y<image.height();++y)for(int x=0;x<image.width();++x)image.setPixelColor(x,y,QColor::fromRgba64(x*200,y*260,32000,65535));
         image.setPixelColor(0,0,QColor::fromRgba64(1001,2003,3005,65535));

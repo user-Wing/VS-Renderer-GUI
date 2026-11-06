@@ -8,6 +8,7 @@
 #include <QMainWindow>
 
 #include <memory>
+#include <vector>
 
 class QAction;
 class QCheckBox;
@@ -30,6 +31,7 @@ class TestAnalysis;
 namespace vsr {
 
 class AnalysisPage;
+class RenderRoute;
 class ParameterEditor;
 class CompareView;
 class PreviewPane;
@@ -72,6 +74,20 @@ private:
     void selectPipelineRow(int row);
     void updateParameterInputSize();
     void openSource();
+    bool addRoute();
+    void selectRoute(int index);
+    void removeRoute();
+    void updateRouteChoices();
+    void renderAdditionalRoute(int index);
+    void scanWorkingFolder(const QString &folder = {});
+    struct RouteState {QList<FilterTimeGroup> groups{{QStringLiteral("全片"),0,{}}};QString preset;bool visible=true;};
+    QList<RouteState> routes_{{}};
+    std::vector<std::unique_ptr<RenderRoute>> additionalRoutes_;
+    int routeIndex_=0;
+    QComboBox *routeChoice_=nullptr,*sourceChoice_=nullptr;
+    QStackedWidget *sourceInputStack_=nullptr;
+    QPushButton *addRouteButton_=nullptr,*removeRouteButton_=nullptr;
+
     bool loadSource(const QString &path);
     void showScript();
     void validateScript();
@@ -79,7 +95,10 @@ private:
     void togglePlayback();
     void seekTimeline(int sliderValue);
     void requestProcessedFrame(int frameIndex);
-    QString writePreviewScript(QString *error = nullptr) const;
+    QString writePreviewScript(QString *error = nullptr, const QString &script = {}) const;
+    QString hlslPreviewPackage_, hlslPreviewFallback_;
+    QVariantMap hlslPreviewParameters_;
+    bool hlslPreviewRetryGlSl_ = false;
     void saveProject();
     void openProject();
     void showPresets();
@@ -120,6 +139,7 @@ private:
     QComboBox *sourceFilter_ = nullptr;
     QLabel *runtimeStatus_ = nullptr;
     QLineEdit *catalogSearch_ = nullptr;
+    QComboBox *catalogCategory_ = nullptr;
     QListWidget *catalogList_ = nullptr;
     QListWidget *pipelineList_ = nullptr;
     ParameterEditor *parameterEditor_ = nullptr;
@@ -131,6 +151,7 @@ private:
     QLabel *durationLabel_ = nullptr;
     QLabel *frameStatus_ = nullptr;
     QLabel *taskStatus_ = nullptr;
+    QTimer *taskStatusTimer_ = nullptr;
     QCheckBox *syncView_ = nullptr;
     QCheckBox *vrrPresent_ = nullptr;
     QCheckBox *vrrPacing_ = nullptr;

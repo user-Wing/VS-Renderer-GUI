@@ -1,0 +1,3 @@
+Failed to load C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\mingw-release\runtime\python\Lib\site-packages\vapoursynth\plugins\vsrplacebo.dll. GetLastError() returned 126. The file you tried to load or one of its dependencies is probably missing.
+single frame 64 48 b'\x14\x14\x14\x14\x14\x14\x14\x14'
+video and realtime player skip: passed

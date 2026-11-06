@@ -1,0 +1,60 @@
+﻿[1/29] Automatic MOC and UIC for target VSRenderer
+[2/28] Automatic MOC and UIC for target VSPlayer
+[3/27] Automatic MOC and UIC for target VSPlayerLite
+[4/26] Automatic MOC and UIC for target vsr_analysis_tests
+[5/25] Automatic MOC and UIC for target vsr_player_lite_tests
+[6/24] Building CXX object CMakeFiles/VSPlayerLite.dir/src/player/PlayerProfiles.cpp.obj
+[7/24] Building CXX object CMakeFiles/VSPlayer.dir/src/player/PlayerProfiles.cpp.obj
+[8/24] Building CXX object CMakeFiles/VSPlayerLite.dir/src/player/PlayerWindow.cpp.obj
+[9/24] Building CXX object CMakeFiles/VSRenderer.dir/src/app/MainWindow.cpp.obj
+In file included from C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/backend/ThreeFpApi.h:3,
+                 from C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/app/MainWindow.h:3,
+                 from C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/app/MainWindow.cpp:1:
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h: In function 'VsrColorSettings VsrColorDefaultSettings()':
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::version' [-Wmissing-field-initializers]
+   24 |     VsrColorSettings c = {0};
+      |                            ^
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::engine' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::output' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::tone' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::gamut' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::quality' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::peakDetect' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::dither' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::inverseTone' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::icc' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::sdrPeak' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::displayPeak' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::paperWhite' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::contrastRecovery' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::iccPath' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/color/ColorBridge.h:24:28: warning: missing initializer for member 'VsrColorSettings::lutPath' [-Wmissing-field-initializers]
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/app/MainWindow.h: At global scope:
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/app/MainWindow.h:108:69: warning: missing initializer for member 'vsr::FilterTimeGroup::script' [-Wmissing-field-initializers]
+  108 |     QList<FilterTimeGroup> timeGroups_{{QStringLiteral("全片"),0,{}}};
+      |                                                                     ^
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/app/MainWindow.cpp: In member function 'void vsr::MainWindow::validateScript()':
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/src/app/MainWindow.cpp:998:67: warning: missing initializer for member 'vsr::FilterTimeGroup::script' [-Wmissing-field-initializers]
+  998 |             if(compatible)groups={{QStringLiteral("全片"),0,graph}};
+      |                                                                   ^
+[10/24] Building CXX object CMakeFiles/vsr_analysis_tests.dir/src/app/MainWindow.cpp.obj
+[11/24] Building CXX object CMakeFiles/VSPlayer.dir/src/player/PlayerWindow.cpp.obj
+[12/24] Linking CXX executable lite\vs-player.exe
+Staged GLSL import tools: C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\mingw-release\lite\runtime\shader-tools
+
+[13/24] Linking CXX executable vsr_analysis_tests.exe
+[14/24] Building CXX object CMakeFiles/vsr_player_lite_tests.dir/src/player/PlayerProfiles.cpp.obj
+[15/24] Building CXX object CMakeFiles/vsr_player_lite_tests.dir/src/player/PlayerWindow.cpp.obj
+[16/24] Building CXX object CMakeFiles/vsr_player_lite_tests.dir/tests/TestPlayerLite.cpp.obj
+[17/24] Linking CXX executable VSRenderer.exe
+Bundled VapourSynth runtime ready: C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\mingw-release\runtime\python
+Staged GLSL import tools: C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\mingw-release\runtime\shader-tools
+
+[18/24] Linking CXX executable vsr_player_lite_tests.exe
+[19/24] Linking CXX executable vs-player.exe
+Staged GLSL import tools: C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\build\mingw-release\runtime\shader-tools
+
+[20/24] Automatic MOC and UIC for target vsr_player_tests
+[21/23] Building CXX object CMakeFiles/vsr_player_tests.dir/src/player/PlayerProfiles.cpp.obj
+[22/23] Building CXX object CMakeFiles/vsr_player_tests.dir/src/player/PlayerWindow.cpp.obj
+[23/23] Linking CXX executable vsr_player_tests.exe

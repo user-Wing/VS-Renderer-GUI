@@ -1,0 +1,257 @@
+{
+  "version": "1.1.0",
+  "releaseAcceptance": false,
+  "published": false,
+  "fullCTest": {
+    "groups": 25,
+    "passed": 20,
+    "failed": 5,
+    "log": "ctest-final.log",
+    "note": "修复前全量轮次；续修专项不折算为全量通过"
+  },
+  "subsequentFullPlayer": {
+    "exitCode": 3221225477,
+    "log": "player-shutdown-fixed.txt",
+    "stderr": "player-shutdown-fixed-stderr.log",
+    "rootCauseConfirmed": false
+  },
+  "subsequentRendererSuite": {
+    "timeoutSeconds": 180,
+    "log": "analysis-postfix.txt"
+  },
+  "tests": {
+    "lite-postfix.txt": {
+      "completed": true,
+      "observedPassed": 37,
+      "observedFailures": [],
+      "observedSkipped": 5,
+      "totals": {
+        "passed": 37,
+        "failed": 0,
+        "skipped": 5
+      }
+    },
+    "photocraft-profile-fixed.txt": {
+      "completed": true,
+      "observedPassed": 5,
+      "observedFailures": [],
+      "observedSkipped": 1,
+      "totals": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 1
+      }
+    },
+    "shader-final.txt": {
+      "completed": true,
+      "observedPassed": 15,
+      "observedFailures": [],
+      "observedSkipped": 0,
+      "totals": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "native-features-final.txt": {
+      "completed": true,
+      "observedPassed": 5,
+      "observedFailures": [],
+      "observedSkipped": 0,
+      "totals": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "routes-final-fixed.txt": {
+      "completed": true,
+      "observedPassed": 4,
+      "observedFailures": [],
+      "observedSkipped": 0,
+      "totals": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "critical-playback-postfix.txt": {
+      "completed": true,
+      "observedPassed": 9,
+      "observedFailures": [],
+      "observedSkipped": 0,
+      "totals": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "color-final.txt": {
+      "completed": true,
+      "observedPassed": 9,
+      "observedFailures": [
+        "TestColor::constantLuminanceAndHdr() 'std::abs(nativeCl.green-nativeNcl.green)>.01 || std::abs(nativeCl.red-nativeNcl.red)>.01' returned FALSE. ()"
+      ],
+      "observedSkipped": 0,
+      "totals": {
+        "passed": 9,
+        "failed": 1,
+        "skipped": 0
+      }
+    },
+    "editor-layout-final.txt": {
+      "completed": true,
+      "observedPassed": 7,
+      "observedFailures": [],
+      "observedSkipped": 1,
+      "totals": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 1
+      }
+    },
+    "cap-hdr-fixed.txt": {
+      "completed": true,
+      "observedPassed": 3,
+      "observedFailures": [],
+      "observedSkipped": 0,
+      "totals": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "updates-final.txt": {
+      "completed": true,
+      "observedPassed": 14,
+      "observedFailures": [],
+      "observedSkipped": 2,
+      "totals": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 2
+      }
+    },
+    "ai-tail-result.txt": {
+      "completed": true,
+      "observedPassed": 3,
+      "observedFailures": [],
+      "observedSkipped": 0,
+      "totals": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "software8k-shutdown-fixed.txt": {
+      "completed": true,
+      "observedPassed": 3,
+      "observedFailures": [],
+      "observedSkipped": 0,
+      "totals": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    "analysis-postfix.txt": {
+      "completed": false,
+      "observedPassed": 16,
+      "observedFailures": [
+        "TestAnalysis::communityExampleDownload() Compared values are not the same",
+        "TestAnalysis::rendererLayoutAndParameterSizing() 'std::abs(frames->mapToGlobal(frames->rect().center()).x()-view->mapToGlobal(view->rect().center()).x())<=2' returned FALSE. ()"
+      ],
+      "observedSkipped": 2
+    },
+    "player-shutdown-fixed.txt": {
+      "completed": false,
+      "observedPassed": 96,
+      "observedFailures": [
+        "TestPlayer::overlayControlsStayUsableDuringPlayback(native) Compared values are not the same",
+        "TestPlayer::overlayControlsStayUsableDuringPlayback(VS) Compared values are not the same",
+        "TestPlayer::audioInputOutputMetersAndTab() 'player.info_->geometry().right()<player.audioInfo_->geometry().left()' returned FALSE. ()",
+        "TestPlayer::frameEditTakesPriorityAndPrefetchKeepsGpuBusy() '!player.frameEditPending_' returned FALSE. ()",
+        "TestPlayer::interpolationPerformance() 'player.playing_' returned FALSE. ()",
+        "TestPlayer::directNativePerformance() 'player.outputSnapshot().timelineGeneration>0 && player.position()>=1200000000' returned FALSE. ()",
+        "TestPlayer::compressedShaderPipeline() '!QFileInfo::exists(runtime.filePath(\"shaders/\"+QString(shader)))' returned FALSE. ()",
+        "TestPlayer::nativeEqualizerProcessesAudio(delay-surround) 'snapshot().audioInsertedSilenceFrames>=4000' returned FALSE. ()",
+        "TestPlayer::audioTracksEffectsAndDrops() 'player.findChild<QWidget *>(\"playerEqualizer\")' returned FALSE. ()"
+      ],
+      "observedSkipped": 48
+    }
+  },
+  "software8k": {
+    "source": "ChouKaguya432048-Part.mkv",
+    "decoder": "software",
+    "surface": [
+      3840,
+      2160
+    ],
+    "sampleSeconds": 10.009,
+    "acceptedFps": 29.17374363073234,
+    "deltas": {
+      "decoded": 301,
+      "accepted": 292,
+      "dropped": 238,
+      "coalesced": 0,
+      "audio_underruns": 2
+    },
+    "maximumLagSeconds": 1.501,
+    "goal48FpsAchieved": false,
+    "host": "7940HX / RTX 4070 Laptop",
+    "note": "这是退出修复后的独立10秒样本；早轮口头汇报28.49fps，最终独立CSV为29.17fps，均未达48fps。"
+  },
+  "single": {
+    "bytes": 24934612,
+    "payloadBytes": 24844460,
+    "files": 89,
+    "verifiedManifestEntries": 88,
+    "sha256": "2e779ea9d953d4dc571306dfd8340851fd5fee26ce8eee672469f53974054ba6",
+    "footer": "VSLITE03",
+    "ffmpegBundled": false,
+    "userIniBundled": false
+  },
+  "singleLifecycle": {
+    "normalExitCleaned": true,
+    "runtimeBesideLauncher": true,
+    "activeChildSurvivedBootstrapTermination": true,
+    "nextLaunchPreservedActiveChildRuntime": true,
+    "staleRuntimeCleanedAtNextLaunch": true,
+    "remainingRuntimeDirectories": 0,
+    "configurationPreserved": true,
+    "launches": 3
+  },
+  "fullArtifact": {
+    "path": "dist/VS-GUI-Full-1.1.0",
+    "manifestEntries": 1672,
+    "resourceHashesVerified": true,
+    "extraFiles": [],
+    "totalBytesExcludingMetadata": 1349321189,
+    "ui": {
+      "started": true,
+      "emptyTwoThreeFourPaneLayoutsObserved": true,
+      "normalExit": true,
+      "mediaPlaybackInThisUiSmoke": false
+    }
+  },
+  "protectedOriginals": {
+    "checked": 46,
+    "changed": []
+  },
+  "aiUpload": {
+    "file": "AI-Subtitles-1.1.0.zip",
+    "modelscopePath": "AI-Subtitles/1.1.0/AI-Subtitles-1.1.0.zip",
+    "bytes": 891930487,
+    "sha256": "0f612a4e8e0796c4363cb54aad605e52fcb6f25d53d7cf9c8f91dd4d825304ac",
+    "seconds": 39.85867667198181
+  },
+  "nativeSha256": "20bd22553add1a5316ab5fd9d61e936398892d522ff5a2e42910924163aeaf0c",
+  "provenance": {
+    "singleNativeMatchesBuild": true,
+    "singlePlayerMatchesBuildExcludingStripTimestampAndChecksum": true,
+    "playerNormalizedSha256": "d51144a767bfefbc5a8375e76bb4845035a0d990a0828e33d6f4c20e75a53830",
+    "aiZipSha256Verified": true,
+    "aiZipAllCrcVerified": true,
+    "aiZipEntries": 1452
+  }
+}

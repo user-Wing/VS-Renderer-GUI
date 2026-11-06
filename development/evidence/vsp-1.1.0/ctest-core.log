@@ -1,0 +1,73 @@
+Internal ctest changing into directory: C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/build/mingw-release
+Test project C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/build/mingw-release
+      Start  1: color-hdr-metadata
+ 1/22 Test  #1: color-hdr-metadata ................   Passed    0.59 sec
+      Start  2: native-shader-packages
+ 2/22 Test  #2: native-shader-packages ............   Passed    9.27 sec
+      Start  3: cap-precision
+ 3/22 Test  #3: cap-precision .....................   Passed    0.56 sec
+      Start  4: cap-workflow
+ 4/22 Test  #4: cap-workflow ......................***Failed    9.08 sec
+
+      Start  5: bluray-metadata
+ 5/22 Test  #5: bluray-metadata ...................   Passed    0.23 sec
+      Start  6: image-document-core
+ 6/22 Test  #6: image-document-core ...............   Passed    0.24 sec
+      Start  7: image-layer-operations
+ 7/22 Test  #7: image-layer-operations ............   Passed    0.18 sec
+      Start  8: image-psd-layers
+ 8/22 Test  #8: image-psd-layers ..................   Passed    0.33 sec
+      Start  9: image-adjustments-hdr
+ 9/22 Test  #9: image-adjustments-hdr .............   Passed    0.22 sec
+      Start 10: image-editor-advanced-tools
+10/22 Test #10: image-editor-advanced-tools .......   Passed   44.62 sec
+      Start 11: image-editor-layout
+11/22 Test #11: image-editor-layout ...............***Failed    5.02 sec
+
+      Start 12: image-editor-interaction
+12/22 Test #12: image-editor-interaction ..........   Passed   11.74 sec
+      Start 13: image-editor-tools
+13/22 Test #13: image-editor-tools ................   Passed   12.75 sec
+      Start 14: photocraft-native-editor
+14/22 Test #14: photocraft-native-editor ..........***Failed   95.58 sec
+photocraft: using supplied control token
+photocraft: control server listening on 127.0.0.1:60444
+2026-11-06T11:35:25.702Z WARN  [update check] photocraft::updates: Update check: GitHub's request limit was reached
+
+      Start 15: graph-and-vpy
+15/22 Test #15: graph-and-vpy .....................   Passed    0.07 sec
+      Start 16: shader-parameters
+16/22 Test #16: shader-parameters .................   Passed    2.15 sec
+      Start 17: d3d11-color-management
+17/22 Test #17: d3d11-color-management ............***Failed    5.72 sec
+
+      Start 18: vapoursynth-to-3fp-frame-bridge
+18/22 Test #18: vapoursynth-to-3fp-frame-bridge ...   Passed    7.95 sec
+      Start 19: preview-zoom-and-pan
+19/22 Test #19: preview-zoom-and-pan ..............   Passed    2.64 sec
+      Start 20: export-command-compatibility
+20/22 Test #20: export-command-compatibility ......   Passed   21.21 sec
+      Start 21: player-language-packs
+21/22 Test #21: player-language-packs .............***Failed    0.07 sec
+Traceback (most recent call last):
+  File "C:\Users\ARXChem\Documents\Open Source Projects\VS-Renderer-GUI\tools\check-player-languages.py", line 19, in <module>
+    assert not missing, (name, sorted(missing))
+           ^^^^^^^^^^^
+AssertionError: ('zh_CN', ['%1 · %2（内置预设）', '4K+ 软解缓冲池上限', 'AI 字幕文件缺失：%1', 'AI 字幕目录缺失：%1', 'AWJimage 提前退出：%1', 'Auto 不超过程序内存预算的一半，并扣除其他占用及系统内存压力。平时约 8 帧；前方 30 秒包扫描检测到超过平均 2.5 倍的码率尖峰时临时扩池。只扫描压缩包，不预读解码第二份视频。', 'Auto（内存上限的一半）', 'D3D11 直通', 'FFmpeg 图片转换失败：%1', 'RAW 中间图像写入失败。', '上采样滤镜', '上采样算法：%1', '下采样', '下采样算法：%1', '倍速', '列表定位', '功耗：CPU N/A · GPU N/A', '功能模式', '动态响度标准化（低延迟）', '动态缓冲池：上限 %1 MiB · 目标 %2 帧 · %3', '启用', '固定比例（取消后拉伸）', '图片输出写入失败。', '将禁用内置滤镜，切换至 D3D11 直通。', '尖峰前瞻', '常规', '当前 VPY：%1', '当前帧 PNG 到剪贴板', '快捷键', '播放 / 暂停', '无法准备 RAW 中间图像。', '无法读取或保存 FFmpeg 图片输出。', '极简模式', '步进 / 值', '第二上采样滤镜', '第二上采样算法：%1', '缩放、压缩和转换格式', '视频帧大小：源 %1×%2 → %3 输出 %4×%5 → 显示 %6×%7', '设置各页面背景、透明度和亮度…', '调整输出尺寸', '跳转 (秒)', '进入 / 退出极简音频模式 · .', '逐帧', '重新采样', '音量 (%)'])
+
+      Start 22: portable-full-update
+22/22 Test #22: portable-full-update ..............***Failed    2.70 sec
+
+
+73% tests passed, 6 tests failed out of 22
+
+Total Test time (real) = 232.96 sec
+
+The following tests FAILED:
+	  4 - cap-workflow (Failed)
+	 11 - image-editor-layout (Failed)
+	 14 - photocraft-native-editor (Failed)
+	 17 - d3d11-color-management (Failed)
+	 21 - player-language-packs (Failed)
+	 22 - portable-full-update (Failed)
+Errors while running CTest

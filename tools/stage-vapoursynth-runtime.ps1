@@ -17,6 +17,8 @@ if ($env:VSR_BUNDLED_VS_RUNTIME) {
     & robocopy.exe $source $target /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XD __pycache__ /XF '*.pyc' | Out-Null
     if ($LASTEXITCODE -ge 8) { throw 'Bundled runtime staging failed.' }
     Write-Host "Bundled VapourSynth runtime reused: $target"
+    & python (Join-Path $PSScriptRoot 'stage-extra-vs-filters.py') --output $target
+    if ($LASTEXITCODE -ne 0) { throw 'Extra VapourSynth filter staging failed.' }
     exit 0
 }
 if (-not $Venv) { $Venv = Join-Path $projectRoot ".deps\vs-python" }
@@ -129,3 +131,6 @@ Copy-Item (Join-Path $Venv "Lib\site-packages\vapoursynth_mvtools-29.dist-info\l
     -Destination (Join-Path $OutputDirectory "MVTools-LICENSE.txt") -Force
 
 Write-Host "Bundled VapourSynth runtime ready: $OutputDirectory"
+
+& python (Join-Path $PSScriptRoot 'stage-extra-vs-filters.py') --output $OutputDirectory
+if ($LASTEXITCODE -ne 0) { throw 'Extra API4 filter staging failed.' }

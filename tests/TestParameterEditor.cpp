@@ -31,6 +31,12 @@ private slots:
         QCOMPARE(changed.last().at(0).toString(),QString("mode"));QCOMPARE(changed.last().at(1).toString(),QString("自定义 GLSL"));
         editor.grab().save(QCoreApplication::applicationDirPath()+"/parameter-shaders-1.0.4.png");
     }
+    void hlslOptionPersistsInGraph(){
+        FilterGraph graph;const int index=graph.add("anime4k");ParameterEditor editor;editor.setNode(FilterCatalog::find("anime4k"),graph.at(index));
+        auto *hlsl=editor.findChild<QCheckBox *>("parameter_hlsl");QVERIFY(hlsl);QVERIFY(hlsl->isChecked());
+        connect(&editor,&ParameterEditor::parameterChanged,&editor,[&](const QString &key,const QVariant &value){graph.setParameter(index,key,value);});
+        hlsl->setChecked(false);QVERIFY(!graph.at(index)->parameters.value("hlsl").toBool());editor.setNode(FilterCatalog::find("anime4k"),graph.at(index));QVERIFY(!editor.findChild<QCheckBox *>("parameter_hlsl")->isChecked());
+    }
     void linkedResolutionUsesLastEditedDimension() {
         FilterGraph graph;const int index=graph.add("anime4k");ParameterEditor editor;
         editor.setNode(FilterCatalog::find("anime4k"),graph.at(index));editor.setInputSize(QSize(1920,1080));

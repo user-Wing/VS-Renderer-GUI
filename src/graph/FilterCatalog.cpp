@@ -57,13 +57,15 @@ const QList<FilterDefinition> &catalog() {
      {integer("width", "宽度", 1920, 16, 16384, 2), integer("height", "高度", 1080, 16, 16384, 2),
       choice("kernel", "算法", "Spline36", {"Point", "Bicubic", "Lanczos", "Spline36"}),
       integer("taps", "Lanczos taps", 3, 2, 16)}},
-    {"anime4k", "mpv GLSL 着色器", "GPU 超分与着色器", "placebo",
-     "按功能选择 mpv/libplacebo GLSL，输出为 YUV444P16。NIS 标明 NVIDIA 来源但并非 N 卡独占；DP4A 版本需要整数点积支持。补帧请使用 RIFE / MVTools 节点。",
-     {choice("category", "功能分类", "全部", FilterCatalog::shaderCategories()), choice("mode", "着色器", "anime4k-v4-a.glsl", {"anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-no-cnn.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL 位置", ""),
+    {"ncnn_still", "NCNN 单帧超分", "GPU 超分与着色器", "resize", "使用 VideoEnhancer NCNN 模型，仅处理单帧 RGB24；视频和实时播放器会跳过。HDR 请先转换到 SDR。",
+     {choice("model", "模型", "AnimeJaNai-V2-2x-Compact-36K", {"AnimeJaNai-V2-2x-Compact-36K"}), integer("gpu", "Vulkan GPU 编号", 0, 0, 15)}},
+    {"anime4k", "mpv GLSL/HLSL 着色器", "GPU 超分与着色器", "placebo",
+     "按功能选择 GLSL/HLSL；GLSL 支持 VS 编码导出，原生 HLSL 放在处理链末尾用于 D3D11 预览。NIS 标明 NVIDIA 来源但并非 N 卡独占；DP4A 版本需要整数点积支持。补帧请使用 RIFE / MVTools 节点。",
+     {choice("category", "功能分类", "全部", FilterCatalog::shaderCategories()), choice("mode", "着色器", "anime4k-v4-a.glsl", {"anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-no-cnn.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL/HLSL 位置", ""),
       choice("output_mode", "输出方式", "倍率", {"倍率", "指定分辨率"}),
       choice("scale", "输出倍率", "2×", {"0.5×", "1×", "2×", "3×", "4×"}),
       integer("width", "输出宽度", 1920, 2, 65536), integer("height", "输出高度", 1080, 2, 65536),
-      boolean("keep_aspect", "保持宽高比", true), choice("dimension_axis", "", "width", {"width", "height"})}},
+      boolean("keep_aspect", "保持宽高比", true), choice("dimension_axis", "", "width", {"width", "height"}), boolean("hlsl", "以 HLSL 执行", true)}},
     {"remove_grain", "RemoveGrain", "降噪", "rgvs", "VCB 教程中的基础空间降噪。",
      {integer("mode", "模式", 20, 0, 28)}},
     {"bilateral", "Bilateral", "降噪", "vszip", "VSZip 双边滤波，注意纹理损失。",
@@ -140,6 +142,14 @@ const QList<FilterDefinition> &catalog() {
      {real("var", "强度", 0.5, 0.0, 100.0, 0.1), boolean("constant", "静态颗粒", false)}},
     };
     catalog.append(QList<FilterDefinition>{
+    {"qtgmc", "QTGMC 高质量反交错", "反交错与 IVTC", "mv", "运动补偿反交错；默认帧率翻倍，需正确选择场序。Fast 更快，Slower 更细致。",
+     {choice("preset", "质量档位", "Fast", {"Slower","Slow","Medium","Fast","Faster","Very Fast"}),boolean("tff", "顶场优先 TFF（关闭为 BFF）", true),boolean("half_rate", "保留原帧率", false)}},
+    {"smdegrain", "SMDegrain 运动补偿降噪", "降噪", "mv", "先估计运动再联合邻帧降噪；半径越大越慢，快速运动需降低强度。",
+     {integer("radius", "时域半径", 2, 1, 3),integer("threshold", "运动差异阈值", 300, 0, 2000),boolean("chroma", "同时处理色度", true)}},
+    {"bm3d", "BM3D CPU 块匹配降噪", "降噪", "bm3d", "CPU 高质量空间降噪，Fast 适合预览；会转换为 16-bit YUV444 后处理。",
+     {real("sigma", "降噪强度", 3, 0, 30, .5),choice("profile", "质量档位", "fast", {"fast","lc","np","high","vn"}),boolean("refine", "增加第二次精修", false)}},
+    {"fft3d", "FFT3DFilter 频域降噪", "降噪", "fft3dfilter", "频域时空降噪；时间块越大越慢，适合胶片颗粒与随机噪声。",
+     {real("sigma", "降噪强度", 2, 0, 30, .5),integer("temporal", "时间块帧数", 3, 1, 5)}},
     {"temporal_median", "TemporalMedian 时域中值", "降噪", "zsmooth", "按邻帧取中值去除闪动噪点；半径越高越慢，运动纹理可能拖影。",
      {integer("radius", "时域半径", 1, 1, 3)}},
     {"flux_t", "FluxSmoothT 时域平滑", "降噪", "zsmooth", "只处理满足阈值的时间方向噪声；强度按 8-bit 标度。",
@@ -180,8 +190,12 @@ const QList<FilterDefinition> &catalog() {
       integer("gpu", "Vulkan GPU 编号", 0, 0, 15), integer("threads", "GPU 工作线程", 1, 1, 4), boolean("scene", "镜头切换检测", true),
       choice("inference_scale", "推理分辨率(仅影响中间帧)", "1 - 原始", {"1 - 原始", "2 - 半宽半高", "4 - 四分之一宽高"})}},
     });
+    QFile ncnnModels(QDir(QCoreApplication::applicationDirPath()).filePath("runtime/ncnn/models.json"));
+    if(ncnnModels.open(QIODevice::ReadOnly))for(auto &definition:catalog)if(definition.id=="ncnn_still")for(auto &parameter:definition.parameters)if(parameter.id=="model"){
+        parameter.choices.clear();for(const auto &item:QJsonDocument::fromJson(ncnnModels.readAll()).array())parameter.choices.append(item.toObject().value("name").toString());
+    }
     const QDir shaders(QDir(QCoreApplication::applicationDirPath()).filePath("shaders"));
-    QDirIterator files(shaders.path(),{"*.glsl","*.hook"},QDir::Files,QDirIterator::Subdirectories);QStringList choices;
+    QDirIterator files(shaders.path(),{"*.glsl","*.hook","*.hlsl"},QDir::Files,QDirIterator::Subdirectories);QStringList choices;
     while(files.hasNext())choices.append(shaders.relativeFilePath(files.next()));
     if(QFileInfo::exists(shaders.filePath("mpv-shaders.7z"))){QFile manifest(shaders.filePath("mpv-shaders/manifest.json"));if(manifest.open(QIODevice::ReadOnly))for(const auto &entry:QJsonDocument::fromJson(manifest.readAll()).object().value("files").toArray()){const auto item=entry.toObject();const auto name="mpv-shaders/"+item.value("path").toString();if(item.value("shader").toBool() && !choices.contains(name))choices.append(name);}}
     choices.sort(Qt::CaseInsensitive);

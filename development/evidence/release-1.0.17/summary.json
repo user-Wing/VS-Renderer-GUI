@@ -1,0 +1,273 @@
+{
+  "version": "1.0.17",
+  "collected_utc": "2026-11-01T11:00:09.540553+00:00",
+  "passed": true,
+  "source_base_commit": "deefd4f8effc028e2bfea69fca10e859d8ff16cd",
+  "source_baseline": {
+    "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\baseline.json",
+    "bytes": 3815,
+    "sha256": "6f9a432196f521754a11e92391916a388b2b2a9b54349787e7b471522b092c4b"
+  },
+  "gates": {
+    "final_verification_passed": true,
+    "single_smoke_passed": true,
+    "full_startup_passed": true,
+    "final_integration_exit_codes": {
+      "Full": 0,
+      "Lite": 0,
+      "Renderer": 0
+    },
+    "git_diff_check_exit_code": 0
+  },
+  "qtest": {
+    "logs": {
+      "shader-tests.txt": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0,
+        "blacklisted": 0,
+        "totals_lines_found": 1,
+        "last_totals": "Totals: 13 passed, 0 failed, 0 skipped, 0 blacklisted, 10452ms"
+      },
+      "graph-tests.txt": {
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0,
+        "blacklisted": 0,
+        "totals_lines_found": 1,
+        "last_totals": "Totals: 17 passed, 0 failed, 0 skipped, 0 blacklisted, 38ms"
+      },
+      "parameter-tests.txt": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "blacklisted": 0,
+        "totals_lines_found": 1,
+        "last_totals": "Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 2907ms"
+      },
+      "lite-hlsl-tests.txt": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0,
+        "blacklisted": 0,
+        "totals_lines_found": 1,
+        "last_totals": "Totals: 23 passed, 0 failed, 0 skipped, 0 blacklisted, 27195ms"
+      },
+      "full-hlsl-tests.txt": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0,
+        "blacklisted": 0,
+        "totals_lines_found": 1,
+        "last_totals": "Totals: 16 passed, 0 failed, 0 skipped, 0 blacklisted, 26717ms"
+      },
+      "renderer-hlsl-tests.txt": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0,
+        "blacklisted": 0,
+        "totals_lines_found": 1,
+        "last_totals": "Totals: 5 passed, 0 failed, 0 skipped, 0 blacklisted, 3416ms"
+      }
+    },
+    "passed_total": 79,
+    "failed_total": 0,
+    "skipped_total": 0,
+    "rule": "last QtTest Totals line in each final log"
+  },
+  "products": {
+    "Full": {
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17",
+      "version": "1.0.17"
+    },
+    "SinglePlayer": {
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-Player.exe",
+      "bytes": 34028319,
+      "sha256": "4609364236946011ce13d3857784ad222580f6ee73774534c4c7fc471f263015"
+    }
+  },
+  "native_dll": {
+    "rebuilt": {
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\native\\FFF.Native.dll",
+      "bytes": 6776832,
+      "sha256": "57ca00bae99c12be3131f3bc2085d496f9ed54f747557b63117aa708d7bb135e"
+    },
+    "Full": {
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\dist\\VS-GUI-Full-1.0.17\\FFF.Native.dll",
+      "bytes": 6776832,
+      "sha256": "57ca00bae99c12be3131f3bc2085d496f9ed54f747557b63117aa708d7bb135e"
+    },
+    "single_stage": {
+      "path": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\single-stage\\FFF.Native.dll",
+      "bytes": 6776832,
+      "sha256": "57ca00bae99c12be3131f3bc2085d496f9ed54f747557b63117aa708d7bb135e"
+    }
+  },
+  "single_startup": {
+    "kind": "cold",
+    "cache_existed_before": false,
+    "cache_path": "C:\\Users\\ARXChem\\AppData\\Local\\VSPlayerLite\\ff527617cf159ae37ce5a7ca",
+    "payload_fingerprint": "ff527617cf159ae37ce5a7ca",
+    "smoke_run_directory": "C:\\Users\\ARXChem\\Documents\\Open Source Projects\\VS-Renderer-GUI\\build\\release-1.0.17\\smoke\\20261101T105735Z-16bc9e36"
+  },
+  "git": {
+    "status_short": {
+      "command": [
+        "git",
+        "status",
+        "--short"
+      ],
+      "exit_code": 0,
+      "stdout": " M CMakeLists.txt\n M README.md\n M THIRD_PARTY_NOTICES.md\n M assets/languages/en_US.json\n M assets/languages/zh_CN.json\n M changelog.md\n D color.md\n M development/validation.md\n M docs/native-api20-build.md\n M docs/player.md\n M docs/renderer.md\n M project.md\n M src/app/MainWindow.cpp\n M src/app/MainWindow.h\n M src/app/MainWindowPresets.cpp\n M src/backend/ThreeFpApi.cpp\n M src/backend/ThreeFpApi.h\n M src/backend/ThreeFpPlayer.cpp\n M src/backend/ThreeFpPlayer.h\n M src/graph/FilterCatalog.cpp\n M src/graph/PresetStore.cpp\n M src/graph/PresetStore.h\n M src/player/PlayerColor.cpp\n M src/player/PlayerInfo.cpp\n M src/player/PlayerMenus.cpp\n M src/player/PlayerProfiles.cpp\n M src/player/PlayerWindow.cpp\n M src/player/PlayerWindow.h\n M src/ui/ParameterEditor.cpp\n M tests/TestAnalysis.cpp\n M tests/TestParameterEditor.cpp\n M tests/TestPlayer.cpp\n M tests/TestPlayerLite.cpp\n M tests/TestVpyScript.cpp\n M tools/build-native-anime4k-fast.ps1\n M tools/build-native-api20.ps1\n M tools/stage-editions-1.0.9.py\n?? patches/3fp-api20-custom-shader.patch\n?? src/graph/HlslPreview.h\n?? src/render/CustomShader.h\n?? src/render/ShaderPackage.cpp\n?? src/render/ShaderPackage.h\n?? tests/TestShaderPackage.cpp\n?? tools/__pycache__/\n?? tools/clean-build-followup-20261011.ps1\n?? tools/clean-workspace-20261011.ps1\n?? tools/experimental/\n?? tools/stage-shader-tools.py\n",
+      "stderr": ""
+    },
+    "diff_check": {
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "warning: in the working copy of 'tests/TestParameterEditor.cpp', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tests/TestVpyScript.cpp', LF will be replaced by CRLF the next time Git touches it\n"
+    },
+    "snapshot_phase": "before copying release evidence"
+  },
+  "scope": {
+    "validation": "Targeted shader, graph, parameter, Lite Player, Full Player and Renderer regressions; not a complete test-suite run.",
+    "performance": "No new 8x performance measurement was performed; the earlier >8x figure remains the user's report from the prior single-file implementation.",
+    "hdr": "HDR coverage checks media switching, shader fallback/recovery and playback continuity; it does not validate HDR color accuracy.",
+    "publication": "Local evidence collection only; no upload or external release archive is created."
+  },
+  "failure_history_preserved": [
+    "full-before-canonical-fix.txt",
+    "lite-before-fixture-fix.txt",
+    "lite-before-hdr-fix.txt",
+    "lite-before-sdr-recovery-fix.txt",
+    "lite-hdr-container-precondition.txt",
+    "lite-hlsl-dependency-failure.txt"
+  ],
+  "evidence": {
+    "cap-build.log": {
+      "bytes": 6542,
+      "sha256": "94d2109d6dd4739236e655c7fb960b246b259d2208be4a39ad32667b090340fd",
+      "role": "final_validation"
+    },
+    "final-build.log": {
+      "bytes": 6855,
+      "sha256": "0428fed5e6419a8c5ed096348cc6a6ea7a80bff0dbce251a72ee1b8cc5aad014",
+      "role": "final_validation"
+    },
+    "final-integration-exits.json": {
+      "bytes": 63,
+      "sha256": "848264adbacd28612cb778a137775b5ce1a8977654597afcd0f9dd406a8163ed",
+      "role": "final_validation"
+    },
+    "final-verification.json": {
+      "bytes": 2871,
+      "sha256": "0823a9a88dc035e6fd97bb7fbc7c17abb2e3ac676b484b9a342992ca9e1e39ab",
+      "role": "final_validation"
+    },
+    "full-before-canonical-fix.txt": {
+      "bytes": 2542,
+      "sha256": "64132e0fc26c9490f36a9a31477862663f9c46d2cc92a4955e60db56c88e88fd",
+      "role": "failure_history"
+    },
+    "full-hlsl-tests.txt": {
+      "bytes": 1169,
+      "sha256": "8a8952f1763bf6ddeae15df3e98d9ee217455f3a54c35511c037053eee61a3a4",
+      "role": "final_validation"
+    },
+    "git-diff-check.txt": {
+      "bytes": 238,
+      "sha256": "31f20517d919d177fed717defab424ba3a75ddd59808ac8e4c2d62713168145e",
+      "role": "git_snapshot"
+    },
+    "git-status.txt": {
+      "bytes": 1351,
+      "sha256": "32c73e3ebef6edf9bc284361ca91901bbbf4ce41517b85aa6acc05b1b30012a2",
+      "role": "git_snapshot"
+    },
+    "graph-tests.txt": {
+      "bytes": 1222,
+      "sha256": "84fd89cec34a6b8f3bbc336ec989d035fe47af790eadee21ad3ce0b0d6b51278",
+      "role": "final_validation"
+    },
+    "lite-before-fixture-fix.txt": {
+      "bytes": 2179,
+      "sha256": "eac39059ad402c338cf669274eebf0945fcb24c9f8637a2a7d67869f34c7baea",
+      "role": "failure_history"
+    },
+    "lite-before-hdr-fix.txt": {
+      "bytes": 1703,
+      "sha256": "32df9ea14dcbc1bde7bb0483a4712d7fea7abbdd282609c14a59d8fc9c30a328",
+      "role": "failure_history"
+    },
+    "lite-before-sdr-recovery-fix.txt": {
+      "bytes": 7071,
+      "sha256": "7f79c0165b4d5f551c5e8695d5ab983f8e3c1fc5d6772bbeb130c34794cf12e7",
+      "role": "failure_history"
+    },
+    "lite-hdr-container-precondition.txt": {
+      "bytes": 1922,
+      "sha256": "d9a8a6aca2af52917fbb1ad22657f410e576974869ca4f29bd57f470c16980de",
+      "role": "failure_history"
+    },
+    "lite-hlsl-dependency-failure.txt": {
+      "bytes": 262,
+      "sha256": "2a69a96fa6b09fbbcbb00b9654539f7f7af1fa19d1b4b64716f8660b57ad61f4",
+      "role": "failure_history"
+    },
+    "lite-hlsl-tests.txt": {
+      "bytes": 6667,
+      "sha256": "c5226f8aa625502d72219be4a0f6e9ad63c7c657fd2dd95b89797d6e572c195e",
+      "role": "final_validation"
+    },
+    "native-build.log": {
+      "bytes": 8789,
+      "sha256": "74c90b8cc4466faa5771d823b853e92080d6a144f951717e921d6cf982b2349b",
+      "role": "final_validation"
+    },
+    "native-exports.json": {
+      "bytes": 258,
+      "sha256": "21e1e4accc3001b3b8e89a8c72e00bdaf16c9daa276db79b71d7dbc607bbe02c",
+      "role": "final_validation"
+    },
+    "parameter-tests.txt": {
+      "bytes": 613,
+      "sha256": "a11cc9338560ee6c9497801285b97b3ea0b45bdca186a1f5ceb55e004498d84f",
+      "role": "final_validation"
+    },
+    "renderer-hlsl-tests.txt": {
+      "bytes": 895,
+      "sha256": "e2babcc271e6a7c14824908927dadf56a2976f8fb3ae7419da18d7169f6d5809",
+      "role": "final_validation"
+    },
+    "shader-tests.txt": {
+      "bytes": 1142,
+      "sha256": "1e09f4cf7dfebc76bb7b664d01727ae9604f98653f92455fb2a51fe88b98aa91",
+      "role": "final_validation"
+    },
+    "single-build.json": {
+      "bytes": 355,
+      "sha256": "dde74896cab42913a74cb2eaeab24f55a5d122c77e7e38e7c9a7b283f99d9a8b",
+      "role": "final_validation"
+    },
+    "smoke-full.json": {
+      "bytes": 43771,
+      "sha256": "76a6f74106f846501d57a514088eac79b77c667da145f81b04baefc5780f62c5",
+      "role": "final_validation"
+    },
+    "smoke-single.json": {
+      "bytes": 47602,
+      "sha256": "12d166958d3cc82218e3b09d821daeeee123e44de2a8358869a5894ec5b06ad2",
+      "role": "final_validation"
+    },
+    "unit-exit-codes.json": {
+      "bytes": 241,
+      "sha256": "18b0a97675374ddfc3d123013b99683d9e3b7646e70a56706f99f5f9f5a1da6d",
+      "role": "final_validation"
+    }
+  },
+  "hash_scope": "All explicitly copied evidence and generated git snapshots. This summary excludes its own hash; validation.md is maintained separately and is not modified."
+}

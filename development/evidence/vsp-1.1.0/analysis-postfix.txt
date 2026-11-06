@@ -1,0 +1,32 @@
+********* Start testing of TestAnalysis *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestAnalysis::initTestCase()
+PASS   : TestAnalysis::independentVideoRoutes()
+QINFO  : TestAnalysis::nativeImageZoomBeyondViewportBounds() Requested zoom 128 source pixel screen span 128
+QINFO  : TestAnalysis::nativeImageZoomBeyondViewportBounds() Requested zoom 1024 source pixel screen span 1024
+QINFO  : TestAnalysis::nativeImageZoomBeyondViewportBounds() Requested zoom 8192 source pixel screen span 8192
+PASS   : TestAnalysis::nativeImageZoomBeyondViewportBounds()
+PASS   : TestAnalysis::sourceYuvProbePreservesTenBitSubsampling()
+SKIP   : TestAnalysis::threeAvifDragLatency() Set VSR_AVIF_TEST_DIR to the Stray AVIF directory
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestAnalysis.cpp(140) : failure location
+PASS   : TestAnalysis::rendererHlslPreviewAndGlslFallback()
+PASS   : TestAnalysis::rendererEditedVpyKeepsPython()
+PASS   : TestAnalysis::rendererTimeGroupLayout()
+PASS   : TestAnalysis::timeGroupPresetAndFrames()
+PASS   : TestAnalysis::presetImportKeepsTimeGroups()
+FAIL!  : TestAnalysis::communityExampleDownload() Compared values are not the same
+   Actual   (row->text(2))                                             : "\u672A\u4E0B\u8F7D"
+   Expected ((QString(QtPrivate::qMakeStringPrivate(u"" "已安装")))): "\u5DF2\u5B89\u88C5"
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestAnalysis.cpp(317) : failure location
+QINFO  : TestAnalysis::rendererStartupBudget() renderer-startup-construction-ms 306
+PASS   : TestAnalysis::rendererStartupBudget()
+SKIP   : TestAnalysis::dual4kPerformance() Set VSR_COMPARE_SOURCE for real comparison performance
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestAnalysis.cpp(328) : failure location
+FAIL!  : TestAnalysis::rendererLayoutAndParameterSizing() 'std::abs(frames->mapToGlobal(frames->rect().center()).x()-view->mapToGlobal(view->rect().center()).x())<=2' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestAnalysis.cpp(359) : failure location
+PASS   : TestAnalysis::exportTabsShowSelection()
+PASS   : TestAnalysis::parameterEditorFollowsTheme()
+PASS   : TestAnalysis::rendererSettingsPageAndVpyWarning()
+PASS   : TestAnalysis::rendererLoadsPresetDuringStartup()
+PASS   : TestAnalysis::presetManagementActions()
+PASS   : TestAnalysis::presetTreeSubdirectories()

@@ -76,7 +76,9 @@ void PlayerWindow::showColorSettings() {
         const auto save=[&](const char* key,const QVariant& value){settings_->setValue(QString("color/")+key,value);};
         save("engine",engine->currentData());save("output",output->currentIndex());save("tone",tone->currentIndex());save("gamut",gamut->currentIndex());save("quality",quality->currentIndex());
         save("sdrPeak",sdr->value());save("displayPeak",peak->value());save("paperWhite",white->value());save("contrastRecovery",contrast->value());save("peakDetect",detect->isChecked());save("dither",dither->isChecked());save("inverseTone",inverse->isChecked());
-        save("icc",icc->currentIndex());save("iccPath",iccPath->text());save("lutPath",lutPath->text());settings_->sync();applyColorSettings();refresh();QTimer::singleShot(100,&dialog,refresh);
+        save("icc",icc->currentIndex());save("iccPath",iccPath->text());save("lutPath",lutPath->text());settings_->sync();applyColorSettings();
+        if(nativeAnime_ || !customShaderPackage_.isEmpty() || profile()=="Anime")refreshScript();
+        refresh();QTimer::singleShot(100,&dialog,refresh);
     };
     connect(buttons->button(QDialogButtonBox::Apply),&QPushButton::clicked,&dialog,store);
     connect(buttons,&QDialogButtonBox::accepted,&dialog,[&]{store();dialog.accept();});connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
