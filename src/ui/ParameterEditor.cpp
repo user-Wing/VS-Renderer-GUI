@@ -120,7 +120,7 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             const auto fit = [combo, shaderMode, shaderCategory] { const int width=std::max(70, combo->fontMetrics().horizontalAdvance(combo->currentText()) + 40);combo->setFixedWidth(combo==shaderMode || combo==shaderCategory?120:std::min(width,120)); };
             fit();
             if(combo!=shaderMode)connect(combo, &QComboBox::currentTextChanged, this,
-                    [this, id, combo, fit](const QString &v) { fit(); combo->setToolTip(v); emit parameterChanged(id, v); });
+                    [this, id, combo, fit](const QString &v) { fit(); combo->setToolTip(v); emit parameterChanged(id, v==QStringLiteral("自定义 GLSL/HLSL")?QStringLiteral("自定义 GLSL"):v); });
             editor = combo;
             break;
         }

@@ -1,6 +1,6 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-11-07。源码版本 **1.1.0（本地开发，未发布）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
+核对日期：2026-11-07。源码版本 **1.1.0（本地开发，未发布）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 与 `patches/3fp-vsp-1.1.0-network-proxy.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
 
 高 DPI 全屏底边控制栏定位于 `PlayerPlaylist.cpp::updateChrome`；Qt 全局坐标在 300% 缩放下可能把物理最后一像素舍入到逻辑边界外，仅全屏容许右/下各一个逻辑像素。Full/Lite 的 `fullscreenPhysicalBottomEdge` 使用 Win32 真实屏幕坐标覆盖左右端和中点；48F 专项入口为 `remote48FrameCadence`，由环境变量指定设备素材，不内置媒体路径。NuxBox 的 Tab 24F 报告未复现，用户复测已恢复。Full 内置旧VPY的插件名兼容位于`PlayerProfiles.cpp::nativeBuiltinCompatible`，只接受完整当前模板或已知旧插件名模板，继续拒绝实际修改过的Python正文。
 
@@ -15,6 +15,8 @@
 父分类的实际悬停触发由`PlayerMenu.cpp`管理：`PlayerMenus`将JSON文字绑定到分类动作的`playerDescription`属性，悬停时主动刷新提示，进入子菜单、离开分类或关闭菜单后停止；不依赖系统生成延迟ToolTip事件。
 
 本轮入口：`PlayerImageTools`负责比例尺寸、位深与Full GLSL/内置HLSL图片导出；Lite通过FFmpeg编码且关闭质量搜索。`PageTheme.h`使用独立底层QWidget绘图并即时刷新，跳过PreviewPane子树；`ThemePackage.h`管理主题包。`WrappedFileCombo.h`处理文件名换行；`PortableChart.h`将配置旁Pareto图保存为相对路径，并兼容单文件内嵌图。`tools/jxl-runtime.cmake`保留SIMD并修补Win64的向量跨函数传参对齐；版本未改变。字幕、滑块、功耗入口仍分别为`PlayerSubtitles`/Native `AssSubtitleRenderer`、`CompareView`和`PowerSensors`，功耗权限边界见 [研究记录](development/pawnio-power.md)。
+
+发版前审查处置见 [审查复核](development/code-review-1.1.0.md)，实际功能回归及未关闭项见 [测试台账](development/validation.md)。外部 AI 包需确认执行指纹；网络链接只允许用户指定的 LAN 目标，跨源私有地址跳转拒绝。
 
 ## 1. 发心与边界
 
@@ -98,7 +100,7 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 | VapourSynth / Python | VS API4 / R81；构建和 stage 脚本，`update-vapoursynth-runtime.py` 锁定哈希 | VS 链不可用；直通路径独立 |
 | VS 插件 | BM3D 11.0、BM3Dvk2 1.0、BestSource 22；其余随运行时保留 | 对应滤镜不可用；不能用 API3 DLL 替代 |
 | FFF.Native | API20 / main `72af915`；标准脚本应用 1.1.0 汇总补丁并复制本库头文件；配置 112 字节、snapshot v22 / 592 字节，动态 C ABI | 原生播放/呈现不可用；缺少可选扩展的旧库不能提供原始 YUV 或自定义 shader |
-| FFmpeg | 当前 shared ABI：63/63/61/7/10/12；Native SDK 与运行 DLL 配套 | 相应解码/导出失败，单文件启动器先检查组件 |
+| FFmpeg | 07-full-shared（2026-11-07），AVX2；shared ABI：63/63/61/7/10/12，来源哈希见 `tools/ffmpeg-source.json` | 相应解码/导出失败，单文件启动器先检查组件 |
 | GLSL / RIFE | 随包 shader 与 NCNN 模型，`stage-shaders.ps1` / `install-analysis-plugins.ps1` | 相应增强不可用；RIFE 需要 Vulkan |
 | GLSL 转换组件 | `runtime/shader-tools/` 中的 glslc、SPIRV-Cross 及配套依赖，由 `tools/stage-shader-tools.py` 整理；HLSL 用 D3DCompiler 编译 | 缺失时不能导入 GLSL；原生 HLSL 不调用 GLSL 转换工具，逐帧播放仅执行已编译字节码 |
 | libVLC / LAV / madVR | Full 可选后端，stage 脚本及各自许可 | 对应后端不可用，PlayerLite 不包含 |

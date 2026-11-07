@@ -25,6 +25,7 @@ New-Item -ItemType Directory -Path $payload -Force | Out-Null
 $excludedDirectories = @('cache', (Join-Path $program 'data'), 'PhotoCraftData', 'shader-cache', 'screenshots', 'vpy', '__pycache__', '.git', '.deps', 'temp', 'logs')
 $excludedDirectories += (Join-Path $program 'docs')
 $excludedDirectories += (Join-Path $program 'themes')
+$excludedDirectories += (Join-Path $program 'shaders/custom')
 if ($Edition -eq 'Lite') {
     $excludedDirectories += @((Join-Path $program 'LAVFilters64'), (Join-Path $program 'madVR09217'), (Join-Path $program 'runtime/mkvtoolnix'))
 }

@@ -142,9 +142,9 @@ struct VapourSynthFrameServer::Impl {
         }, promise);
     }
 
-    void trimAhead(int current, bool seek) {
+    void trimAhead(int current) {
         for (auto it = ahead.begin(); it != ahead.end();) {
-            if ((it->first < current || it->first > current + 16) && (seek || it->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready)) {
+            if ((it->first < current || it->first > current + 16) && (it->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready)) {
                 const auto result = it->second.get(); if (result.frame) vsApi->freeFrame(result.frame);
                 it = ahead.erase(it);
             } else ++it;
@@ -362,7 +362,7 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames, bo
             return;
         }
         const int bounded = impl_->info.numFrames > 0 ? qMin(frameIndex, impl_->info.numFrames - 1) : frameIndex;
-        impl_->trimAhead(bounded, warmStart && impl_->lastRequested>=0);
+        impl_->trimAhead(bounded);
         const int availableAhead = impl_->info.numFrames > 0
             ? qMax(0, impl_->info.numFrames - bounded - 1) : 0;
         const int warmCount = qBound(0, prefetchFrames, qMin(16, availableAhead));

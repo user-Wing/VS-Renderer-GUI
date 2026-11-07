@@ -1218,7 +1218,7 @@ void MainWindow::openProject()
     additionalRoutes_.clear();while(routes_.size()>1){compareView_->removeProcessedPane(routes_.size()-1);routes_.removeLast();}
     auto entries=root.value("routes").toArray();if(entries.isEmpty())entries.append(root);
     routes_.clear();
-    for(int i=0;i<qMin(3,entries.size());++i){const auto entry=entries[i].toObject();RouteState route;route.groups=PresetStore::timeGroups(entry);route.preset=entry.value("preset").toString();route.visible=entry.value("visible").toBool(true);routes_.append(route);if(i>0)additionalRoutes_.push_back(std::make_unique<RenderRoute>(api_,compareView_->addProcessedPane(),this));}
+    for(int i=0;i<qMin(3,entries.size());++i){const auto entry=entries[i].toObject();RouteState route;route.groups=PresetStore::timeGroups(entry);route.preset=entry.value("preset").toString();route.visible=entry.value("visible").toBool(true);routes_.append(route);if(i>0)createAdditionalRoute();}
     routeIndex_=qBound(0,root.value("editingRoute").toInt(),int(routes_.size())-1);activePreset_=routes_[routeIndex_].preset;replaceTimeGroups(routes_[routeIndex_].groups);
     for(int i=0;i<routes_.size();++i)compareView_->setRouteVisible(i,routes_[i].visible);updateRouteChoices();
     sourceFilter_->setCurrentIndex(sourceFilter_->findData(root.value(QStringLiteral("sourceFilter")).toInt()));

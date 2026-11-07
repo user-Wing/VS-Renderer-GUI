@@ -386,16 +386,17 @@ bool PlayerWindow::openFile(const QString &input) {
     const bool opened=openMedia();if(opened)showStatus(tr("打开文件：%1").arg(QFileInfo(source_).fileName()));return opened;
 }
 bool PlayerWindow::openMedia() {
+    lav_.reset();
 #ifdef VSR_LITE_PLAYER
     setDirectMode(true);
 #else
-    setDirectMode(mediaInput_.startsWith("bluray:") || networkSource() || (!madvrMode() && (preset_.isEmpty() || (!profile().isEmpty() && interpolationStage()<0) || playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower()))));
+    setDirectMode(minimalMode_ || mediaInput_.startsWith("bluray:") || networkSource() || (!madvrMode() && (preset_.isEmpty() || (!profile().isEmpty() && interpolationStage()<0) || playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower()))));
 #endif
     applyScaling();
     clock_->setClockOnly(minimalMode_ || audioMode_ || (!direct_ && !madvrMode()));
     if (!clock_->openFile(mediaInput_)) { setError(clock_->lastError()); return false; }
     applyBlurayMetadata();
-    lavVideo_ = !audioMode_ && !networkSource() && (madvrMode() || (!direct_ && settings_->value("decode/video",settings_->value("player/core","3FP")).toString()=="LAV"));
+    lavVideo_ = !minimalMode_ && !audioMode_ && !networkSource() && (madvrMode() || (!direct_ && settings_->value("decode/video",settings_->value("player/core","3FP")).toString()=="LAV"));
     lavAudio_ = QFileInfo(source_).suffix().compare("mpls",Qt::CaseInsensitive)!=0 && !networkSource() && settings_->value("decode/audio",settings_->value("player/core","3FP")).toString()=="LAV" && speed_==1;
     useLav_=lavVideo_ || lavAudio_;
     if (useLav_) {
@@ -404,7 +405,7 @@ bool PlayerWindow::openMedia() {
     }
     clock_->setMuted(lavAudio_ || mute_->isChecked()); clock_->setVolume(volume_->value() / 100.0f);
     if (lav_) lav_->volume(volume_->value() / 100.0f, !lavAudio_ || mute_->isChecked());
-    if(madvrMode() && !audioMode_ && !networkSource()) {
+    if(!minimalMode_ && madvrMode() && !audioMode_ && !networkSource()) {
         server_->unloadScript();ready_=true; output_->stop(); pane_->setSurfaceActive(true);
         const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height());
         if(speed_!=1) { lav_->setRate(speed_); lav_->volume(0,true);clock_->setMuted(mute_->isChecked()); }
@@ -412,7 +413,7 @@ bool PlayerWindow::openMedia() {
     } else { rendererBadge_->setText(direct_?"3FP":"VS"); if(direct_) {ready_=true;pane_->setSurfaceActive(!minimalMode_);if(preset_.isEmpty())showStatus(tr("打开文件：%1").arg(QFileInfo(source_).fileName()));} else refreshScript(); } return true;
 }
 void PlayerWindow::refreshScript() {
-    if ((discMenu_ && discMenu_->active()) || imageMode_ || audioMode_ || source_.isEmpty() || mediaInput_.isEmpty() || (madvrMode() && !networkSource())) return;
+    if (minimalMode_ || (discMenu_ && discMenu_->active()) || imageMode_ || audioMode_ || source_.isEmpty() || mediaInput_.isEmpty() || (madvrMode() && !networkSource())) return;
     if(profile()=="Anime" && media_.value("streams").toArray().isEmpty() && clock_->snapshot().state==ThreeFpState::Opening)return;
     stopDiscIndexing();discIndexParts_.clear();discIndexAttempted_.clear();
     const bool resume=autoPlay_ || playing_;
@@ -813,9 +814,9 @@ void PlayerWindow::updateMinimalControls(){
         if(!property("minimalMode").toBool())normalWindowSize_=size();
         infoVisible_=false;static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();playlistPanel_->hide();lyricLabel_->hide();audioSubtitle_->hide();equalizerButton_->hide();speedButton_->hide();
         pane_->setImage({});pane_->setSurfaceActive(false);setMinimumSize(360,70);
-        if(!isFullScreen())resize(420,controls_->sizeHint().height()+40);
     }else {setMinimumSize(420,160);equalizerButton_->show();}
     setProperty("minimalMode",minimalMode_);layoutChrome();
+    if(minimalMode_ && !isFullScreen()){centralWidget()->layout()->invalidate();const auto margins=centralWidget()->layout()->contentsMargins();resize(420,controls_->sizeHint().height()+margins.top()+margins.bottom()+height()-centralWidget()->height());}
 }
 void PlayerWindow::setMinimalMode(bool enabled){
     if(imageMode_ || (discMenu_ && discMenu_->active()) || minimalMode_==enabled)return;

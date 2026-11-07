@@ -89,6 +89,8 @@ private slots:
         QVERIFY(plan.ffmpegArguments.contains(QStringLiteral("1:v:0?")));
         QVERIFY(plan.ffmpegArguments.contains(QStringLiteral("0:a:0?")));
         QVERIFY(plan.ffmpegArguments.contains(QStringLiteral("av1_nvenc")));
+        const auto extra=ExportPipeline::buildPlan(command+QStringLiteral(" -metadata comment=C:\\_keep"),source,output,script,directory.path());
+        QVERIFY(extra.error.isEmpty());QVERIFY(extra.ffmpegArguments.contains(QStringLiteral("comment=C:\\_keep")));
         QVERIFY(plan.ffmpegArguments.contains(QDir::toNativeSeparators(source)));
         QVERIFY(plan.ffmpegArguments.contains(QDir::toNativeSeparators(output)));
         const int pipeInput = plan.ffmpegArguments.indexOf(QStringLiteral("yuv4mpegpipe"));

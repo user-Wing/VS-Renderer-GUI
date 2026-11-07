@@ -26,11 +26,14 @@ namespace vsr {
 void MainWindow::updateRouteChoices(){
     const QSignalBlocker blocker(routeChoice_);routeChoice_->clear();for(int i=0;i<routes_.size();++i)routeChoice_->addItem(QString("路 %1 · %2").arg(i+1).arg(routes_[i].visible?QStringLiteral("显示"):QStringLiteral("隐藏")));routeChoice_->setCurrentIndex(routeIndex_);addRouteButton_->setEnabled(routes_.size()<3);removeRouteButton_->setEnabled(routes_.size()>1);
 }
+void MainWindow::createAdditionalRoute(){
+    auto *pane=compareView_->addProcessedPane();additionalRoutes_.push_back(std::make_unique<RenderRoute>(api_,pane,this));auto *changedRoute=additionalRoutes_.back().get();connect(pane,&PreviewPane::viewChanged,this,[this,changedRoute](float zoom,float x,float y){if(!syncView_->isChecked())return;sourcePane_->adoptView(zoom,x,y);sourcePlayer_->setView(zoom,x,y);processedPane_->adoptView(zoom,x,y);processedPlayer_->setView(zoom,x,y);for(auto &route:additionalRoutes_)if(route.get()!=changedRoute)route->setView(zoom,x,y);});
+    if(syncView_->isChecked())additionalRoutes_.back()->setView(sourcePane_->zoom(),sourcePane_->pan().x(),sourcePane_->pan().y());
+}
 bool MainWindow::addRoute(){
     if(routes_.size()>=3)return false;
     routes_[routeIndex_].groups=currentTimeGroups();routes_[routeIndex_].preset=activePreset_;
-    routes_.append(RouteState{});auto *pane=compareView_->addProcessedPane();additionalRoutes_.push_back(std::make_unique<RenderRoute>(api_,pane,this));auto *changedRoute=additionalRoutes_.back().get();connect(pane,&PreviewPane::viewChanged,this,[this,changedRoute](float zoom,float x,float y){if(!syncView_->isChecked())return;sourcePane_->adoptView(zoom,x,y);sourcePlayer_->setView(zoom,x,y);processedPane_->adoptView(zoom,x,y);processedPlayer_->setView(zoom,x,y);for(auto &route:additionalRoutes_)if(route.get()!=changedRoute)route->setView(zoom,x,y);});
-    if(syncView_->isChecked())additionalRoutes_.back()->setView(sourcePane_->zoom(),sourcePane_->pan().x(),sourcePane_->pan().y());
+    routes_.append(RouteState{});createAdditionalRoute();
     additionalRoutes_.back()->reset(sourcePath_->text().isEmpty()?QStringLiteral("等待视频"):QStringLiteral("源已打开\n点击“渲染预览”生成右侧画面"));
     selectRoute(routes_.size()-1);return true;
 }
@@ -49,14 +52,14 @@ void MainWindow::removeRoute(){
 }
 void MainWindow::renderAdditionalRoute(int index){
     if(index<1 || index>=routes_.size() || sourcePath_->text().isEmpty())return;
-    auto result=currentScript();QString shader;QVariantMap parameters;auto groups=currentTimeGroups();
+    auto result=currentScript();const auto fallback=result.script;QString shader;QVariantMap parameters;auto groups=currentTimeGroups();
     bool compatible=activePreset_.isEmpty() && groups.size()==1 && groups.first().script.isEmpty();
     if(!activePreset_.isEmpty()){QFile file(activePreset_);FilterGraph graph;SourceFilter filter=SourceFilter::Ffms2;compatible=file.open(QIODevice::ReadOnly) && PresetStore::verifiedGraph(QString::fromUtf8(file.readAll()),&graph,&filter);if(compatible)groups={{QStringLiteral("全片"),0,graph}};}
     if(compatible){const auto plan=hlslPreviewPlan(groups.first().graph);if(!plan.shaderPath.isEmpty() && !sourcePlayer_->snapshot().isHdrSource){const auto package=ShaderPackage::prepare(plan.shaderPath);if(!package.packagePath.isEmpty()){shader=package.packagePath;parameters=plan.parameters;groups.first().graph=plan.graph;result=VpyScriptBuilder::buildGroups(sourcePath_->text(),static_cast<SourceFilter>(sourceFilter_->currentData().toInt()),groups);}}}
     if(!result.errors.isEmpty()){setStatus(result.errors.join('\n'),true);return;}
     const auto directory=QStandardPaths::writableLocation(QStandardPaths::CacheLocation);QDir().mkpath(directory);
     const auto path=QDir(directory).filePath(QString("preview-route-%1.vpy").arg(index+1));QSaveFile file(path);if(!file.open(QIODevice::WriteOnly) || file.write(result.script.toUtf8())<0 || !file.commit()){setStatus(QStringLiteral("该路脚本写入失败。"),true);return;}
-    additionalRoutes_[index-1]->load(result.script,path,shader,parameters);additionalRoutes_[index-1]->setVisible(routes_[index].visible);
+    additionalRoutes_[index-1]->load(result.script,path,shader,parameters,fallback);additionalRoutes_[index-1]->setVisible(routes_[index].visible);
 }
 void MainWindow::scanWorkingFolder(const QString &input){
     const auto folder=input.isEmpty()?QFileDialog::getExistingDirectory(this,QStringLiteral("打开工作文件夹")):input;if(folder.isEmpty())return;

@@ -9,12 +9,32 @@
 #include <QPointer>
 #include <QTimer>
 #include <QRegularExpression>
+#include <QHostInfo>
+#include <QUuid>
 
 namespace vsr {
+bool PlayerNetworkInput::allowedTarget(const QUrl &target,const QUrl &original){
+    if(!target.isValid() || (target.scheme()!="http" && target.scheme()!="https") || target.host().isEmpty())return false;
+    if(!target.userInfo().isEmpty() && (target.host().compare(original.host(),Qt::CaseInsensitive)!=0 || target.userInfo()!=original.userInfo()))return false;
+    if(original.scheme()=="https" && target.scheme()!="https")return false;
+    // A LAN server entered explicitly remains supported, but cannot redirect to another private authority.
+    if(target.host().compare(original.host(),Qt::CaseInsensitive)==0 && target.port(target.scheme()=="https"?443:80)==original.port(original.scheme()=="https"?443:80))return true;
+    QList<QHostAddress> addresses;QHostAddress literal;
+    if(literal.setAddress(target.host()))addresses.append(literal);else addresses=QHostInfo::fromName(target.host()).addresses();
+    if(addresses.isEmpty())return false;
+    for(const auto &address:addresses){bool ipv4=false;const auto v4=address.toIPv4Address(&ipv4);const auto canonical=ipv4?QHostAddress(v4):address;
+        if(canonical.isNull() || canonical.isLoopback() || canonical.isLinkLocal() || canonical.isMulticast())return false;
+        for(const auto &subnet:{"0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16","172.16.0.0/12","192.168.0.0/16","240.0.0.0/4","::/128","fc00::/7","fe80::/10"})if(canonical.isInSubnet(QHostAddress::parseSubnet(subnet)))return false;
+    }
+    return true;
+}
 namespace {
+void checkRedirects(QNetworkReply *reply,const QUrl &original){
+    QObject::connect(reply,&QNetworkReply::redirected,reply,[reply,original](const QUrl &url){if(PlayerNetworkInput::allowedTarget(reply->url().resolved(url),original))reply->redirectAllowed();else reply->abort();});
+}
 QNetworkRequest request(const QUrl &url) {
     QNetworkRequest result(url);
-    result.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    result.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::UserVerifiedRedirectPolicy);
     result.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     result.setTransferTimeout(15000);
     result.setRawHeader("User-Agent", "VS-Player/" VSR_VERSION);
@@ -23,8 +43,8 @@ QNetworkRequest request(const QUrl &url) {
 }
 class RangeConnection final : public QObject {
 public:
-    RangeConnection(QTcpSocket *socket, const QUrl &url, const QByteArray &path, qint64 size, QObject *parent)
-        : QObject(parent), socket_(socket), manager_(new QNetworkAccessManager(this)), url_(url), path_(path), size_(size) {
+    RangeConnection(QTcpSocket *socket, const QUrl &url, const QUrl &original, const QByteArray &path, qint64 size, QObject *parent)
+        : QObject(parent), socket_(socket), manager_(new QNetworkAccessManager(this)), url_(url), original_(original), path_(path), size_(size) {
         socket->setParent(this);
         connect(socket, &QTcpSocket::disconnected, this, &QObject::deleteLater);
         connect(socket, &QTcpSocket::readyRead, this, [this] { readRequest(); });
@@ -45,9 +65,11 @@ private:
             socket_->write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
             socket_->disconnectFromHost(); return;
         }
+        if(size_<=0 || !PlayerNetworkInput::allowedTarget(url_,original_)){socket_->disconnectFromHost();return;}
         auto upstream = request(url_);
         for (const auto &line : lines) if (line.toLower().startsWith("range:")) upstream.setRawHeader("Range", line.mid(6).trimmed());
         reply_ = first[0] == "HEAD" ? manager_->head(upstream) : manager_->get(upstream);
+        checkRedirects(reply_,original_);
         reply_->setParent(this); reply_->setReadBufferSize(256 * 1024);
         connect(reply_, &QNetworkReply::metaDataChanged, this, [this] { sendHeader(); });
         connect(reply_, &QNetworkReply::readyRead, this, [this] { sendHeader(); pump(); });
@@ -65,7 +87,7 @@ private:
             if(length>0)header+="Content-Length: "+QByteArray::number(length)+"\r\n";
         }
         for (const auto &name : {"Content-Length", "Content-Range", "Content-Type", "Accept-Ranges"}) {
-            const auto value = reply_->rawHeader(name); if (!value.isEmpty()) header += QByteArray(name) + ": " + value + "\r\n";
+            const auto value = reply_->rawHeader(name); if(value.contains('\r') || value.contains('\n')){reply_->abort();socket_->disconnectFromHost();return;} if (!value.isEmpty()) header += QByteArray(name) + ": " + value + "\r\n";
         }
         socket_->write(header + "\r\n"); sent_ = true;
     }
@@ -78,7 +100,7 @@ private:
     QTcpSocket *socket_;
     QNetworkAccessManager *manager_;
     QNetworkReply *reply_ = nullptr;
-    QUrl url_;
+    QUrl url_, original_;
     QByteArray path_, header_;
     bool sent_ = false;
     qint64 size_ = 0;
@@ -102,8 +124,9 @@ signals:
 private:
     void probe(const QUrl &url, bool resolved) {
         const auto generation = generation_;
+        if(!PlayerNetworkInput::allowedTarget(url,original_)){emit errorOccurred(generation,tr("拒绝访问非用户指定的本机或私有网络目标。"));return;}
         auto query = request(url); query.setRawHeader("Range", "bytes=0-0");
-        auto *reply = manager_->get(query); resolver_ = reply; reply->setReadBufferSize(4096);
+        auto *reply = manager_->get(query); checkRedirects(reply,original_); resolver_ = reply; reply->setReadBufferSize(4096);
         connect(reply, &QNetworkReply::metaDataChanged, this, [this, reply, generation, resolved] {
             if (generation != generation_ || resolver_ != reply) return;
             const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -135,7 +158,7 @@ private:
         QString path = original_.path(QUrl::FullyDecoded); if (path.startsWith("/d/")) path.remove(0, 2);
         auto query = request(api); query.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         auto *reply = manager_->post(query, QJsonDocument(QJsonObject{{"path", path}, {"password", ""}}).toJson(QJsonDocument::Compact));
-        resolver_ = reply; reply->setReadBufferSize(1024 * 1024); const auto generation = generation_;
+        checkRedirects(reply,original_);resolver_ = reply; reply->setReadBufferSize(1024 * 1024); const auto generation = generation_;
         connect(reply, &QNetworkReply::finished, this, [this, reply, generation] {
             if (generation != generation_ || resolver_ != reply) return;
             resolver_ = nullptr; const auto json = QJsonDocument::fromJson(reply->readAll()).object(); reply->deleteLater();
@@ -147,11 +170,12 @@ private:
         });
     }
     void startProxy(const QUrl &url, quint64 generation, qint64 size) {
+        if(size<=0){emit errorOccurred(generation,tr("网络视频未提供有效长度，无法创建 Range 代理。"));return;}
         server_ = new QTcpServer(this);
         if (!server_->listen(QHostAddress::LocalHost, 0)) { emit errorOccurred(generation, server_->errorString()); return; }
-        const auto path = "/" + QByteArray::number(generation) + "/video.mkv";
+        const auto path = "/" + QUuid::createUuid().toByteArray(QUuid::WithoutBraces) + "/video.mkv";
         connect(server_, &QTcpServer::newConnection, server_, [this, url, path, size] {
-            while (server_->hasPendingConnections()) new RangeConnection(server_->nextPendingConnection(), url, path, size, server_);
+            while (server_->hasPendingConnections()) new RangeConnection(server_->nextPendingConnection(), url, original_, path, size, server_);
         });
         emit ready(generation, QString("http://127.0.0.1:%1%2").arg(server_->serverPort()).arg(QString::fromLatin1(path)));
     }

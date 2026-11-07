@@ -3,6 +3,7 @@
 #include "graph/FilterCatalog.h"
 
 #include <QUuid>
+#include <cmath>
 
 namespace vsr {
 
@@ -59,7 +60,12 @@ bool FilterGraph::setParameter(int index, const QString &parameterId, const QVar
         return false;
     for (const auto &parameter : definition->parameters) {
         if (parameter.id == parameterId) {
-            node->parameters.insert(parameterId, value);
+            QVariant checked=value;
+            if(parameter.type==ParameterType::Choice){checked=value.toString();if(node->definitionId=="anime4k" && parameterId=="category" && checked.toString()=="自定义 GLSL/HLSL")checked=QStringLiteral("自定义 GLSL");if(!parameter.choices.contains(checked.toString()))return false;}
+            else if(parameter.type==ParameterType::Integer || parameter.type==ParameterType::Real){bool ok=false;const double number=value.toDouble(&ok);if(!ok || !std::isfinite(number) || number<parameter.minimum || number>parameter.maximum || (parameter.type==ParameterType::Integer && std::trunc(number)!=number))return false;checked=parameter.type==ParameterType::Integer?QVariant(int(number)):QVariant(number);}
+            else if(parameter.type==ParameterType::Boolean){if(value.metaType().id()!=QMetaType::Bool)return false;}
+            else if(parameter.type==ParameterType::File){if(value.metaType().id()!=QMetaType::QString || value.toString().contains(QChar(0)))return false;}
+            node->parameters.insert(parameterId, checked);
             return true;
         }
     }

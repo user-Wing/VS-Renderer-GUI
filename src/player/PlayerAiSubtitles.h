@@ -11,8 +11,9 @@ class PlayerAiSubtitles final : public QObject {
 public:
     explicit PlayerAiSubtitles(QObject *parent=nullptr);
     ~PlayerAiSubtitles() override;
+    static bool validMessage(const QJsonObject &data);
     static QString validatePackage(const QString &path,QJsonObject *resolved=nullptr);
-    QString start(ThreeFpPlayer *player,const QString &package);
+    QString start(ThreeFpPlayer *player,const QString &package,const QString &approvedFingerprint={});
     void stop();
     bool active() const {return timer_.isActive();}
 signals:

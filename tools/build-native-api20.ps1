@@ -24,6 +24,17 @@ if(!$applied){
     & git -C $NativeRoot apply $patch
     if($LASTEXITCODE -ne 0){throw 'VSP 1.1.0 patch failed.'}
 }
+$networkPatch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches/3fp-vsp-1.1.0-network-proxy.patch'
+$ErrorActionPreference='Continue'
+& git -C $NativeRoot apply --reverse --check $networkPatch 2>$null
+$networkApplied=$LASTEXITCODE -eq 0
+$ErrorActionPreference='Stop'
+if(!$networkApplied){
+    & git -C $NativeRoot apply --check $networkPatch
+    if($LASTEXITCODE -ne 0){throw 'Loopback proxy patch conflicts with the native checkout.'}
+    & git -C $NativeRoot apply $networkPatch
+    if($LASTEXITCODE -ne 0){throw 'Loopback proxy patch failed.'}
+}
 $projectRoot=Split-Path $PSScriptRoot -Parent
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/SourcePixelProbe.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/SourcePixelProbe.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/color/ColorBridge.h'), (Join-Path $projectRoot 'src/color/NativeColorEngine.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Render') -Force

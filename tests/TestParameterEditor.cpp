@@ -56,8 +56,8 @@ private slots:
         auto definition=*FilterCatalog::find("anime4k");
         const QString longPath="mpv-shaders/example--repository/a/very/long/folder/NVScaler_a_very_long_shader_filename_which_must_not_expand_the_control.glsl";
         for(auto &p:definition.parameters)if(p.id=="mode")p.choices.append(longPath);
-        FilterGraph graph;const int index=graph.add("anime4k");graph.setParameter(index,"mode",longPath);
-        ParameterEditor editor;editor.resize(243,800);editor.setNode(&definition,graph.at(index));editor.show();QTest::qWait(20);
+        FilterGraph graph;const int index=graph.add("anime4k");auto node=*graph.at(index);node.parameters["mode"]=longPath;
+        ParameterEditor editor;editor.resize(243,800);editor.setNode(&definition,&node);editor.show();QTest::qWait(20);
         auto *mode=editor.findChild<QComboBox *>("parameter_mode");auto *category=editor.findChild<QComboBox *>("parameter_category");
         QCOMPARE(mode->currentData().toString(),longPath);QCOMPARE(mode->width(),120);QVERIFY(mode->toolTip().contains(longPath));QVERIFY(mode->toolTip().contains("非 N 卡独占"));QCOMPARE(mode->view()->maximumWidth(),520);
         const auto *label=editor.findChild<QLabel *>("parameterLabel_mode");QVERIFY(label->geometry().right()<mode->geometry().left());QVERIFY(label->width()>=label->fontMetrics().horizontalAdvance(label->text()));QVERIFY(label->height()>=label->fontMetrics().height());

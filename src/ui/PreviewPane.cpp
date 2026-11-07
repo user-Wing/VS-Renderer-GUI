@@ -36,7 +36,7 @@ public:
         setAttribute(Qt::WA_PaintOnScreen);
         setAttribute(Qt::WA_NoSystemBackground);
     }
-    ~NativeVideoSurface() override {for(auto *thread:builders){thread->requestInterruption();thread->wait();delete thread;}}
+    ~NativeVideoSurface() override {for(auto *thread:builders){thread->disconnect(this);thread->requestInterruption();}}
     void buildLevels() {
         levels.clear();const auto generation=++imageGeneration;
         for(auto *thread:builders)thread->requestInterruption();
@@ -54,7 +54,8 @@ public:
                 if(level.isNull())return;used+=level.sizeInBytes();result->append(level);
             }
         });builders.append(thread);
-        connect(thread,&QThread::finished,this,[this,thread,result,generation]{builders.removeOne(thread);if(generation==imageGeneration){levels=*result;update();}thread->deleteLater();});thread->start();
+        connect(thread,&QThread::finished,thread,&QObject::deleteLater);
+        connect(thread,&QThread::finished,this,[this,thread,result,generation]{builders.removeOne(thread);if(generation==imageGeneration){levels=*result;update();}});thread->start();
     }
     QPaintEngine *paintEngine() const override { return image.isNull() ? nullptr : QWidget::paintEngine(); }
 protected:

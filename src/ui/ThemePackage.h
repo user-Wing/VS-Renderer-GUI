@@ -33,13 +33,15 @@ inline bool importPack(const QString &input,const QString &configuration,QString
         for(const auto &line:listing.split('\n')){
             const auto text=line.trimmed();
             if(text.startsWith("Path = ") && (!safeName(text.mid(7)) || ++files>512)){error=QObject::tr("主题包路径无效或文件过多");return false;}
-            if(text.startsWith("Size = "))bytes+=text.mid(7).toLongLong();
+            if(text.startsWith("Size = ")){bool ok=false;const auto size=text.mid(7).toLongLong(&ok);if(!ok || size<0 || size>256*1024*1024-bytes){error=QObject::tr("主题包解压总量超过 256 MiB 或尺寸无效");return false;}bytes+=size;}
             if(text.startsWith("Symbolic Link =") || text.startsWith("Hard Link =")){error=QObject::tr("主题包不能包含链接");return false;}
         }
         if(files==0 || bytes>256*1024*1024){error=QObject::tr("主题包为空或超过 256 MiB");return false;}
         if(!archive({"x","-y","-o"+temporary.path(),input},{},output,error))return false;
         directory=temporary.path();
     }
+    qint64 total=0;int count=0;QDirIterator inventory(directory,QDir::Files|QDir::Dirs|QDir::NoDotAndDotDot,QDirIterator::Subdirectories);
+    while(inventory.hasNext()){inventory.next();const auto info=inventory.fileInfo();if(info.isSymLink() || info.isJunction()){error=QObject::tr("主题目录不能包含链接");return false;}if(info.isFile() && (++count>512 || info.size()>256*1024*1024-total)){error=QObject::tr("主题目录超过文件数或 256 MiB 总量限制");return false;}if(info.isFile())total+=info.size();}
     const auto ini=locate(directory);if(ini.isEmpty()){error=QObject::tr("主题包必须包含唯一的 skin.ini");return false;}
     QSettings source(ini,QSettings::IniFormat);QMap<QString,QVariant> values;
     QMap<QString,QString> images;QCryptographicHash hash(QCryptographicHash::Sha256);

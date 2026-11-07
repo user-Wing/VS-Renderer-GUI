@@ -1,0 +1,128 @@
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -42,6 +42,16 @@
+ #include <chrono>
+ 
+ namespace {
++// All remote inputs must pass through the GUI's checked loopback Range proxy.
++bool IsLoopbackProxy(const std::string_view path) noexcept {
++    constexpr std::string_view prefix="http://127.0.0.1:";
++    if(path.rfind(prefix,0)!=0 || path.find_first_of("\r\n")!=std::string_view::npos)return false;
++    const auto slash=path.find('/',prefix.size());
++    if(slash==std::string_view::npos || slash==prefix.size())return false;
++    unsigned port=0;
++    for(auto i=prefix.size();i<slash;++i){if(path[i]<'0' || path[i]>'9')return false;port=port*10+unsigned(path[i]-'0');if(port>65535)return false;}
++    return port>0;
++}
+ using PlayerMediaText::FfmpegError;
+ using PlayerMediaText::AppendDictionaryJson;
+ using PlayerMediaText::EscapeJson;
+@@ -3446,8 +3456,14 @@
+ FFFResult PlayerSession::OpenFormat(const std::string& path, AVFormatContext** output,
+     std::unique_ptr<SharedFileInput>& io, std::string& error) noexcept {
+     AVDictionary* options = nullptr;
+-    av_dict_set(&options, "protocol_whitelist", "file,crypto,data", 0);
+-    av_dict_set(&options, "protocol_blacklist", "http,https,tcp,tls,udp,rtp,rtsp,srt,rist,ftp,ssh", 0);
++    const bool remote=IsLoopbackProxy(path);
++    av_dict_set(&options,"protocol_whitelist",remote?"http,tcp":"file,crypto,data",0);
++    if(!remote)av_dict_set(&options,"protocol_blacklist","http,https,tcp,tls,udp,rtp,rtsp,srt,rist,ftp,ssh",0);
++    else {
++        av_dict_set(&options,"rw_timeout","10000000",0);
++        // Reject playlist/virtual demuxers before they can open nested URLs.
++        av_dict_set(&options,"format_whitelist","mov,matroska,webm,mpegts,mpeg,avi,asf,flv,ogg,wav,flac,mp3,aac,ac3,eac3,dts,h264,hevc,av1,ivf",0);
++    }
+     // A layered ("progressive") AVIF stores its primary item as several extents,
+     // and the mov demuxer refuses those before any decoder runs. Repairing the box
+     // means editing the bytes, so such a file is read and repaired here and handed
+@@ -3455,12 +3471,12 @@
+     // The gate is a container name check so nothing else pays for the read.
+     std::vector<std::uint8_t> repairedBytes;
+     std::string repairDetail;
+-    const bool repaired = IsStillImageContainerName(path) &&
++    const bool repaired = !remote && IsStillImageContainerName(path) &&
+         AvifIlocShim::ReadAndRepair(path.c_str(), MaxRepairedStillImageBytes,
+             repairedBytes, repairDetail);
+-    io = repaired ? SharedFileInput::OpenMemory(repairedBytes.data(), repairedBytes.size(), error)
++    io = remote ? nullptr : repaired ? SharedFileInput::OpenMemory(repairedBytes.data(), repairedBytes.size(), error)
+                   : SharedFileInput::Open(path.c_str(), error);
+-    if (io == nullptr) {
++    if (!remote && io == nullptr) {
+         av_dict_free(&options);
+         return FFFResult::NativeFailure;
+     }
+@@ -3471,16 +3487,16 @@
+         error = "Could not allocate the FFmpeg input context.";
+         return FFFResult::NativeFailure;
+     }
+-    context->pb = io->Context();
++    if(io)context->pb = io->Context();
+     context->interrupt_callback.callback = [](void* opaque) {
+         const auto* session = static_cast<PlayerSession*>(opaque);
+         const auto deadline = session->inputDeadlineTick_.load();
+         return session->terminate_.load() || (deadline && GetTickCount64() >= deadline) ? 1 : 0;
+     };
+     context->interrupt_callback.opaque = this;
+-    io->SetInterrupt(context->interrupt_callback);
++    if(io)io->SetInterrupt(context->interrupt_callback);
+     const auto incompleteName = IsIncompleteDownloadName(path);
+-    context->flags |= AVFMT_FLAG_CUSTOM_IO;
++    if(io)context->flags |= AVFMT_FLAG_CUSTOM_IO;
+     *output = context;
+     auto result = avformat_open_input(output, path.c_str(), nullptr, &options);
+     av_dict_free(&options);
+@@ -3500,7 +3516,7 @@
+         demuxerName.find("dash") != std::string_view::npos) {
+         CloseFormat(output, io); error = "Network and virtual-device demuxers are disabled."; return FFFResult::NotSupported;
+     }
+-    if (demuxerName.find("matroska") != std::string_view::npos &&
++    if (io && demuxerName.find("matroska") != std::string_view::npos &&
+         (incompleteName || io->HasWriter())) io->DetectUnwrittenData(true);
+     // Set image-loop options before the first packet on every OpenFormat path.
+     if (!ApplyLoopingOptions(*output, demuxerName)) {
+@@ -3529,16 +3545,22 @@
+     // input for layered AVIF and every demuxer gate -- so the "same file" it
+     // measured was not always the file the session plays.
+     AVDictionary* options = nullptr;
+-    av_dict_set(&options, "protocol_whitelist", "file,crypto,data", 0);
+-    av_dict_set(&options, "protocol_blacklist", "http,https,tcp,tls,udp,rtp,rtsp,srt,rist,ftp,ssh", 0);
++    const bool remote=IsLoopbackProxy(path);
++    av_dict_set(&options,"protocol_whitelist",remote?"http,tcp":"file,crypto,data",0);
++    if(!remote)av_dict_set(&options,"protocol_blacklist","http,https,tcp,tls,udp,rtp,rtsp,srt,rist,ftp,ssh",0);
++    else {
++        av_dict_set(&options,"rw_timeout","10000000",0);
++        // Reject playlist/virtual demuxers before they can open nested URLs.
++        av_dict_set(&options,"format_whitelist","mov,matroska,webm,mpegts,mpeg,avi,asf,flv,ogg,wav,flac,mp3,aac,ac3,eac3,dts,h264,hevc,av1,ivf",0);
++    }
+     std::vector<std::uint8_t> repairedBytes;
+     std::string repairDetail;
+-    const bool repaired = IsStillImageContainerName(path) &&
++    const bool repaired = !remote && IsStillImageContainerName(path) &&
+         AvifIlocShim::ReadAndRepair(path.c_str(), MaxRepairedStillImageBytes,
+             repairedBytes, repairDetail);
+-    io = repaired ? SharedFileInput::OpenMemory(repairedBytes.data(), repairedBytes.size(), error)
++    io = remote ? nullptr : repaired ? SharedFileInput::OpenMemory(repairedBytes.data(), repairedBytes.size(), error)
+                   : SharedFileInput::Open(path.c_str(), error);
+-    if (io == nullptr) {
++    if (!remote && io == nullptr) {
+         av_dict_free(&options);
+         return FFFResult::NativeFailure;
+     }
+@@ -3549,8 +3571,8 @@
+         error = "Could not allocate the trial demuxer context.";
+         return FFFResult::NativeFailure;
+     }
+-    context->pb = io->Context();
+-    context->flags |= AVFMT_FLAG_CUSTOM_IO;
++    if(io)context->pb = io->Context();
++    if(io)context->flags |= AVFMT_FLAG_CUSTOM_IO;
+     // The read itself is a synchronous file read and cannot be cut short, but
+     // avformat's own probing loops do consult this, and the packet loop below
+     // checks the same flag, so the non-cancellable window shrinks to one read.
+@@ -8742,6 +8764,7 @@
+ 
+ bool PlayerSession::NormalizeLocalPath(const char* path, std::string& normalized, std::string& error) noexcept {
+     try {
++        if(path && IsLoopbackProxy(path)){normalized=path;return true;}
+         auto wide = FromUtf8(path); if (wide.empty()) { error = "A non-empty UTF-8 local path is required."; return false; }
+         if (wide.rfind(L"\\\\", 0) == 0 || wide.rfind(L"//", 0) == 0 || wide.find(L"://") != std::wstring::npos ||
+             wide.rfind(L"\\\\.\\", 0) == 0 || wide.rfind(L"\\\\?\\GLOBALROOT", 0) == 0) { error = "Network, device and pipe paths are disabled."; return false; }

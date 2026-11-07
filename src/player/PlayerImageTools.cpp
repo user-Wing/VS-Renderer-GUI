@@ -220,6 +220,9 @@ QString PlayerImageTools::writeOutput(const ImageOutput &o) {
     }
 #ifdef VSR_LITE_PLAYER
     const auto resultPath=temporary.filePath("result."+extension(o.format));
+    // Lite exports SDR: convert tagged samples before discarding the QImage container.
+    if(image.colorSpace().isValid())image=image.convertedToColorSpace(QColorSpace::SRgb);
+    if(image.isNull())return tr("无法转换图片颜色空间。");
     QProcess ff;const auto floatImage=image.convertToFormat(QImage::Format_RGBA32FPx4);
     QStringList args{"-v","error","-f","rawvideo","-pixel_format","gbrapf32le","-video_size",QString("%1x%2").arg(image.width()).arg(image.height()),"-i","pipe:0","-frames:v","1"};
     if(o.format=="avif")args<<"-c:v"<<"libaom-av1"<<"-still-picture"<<"1"<<"-crf"<<QString::number((100-o.quality)*63/100)<<"-cpu-used"<<QString::number(std::clamp(o.speed,0,8))<<"-pix_fmt"<<(QString("yuv%1p").arg(o.chroma=="auto"?"420":o.chroma)+(outputBitDepth(o)>8?QString::number(outputBitDepth(o))+"le":QString()));
@@ -231,7 +234,7 @@ QString PlayerImageTools::writeOutput(const ImageOutput &o) {
         const auto flags=o.resizeAlgorithm=="nearest"?QString("neighbor"):o.resizeAlgorithm=="bilinear"?QString("bilinear"):QString("lanczos");
         args<<"-vf"<<QString("scale=%1:%2:flags=%3:param0=%4").arg(o.size.width()).arg(o.size.height()).arg(flags).arg(o.resizeAlgorithm=="lanczos4"?4:3);
     }
-    args<<"-y"<<resultPath;const auto bundled=QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe");ff.start(QFileInfo::exists(bundled)?bundled:QString("ffmpeg.exe"),args);if(!ff.waitForStarted())return ff.errorString();
+    args<<"-color_primaries"<<"bt709"<<"-color_trc"<<"iec61966-2-1"<<"-y"<<resultPath;const auto bundled=QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe");ff.start(QFileInfo::exists(bundled)?bundled:QString("ffmpeg.exe"),args);if(!ff.waitForStarted())return ff.errorString();
     QByteArray row(image.width()*4,Qt::Uninitialized);
     for(int component:{1,2,0,3})for(int y=0;y<image.height();++y){auto *line=reinterpret_cast<float*>(row.data());const auto *pixels=reinterpret_cast<const float*>(floatImage.constScanLine(y));for(int x=0;x<image.width();++x)line[x]=pixels[x*4+component];ff.write(row);while(ff.bytesToWrite()>4*1024*1024){if(QThread::currentThread()->isInterruptionRequested()){ff.kill();ff.waitForFinished();return tr("已取消输出。");}if(!ff.waitForBytesWritten(1000) && ff.state()==QProcess::NotRunning)return QString::fromUtf8(ff.readAllStandardError());}}
     ff.closeWriteChannel();while(!ff.waitForFinished(100)){if(QThread::currentThread()->isInterruptionRequested()){ff.kill();ff.waitForFinished();return tr("已取消输出。");}}

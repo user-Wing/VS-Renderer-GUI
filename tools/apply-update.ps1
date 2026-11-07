@@ -72,9 +72,15 @@ try {
         # New built-ins replace old built-ins. The complete old directory remains in the backup.
         Get-ChildItem -LiteralPath $oldPresets -Force | Where-Object { $_.Name -ne 'builtin' } | Copy-Item -Destination $newPresets -Recurse -Force
     }
-    foreach ($name in @('screenshots','projects','presets','PhotoCraftData','data')) {
+    foreach ($name in @('screenshots','projects','presets','PhotoCraftData','data','themes')) {
         $userPath = Join-Path $targetRoot $name
         if (Test-Path -LiteralPath $userPath) { Copy-Item -LiteralPath $userPath -Destination $incoming -Recurse -Force }
+    }
+    $customShaders = Join-Path $targetRoot 'shaders/custom'
+    if (Test-Path -LiteralPath $customShaders) {
+        $shaderParent = Join-Path $incoming 'shaders'
+        New-Item -ItemType Directory -Path $shaderParent -Force | Out-Null
+        Copy-Item -LiteralPath $customShaders -Destination $shaderParent -Recurse -Force
     }
     Get-ChildItem -LiteralPath $targetRoot -Recurse -File | Where-Object { $_.Extension -in '.icc','.icm','.cube' -or $_.Name -eq 'settings.bin' -or $_.Name -like '*.vsr.json' } | ForEach-Object {
         $destination = Join-Path $incoming $_.FullName.Substring($targetRoot.Length + 1)

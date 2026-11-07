@@ -24,6 +24,8 @@ QString applicationStyleSheet(bool dark)
         QListWidget, QTreeWidget, QPlainTextEdit, QScrollArea { background: #ffffff; border: 1px solid #d1d1d1; }
         QListWidget::item { min-height: 32px; padding: 1px 6px; }
         QListWidget::item:selected { color: #111111; background: #d9ebf7; border-left: 3px solid #0067c0; }
+        QTreeWidget#encodingQueue QHeaderView::section { background: #eeeeee; color: #1b1b1b; border: 0; border-right: 1px solid #d1d1d1; border-bottom: 1px solid #d1d1d1; padding: 6px 8px; }
+        QTreeWidget#encodingQueue::item:selected { color: #111111; background: #d9ebf7; }
         QSplitter::handle { background: #d1d1d1; }
         QSlider::groove:horizontal { height: 4px; background: #c6c6c6; border-radius: 2px; }
         QSlider::sub-page:horizontal { background: #0067c0; border-radius: 2px; }

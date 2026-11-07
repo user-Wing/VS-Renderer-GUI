@@ -896,14 +896,14 @@ int main(int argc,char **argv) {
     if(startupArgument>=0)return cap::runStartupTaskCommand(app.arguments().value(startupArgument+1)=="enable",app.arguments().value(startupArgument+2));
     const int waitArgument=app.arguments().indexOf("--wait-parent");
     if(waitArgument>=0){const auto parent=OpenProcess(SYNCHRONIZE,FALSE,app.arguments().value(waitArgument+1).toULong());if(parent){WaitForSingleObject(parent,10000);CloseHandle(parent);}}
-    if(const auto running=OpenMutexW(SYNCHRONIZE,FALSE,L"Local\\VSRenderer-VSCap")){CloseHandle(running);return 0;}
     QSettings preferences(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);
     if((preferences.value("general/uiAccess",false).toBool() || app.arguments().contains("--uiaccess-launch")) && !cap::hasUiAccess()){
         QString error;if(cap::restartWithUiAccess(&error))return 0;
         QMessageBox::warning(nullptr,"VS Cap",QStringLiteral("UIAccess 启动失败，继续使用普通置顶。\n")+error);
     }
     HANDLE instance=CreateMutexW(nullptr,FALSE,L"Local\\VSRenderer-VSCap");
-    if(GetLastError()==ERROR_ALREADY_EXISTS){if(instance)CloseHandle(instance);return 0;}
+    if(!instance){QMessageBox::warning(nullptr,"VS Cap",QStringLiteral("无法建立单实例锁。"));return 1;}
+    if(GetLastError()==ERROR_ALREADY_EXISTS){CloseHandle(instance);return 0;}
     CapApp controller;
     const int result=app.exec();if(instance)CloseHandle(instance);return result;
 }

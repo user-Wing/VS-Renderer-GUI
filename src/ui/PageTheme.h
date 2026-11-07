@@ -53,7 +53,7 @@ public:
         const auto name=settings.value("image").toString();image_={};if(!name.isEmpty()){QImageReader reader(QDir(QFileInfo(path).absolutePath()).absoluteFilePath(name));const auto size=reader.size();if(size.width()>4096 || size.height()>4096)reader.setScaledSize(size.scaled(4096,4096,Qt::KeepAspectRatio));image_=reader.read();}
         transparency_=std::clamp(settings.value("transparency",20).toInt(),0,100);brightness_=std::clamp(settings.value("brightness",80).toInt(),0,180);
         const bool active=!image_.isNull() || color_.isValid();
-        const auto base=originalStyle_.isEmpty() || originalStyle_.contains('{')?originalStyle_:QString("QWidget#%1{%2}").arg(target_->objectName(),originalStyle_);
+        const auto base=originalStyle_.isEmpty() || originalStyle_.contains('{')?originalStyle_:QString("%1{%2}").arg(target_->objectName().isEmpty()?QString("QWidget"):QString("QWidget#%1").arg(target_->objectName()),originalStyle_);
         target_->setStyleSheet(base+(active?QStringLiteral("\nQWidget[pageThemeContainer=\"true\"]{background:transparent;color:#e8eaed;} QAbstractScrollArea[pageThemeContainer=\"true\"]{background:rgba(24,26,32,100);} QAbstractScrollArea[pageThemeContainer=\"true\"] QWidget{background:transparent;}"):QString()));
         setVisible(active);if(active)styleContainers();update();target_->update();
     }

@@ -75,6 +75,7 @@ private:
     void updateParameterInputSize();
     void openSource();
     bool addRoute();
+    void createAdditionalRoute();
     void selectRoute(int index);
     void removeRoute();
     void updateRouteChoices();

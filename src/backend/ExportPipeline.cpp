@@ -86,8 +86,8 @@ ExportPlan ExportPipeline::buildPlan(const QString &command, const QString &sour
 {
     ExportPlan plan;
     QString normalized = command.trimmed();
-    normalized.replace(QStringLiteral("\\_"), QStringLiteral("_"));
     QStringList tokens = QProcess::splitCommand(normalized);
+    for(int i=1;i<tokens.size();++i)if(tokens[i-1]=="-c" || tokens[i-1].startsWith("-c:") || tokens[i-1].startsWith("-codec"))tokens[i].replace(QStringLiteral("\\_"),QStringLiteral("_"));
     if (tokens.size() < 2) {
         plan.error = QStringLiteral("请输入完整 FFmpeg 命令。");
         return plan;
@@ -172,6 +172,7 @@ ExportPlan ExportPipeline::buildPlan(const QString &command, const QString &sour
     tokens.prepend(QStringLiteral("-progress"));
     // End other streams when the VS video pipe reaches EOF, including stop.
     const int destination = tokens.indexOf(QDir::toNativeSeparators(outputPath));
+    if(destination<0){plan.error=QStringLiteral("无法定位输出文件参数。");return plan;}
     tokens.insert(destination, QStringLiteral("-shortest"));
     tokens.insert(destination + 1, QStringLiteral("-f"));
     tokens.insert(destination + 2, QStringLiteral("matroska"));

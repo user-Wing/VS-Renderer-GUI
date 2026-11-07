@@ -299,13 +299,15 @@ if(BUILD_TESTING)
     qt_add_executable(vsr_image_editor_tests tests/TestImageEditor.cpp
         src/player/PhotoCraftEditor.cpp src/player/PhotoCraftEditor.h
         src/player/PlayerImageTools.cpp src/player/PlayerImageTools.h src/player/PlayerImageResample.cpp
-        src/ui/PreviewPane.cpp src/ui/PreviewPane.h assets/image-tools.qrc)
+        src/ui/PreviewPane.cpp src/ui/PreviewPane.h assets/image-tools.qrc
+        src/backend/ThreeFpApi.cpp src/graph/FilterCatalog.cpp)
     target_link_libraries(vsr_image_editor_tests PRIVATE vsr_image_editor Qt6::Test Qt6::Network shell32)
     add_test(NAME image-editor-tools COMMAND vsr_image_editor_tests)
     qt_add_executable(vsr_photocraft_tests tests/TestPhotoCraft.cpp
         src/player/PhotoCraftEditor.cpp src/player/PhotoCraftEditor.h
         src/player/PlayerImageTools.cpp src/player/PlayerImageTools.h src/player/PlayerImageResample.cpp
-        src/ui/PreviewPane.cpp src/ui/PreviewPane.h assets/image-tools.qrc)
+        src/ui/PreviewPane.cpp src/ui/PreviewPane.h assets/image-tools.qrc
+        src/backend/ThreeFpApi.cpp src/graph/FilterCatalog.cpp)
     target_link_libraries(vsr_photocraft_tests PRIVATE vsr_image_decoder vsr_image_core Qt6::Widgets Qt6::Test Qt6::Network shell32)
     add_test(NAME photocraft-native-editor COMMAND vsr_photocraft_tests)
     qt_add_executable(vsr_graph_tests

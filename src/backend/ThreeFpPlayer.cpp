@@ -89,7 +89,7 @@ bool ThreeFpPlayer::setVideoEnhancement(bool hdr,bool enabled){
     (hdr?videoAutoHdr_:videoSuperResolution_)=enabled;
     return !handle_ || api_.setVideoEnhancement(handle_,hdr,enabled)==ThreeFpResult::Success;
 }
-VideoEnhancementStatus ThreeFpPlayer::videoEnhancementStatus(bool hdr) const{return api_.videoEnhancementStatus(handle_,hdr);}
+VideoEnhancementStatus ThreeFpPlayer::videoEnhancementStatus(bool hdr) const{return handle_?api_.videoEnhancementStatus(handle_,hdr):VideoEnhancementStatus{};}
 bool ThreeFpPlayer::setSoftwarePreScale(int height) { if(height!=0 && height!=720 && height!=1080 && height!=2160)return false;softwarePreScaleHeight_=height;return !handle_ || api_.setSoftwarePreScale(handle_,height)==ThreeFpResult::Success; }
 
 bool ThreeFpPlayer::ready() const { return const_cast<ThreeFpPlayer *>(this)->createSession(); }

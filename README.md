@@ -6,7 +6,11 @@ Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS
 
 [下载便携包](https://github.com/user-Wing/VS-Renderer-GUI/releases) · [ModelScope 下载源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) · [操作指南](docs/README.md) · [更新日志](changelog.md)
 
+1.1.0 发版前修复包含便携更新的自定义主题保留、单文件关联、多路同步、极简模式与编码队列主题；发布前验收状态见 [测试台账](development/validation.md)。
+
 单文件播放器内附可编辑的教程与滤镜说明默认配置；首次启动写到程序旁的 `preset-descriptions.json`，保存后即时刷新。
+
+本轮 Full 内置 2026-11-07 FFmpeg shared，最低 CPU 要求为 x86-64-v3（AVX2）；单文件播放器继续使用外置 FFmpeg shared。
 
 源码版本：**1.1.0，本地开发版，未发布**。全量回归仍有未关闭的失败，下载入口中的历史版本不自动包含本轮功能。验收范围见 [版本测试台账](development/validation.md)。
 

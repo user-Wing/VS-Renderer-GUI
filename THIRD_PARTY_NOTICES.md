@@ -87,7 +87,7 @@ The Windows runtime uses the official VapourSynth R81 ABI3 wheel (LGPL-2.1-or-la
 
 ## 1.1.0 本地资源更新
 
-- 3FP 固定 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，MIT；本地汇总补丁见 `patches/3fp-vsp-1.1.0.patch`。
+- 3FP 固定 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，MIT；本地汇总补丁见 `patches/3fp-vsp-1.1.0.patch` 与 `patches/3fp-vsp-1.1.0-network-proxy.patch`。
 - PhotoCraft 0.20.1 固定 `8f7d916ba5ce6d94f2334d47bb23b84ff6cbaff2`，保留上游 MIT/Apache、字体/图标/词典声明及本地集成补丁，不修改模型或导出算法。
 - Qt ImageFormats 6.10.2 TIFF 插件使用对应 Qt 源码与内含 libtiff；完整许可随 `licenses/qtimageformats` 分发，构建入口见 `tools/build-extra-imageformats.ps1`。
 - Qwen3-ASR-0.6B INT8、sherpa-onnx、numpy 与 Python 放在独立 AI-Subtitles ZIP；来源、精确文件哈希及各依赖许可证在包内 `SOURCES.json` / `resource-manifest.json` / `licenses`。

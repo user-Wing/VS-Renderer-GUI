@@ -1,6 +1,7 @@
 #include "render/ShaderPackage.h"
 #include "render/CustomShader.h"
 #include <QTest>
+#include <d3d11shader.h>
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
@@ -26,6 +27,12 @@ float4 main(float2 uv:TEXCOORD0):SV_Target{return image.Sample(sampleState,uv);}
 class TestShaderPackage final : public QObject {
     Q_OBJECT
 private slots:
+    void imageResamplerConstantLayout(){
+        const char source[]="cbuffer C:register(b0){float2 inputSize;float2 outputSize;uint algorithm;float3 padding;};float4 main():SV_Target{return float4(inputSize+outputSize,float(algorithm)+padding.x,padding.y+padding.z);}";
+        Microsoft::WRL::ComPtr<ID3DBlob> code;QVERIFY(SUCCEEDED(D3DCompile(source,sizeof(source),nullptr,nullptr,nullptr,"main","ps_5_0",0,0,&code,nullptr)));
+        Microsoft::WRL::ComPtr<ID3D11ShaderReflection> reflection;QVERIFY(SUCCEEDED(D3DReflect(code->GetBufferPointer(),code->GetBufferSize(),IID_ID3D11ShaderReflection,reinterpret_cast<void**>(reflection.GetAddressOf()))));
+        D3D11_SHADER_BUFFER_DESC description{};QVERIFY(SUCCEEDED(reflection->GetConstantBufferByName("C")->GetDesc(&description)));QCOMPARE(description.Size,32u);
+    }
     void sixteenBindingsReachGpu() {
         QTemporaryDir directory;QByteArray source;
         for(int i=0;i<16;++i)source+="//!HOOK MAIN\n//!BIND HOOKED\n//!SAVE T"+QByteArray::number(i)+"\nvec4 hook(){return vec4("+QByteArray::number((i+1)/32.0)+");}\n";

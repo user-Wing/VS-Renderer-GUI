@@ -10,6 +10,7 @@ class PlayerNetworkInput final : public QObject {
 public:
     explicit PlayerNetworkInput(QObject *parent = nullptr);
     ~PlayerNetworkInput() override;
+    static bool allowedTarget(const QUrl &target,const QUrl &original);
     void open(const QUrl &url);
     void cancel();
 signals:

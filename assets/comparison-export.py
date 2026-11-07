@@ -56,8 +56,8 @@ def render(source, item):
     blank=core.std.BlankClip(source,width=tile_width,height=tile_height,color=[0,0,0])
     if b>a and d>c:
         scale_x,scale_y=source.width/image_w,source.height/image_h
-        kernel={0:'Point',1:'Bilinear',2:'Bicubic',3:'Lanczos',5:'Spline36'}[spec['scaler']]
-        params=dict(filter_param_a=0,filter_param_b=.5) if spec['scaler']==2 else {}
+        kernel={0:'Point',1:'Bilinear',2:'Bicubic',3:'Lanczos',5:'Spline36',7:'Lanczos'}[spec['scaler']]
+        params=dict(filter_param_a=0,filter_param_b=.5) if spec['scaler']==2 else dict(filter_param_a=4) if spec['scaler']==7 else {}
         image=getattr(core.resize,kernel)(source,width=b-a,height=d-c,src_left=(a-left)*scale_x,src_top=(c-top)*scale_y,src_width=(b-a)*scale_x,src_height=(d-c)*scale_y,**params)
         tile=core.std.AddBorders(image,left=a-cutx,right=cutx+tile_width-b,top=c-cuty,bottom=cuty+tile_height-d,color=[0,0,0])
     else: tile=blank

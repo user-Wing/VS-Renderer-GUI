@@ -1,4 +1,5 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerAssociations.h"
 #include "player/PlayerIdleGuide.h"
 #include "player/PlayerMenu.h"
 #include "render/ShaderPackage.h"
@@ -46,6 +47,17 @@ class TestPlayer final : public QObject {
     QByteArray previous_;bool existed_=false;
     QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
 private slots:
+    void singleAssociationUsesLauncher(){
+        const auto old=qgetenv("VSR_SINGLE_PLAYER_PATH");const auto restore=qScopeGuard([&]{if(old.isNull())qunsetenv("VSR_SINGLE_PLAYER_PATH");else qputenv("VSR_SINGLE_PLAYER_PATH",old);});
+        QTemporaryDir dir;const auto path=dir.filePath("VS-Player.exe");qputenv("VSR_SINGLE_PLAYER_PATH",path.toUtf8());QCOMPARE(playerAssociationExecutable(),path);
+    }
+    void imageExportConvertsLinearColour(){
+        QTemporaryDir dir;ImageOutput o;o.source=dir.filePath("source.png");o.destination=dir.filePath("output.png");o.format="png";o.bitDepth="16";
+        o.image=QImage(2,2,QImage::Format_RGBA32FPx4);o.image.setColorSpace(QColorSpace::SRgbLinear);
+        for(int y=0;y<2;++y){float *p=reinterpret_cast<float*>(o.image.scanLine(y));for(int x=0;x<2;++x){p[x*4]=p[x*4+1]=p[x*4+2]=.5f;p[x*4+3]=1;}}
+        const auto expected=o.image.convertedToColorSpace(QColorSpace::SRgb).pixelColor(0,0).redF();
+        QCOMPARE(PlayerImageTools::writeOutput(o),QString());QImage result(o.destination);QVERIFY(!result.isNull());QVERIFY(std::abs(result.pixelColor(0,0).redF()-expected)<.001);
+    }
     void packagedDescriptionsSeedOnlyMissingConfig(){
         QTemporaryDir directory;const auto bundled=QDir(QCoreApplication::applicationDirPath()).filePath("preset-descriptions.json");
         QFile original(bundled);const bool existed=original.exists();QByteArray saved;if(original.open(QIODevice::ReadOnly))saved=original.readAll();original.close();
@@ -101,7 +113,7 @@ private slots:
         const auto first=player.snapshot();QElapsedTimer wall;wall.start();for(int i=0;i<6;++i){QTest::qWait(1000);const auto s=player.snapshot();qInfo()<<"cadence"<<algorithm<<"wall-ms"<<wall.elapsed()<<"position"<<s.position100ns/1e7<<"decoded"<<s.decodedVideoFrames-first.decodedVideoFrames<<"presented"<<s.presentedVideoFrames-first.presentedVideoFrames<<"dropped"<<s.droppedVideoFrames-first.droppedVideoFrames<<"coalesced"<<s.coalescedVideoFrames-first.coalescedVideoFrames<<"present-wait-ms"<<s.presentWait100ns/1e4<<"upload-ms"<<s.videoUpload100ns/1e4<<"scaling"<<s.videoScalingMode;}
         const auto last=player.snapshot();const double fps=(last.presentedVideoFrames-first.presentedVideoFrames)*1000./wall.elapsed();qInfo()<<"cadence-summary"<<"fps"<<fps<<"source-fps"<<double(player.clip_.fpsNumerator)/player.clip_.fpsDenominator<<"screen-hz"<<player.screen()->refreshRate()<<"surface-physical"<<player.pane_->surface()->size()*player.pane_->devicePixelRatioF()<<"native-mode"<<last.decodeMode<<"custom-package"<<!player.customShaderPackage_.isEmpty()<<"Tab-fps"<<player.infoCurrentFps_;QVERIFY2(fps>43,"48 fps input should present at least 43 distinct frames per second in this lightweight path");
     }
-    void pageThemeVisible(){QTemporaryDir directory;QImage background(16,16,QImage::Format_RGB32);background.fill(Qt::green);const auto path=directory.filePath("green.png"),ini=directory.filePath("themes.ini");QVERIFY(background.save(path));QSettings settings(ini,QSettings::IniFormat);settings.setValue("VSP-Main/image",path);settings.setValue("VSP-Main/transparency",0);settings.setValue("VSP-Main/brightness",100);settings.sync();QLabel label("Text");label.setStyleSheet("background:#101010;color:white;");label.resize(240,100);applyPageTheme(&label,ini,"VSP-Main");label.show();QTest::qWait(50);QCOMPARE(label.grab().toImage().pixelColor(4,4),QColor(Qt::green));}
+    void pageThemeVisible(){QTemporaryDir directory;QImage background(16,16,QImage::Format_RGB32);background.fill(Qt::green);const auto path=directory.filePath("green.png"),ini=directory.filePath("themes.ini");QVERIFY(background.save(path));QSettings settings(ini,QSettings::IniFormat);settings.setValue("VSP-Main/image",path);settings.setValue("VSP-Main/transparency",0);settings.setValue("VSP-Main/brightness",180);settings.sync();QLabel label("Text");label.setStyleSheet("background:#101010;color:white;");label.resize(240,100);applyPageTheme(&label,ini,"VSP-Main");label.show();QTest::qWait(50);QCOMPARE(label.grab().toImage().pixelColor(4,4),QColor(Qt::green));}
 
     void ffmpegImageExportDepthAndResize(){
         QTemporaryDir dir;ImageOutput output;output.source=dir.filePath("source.png");output.image=QImage(32,24,QImage::Format_RGBA64);output.image.fill(QColor(80,140,210,180));QVERIFY(output.image.save(output.source));output.size=QSize(48,36);
@@ -122,6 +134,14 @@ private slots:
         player.settings_->setValue("render/downscale",4);player.applyScaling();player.clock_->redraw();QTest::qWait(100);const auto downJinc=player.clock_->capture();QVERIFY(!downNearest.isNull());QVERIFY(!downJinc.isNull());QVERIFY(downNearest!=downJinc);
     }
 
+    void minimalModeBottomSpacingMatchesStandard(){
+        PlayerWindow player;player.show();QTest::qWait(100);player.layoutChrome();
+        const auto gap=[&]{return player.controls_->height()-player.play_->mapTo(player.controls_,QPoint(0,player.play_->height())).y();};
+        const auto standard=gap();player.controls_->grab().save(QCoreApplication::applicationDirPath()+"/review-standard-controls.png");
+        player.setMinimalMode(true);QTest::qWait(100);player.layoutChrome();QCOMPARE(gap(),standard);
+        QCOMPARE(player.controls_->height(),player.controls_->sizeHint().height());
+        player.grab().save(QCoreApplication::applicationDirPath()+"/review-minimal-player.png");
+    }
     void minimalModeKeepsPlaybackPosition(){
         QTemporaryDir directory;const auto file=directory.filePath("minimal-position.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=24","-f","lavfi","-i","sine=frequency=440:sample_rate=48000","-t","15","-c:v","ffv1","-c:a","flac",file});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
         PlayerWindow player;player.settings_->setValue("playback/remember",false);player.resize(1100,650);player.show();QVERIFY(player.openFile(file));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0,15000);
@@ -425,7 +445,7 @@ private slots:
     void audioControlsPopup(){
         QSettings settings(config(),QSettings::IniFormat);settings.setValue("player/volume",63);settings.setValue("player/muted",true);settings.sync();PlayerWindow player;player.show();player.activateWindow();QTRY_VERIFY(player.isActiveWindow());
         auto *percent=player.findChild<QLineEdit *>("playerVolumePercent");auto *button=player.findChild<QPushButton *>("playerEqualizerButton");QVERIFY(percent && button);QCOMPARE(percent->text(),QString("63%"));const auto muted=player.mute_->icon().pixmap(24,24).toImage();QVERIFY(!muted.isNull());player.mute_->click();QVERIFY(!player.mute_->isChecked());QVERIFY(player.mute_->icon().pixmap(24,24).toImage()!=muted);
-        button->click();QTRY_VERIFY(player.equalizerPopup_ && player.equalizerPopup_->isVisible());QVERIFY(!qobject_cast<QDialog *>(player.equalizerPopup_.data()));QCOMPARE(player.equalizerPopup_->windowType(),Qt::Popup);player.equalizerPopup_->findChild<QSlider *>("equalizerMaster")->setValue(27);QCOMPARE(percent->text(),QString("27%"));button->click();QVERIFY(!player.equalizerPopup_ || !player.equalizerPopup_->isVisible());
+        button->click();QTRY_VERIFY(player.equalizerPopup_ && player.equalizerPopup_->isVisible());QVERIFY(!qobject_cast<QDialog *>(player.equalizerPopup_.data()));QCOMPARE(player.equalizerPopup_->windowType(),Qt::Tool);player.equalizerPopup_->findChild<QSlider *>("equalizerMaster")->setValue(27);QCOMPARE(percent->text(),QString("27%"));button->click();QVERIFY(!player.equalizerPopup_ || !player.equalizerPopup_->isVisible());
     }
     void allowedModes(){
         PlayerWindow player;player.show();QCOMPARE(player.qualityStage(),5);

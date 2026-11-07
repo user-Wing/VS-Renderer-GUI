@@ -53,7 +53,7 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     tabs_->setObjectName(QStringLiteral("exportTabs"));
     tabs_->setStyleSheet(QStringLiteral(
         "QTabWidget::pane{border:1px solid #50535a;}"
-        "QTabWidget::tab-bar{left:0;}"
+        "QTabWidget::tab-bar{left:13px;}"
         "QTabBar::tab{background:#27292e;color:#c8cbd1;border:1px solid #50535a;padding:4px 12px;margin-right:2px;}"
         "QTabBar::tab:selected{background:#343840;color:#e8eaed;border-bottom:1px solid #8ab4f8;}"
         "QTabBar::tab:hover:!selected{background:#30343b;border-color:#7086a4;}"));
@@ -89,7 +89,7 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
                 if(!buffer.contains('\n')){socket->setProperty("commandBuffer",buffer);return;}
                 const auto command=QJsonDocument::fromJson(buffer.left(buffer.indexOf('\n'))).object().value("command").toString();
                 if(!isVisible() || command.trimmed().isEmpty()){socket->write("ERROR: open the export window first\n");socket->disconnectFromServer();return;}
-                command_->setPlainText(command);rememberCommand();tabs_->setCurrentIndex(0);raise();activateWindow();
+                command_->setPlainText(command);command_->setToolTip(QStringLiteral("此命令来自本机外部程序；导出前请核对可执行文件、参数和输出路径。"));rememberCommand();tabs_->setCurrentIndex(0);raise();activateWindow();
                 socket->write("OK\n");socket->disconnectFromServer();
             });
         }
@@ -166,8 +166,6 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     table_->header()->setSectionsMovable(true);
     table_->header()->setStretchLastSection(false);
     table_->header()->setSectionResizeMode(QHeaderView::Interactive);
-    table_->header()->setStyleSheet(QStringLiteral(
-        "QHeaderView::section{background:#eeeeee;color:#1b1b1b;border:0;border-right:2px solid #999999;border-bottom:1px solid #aaaaaa;padding:6px 8px;}"));
     table_->setColumnWidth(0, 420);
     table_->setColumnWidth(1, 230);
     queueLayout->addWidget(table_, 1);
@@ -323,14 +321,13 @@ bool ExportWindow::addJob(const QString &command, const QString &output, const Q
     const auto fail = [&](const QString &message) { if (error) *error = message; return false; };
     if (!compositionSources_.isEmpty()) {
         auto normalized = command;
-        normalized.replace(QStringLiteral("\\_"), QStringLiteral("_"));
         const auto tokens = QProcess::splitCommand(normalized);
         const QRegularExpression geometry(QStringLiteral("\\b(scale\\w*|crop\\w*|pad\\w*|zscale|transpose\\w*|rotate|v360|perspective|zoompan)\\s*(?:=|,|;|$)"));
         for (int i = 0; i < tokens.size(); ++i) {
             const auto &option = tokens[i];
             if (option == QStringLiteral("-s") || option.startsWith(QStringLiteral("-s:")) ||
                 ((option == QStringLiteral("-vf") || option == QStringLiteral("-filter") || option.startsWith(QStringLiteral("-filter:"))) &&
-                 i + 1 < tokens.size() && geometry.match(tokens[i + 1]).hasMatch()))
+                 i + 1 < tokens.size() && geometry.match(QString(tokens[i + 1]).replace(QStringLiteral("\\_"),QStringLiteral("_"))).hasMatch()))
                 return fail(QStringLiteral("对比画布输出必须保持最大源视频分辨率，请移除 3FUI 参数中的尺寸、缩放、裁切或旋转设置。"));
         }
     }

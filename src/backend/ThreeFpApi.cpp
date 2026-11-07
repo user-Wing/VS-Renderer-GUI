@@ -134,6 +134,7 @@ ThreeFpResult ThreeFpApi::readSourcePixel(void *h, VsrSourcePixelProbe *p) const
 ThreeFpResult ThreeFpApi::submitExternalVideoFrame(void *h, const ThreeFpExternalVideoFrame *f) const { return available() ? submitExternalVideoFrame_(h, f) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setExternalOutputFormat(void *h, const char *f) const { return setExternalOutputFormat_ ? setExternalOutputFormat_(h,f) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setSubtitleLayer(void *h, const TimedTextLayer *layer) const {
+    if(!h || !layer || (layer->count && !layer->commands))return ThreeFpResult::InvalidArgument;
     if(!setSubtitleLayer_)return ThreeFpResult::NotSupported;
     if(apiVersion()<20)return setSubtitleLayer_(h,layer);
     auto adapted=*layer;adapted.version=20;std::vector<TimedTextCommand> commands;

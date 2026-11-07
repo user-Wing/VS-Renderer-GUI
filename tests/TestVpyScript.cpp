@@ -12,6 +12,13 @@ using namespace vsr;
 class TestVpyScript final : public QObject {
     Q_OBJECT
 private slots:
+    void rejectsInvalidParameterValues(){
+        FilterGraph graph;const int row=graph.add("resize");
+        QVERIFY(!graph.setParameter(row,"kernel","Bicubic(clip); __import__('os').system('bad') #"));
+        QVERIFY(!graph.setParameter(row,"width",-1));QVERIFY(!graph.setParameter(row,"width",4.5));QVERIFY(!graph.setParameter(row,"width","nan"));
+        QVERIFY(graph.setParameter(row,"width",640));QVERIFY(graph.setParameter(row,"kernel","Bicubic"));
+        QCOMPARE(graph.nodes()[row].parameters.value("kernel").toString(),QString("Bicubic"));
+    }
     void hlslTailPreservesOrderAndDimensions(){
         FilterGraph graph;graph.add("crop");const int shader=graph.add("anime4k");graph.setParameter(shader,"mode","anime4k-a-fast.glsl");
         auto plan=hlslPreviewPlan(graph);QVERIFY(!plan.shaderPath.isEmpty());QCOMPARE(plan.graph.nodes().size(),1);QCOMPARE(plan.graph.nodes().first().definitionId,QString("crop"));
@@ -72,7 +79,7 @@ private slots:
         const auto *definition=FilterCatalog::find("anime4k");QVERIFY(definition);
         QStringList choices;for(const auto &p:definition->parameters)if(p.id=="mode")choices=p.choices;
         QVERIFY(choices.contains("anime4k-a-fast.glsl"));QVERIFY(choices.contains("自定义 GLSL"));
-        FilterGraph graph;const int node=graph.add("anime4k");graph.setParameter(node,"mode","mpv-shaders/gist--test/downscale.hook");graph.setParameter(node,"scale","0.5×");
+        FilterGraph graph;const int node=graph.add("anime4k");QVERIFY(!graph.setParameter(node,"mode","mpv-shaders/gist--test/downscale.hook"));QVERIFY(graph.setParameter(node,"mode","自定义 GLSL"));QVERIFY(graph.setParameter(node,"shader","mpv-shaders/gist--test/downscale.hook"));graph.setParameter(node,"scale","0.5×");
         const auto result=VpyScriptBuilder::build("input.mkv",SourceFilter::Ffms2,graph);QVERIFY(result.errors.isEmpty());QVERIFY(result.script.contains("mpv-shaders/gist--test/downscale.hook"));QVERIFY(result.script.contains("int(clip.width * 0.5)"));
     }
     void rejectsMissingSource()

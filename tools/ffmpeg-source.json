@@ -1,0 +1,19 @@
+{
+  "archive": "07-full-shared.7z",
+  "sha256": "06296918d33886b1dd819e792ada7bf49d146984ba0fef9b1b3dea6f715d6b88",
+  "version": "8.0.git",
+  "buildDate": "2026-11-07",
+  "architecture": "windows-x64",
+  "minimumCpu": "x86-64-v3 (AVX2)",
+  "sharedAbi": {
+    "avcodec": 63,
+    "avformat": 63,
+    "avutil": 61,
+    "avdevice": 63,
+    "avfilter": 12,
+    "swresample": 7,
+    "swscale": 10
+  },
+  "sourceDirectory": ".deps/ffmpeg-enhanced/07-full-shared",
+  "provenance": "User-supplied archive; original README and build-info retained in runtime/ffmpeg."
+}

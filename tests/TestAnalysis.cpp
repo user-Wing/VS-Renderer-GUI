@@ -41,6 +41,7 @@
 #include "graph/VpyScriptBuilder.h"
 #include <QSignalSpy>
 #include <QFile>
+#include <QFileDialog>
 #include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
@@ -76,6 +77,20 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void additionalRouteFallsBackToCompleteScript(){
+        ThreeFpApi api;PreviewPane pane("route","VS");pane.resize(640,400);pane.show();RenderRoute route(api,&pane,nullptr);QTemporaryDir dir;
+        const QString prefix="import vapoursynth as vs\nclip=vs.core.std.BlankClip(format=vs.YUV420P8,length=24,width=";
+        const auto original=prefix+"160,height=90)\nclip.set_output()\n",fallback=prefix+"200,height=100)\nclip.set_output()\n";
+        route.load(original,dir.filePath("route.vpy"),"unused-for-incompatible-aspect",{{"output_mode","指定分辨率"},{"width",200},{"height",100},{"keep_aspect",false}},fallback);
+        ThreeFpSnapshot source{};source.position100ns=0;source.timelineGeneration=1;
+        QTRY_VERIFY_WITH_TIMEOUT(([&]{route.sync(source);return route.snapshot().videoWidth==200;})(),15000);QCOMPARE(route.snapshot().videoHeight,100u);
+    }
+    void restoredRoutesSynchronizeFromEveryPane(){
+        QTemporaryDir dir;const auto path=dir.filePath("restore.vsr.json");QFile file(path);QVERIFY(file.open(QIODevice::WriteOnly));file.write(R"({"schemaVersion":2,"routes":[{},{}],"editingRoute":1})");file.close();
+        MainWindow window;window.syncView_->setChecked(true);QTimer chooser;chooser.setInterval(50);connect(&chooser,&QTimer::timeout,&window,[&]{for(auto *widget:QApplication::topLevelWidgets())if(auto *dialog=qobject_cast<QFileDialog*>(widget)){dialog->setOption(QFileDialog::DontUseNativeDialog);dialog->selectFile(path);if(auto *name=dialog->findChild<QLineEdit*>("fileNameEdit"))name->setText(path);QMetaObject::invokeMethod(dialog,"accept");}});
+        const bool native=QApplication::testAttribute(Qt::AA_DontUseNativeDialogs);QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);chooser.start();window.openProject();chooser.stop();QApplication::setAttribute(Qt::AA_DontUseNativeDialogs,native);
+        auto *view=window.compareView_->findChild<MultiCompareView*>();QCOMPARE(window.additionalRoutes_.size(),size_t(1));emit view->pane(2)->viewChanged(3,.2f,.1f);QCOMPARE(window.sourcePane_->zoom(),3.f);QCOMPARE(window.processedPane_->zoom(),3.f);
+    }
     void suppliedThemeAllPagesAndPreviewIsolation(){
         const auto image=qEnvironmentVariable("VSR_THEME_TEST_IMAGE");if(image.isEmpty())QSKIP("Set VSR_THEME_TEST_IMAGE");QVERIFY(QFileInfo::exists(image));
         const auto ini=QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini");QFile original(ini);const bool existed=original.exists();QByteArray saved;if(original.open(QIODevice::ReadOnly))saved=original.readAll();original.close();const auto restore=qScopeGuard([&]{QFile file(ini);if(existed){file.open(QIODevice::WriteOnly);file.write(saved);}else file.remove();});
@@ -383,9 +398,10 @@ private slots:
             window.resize(size);toggle->trigger();QTest::qWait(80);
             QCOMPARE(transport->mapToGlobal(QPoint(0,0)).x(),view->mapToGlobal(QPoint(0,0)).x());
             QCOMPARE(transport->width(),view->width());
-            QVERIFY(std::abs(frames->mapToGlobal(frames->rect().center()).x()-view->mapToGlobal(view->rect().center()).x())<=2);
-            QCOMPARE(position->mapToGlobal(QPoint()).x(),mode->mapToGlobal(QPoint()).x());
-            QCOMPARE(timeline->mapToGlobal(QPoint()).x(),position->mapToGlobal(QPoint()).x());
+            QVERIFY(frames->mapToGlobal(QPoint(frames->width(),0)).x()<=mode->mapToGlobal(QPoint()).x());
+            QVERIFY(position->mapToGlobal(QPoint(position->width(),0)).x()<=timeline->mapToGlobal(QPoint()).x());
+            QVERIFY(std::abs(frames->mapToGlobal(frames->rect().center()).y()-mode->mapToGlobal(mode->rect().center()).y())<=2);
+            QVERIFY(timeline->mapTo(transport,QPoint(timeline->width(),0)).x()<=transport->width());
             QCOMPARE(source->mapToGlobal(source->rect().center()).y(),browse->mapToGlobal(browse->rect().center()).y());
             QVERIFY(catalog->height()>=190);QVERIFY(sidebar->width()<360);
             QVERIFY(sidebar->mapToGlobal(QPoint(sidebar->width(),0)).x()<=parameters->mapToGlobal(QPoint()).x());
@@ -410,8 +426,8 @@ private slots:
                 QVERIFY(label && field);QVERIFY2(!label->geometry().intersects(field->geometry()),qPrintable(definition.id+":"+parameter.id));
                 if(parameter.type==ParameterType::Boolean)QVERIFY(std::abs(field->geometry().right()-(editor.width()-9))<=1);
                 if(auto *combo=qobject_cast<QComboBox *>(field)) {
-                    QVERIFY(combo->width()>=combo->fontMetrics().horizontalAdvance(combo->currentText())+34);
-                    QVERIFY(combo->width()<220);
+                    QVERIFY(combo->width()>=70 && combo->width()<=120);
+                    if(!combo->currentText().isEmpty())QVERIFY(!combo->toolTip().isEmpty());
                 }
             }
             if(definition.id=="mvtools" || definition.id=="rife")editor.grab().save(QCoreApplication::applicationDirPath()+"/renderer-parameters-"+definition.id+".png");
@@ -431,10 +447,15 @@ private slots:
         QCOMPARE(tabs->tabBar()->mapToGlobal(tabs->tabBar()->tabRect(0).topLeft()).x(),command->mapToGlobal(QPoint()).x());
         tabs->setCurrentIndex(2);QCoreApplication::processEvents();
         auto *queue=window.findChild<QTreeWidget *>("encodingQueue");QVERIFY(queue);
-        const auto header=queue->header()->grab().toImage().scaled(queue->header()->size(),Qt::IgnoreAspectRatio,Qt::FastTransformation);
-        for(int section=0;section<4;++section) {
-            const int boundary=queue->header()->sectionViewportPosition(section)+queue->header()->sectionSize(section)-1;
-            if(boundary<header.width()) QCOMPARE(header.pixelColor(boundary,8),QColor("#999999"));
+        const auto previous=qApp->styleSheet();const auto restore=qScopeGuard([&]{qApp->setStyleSheet(previous);});
+        for(bool dark:{false,true}){
+            qApp->setStyleSheet(applicationStyleSheet(dark));QTest::qWait(60);
+            const auto header=queue->header()->grab().toImage().scaled(queue->header()->size(),Qt::IgnoreAspectRatio,Qt::FastTransformation);
+            QCOMPARE(header.pixelColor(queue->header()->sectionSize(0)-12,header.height()/2),QColor(dark?"#25272b":"#eeeeee"));
+            for(int section=0;section<4;++section) {
+                const int boundary=queue->header()->sectionViewportPosition(section)+queue->header()->sectionSize(section)-1;
+                if(boundary<header.width()) QCOMPARE(header.pixelColor(boundary,8),QColor(dark?"#50535a":"#d1d1d1"));
+            }
         }
         tabs->setCurrentIndex(2);window.grab().save(QCoreApplication::applicationDirPath()+"/renderer-export-tabs.png");
     }
@@ -492,6 +513,7 @@ private slots:
         QDragEnterEvent enter(QPoint(400,300),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier); QApplication::sendEvent(&window,&enter); QVERIFY(enter.isAccepted());
         QDropEvent drop(QPointF(400,300),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier); QApplication::sendEvent(&window,&drop); QVERIFY(drop.isAccepted());
         const auto rendered = [&window] { for (auto *player : window.findChildren<ThreeFpPlayer *>()) if (player->snapshot().videoWidth == 160 && player->snapshot().presentedVideoFrames > 0) return true; return false; };
+        QTest::qWait(200);QVERIFY(!rendered());window.validateScript();
         QTRY_VERIFY_WITH_TIMEOUT(rendered(),15000);
     }
     void presetManagementActions()
@@ -784,6 +806,8 @@ private slots:
         layout->setCurrentIndex(layout->findData(MultiCompareView::FourWipe));
         auto *view=page.findChild<MultiCompareView *>();view->setDivision(.35,.65);
         page.alignVideo(1,1,true);QTRY_VERIFY_WITH_TIMEOUT(!page.busy() && page.offset(1)>9000000,10000);
+        QVERIFY(!page.compositionScript().errors.isEmpty()); // D3D11 preview cannot be reproduced by VS.
+        QComboBox *scaler=nullptr;for(auto *combo:page.findChildren<QComboBox*>())if(combo->findText(QStringLiteral("放大：Lanczos 4"))>=0)scaler=combo;QVERIFY(scaler);scaler->setCurrentIndex(7); // Lanczos 4 must map to a supported export kernel.
         const auto script=page.compositionScript();QVERIFY2(script.errors.isEmpty(),qPrintable(script.errors.join(";")));
         QFile saved(dir.filePath("composition.vpy"));QVERIFY(saved.open(QIODevice::WriteOnly));saved.write(script.script.toUtf8());saved.close();
         QProcess pipe;pipe.start(QCoreApplication::applicationDirPath()+"/runtime/python/Lib/site-packages/vapoursynth/vspipe.exe",{"--info",saved.fileName(),"-"});

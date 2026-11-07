@@ -57,7 +57,7 @@ private slots:
         action(editor,"imageEditorUndo")->trigger();QCOMPARE(editor.document()->readRegion(id,{0,0,1,1}).pixelColor(0,0).rgba64().red(),quint16(1001));auto *mask=editor.findChild<QCheckBox *>("imageEditorEditMask");QVERIFY(mask);mask->setChecked(true);QVERIFY(editor.tools()->editingMask());mask->setChecked(false);QVERIFY(!editor.tools()->editingMask());editor.document()->history()->setClean();
     }
     void openNativeHdrAvif(){
-        const auto path=QFileInfo(".deps/image/libavif/libavif-1.4.2/tests/data/colors_hdr_p3.avif").absoluteFilePath();QVERIFY(QFile::exists(path));
+        const auto path=QFINDTESTDATA("../.deps/image/libavif/libavif-1.4.2/tests/data/colors_hdr_p3.avif");QVERIFY(QFile::exists(path));
         const bool previous=QApplication::testAttribute(Qt::AA_DontUseNativeDialogs);QApplication::setAttribute(Qt::AA_DontUseNativeDialogs,true);const auto restore=qScopeGuard([previous]{QApplication::setAttribute(Qt::AA_DontUseNativeDialogs,previous);});
         ImageEditorWindow editor(pixels(),"source.png");editor.setAttribute(Qt::WA_DeleteOnClose,false);editor.show();
         QTimer::singleShot(0,&editor,[&]{auto *dialog=qobject_cast<QFileDialog *>(QApplication::activeModalWidget());QVERIFY(dialog);dialog->selectFile(path);QVERIFY(QMetaObject::invokeMethod(dialog,"accept",Qt::DirectConnection));});action(editor,"imageEditorOpen")->trigger();

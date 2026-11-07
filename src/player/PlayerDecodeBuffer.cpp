@@ -22,7 +22,7 @@ void PlayerWindow::updateDecodeBuffer(){
     MEMORYSTATUSEX memory{};memory.dwLength=sizeof(memory);if(!GlobalMemoryStatusEx(&memory))return;
     const quint64 appBudget=memory.ullTotalPhys*std::clamp(settings_->value("performance/ram",50).toInt(),1,100)/100;
     quint64 bytes=appBudget/2;
-    const auto chosen=settings_->value("performance/bufferMiB",0).toULongLong();if(chosen)bytes=qMin(bytes,chosen*1048576);
+    const auto chosen=settings_->value("performance/bufferMiB",0).toULongLong();if(chosen)bytes=qMin(bytes,qMin(chosen,bytes/1048576)*1048576);
     const quint64 frameBytes=quint64(snap.videoWidth)*snap.videoHeight*6; // Conservative 16-bit 4:4:4 estimate; Native charges actual strides/pipeline.
     const quint64 resident=qMin(decodePoolBytes_,quint64(snap.queuedVideoFrames)*frameBytes);
     bytes=qMin(bytes,memory.ullAvailPhys*3/4+resident);

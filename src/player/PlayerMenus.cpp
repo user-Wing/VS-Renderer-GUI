@@ -12,6 +12,7 @@
 #include "ui/PreviewPane.h"
 #include <QSettings>
 #include <QMenu>
+#include <QMessageBox>
 #include <QActionGroup>
 #include <QCoreApplication>
 #include <QDir>
@@ -219,7 +220,14 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
             connect(aiSubtitles_,&PlayerAiSubtitles::caption,this,[this](const QString &text){const auto size=pane_->surface()->size();aiCaption_->setGeometry(24,qMax(0,size.height()-180),qMax(1,size.width()-48),120);aiCaption_->setText(text);aiCaption_->setVisible(!text.isEmpty() && subtitleVisible_);aiCaption_->raise();});
         }
         if(!enabled){aiSubtitles_->stop();return;}
-        const auto error=aiSubtitles_->start(clock_.get(),settings_->value("ai/package",QDir(QCoreApplication::applicationDirPath()).filePath("runtime/ai-subtitles/ai-subtitles.json")).toString());
+        const auto package=settings_->value("ai/package",QDir(QCoreApplication::applicationDirPath()).filePath("runtime/ai-subtitles/ai-subtitles.json")).toString();
+        QJsonObject data;const auto validation=PlayerAiSubtitles::validatePackage(package,&data);if(!validation.isEmpty()){setError(validation);return;}
+        const auto fingerprint=data.value("executableFingerprint").toString();
+        if(settings_->value("ai/trustedExecutableFingerprint").toString()!=fingerprint){
+            if(QMessageBox::question(this,tr("运行 AI 字幕扩展包"),tr("此扩展包将以当前用户权限运行外部 Python 和脚本。仅运行你信任来源的完整扩展包。\nPython：%1\nWorker：%2\n执行文件 SHA-256：%3\n是否信任并启动？").arg(data.value("python").toString(),data.value("worker").toString(),fingerprint),QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes)return;
+            settings_->setValue("ai/trustedExecutableFingerprint",fingerprint);
+        }
+        const auto error=aiSubtitles_->start(clock_.get(),package,fingerprint);
         if(!error.isEmpty()){setError(error);setProperty("settingsPage",8);showSettings();}
     });
 #endif

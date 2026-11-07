@@ -15,6 +15,8 @@ StartupWarmup::StartupWarmup(ThreeFpPlayer *source, ThreeFpPlayer *processed,
     // The demuxer and VS source nodes can keep the warmup media open until teardown.
     connect(source_, &QObject::destroyed, [keep = directory_] {});
     connect(server_, &QObject::destroyed, [keep = directory_] {});
+    for(QObject *dependency:{static_cast<QObject*>(source_),static_cast<QObject*>(processed_),static_cast<QObject*>(server_)})
+        connect(dependency,&QObject::destroyed,this,[this]{running_=false;started_=true;timer_.stop();pendingFrame_.reset();});
     timer_.setInterval(25);
     connect(&timer_, &QTimer::timeout, this, &StartupWarmup::poll);
     connect(server_, &VapourSynthFrameServer::scriptLoaded, this, [this] {
@@ -70,6 +72,7 @@ void StartupWarmup::start()
 
 void StartupWarmup::poll()
 {
+    if(!running_)return;
     const auto source = source_->snapshot();
     if (source.state == ThreeFpState::Failed) { complete(false, QStringLiteral("源解码预热失败。")); return; }
     if (!sourceStarted_ && (source.state == ThreeFpState::Ready || source.state == ThreeFpState::Paused))

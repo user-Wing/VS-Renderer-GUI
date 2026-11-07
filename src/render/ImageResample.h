@@ -38,6 +38,7 @@ float4 ps(V v):SV_Target{
         ComPtr<ID3D11Texture2D> target;ComPtr<ID3D11RenderTargetView> rt;ComPtr<ID3D11ShaderResourceView> nextView;
         if(FAILED(device->CreateTexture2D(&description,nullptr,&target)) || FAILED(device->CreateRenderTargetView(target.Get(),nullptr,&rt)) || FAILED(device->CreateShaderResourceView(target.Get(),nullptr,&nextView)))return false;
         struct Settings{float input[2],output[2];unsigned algorithm,padding[3];} settings{{float(width),float(height)},{float(nextWidth),float(nextHeight)},algorithm,{0,0,0}};
+        static_assert(sizeof(Settings)==32);
         context->UpdateSubresource(constants.Get(),0,nullptr,&settings,0,0);auto *cb=constants.Get();auto *targetView=rt.Get();auto *sourceView=view.Get();auto *sample=sampler.Get();context->OMSetRenderTargets(1,&targetView,nullptr);const D3D11_VIEWPORT viewport{0,0,float(nextWidth),float(nextHeight),0,1};context->RSSetViewports(1,&viewport);context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);context->VSSetShader(vs.Get(),nullptr,0);context->PSSetShader(ps.Get(),nullptr,0);context->PSSetConstantBuffers(0,1,&cb);context->PSSetShaderResources(0,1,&sourceView);context->PSSetSamplers(0,1,&sample);context->Draw(3,0);ID3D11ShaderResourceView *empty=nullptr;context->PSSetShaderResources(0,1,&empty);context->OMSetRenderTargets(0,nullptr,nullptr);
         current=target;view=nextView;width=nextWidth;height=nextHeight;
     }while(width!=outWidth || height!=outHeight);
