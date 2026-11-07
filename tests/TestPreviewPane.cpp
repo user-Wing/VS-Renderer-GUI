@@ -1,5 +1,6 @@
 #include "ui/PreviewPane.h"
 #include "ui/CompareView.h"
+#include "ui/MultiCompareView.h"
 
 #include <QMouseEvent>
 #include <QSignalSpy>
@@ -153,6 +154,15 @@ private slots:
         QCOMPARE(redraws.size(), 1);
     }
 
+    void multiRouteWipeUsesSharedCanvas(){
+        CompareView view;view.resize(1000,600);auto *third=view.addProcessedPane();auto *fourth=view.addProcessedPane();view.show();QVERIFY(QTest::qWaitForWindowExposed(&view));view.setMode(CompareMode::Slider);
+        auto *shared=view.findChild<MultiCompareView *>();QVERIFY(shared);shared->setDivision(.35,.65);QCoreApplication::processEvents();
+        const QList<PreviewPane*> panes{view.sourcePane(),view.processedPane(),third,fourth};
+        for(auto *pane:panes){QCOMPARE(pane->size(),QSize(1000,600));QCOMPARE(pane->parentWidget()->pos()+pane->pos(),QPoint());}
+        for(int i=0;i<panes.size();++i)for(int j=i+1;j<panes.size();++j)QVERIFY(!panes[i]->parentWidget()->geometry().intersects(panes[j]->parentWidget()->geometry()));
+        auto *handle=shared->findChild<QWidget *>("comparisonDivider4");QVERIFY(handle->isVisible());QTest::mousePress(handle,Qt::LeftButton);QTest::mouseMove(handle,QPoint(90,40));QTest::mouseRelease(handle,Qt::LeftButton);QVERIFY(view.splitRatio()>.35);
+        view.setRouteVisible(2,false);QCOMPARE(shared->assignments(),QList<int>({0,1,2}));QCOMPARE(third->size(),QSize(1000,600));view.removeProcessedPane(2);view.setMode(CompareMode::SideBySide);QCOMPARE(shared->assignments().size(),3);
+    }
     void sliderModeClipsProcessedPaneAtDivider()
     {
         CompareView view;

@@ -98,7 +98,7 @@ void PlayerWindow::updateInfo() {
              .arg(QDateTime::currentDateTime().toString("HH:mm:ss"), formatTime(at), formatTime(source.duration100ns))
              .arg(source.duration100ns > 0 ? at * 100.0 / source.duration100ns : 0, 0, 'f', 1).arg(lastFrame_).arg(clip_.totalFrames)
           << tr("CPU：%1 · GPU：%2 · 内存：%3 MiB").arg(usage_.processCpu>=0?QString::number(usage_.processCpu,'f',1)+"%":tr("采样中"),usage_.gpu>=0?QString::number(usage_.gpu,'f',1)+"%":tr("未提供")).arg(usage_.memoryMiB)
-          << tr("功耗：CPU N/A · GPU N/A")
+          << tr("功耗：CPU %1 · GPU(NVIDIA) %2").arg(usage_.cpuWatts>=0?QString::number(usage_.cpuWatts,'f',1)+" W":usage_.cpuPowerStatus,usage_.gpuWatts>=0?QString::number(usage_.gpuWatts,'f',1)+" W":QString("N/A"))
           << ""
           << tr("视频解码器：%1 · VS 源：%2").arg(decoder, direct_ ? tr("原生直通") : preset_.isEmpty() ? "FFMS2" : tr("VPY 定义"))
           << tr("输入：%1 · %2×%3 · %4-%5 · 帧率：%6 · 位率：%7")

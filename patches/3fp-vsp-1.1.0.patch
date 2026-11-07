@@ -96466,7 +96466,7 @@ index b47e70d..5187fc9 100644
      // The producer publishes an immutable layer and renderers retain a shared
      // snapshot. This keeps the timed-text mutex short without copying every
 diff --git a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp b/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
-index bf1e069..719b079 100644
+index bf1e069..8a8a435 100644
 --- a/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
 +++ b/FFF.Native/3FP/Subtitle/AssSubtitleRenderer.cpp
 @@ -328,6 +328,7 @@ public:
@@ -96514,7 +96514,19 @@ index bf1e069..719b079 100644
              if (requestedStream < 0 || requestedStream >= static_cast<std::int32_t>(format->nb_streams) ||
                  format->streams[requestedStream]->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE)
                  throw std::runtime_error("The requested embedded subtitle stream does not exist.");
-@@ -481,8 +490,47 @@ private:
+@@ -436,6 +445,11 @@ private:
+                     attached->codecpar->extradata_size);
+             }
+ 
++            // The dedicated demuxer needs only this track. Matroska can skip
++            // large video/audio blocks instead of returning them one by one.
++            for (unsigned i = 0; i < format->nb_streams; ++i)
++                format->streams[i]->discard = i == requestedStream ? AVDISCARD_DEFAULT : AVDISCARD_ALL;
++
+             auto* stream = format->streams[requestedStream];
+             std::int64_t timelineOriginMilliseconds = 0;
+             auto timelineStream = av_find_best_stream(format, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+@@ -481,8 +495,47 @@ private:
  
              packet = av_packet_alloc();
              if (packet == nullptr) throw std::runtime_error("Could not allocate a subtitle packet.");
@@ -96564,7 +96576,7 @@ index bf1e069..719b079 100644
                  if (packet->stream_index != requestedStream) {
                      av_packet_unref(packet);
                      continue;
-@@ -530,23 +578,13 @@ private:
+@@ -530,23 +583,13 @@ private:
                              if (*current == '\n') text += "\\N";
                              else text += *current;
                          }
@@ -96589,7 +96601,7 @@ index bf1e069..719b079 100644
      }
  
      static void AssMessageCallback(const int level, const char* format, va_list arguments,
-@@ -718,6 +756,10 @@ private:
+@@ -718,6 +761,10 @@ private:
      }
  
      void Close() noexcept {
@@ -96600,7 +96612,7 @@ index bf1e069..719b079 100644
          if (renderer_ != nullptr) ass_renderer_done(renderer_);
          if (track_ != nullptr) ass_free_track(track_);
          if (library_ != nullptr) ass_library_done(library_);
-@@ -730,6 +772,13 @@ private:
+@@ -730,6 +777,13 @@ private:
      ASS_Library* library_{};
      ASS_Renderer* renderer_{};
      ASS_Track* track_{};

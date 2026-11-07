@@ -1,8 +1,10 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-11-06。源码版本 **1.1.0（本地开发，未发布）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
+核对日期：2026-11-07。源码版本 **1.1.0（本地开发，未发布）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
 
 历史续修记录：`src/render/ShaderPackage.cpp`增加单文件多pass HLSL导入；含`//!HOOK`的HLSL复用现有MAIN/PREKERNEL指令解析，每段独立编译并保留资源反射检查。普通单pass HLSL契约与Native二进制包格式不变，缓存语义键升级v7。`tests/TestShaderPackage.cpp`覆盖重复main的多段输入；本地独立产物`dist/VS-Player-MoeSR.exe`保留原`dist/VS-Player.exe`，未改版本或发布。
+
+本轮入口：`PlayerSubtitles.cpp` 与 Native `AssSubtitleRenderer.cpp` 负责字幕加载和跳转；`CompareView` 复用 `MultiCompareView` 的三/四路滑块；`PageTheme.h` / `ThemePackage.h` 管理多页面主题与包；`PlayerResources.cpp` / `PowerSensors.h` 读取现有 PawnIO/NVML。功耗接口和权限边界见 [研究记录](development/pawnio-power.md)。Pareto 路径保存在程序旁 `player.ini` 的 `[render] paretoImage`，相对路径以该 INI 所在目录为基准。
 
 ## 1. 发心与边界
 
@@ -62,7 +64,7 @@
 | `development/` | 源码工作区测试台账、合并历史原文与证据；不随运行包复制 |
 | `.deps/`、`build/`、`dist/` | 忽略的依赖、构建/原始日志、本地运行产物；不等于已发布附件 |
 
-1.1.0 改动入口：`src/app/MainWindowRoutes.cpp` / `RenderRoute.h` 管理处理路；`PlayerDecodeBuffer.cpp` 管理按需软解缓冲（常规8帧、尖峰最多48帧/2GiB，预算仅是上限）；`PlayerShortcuts.h` 定义快捷键；`ui/PageTheme.h` 复用页面背景；`assets/ncnn-filter.py` 仅处理 Renderer 单帧，实时 Player 注入跳过标志。AI 音频桥仍为 `PlayerAiSubtitles.cpp`，包说明见 [组件指南](assets/ai-subtitles/README.md)。
+1.1.0 改动入口：`src/app/MainWindowRoutes.cpp` / `RenderRoute.h` 管理处理路；`PlayerDecodeBuffer.cpp` 管理按需软解缓冲（常规8帧、尖峰最多48帧/4GiB，包含解码流水线，预算仅是上限）；`PlayerShortcuts.h` 定义快捷键；`ui/PageTheme.h` 复用页面背景；`assets/ncnn-filter.py` 仅处理 Renderer 单帧，实时 Player 注入跳过标志。AI 音频桥仍为 `PlayerAiSubtitles.cpp`，包说明见 [组件指南](assets/ai-subtitles/README.md)。
 
 ## 5. UI 地图
 

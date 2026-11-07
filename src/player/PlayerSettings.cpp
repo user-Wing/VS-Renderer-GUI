@@ -203,6 +203,14 @@ void PlayerWindow::showSettings() {
     const auto allowed=settings_->value("player/animeStages",QStringList{"0","1","2","3","6","7","4","5"}).toStringList();
     for(int stage:{0,1,2,3,6,7,4,5}){auto *item=new QListWidgetItem(qualityNames().at(stage),animeStages);item->setData(Qt::UserRole,stage);item->setCheckState(stage==5 || allowed.contains(QString::number(stage))?Qt::Checked:Qt::Unchecked);if(stage==5)item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);if(stage==settings_->value("player/animeStage",0).toInt())animeStages->setCurrentItem(item);}
     animeStages->ensurePolished();animeStages->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);animeStages->setFixedHeight(animeStages->count()*qMax(animeStages->sizeHintForRow(0),animeStages->fontMetrics().height()+12)+2*animeStages->frameWidth()+4);
+    if(!settings_->contains("render/paretoImage"))settings_->setValue("render/paretoImage",QString());
+    auto *pareto=new QPushButton(tr("查看超分算法Pareto图"),&dialog);pareto->setObjectName("playerParetoChart");
+    connect(pareto,&QPushButton::clicked,&dialog,[this,&dialog]{
+        const auto name=settings_->value("render/paretoImage").toString().trimmed();
+        const auto path=QDir(QFileInfo(settings_->fileName()).absolutePath()).absoluteFilePath(name);
+        if(name.isEmpty() || !QFileInfo::exists(path)){QMessageBox::information(&dialog,tr("Pareto图"),tr("请在 %1 的 [render] 中设置 paretoImage=图片路径，支持相对路径。").arg(settings_->fileName()));return;}
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    });render->addRow(pareto);
     render->addRow(new QLabel(tr("自动切换参与档位"),&dialog));render->addRow(animeStages);
     auto *interpolationStages=new QWidget(&dialog);interpolationStages->setObjectName("playerInterpolationStages");auto *stageGrid=new QGridLayout(interpolationStages);stageGrid->setContentsMargins(0,0,0,0);
     QList<QCheckBox*> interpolationChoices;const QStringList stageLabels{tr("RIFE"),tr("RIFE 半尺寸"),"MVTools HQ","MVTools LQ"};

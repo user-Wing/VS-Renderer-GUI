@@ -22,7 +22,10 @@ public:
 signals:
     void parameterChanged(const QString &parameterId, const QVariant &value);
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
 private:
+    void updateTextHeights();
     void clear();
     QGridLayout *form_ = nullptr;
     QSize inputSize_;

@@ -20,6 +20,7 @@ public:
         connect(server_.get(),&VapourSynthFrameServer::frameReady,this,[this](const VapourSynthFrame &frame){if(!visible_ || !pending_ || frame.frameIndex!=requested_)return;pending_=false;if(player_->submitFrame(frame)){last_=frame.frameIndex;pane_->setSurfaceActive(true);pane_->setBadge(QString("VS · 帧 %1").arg(last_));}else{pane_->setSurfaceActive(false);pane_->setPlaceholderText(player_->lastError());}});
         connect(server_.get(),&VapourSynthFrameServer::errorOccurred,this,[this](const QString &error){ready_=pending_=false;pane_->setSurfaceActive(false);pane_->setPlaceholderText(error);});
     }
+    void setScalingAlgorithms(ThreeFpScalingAlgorithm upscale,ThreeFpScalingAlgorithm downscale){player_->setScalingAlgorithms(upscale,downscale);}
     void setView(float zoom,float x,float y){pane_->adoptView(zoom,x,y);player_->setView(zoom,x,y);}
     ThreeFpSnapshot snapshot() const {return player_->snapshot();}
     void load(const QString &script,const QString &path,const QString &shader={},const QVariantMap &parameters={}){script_=script;path_=path;shader_=shader;shaderParameters_=parameters;ready_=pending_=false;last_=-1;if(!visible_)return;player_->setCustomShader({});player_->resetVideoOutput();player_->setMuted(true);pane_->setSurfaceActive(false);pane_->setPlaceholderText(QStringLiteral("正在加载该路处理链…"));if(server_->available())server_->loadScript(script,path);else server_->initialize();}

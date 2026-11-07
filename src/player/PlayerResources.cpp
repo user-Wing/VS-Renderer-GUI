@@ -1,4 +1,5 @@
 #include "player/PlayerResources.h"
+#include "player/PowerSensors.h"
 #include <windows.h>
 #include <pdh.h>
 #include <pdhmsg.h>
@@ -12,6 +13,7 @@
 namespace vsr {
 namespace { quint64 ticks(FILETIME value) { ULARGE_INTEGER n{}; n.LowPart=value.dwLowDateTime; n.HighPart=value.dwHighDateTime; return n.QuadPart; } }
 struct PlayerResources::Impl {
+    PowerSensors power;
     PDH_HQUERY query = nullptr; PDH_HCOUNTER gpu = nullptr;
     quint64 lastSystem = 0, lastIdle = 0, lastProcess = 0;
     void initialize() { if (!query && PdhOpenQueryW(nullptr,0,&query)==ERROR_SUCCESS) { PdhAddEnglishCounterW(query,L"\\GPU Engine(*)\\Utilization Percentage",0,&gpu); PdhCollectQueryData(query); } }
@@ -29,6 +31,7 @@ ResourceUsage PlayerResources::sample(bool detailed) {
     MEMORYSTATUSEX memory{}; memory.dwLength=sizeof(memory); GlobalMemoryStatusEx(&memory); out.ram=memory.dwMemoryLoad; out.totalMemoryMiB=memory.ullTotalPhys/1048576;
     PROCESS_MEMORY_COUNTERS process{}; process.cb=sizeof(process); if(GetProcessMemoryInfo(GetCurrentProcess(),&process,sizeof(process))) out.memoryMiB=process.WorkingSetSize/1048576;
     if (!detailed) return out;
+    i.power.sample(out.cpuWatts,out.gpuWatts,out.cpuPowerStatus);
     i.initialize();
     if(i.query && i.gpu && PdhCollectQueryData(i.query)==ERROR_SUCCESS) {
         DWORD bytes=0,count=0;

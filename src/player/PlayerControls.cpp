@@ -87,7 +87,6 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     button("›|", tr("进一帧"), [this] { stepFrame(1); });
     button("−1s", tr("退一秒"), [this] { seekTime(position() - 10000000); });
     button("+1s", tr("进一秒"), [this] { seekTime(position() + 10000000); });
-    minimalButton_=button("·",tr("进入 / 退出极简音频模式 · ."),[this]{setMinimalMode(!minimalMode_);});minimalButton_->setObjectName("playerMinimal");minimalButton_->setProperty("minimalControl",true);
     const auto keyframe = [this](int direction) {
         suspendQualityCheck();
         manualFrame_ = -1;

@@ -13,6 +13,7 @@ public:
     void load(int slot,const QString &path,int stream,const QString &codec,const QVariantMap &style);
     void render(qint64 time,const QSize &canvas,const QSize &video,bool visible);
 signals:
+    void status(const QString &message);
     void imageReady(const QImage &image);
     void errorOccurred(const QString &error);
 private:

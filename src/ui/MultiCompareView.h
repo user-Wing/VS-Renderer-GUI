@@ -17,6 +17,8 @@ public:
     void setSlots(const QList<int> &assignments, Layout layout);
     QList<int> assignments() const { return slots_; }
     void setDivision(double x, double y);
+    double divisionX() const { return x_; }
+    void setSourceControlsVisible(bool visible);
     QRect cellRect(int slot) const;
     bool isWipe() const;
 signals:
@@ -37,5 +39,6 @@ private:
     Layout layout_ = Pair;
     double x_ = .5, y_ = .5, x2_ = .67, y2_ = .67;
     int dragging_ = -1;
+    bool sourceControlsVisible_ = true;
 };
 }

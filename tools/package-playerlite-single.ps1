@@ -32,6 +32,11 @@ Get-ChildItem -LiteralPath $SourceDirectory -Force | Where-Object {
 } | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
 }
+foreach ($name in @('7z.exe','7z.dll')) {
+    if (!(Test-Path -LiteralPath (Join-Path $stage "runtime/tools/$name"))) { throw "Missing theme archive tool in SourceDirectory: runtime/tools/$name" }
+}
+New-Item -ItemType Directory -Path (Join-Path $stage 'licenses/PawnIO-Modules') -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'assets/pawnio/COPYING'),(Join-Path $root 'assets/pawnio/NOTICE.md') -Destination (Join-Path $stage 'licenses/PawnIO-Modules') -Force
 Copy-Item -LiteralPath $built -Destination (Join-Path $stage 'vs-player.exe') -Force
 & (Join-Path (Split-Path $compiler) 'strip.exe') --strip-all (Join-Path $stage 'vs-player.exe')
 if ($LASTEXITCODE -ne 0) { throw 'Cannot strip the staged player' }

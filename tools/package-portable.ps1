@@ -36,6 +36,8 @@ foreach ($name in @('README.md', 'project.md', 'changelog.md')) {
 }
 Copy-Item -LiteralPath (Join-Path $root 'docs') -Destination $payload -Recurse -Force
 New-Item -ItemType Directory -Path (Join-Path $payload 'licenses') -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $payload 'licenses/PawnIO-Modules') -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'assets/pawnio/COPYING'),(Join-Path $root 'assets/pawnio/NOTICE.md') -Destination (Join-Path $payload 'licenses/PawnIO-Modules') -Force
 Get-ChildItem -LiteralPath (Join-Path $root 'third_party/runtime-notices') -File | Copy-Item -Destination (Join-Path $payload 'licenses') -Force
 Copy-Item -LiteralPath (Join-Path $root 'third_party/image-zlib/LICENSE') -Destination (Join-Path $payload 'licenses/image-zlib-LICENSE.txt') -Force
 foreach ($name in @('zh_CN.json', 'en_US.json')) {

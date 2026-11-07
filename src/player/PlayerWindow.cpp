@@ -181,7 +181,7 @@ PlayerWindow::PlayerWindow() {
         "QSlider::sub-page:horizontal{background:#8ab4f8;} QSlider::handle:horizontal{background:#e5e7eb;width:10px;margin:-4px 0;border-radius:5px;}"
         "QMenu{background:#292b30;border:1px solid #555;} QMenu::item{padding:6px 36px 6px 12px;} QMenu::right-arrow{width:8px;height:8px;margin-right:8px;} QMenu::item:selected{background:#426da7;}"));
     setProperty("playerBaseStyle",styleSheet());
-    auto *central = new QWidget(this); auto *layout = new QVBoxLayout(central); layout->setContentsMargins(0, 0, 0, 6); layout->setSpacing(4); setCentralWidget(central);
+    auto *central = new QWidget(this); auto *layout = new QVBoxLayout(central); layout->setContentsMargins(0, 0, 0, 2); layout->setSpacing(4); setCentralWidget(central);
     pane_ = new PreviewPane("VS Player", "VS", central); pane_->setChromeVisible(false); pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nCtrl+P 加载 VPY 预设 · Tab 视频信息")); videoSplit_=new QSplitter(Qt::Horizontal,central);videoSplit_->setObjectName("playerVideoSplit");videoSplit_->addWidget(pane_);layout->addWidget(videoSplit_,1);
     hidden_ = new QWidget(central); hidden_->setAttribute(Qt::WA_NativeWindow); hidden_->resize(320, 180); hidden_->hide();
     clock_ = std::make_unique<ThreeFpPlayer>(api_, hidden_); output_ = std::make_unique<ThreeFpPlayer>(api_, pane_->surface()); output_->setMuted(true); clock_->setAutomaticHdr(true); output_->setAutomaticHdr(true);
@@ -190,6 +190,7 @@ PlayerWindow::PlayerWindow() {
     connect(network_.get(),&PlayerNetworkInput::ready,this,[this](const QString &url){mediaInput_=url;openMedia();});
     connect(network_.get(),&PlayerNetworkInput::errorOccurred,this,[this](const QString &message){autoPlay_=false;setError(message);});
     subtitles_ = std::make_unique<PlayerSubtitles>();
+    connect(subtitles_.get(), &PlayerSubtitles::status, this, &PlayerWindow::showStatus);
     connect(subtitles_.get(), &PlayerSubtitles::errorOccurred, this, &PlayerWindow::setError);
     connect(subtitles_.get(), &PlayerSubtitles::imageReady, this, [this](const QImage &image) {
         if(audioMode_){if(!externalSubtitle_.isEmpty() || !externalSecondarySubtitle_.isEmpty()){audioSubtitle_->setGeometry(pane_->surface()->rect());auto pixmap=QPixmap::fromImage(image);pixmap.setDevicePixelRatio(pane_->surface()->devicePixelRatioF());audioSubtitle_->setPixmap(pixmap);audioSubtitle_->show();audioSubtitle_->raise();}return;}

@@ -15,6 +15,10 @@ void PlayerWindow::updateDecodeBuffer(){
     if(bufferTimer_.isValid() && bufferTimer_.elapsed()<500)return;bufferTimer_.restart();
     const auto snap=clock_->snapshot();
     if(!ready_ || !direct_ || imageMode_ || minimalMode_ || networkSource() || snap.videoHeight<2160 || snap.decodeMode!=1)return;
+    if(snap.timelineGeneration!=decodePoolGeneration_){
+        decodePoolGeneration_=snap.timelineGeneration;decodeBurstFrom_=decodeBurstUntil_=0;bitrateTimer_.invalidate();
+        if(bitrateProbe_){bitrateProbe_->disconnect(this);bitrateProbe_->kill();bitrateProbe_->deleteLater();bitrateProbe_=nullptr;}
+    }
     MEMORYSTATUSEX memory{};memory.dwLength=sizeof(memory);if(!GlobalMemoryStatusEx(&memory))return;
     const quint64 appBudget=memory.ullTotalPhys*std::clamp(settings_->value("performance/ram",50).toInt(),1,100)/100;
     quint64 bytes=appBudget/2;
@@ -30,7 +34,7 @@ void PlayerWindow::updateDecodeBuffer(){
     const auto pipeline=quint64(qMax(0,media_.value("videoDecoderDelayFrames").toInt()));
     // The configured RAM percentage is a ceiling, never a reservation target.
     bytes=qMin(bytes,frameBytes*(frames+pipeline+1));
-    if(burst)bytes=qMin(bytes,quint64(2)*1024*1024*1024);
+    if(burst)bytes=qMin(bytes,quint64(4)*1024*1024*1024);
     if(bytes!=decodePoolBytes_ || frames!=decodePoolFrames_){clock_->setDecodeBuffer(bytes,frames);decodePoolBytes_=bytes;decodePoolFrames_=frames;}
     if(!enabled || bitrateProbe_ || (bitrateTimer_.isValid() && bitrateTimer_.elapsed()<5000))return;
     bitrateTimer_.restart();const auto path=source_;const auto at=snap.position100ns;const auto generation=snap.timelineGeneration;
@@ -44,9 +48,11 @@ void PlayerWindow::updateDecodeBuffer(){
         if(average>0)for(auto it=seconds.cbegin();it!=seconds.cend();++it)if(double(it.value())*8>average*2.5){
             const auto begin=qMax(qint64(0),(it.key()-15)*10000000),end=(it.key()+2)*10000000;
             if(end<=position())continue;
-            if(decodeBurstUntil_<=position() || begin>decodeBurstUntil_){decodeBurstFrom_=begin;decodeBurstUntil_=end;}
+            if(decodeBurstUntil_>position() && begin>decodeBurstUntil_)break;
+            if(decodeBurstUntil_<=position()){decodeBurstFrom_=begin;decodeBurstUntil_=end;}
             else {decodeBurstFrom_=qMin(decodeBurstFrom_,begin);decodeBurstUntil_=qMax(decodeBurstUntil_,end);}
-            break;
+            // Merge overlapping prefetch windows, including the tail of the
+            // same spike. A later disjoint spike is handled by the next probe.
         }
     });
     connect(probe,&QProcess::errorOccurred,this,[this,probe](QProcess::ProcessError error){if(error==QProcess::FailedToStart){bitrateProbe_=nullptr;probe->deleteLater();}});

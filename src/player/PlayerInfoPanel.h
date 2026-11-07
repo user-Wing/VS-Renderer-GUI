@@ -30,7 +30,7 @@ public:
         for(auto *widget=parent;widget;widget=widget->parentWidget())widget->installEventFilter(this);
         setAlignment(Qt::AlignTop|Qt::AlignLeft);setMargin(12);setContentsMargins(0,0,0,30);
         baseFont_=QFont("Comic Sans MS",9);setFont(baseFont_);
-        scroll_=new QScrollArea(this);scroll_->setObjectName("playerInfoTextArea");scroll_->setFrameShape(QFrame::NoFrame);scroll_->setWidgetResizable(false);
+        scroll_=new QScrollArea(this);scroll_->setObjectName("playerInfoTextArea");scroll_->setFrameShape(QFrame::NoFrame);scroll_->setWidgetResizable(false);scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         text_=new QLabel; text_->setTextFormat(Qt::PlainText);text_->setAlignment(Qt::AlignTop|Qt::AlignLeft);text_->setMargin(0);scroll_->setWidget(text_);
         audioMode_=new QComboBox(this);audioMode_->setObjectName("playerInfoAudioMode");audioMode_->addItems({tr("音频简略信息"),tr("音频详细信息")});
         opacityText_=new QLabel(tr("透明度"),this);percent_=new QLabel(this);percent_->setObjectName("playerInfoOpacityPercent");
@@ -46,9 +46,9 @@ public:
     void hidePanel(){hide();}
     void setRightSide(bool right){right_=right;audioMode_->hide();positionPanel();}
     void showText(const QString &text){
-        QLabel::setText(text);text_->setText(text);setFont(baseFont_);QFontMetrics metrics(baseFont_,this);int width=0;
+        QLabel::setText(text);text_->setText(text);text_->setFont(baseFont_);setFont(baseFont_);QFontMetrics metrics(baseFont_,this);int width=0;
         const auto lines=text.split('\n');for(const auto &line:lines)width=std::max(width,metrics.horizontalAdvance(line));
-        const auto available=availableSize();const int contentHeight=int(lines.size())*metrics.lineSpacing()+110;
+        const auto available=availableSize();text_->adjustSize();const int contentHeight=std::max(int(lines.size())*metrics.lineSpacing(),text_->sizeHint().height())+140;
         baseSize_=QSize(width+48,contentHeight+qRound(contentHeight*.05)).boundedTo(available);setMaximumSize(available);setMinimumSize(baseSize_);
         if(!initialized_){resize(baseSize_);initialized_=true;}else resize(size().expandedTo(baseSize_));
         layoutControls();

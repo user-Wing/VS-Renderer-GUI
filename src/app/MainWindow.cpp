@@ -565,8 +565,10 @@ QWidget *MainWindow::buildSidebar()
     sourceInputStack_=new QStackedWidget(input);sourceInputStack_->setMinimumWidth(0);sourceInputStack_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);sourceInputStack_->addWidget(sourcePath_);
     sourceChoice_=new QComboBox(input);sourceChoice_->setObjectName("rendererSourceChoice");sourceChoice_->setMinimumContentsLength(6);sourceChoice_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);sourceInputStack_->addWidget(sourceChoice_);
     inputRow->addWidget(sourceInputStack_,1);
-    auto *folder=new QPushButton(QStringLiteral("文件夹…"),input);folder->setObjectName("rendererFolderImport");connect(folder,&QPushButton::clicked,this,[this]{scanWorkingFolder();});
+    auto *folder=new QPushButton(QStringLiteral("打开文件夹"),input);folder->setObjectName("rendererFolderImport");connect(folder,&QPushButton::clicked,this,[this]{scanWorkingFolder();});
     connect(sourceChoice_,&QComboBox::currentIndexChanged,this,[this](int index){if(index>=0)loadSource(sourceChoice_->itemData(index).toString());});
+    inputRow->setContentsMargins(0,0,0,0);
+    for(auto *control:QList<QWidget*>{sourcePath_,sourceChoice_,sourceInputStack_,browse,folder})control->setFixedHeight(30);
     inputRow->addWidget(browse);inputRow->addWidget(folder);
     inputLayout->addLayout(inputRow);
     connect(browse, &QPushButton::clicked, this, &MainWindow::openSource);
@@ -762,6 +764,7 @@ QWidget *MainWindow::buildTransport()
     mode->setObjectName(QStringLiteral("rendererCompareMode"));
     mode->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Preferred);
     mode->addItems({QStringLiteral("并排"), QStringLiteral("A/B 滑块")});
+    connect(compareView_,&CompareView::visiblePaneCountChanged,mode,[mode](int count){mode->setItemText(1,count==4?QStringLiteral("A/B/C/D 滑块"):count==3?QStringLiteral("A/B/C 滑块"):QStringLiteral("A/B 滑块"));});
     auto *previous = compactButton(QStringLiteral("◀ 帧"), transport);
     playButton_ = compactButton(QStringLiteral("播放"), transport);
     auto *next = compactButton(QStringLiteral("帧 ▶"), transport);
@@ -783,6 +786,7 @@ QWidget *MainWindow::buildTransport()
     frames->setContentsMargins(0, 0, 0, 0);
     frameControls->setSizePolicy(QSizePolicy::Maximum,QSizePolicy::Preferred);
     frames->addWidget(previous); frames->addWidget(playButton_); frames->addWidget(next);
+    fileInput_->setFixedHeight(30);mode->setFixedHeight(30);scaler->setFixedHeight(30);frameControls->setFixedHeight(30);
     controlRow->addWidget(fileInput_,1);
     controlRow->addStretch(1);
     controlRow->addWidget(frameControls);
@@ -800,7 +804,7 @@ QWidget *MainWindow::buildTransport()
             sourcePlayer_->redraw();
             processedPlayer_->redraw();
         });
-        setStatus(index == 1 ? QStringLiteral("A/B 滑块：左侧源视频，右侧处理后；拖动蓝色中线调整位置。")
+        setStatus(index == 1 ? QStringLiteral("拖动蓝色分界线比较各路同一位置；三路/四路复用 Compare 滑块。")
                              : QStringLiteral("已切换为并排比较。"));
     });
 
@@ -828,6 +832,7 @@ QWidget *MainWindow::buildTransport()
         const auto downscale = scaler->currentData().toInt()==7 ? upscale : ThreeFpScalingAlgorithm::Lanczos3;
         const bool left = sourcePlayer_->setScalingAlgorithms(upscale, downscale);
         const bool right = processedPlayer_->setScalingAlgorithms(upscale, downscale);
+        for(auto &route:additionalRoutes_)route->setScalingAlgorithms(upscale,downscale);
         setStatus(left && right
             ? QStringLiteral("缩放算法：%1").arg(scaler->currentText().section(QStringLiteral("："), 1))
             : QStringLiteral("3FP 缩放算法切换失败。"), !(left && right));

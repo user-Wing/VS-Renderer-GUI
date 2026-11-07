@@ -76,7 +76,6 @@ private:
     void updateMinimalControls();
     bool minimalMode_=false;
     QSize normalWindowSize_;
-    QPushButton *minimalButton_=nullptr;
     void buildTransport(QVBoxLayout *layout);
     void buildPlaylist(QWidget *parent);
     void updateChrome();
@@ -178,7 +177,7 @@ private:
     void updateDecodeBuffer();
     QProcess *bitrateProbe_=nullptr;
     QElapsedTimer bufferTimer_,bitrateTimer_;
-    qint64 decodeBurstFrom_=0,decodeBurstUntil_=0;
+    qint64 decodeBurstFrom_=0,decodeBurstUntil_=0;quint64 decodePoolGeneration_=0;
     quint64 decodePoolBytes_=0;
     unsigned decodePoolFrames_=0;
     void resetStatistics();

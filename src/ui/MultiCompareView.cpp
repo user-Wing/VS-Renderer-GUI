@@ -63,7 +63,8 @@ void MultiCompareView::setSlots(const QList<int> &assignments, Layout layout)
     layout_ = layout;
     arrange();
 }
-void MultiCompareView::setDivision(double x, double y) { x_ = std::clamp(x, .1, .9); y_ = std::clamp(y, .1, .9); arrange(); }
+void MultiCompareView::setDivision(double x, double y) { x_ = std::clamp(x, .05, .95); y_ = std::clamp(y, .1, .9); arrange(); }
+void MultiCompareView::setSourceControlsVisible(bool visible) { sourceControlsVisible_=visible;arrange(); }
 void MultiCompareView::resizeEvent(QResizeEvent *) { arrange(); }
 bool MultiCompareView::isWipe() const
 {
@@ -75,7 +76,7 @@ void MultiCompareView::arrange()
 {
     const int n = slots_.size();
     const bool wipe = isWipe();
-    const int top = wipe ? 28 : 0;
+    const int top = wipe && sourceControlsVisible_ ? 28 : 0;
     const int w = width(), h = std::max(1, height() - top);
     const int x = int(w * x_), y = int(h * y_);
     std::array<bool, 5> usedHandles{};
@@ -141,20 +142,20 @@ void MultiCompareView::arrange()
         const int selectorWidth = std::min(240, std::max(1, selector.width() - 34));
         selectors_[i]->setGeometry(selector.x() + 3, selector.y() + 2, selectorWidth, 24);
         remove_[i]->setGeometry(selector.x() + selectorWidth + 6, selector.y() + 2, 24, 24);
-        remove_[i]->show();
+        remove_[i]->setVisible(sourceControlsVisible_);
         {
             QSignalBlocker block(selectors_[i]);
             selectors_[i]->setCurrentIndex(video);
             selectors_[i]->setToolTip(selectors_[i]->currentText());
         }
-        selectors_[i]->show();
+        selectors_[i]->setVisible(sourceControlsVisible_);
         panes_[video]->setChromeVisible(!wipe);
         if (wipe) {
             // Same-sized native surfaces, one common origin. Only HWND parent clips move.
             clips_[video]->setGeometry(cell.translated(0, top));
             panes_[video]->setGeometry(-cell.x(), -cell.y(), w, h);
         } else {
-            const QRect viewport = cell.adjusted(0, 28, 0, 0);
+            const QRect viewport = cell.adjusted(0, sourceControlsVisible_?28:0, 0, 0);
             clips_[video]->setGeometry(viewport);
             panes_[video]->setGeometry(0, 0, viewport.width(), viewport.height());
         }
@@ -187,7 +188,7 @@ bool MultiCompareView::eventFilter(QObject *object, QEvent *event)
     if (event->type() == QEvent::MouseMove && dragging_ >= 0) {
         const auto point = mapFromGlobal(static_cast<QMouseEvent *>(event)->globalPosition().toPoint());
         const double x = std::clamp(double(point.x()) / std::max(1, width()), .1, .9);
-        const double y = std::clamp(double(point.y() - 28) / std::max(1, height() - 28), .1, .9);
+        const double y = std::clamp(double(point.y() - (sourceControlsVisible_?28:0)) / std::max(1, height() - (sourceControlsVisible_?28:0)), .1, .9);
         if (id == 0 || id == 4) x_ = layout_ == ThreeRow ? std::min(x, x2_ - .1) : x;
         if (id == 1) x2_ = std::max(x, x_ + .1);
         if (id == 2 || id == 4) y_ = layout_ == ThreeColumn ? std::min(y, y2_ - .1) : y;

@@ -60,6 +60,7 @@ struct PlayerSubtitles::Impl {
 PlayerSubtitles::PlayerSubtitles():impl_(std::make_unique<Impl>()),worker_(new QObject) { worker_->moveToThread(&thread_);connect(&thread_,&QThread::finished,worker_,&QObject::deleteLater);thread_.start(); }
 PlayerSubtitles::~PlayerSubtitles() { QMetaObject::invokeMethod(worker_,[this]{impl_.reset();},Qt::BlockingQueuedConnection);thread_.quit();thread_.wait(); }
 void PlayerSubtitles::load(int slot,const QString &path,int stream,const QString &codec,const QVariantMap &style) {
+    if(!path.isEmpty())emit status(tr("正在加载字幕…"));
     QMetaObject::invokeMethod(worker_,[this,slot,path,stream,codec,style]{
         impl_->clear(slot); if(path.isEmpty()) return;impl_->initialize(); auto &t=impl_->tracks[slot]; QString actual=path; int index=stream; QTemporaryDir temp;
         t.srt=codec=="subrip" || QFileInfo(path).suffix().compare("srt",Qt::CaseInsensitive)==0;
@@ -72,6 +73,7 @@ void PlayerSubtitles::load(int slot,const QString &path,int stream,const QString
         if(t.bitmap && impl_->openBitmap) result=impl_->openBitmap(utf8.constData(),index,&t.handle);
         else if(impl_->openAss) { const auto fonts=(QFileInfo(path).absolutePath()+"\n"+QDir(QCoreApplication::applicationDirPath()).filePath("fonts")).toUtf8(); result=impl_->openAss(utf8.constData(),fonts.constData(),index,&t.handle); }
         if(result!=0) {impl_->clear(slot);emit errorOccurred(tr("字幕加载失败：%1(%2)").arg(path).arg(result));}
+        else emit status(tr("字幕已加载"));
     },Qt::QueuedConnection);
 }
 void PlayerSubtitles::render(qint64 time,const QSize &canvas,const QSize &video,bool visible) {

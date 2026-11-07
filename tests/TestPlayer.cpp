@@ -45,6 +45,8 @@
 #include <QTreeWidget>
 #include <QCursor>
 #include <QScreen>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QUrl>
 #include "player/PlayerSubtitles.h"
 #include "ui/PreviewPane.h"
@@ -613,15 +615,16 @@ private slots:
         QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",true);settings.setValue("playback/remember",false);settings.setValue("decode/mode",1);settings.setValue("player/preset",QString());settings.setValue("subtitle/visible",qEnvironmentVariableIntValue("VSR_PERF_SUBTITLES")!=0);settings.sync();
         PlayerWindow player;player.show();player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));
         auto *surface=player.pane_->surface();const auto dpi=surface->devicePixelRatioF();if(qEnvironmentVariableIsSet("VSR_PERF_FULLSCREEN"))player.toggleFullscreen();else surface->setFixedSize(qRound(3840/dpi),qRound(2160/dpi));
+        connect(player.clock_.get(),&ThreeFpPlayer::errorOccurred,&player,[](const QString &error){qWarning().noquote()<<"Measurement native error:"<<error;});
         QElapsedTimer startup;startup.start();quint64 subtitleUpdates=0;const auto connection=connect(player.subtitles_.get(),&PlayerSubtitles::imageReady,&player,[&]{++subtitleUpdates;});const auto disconnectCounter=qScopeGuard([&]{disconnect(connection);});
         QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>2,30000);QCOMPARE(player.snapshot().decodeMode,1u);QVERIFY(player.direct_);QCOMPARE(player.qualityStage(),5);qInfo()<<"open to first frames ms"<<startup.elapsed()<<"subtitle enabled"<<player.subtitleVisible_<<"surface"<<surface->size()*dpi<<"quality stage"<<player.qualityStage()<<"scaling mode"<<player.snapshot().videoScalingMode<<"decoder workers"<<player.media_.value("videoDecoderThreads");
-        player.seekTime(100000000);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.snapshot().timelineGeneration>0,20000);QTest::qWait(5000);
-        QFile csv(qEnvironmentVariable("VSR_PERF_CSV"));QVERIFY(csv.open(QIODevice::WriteOnly));csv.write("wall_s,position_s,decoded,accepted,dropped,audio_underruns,decode_mode,video_clock_error_s,decoded_audio,queued_video,audio_binaural,subtitle_updates,cpu_s,upload_ms,lock_ms,present_wait_ms,coalesced,presents,rss_mib,private_mib,peak_rss_mib,local_gpu_mib,nonlocal_gpu_mib,catchup_switches,reference_only,delay_frames,audio_silence_frames,audio_overlap_frames\n");
+        const int seekSeconds=qEnvironmentVariableIsSet("VSR_PERF_SEEK_SECONDS")?qEnvironmentVariableIntValue("VSR_PERF_SEEK_SECONDS"):10;player.seekTime(qint64(seekSeconds)*10000000);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.snapshot().timelineGeneration>0,20000);QTest::qWait(qEnvironmentVariableIsSet("VSR_PERF_WARMUP_MS")?qEnvironmentVariableIntValue("VSR_PERF_WARMUP_MS"):5000);
+        QFile csv(qEnvironmentVariable("VSR_PERF_CSV"));QVERIFY(csv.open(QIODevice::WriteOnly));csv.write("wall_s,position_s,decoded,accepted,dropped,audio_underruns,decode_mode,video_clock_error_s,decoded_audio,queued_video,audio_binaural,subtitle_updates,cpu_s,upload_ms,lock_ms,present_wait_ms,coalesced,presents,rss_mib,private_mib,peak_rss_mib,local_gpu_mib,nonlocal_gpu_mib,catchup_switches,reference_only,delay_frames,audio_silence_frames,audio_overlap_frames,pool_frames,pool_mib,burst_until_s\n");
         IDXGIFactory1 *factory=nullptr;CreateDXGIFactory1(IID_PPV_ARGS(&factory));
         const auto releaseFactory=qScopeGuard([&]{if(factory)factory->Release();});
-        const auto first=player.snapshot();double maximumLag=0;
+        const auto first=player.snapshot();double maximumLag=0;quint64 spikeStartDrops=0,spikeEndDrops=0;bool spikeStarted=false;
         QElapsedTimer timer;timer.start();const int seconds=qMax(1,qEnvironmentVariableIntValue("VSR_PERF_SECONDS"));
-        for(int i=0;i<=seconds;++i){if(i)QTest::qWait(qMax(0,i*1000-int(timer.elapsed())));const auto s=player.snapshot();QCOMPARE(s.decodeMode,1u);QVERIFY2(s.state==ThreeFpState::Playing,qPrintable(player.clock_->lastError()+" / "+player.message_->text()));
+        for(int i=0;i<=seconds;++i){if(i)QTest::qWait(qMax(0,i*1000-int(timer.elapsed())));const auto s=player.snapshot();if(s.position100ns>=1350000000LL && !spikeStarted){spikeStartDrops=s.droppedVideoFrames;spikeStarted=true;}if(s.position100ns<=1570000000LL)spikeEndDrops=s.droppedVideoFrames;QCOMPARE(s.decodeMode,1u);QVERIFY2(player.isVisible(),"The playback measurement window was closed before the run completed");QVERIFY2(s.state==ThreeFpState::Playing,qPrintable(player.clock_->lastError()+" / "+player.message_->text()));
             FILETIME created{},exited{},kernel{},user{};GetProcessTimes(GetCurrentProcess(),&created,&exited,&kernel,&user);
             if(s.frameTimeBaseDenominator>0)maximumLag=qMax(maximumLag,s.position100ns/1e7-s.framePts*double(s.frameTimeBaseNumerator)/s.frameTimeBaseDenominator);
             const auto policy=QJsonDocument::fromJson(player.clock_->mediaInfo().toUtf8()).object();
@@ -630,11 +633,12 @@ private slots:
             if(factory)for(UINT n=0;;++n){IDXGIAdapter1 *adapter=nullptr;if(factory->EnumAdapters1(n,&adapter)!=S_OK)break;IDXGIAdapter3 *budget=nullptr;
                 if(SUCCEEDED(adapter->QueryInterface(IID_PPV_ARGS(&budget)))){DXGI_QUERY_VIDEO_MEMORY_INFO info{};if(SUCCEEDED(budget->QueryVideoMemoryInfo(0,DXGI_MEMORY_SEGMENT_GROUP_LOCAL,&info)))local+=info.CurrentUsage;if(SUCCEEDED(budget->QueryVideoMemoryInfo(0,DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL,&info)))nonlocal+=info.CurrentUsage;budget->Release();}adapter->Release();}
             const double cpu=(double(kernel.dwHighDateTime)*4294967296.+kernel.dwLowDateTime+double(user.dwHighDateTime)*4294967296.+user.dwLowDateTime)/1e7;
-            csv.write(QString("%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13\n").arg(timer.elapsed()/1000.,0,'f',3).arg(s.position100ns/1e7,0,'f',6).arg(s.decodedVideoFrames).arg(s.presentedVideoFrames).arg(s.droppedVideoFrames).arg(s.audioUnderruns).arg(s.decodeMode).arg(s.frameTimeBaseDenominator?s.framePts*double(s.frameTimeBaseNumerator)/s.frameTimeBaseDenominator-s.position100ns/1e7:0,0,'f',6).arg(s.decodedAudioFrames).arg(s.queuedVideoFrames).arg(s.audioBinaural).arg(subtitleUpdates).arg(cpu,0,'f',6).replace("\n",QString(",%1,%2,%3,%4,%5\n").arg(s.videoUpload100ns/1e4,0,'f',3).arg(s.deviceLockWait100ns/1e4,0,'f',3).arg(s.presentWait100ns/1e4,0,'f',3).arg(s.coalescedVideoFrames).arg(s.swapChainPresents)).replace("\n",QString(",%1,%2,%3,%4,%5\n").arg(memory.WorkingSetSize/1048576.,0,'f',2).arg(memory.PrivateUsage/1048576.,0,'f',2).arg(memory.PeakWorkingSetSize/1048576.,0,'f',2).arg(local/1048576.,0,'f',2).arg(nonlocal/1048576.,0,'f',2)).replace("\n",QString(",%1,%2,%3,%4,%5\n").arg(policy.value("softwareVideoRealtimeSwitches").toInt()).arg(policy.value("softwareVideoReferenceOnly").toBool()?1:0).arg(policy.value("videoDecoderDelayFrames").toInt()).arg(s.audioInsertedSilenceFrames).arg(s.audioDroppedOverlapFrames)).toUtf8());csv.flush();
+            csv.write(QString("%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13\n").arg(timer.elapsed()/1000.,0,'f',3).arg(s.position100ns/1e7,0,'f',6).arg(s.decodedVideoFrames).arg(s.presentedVideoFrames).arg(s.droppedVideoFrames).arg(s.audioUnderruns).arg(s.decodeMode).arg(s.frameTimeBaseDenominator?s.framePts*double(s.frameTimeBaseNumerator)/s.frameTimeBaseDenominator-s.position100ns/1e7:0,0,'f',6).arg(s.decodedAudioFrames).arg(s.queuedVideoFrames).arg(s.audioBinaural).arg(subtitleUpdates).arg(cpu,0,'f',6).replace("\n",QString(",%1,%2,%3,%4,%5\n").arg(s.videoUpload100ns/1e4,0,'f',3).arg(s.deviceLockWait100ns/1e4,0,'f',3).arg(s.presentWait100ns/1e4,0,'f',3).arg(s.coalescedVideoFrames).arg(s.swapChainPresents)).replace("\n",QString(",%1,%2,%3,%4,%5\n").arg(memory.WorkingSetSize/1048576.,0,'f',2).arg(memory.PrivateUsage/1048576.,0,'f',2).arg(memory.PeakWorkingSetSize/1048576.,0,'f',2).arg(local/1048576.,0,'f',2).arg(nonlocal/1048576.,0,'f',2)).replace("\n",QString(",%1,%2,%3,%4,%5\n").arg(policy.value("softwareVideoRealtimeSwitches").toInt()).arg(policy.value("softwareVideoReferenceOnly").toBool()?1:0).arg(policy.value("videoDecoderDelayFrames").toInt()).arg(s.audioInsertedSilenceFrames).arg(s.audioDroppedOverlapFrames)).replace("\n",QString(",%1,%2,%3\n").arg(player.decodePoolFrames_).arg(player.decodePoolBytes_/1048576.).arg(player.decodeBurstUntil_/1e7)).toUtf8());csv.flush();
         }
         const auto last=player.snapshot();const auto wall=timer.elapsed()/1000.;
         const auto frameSeconds=(last.framePts-first.framePts)*double(last.frameTimeBaseNumerator)/last.frameTimeBaseDenominator;
         qInfo()<<"wall"<<wall<<"media"<<(last.position100ns-first.position100ns)/1e7<<"video"<<frameSeconds<<"max-lag"<<maximumLag;
+        if(qEnvironmentVariableIntValue("VSR_PERF_REQUIRE_NO_SPIKE_DROPS")){QVERIFY(spikeStarted);QCOMPARE(spikeEndDrops,spikeStartDrops);}
         if(qEnvironmentVariableIntValue("VSR_PERF_ASSERT_SYNC")){
             QVERIFY((last.position100ns-first.position100ns)/1e7>wall*.98);QVERIFY(frameSeconds>wall*.95);QVERIFY(maximumLag<2);
             const auto expected=qRound64(frameSeconds*player.clip_.fpsNumerator/player.clip_.fpsDenominator);
@@ -802,7 +806,7 @@ private slots:
         QWidget host;host.resize(1200,800);host.show();host.activateWindow();QTRY_VERIFY(host.isActiveWindow());PlayerInfoPanel panel(&host);panel.showText("当前帧率：95.90 fps · 已提交：100\n目标帧率：95.90 · 预解码：8 帧\n补帧：RIFE\n缩放滤镜：Jinc\n色彩引擎：3FP");panel.show();QTest::qWait(20);QVERIFY(host.isActiveWindow());QVERIFY(panel.isWindow());QVERIFY(panel.width()<=host.width()-24);
         QVERIFY(!panel.wordWrap());const auto minimum=panel.minimumSize();const auto pointSize=panel.font().pointSizeF();const auto initial=panel.size();for(int i=0;i<1000;++i)panel.showText(panel.text());QCOMPARE(panel.size(),initial);QCOMPARE(panel.minimumSize(),minimum);
         panel.resize(minimum*2);QVERIFY(panel.font().pointSizeF()>pointSize);for(auto *label:panel.findChildren<QLabel *>())if(label->text()=="透明度"){QCOMPARE(label->font().pointSizeF(),panel.font().pointSizeF());QVERIFY(label->width()>=QFontMetrics(label->font()).horizontalAdvance(label->text()));}panel.resize(1,1);QCOMPARE(panel.size(),minimum);
-        auto *opacity=panel.findChild<QSlider *>("playerInfoOpacity");QVERIFY(opacity);QCOMPARE(opacity->value(),50);opacity->setValue(40);QCOMPARE(panel.findChild<QLabel *>("playerInfoOpacityPercent")->text(),QString("40%"));QVERIFY(panel.findChild<QSizeGrip *>("playerInfoResize"));const auto image=panel.grab().toImage();QVERIFY(qAlpha(image.pixel(3,3))>=150 && qAlpha(image.pixel(3,3))<=155);QCOMPARE(qAlpha(image.pixel(3,image.height()-10)),qAlpha(image.pixel(3,3)));QDialog settings(&host);settings.setWindowModality(Qt::WindowModal);settings.show();settings.activateWindow();QTRY_VERIFY(!panel.isVisible());settings.close();host.activateWindow();QTRY_VERIFY(panel.isVisible());panel.grab().save("build/player-tab-transparency.png");
+        auto *opacity=panel.findChild<QSlider *>("playerInfoOpacity");QVERIFY(opacity);QCOMPARE(opacity->value(),50);opacity->setValue(40);QCOMPARE(panel.findChild<QLabel *>("playerInfoOpacityPercent")->text(),QString("40%"));QVERIFY(panel.findChild<QSizeGrip *>("playerInfoResize"));const auto image=panel.grab().toImage();QVERIFY(qAlpha(image.pixel(3,3))>=150 && qAlpha(image.pixel(3,3))<=155);QCOMPARE(qAlpha(image.pixel(3,image.height()-10)),qAlpha(image.pixel(3,3)));QDialog settings(&host);settings.setWindowModality(Qt::WindowModal);settings.show();settings.activateWindow();QVERIFY(panel.isVisible());settings.close();host.activateWindow();QTRY_VERIFY(panel.isVisible());panel.grab().save("build/player-tab-transparency.png");
     }
     void nativeAudioClockDoesNotDecodeVideo() {
         QTemporaryDir directory;const auto path=directory.filePath("clock.mkv");QProcess encoder;
@@ -1600,6 +1604,26 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         PlayerWindow player;player.show();player.loadPreset(script);QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>5,10000);QTRY_VERIFY_WITH_TIMEOUT(player.skippedFrames()>3,10000);
         player.activateWindow();QTRY_VERIFY(player.isActiveWindow());QTest::keyClick(&player,Qt::Key_Tab);QTest::qWait(100);bool found=false;for(auto *label:player.findChildren<QLabel *>())if(label->text().contains(QStringLiteral("VS 跳过"))){found=true;QVERIFY(label->text().contains(QStringLiteral("GPU：")));}QVERIFY(found);
         const auto dropped=player.skippedFrames();player.seekTime(0);QTest::qWait(30);QVERIFY(player.skippedFrames()<=dropped+1);
+    }
+    void followupTransportAndInformationFit(){
+        const auto source=qEnvironmentVariable("VSR_SUBTITLE_LATENCY_SOURCE");if(source.isEmpty())QSKIP("Set VSR_SUBTITLE_LATENCY_SOURCE");
+        QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",false);settings.setValue("playback/remember",false);settings.setValue("player/preset",QString());settings.setValue("decode/mode",1);settings.sync();
+        PlayerWindow player;player.show();player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.ready_,15000);player.infoVisible_=true;player.updateInfo();QTest::qWait(300);
+        QVERIFY(!player.findChild<QPushButton*>("playerMinimal"));auto *scroll=player.info_->findChild<QScrollArea*>("playerInfoTextArea");QVERIFY(scroll);QCOMPARE(scroll->verticalScrollBar()->maximum(),0);QCOMPARE(scroll->horizontalScrollBar()->maximum(),0);
+        const auto bottomGap=[&]{return player.centralWidget()->mapToGlobal(QPoint(0,player.centralWidget()->height())).y()-player.controls_->mapToGlobal(QPoint(0,player.controls_->height())).y();};QCOMPARE(bottomGap(),2);
+        const auto directory=qEnvironmentVariable("VSR_FOLLOWUP_ARTIFACTS");if(!directory.isEmpty())player.grab().save(QDir(directory).filePath("player-tab.png"));
+        player.setMinimalMode(true);QTest::qWait(100);QVERIFY(player.height()<200);QCOMPARE(bottomGap(),2);QVERIFY(!player.info_->isVisible());if(!directory.isEmpty())player.grab().save(QDir(directory).filePath("player-minimal.png"));
+    }
+    void embeddedSubtitleFirstRenderAfterSeek() {
+        const auto source=qEnvironmentVariable("VSR_SUBTITLE_LATENCY_SOURCE");if(source.isEmpty())QSKIP("Set VSR_SUBTITLE_LATENCY_SOURCE");
+        PlayerSubtitles subtitles;QSignalSpy frames(&subtitles,&PlayerSubtitles::imageReady),errors(&subtitles,&PlayerSubtitles::errorOccurred),status(&subtitles,&PlayerSubtitles::status);
+        subtitles.load(0,source,qEnvironmentVariableIntValue("VSR_SUBTITLE_LATENCY_STREAM"),"ass",{});
+        QTRY_VERIFY_WITH_TIMEOUT(status.size()>=2 || !errors.isEmpty(),1500);QVERIFY(errors.isEmpty());
+        for(int second:{60,300,60}){frames.clear();QElapsedTimer elapsed;elapsed.start();subtitles.render(qint64(second)*10000000,QSize(640,360),QSize(3840,2160),true);
+            QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty(),1000);const auto image=qvariant_cast<QImage>(frames.last().first());bool ink=false;
+            for(int y=0;y<image.height()&&!ink;++y)for(int x=0;x<image.width();++x)if(qAlpha(image.pixel(x,y))){ink=true;break;}
+            QVERIFY2(ink,"First render after seek must contain the active subtitle");qInfo()<<"subtitle seek"<<second<<"ms"<<elapsed.elapsed();
+        }
     }
     void subtitleOverlay() {
         QTemporaryDir dir;const auto path=dir.filePath("caption.srt");QFile srt(path);QVERIFY(srt.open(QIODevice::WriteOnly));srt.write("1\n00:00:00,000 --> 00:00:05,000\nSubtitle test\n\n");srt.close();

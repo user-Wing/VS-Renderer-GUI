@@ -21,6 +21,8 @@
 #include <QDir>
 #include <QSignalBlocker>
 #include <cmath>
+#include <QTimer>
+#include <QResizeEvent>
 
 namespace vsr {
 
@@ -48,7 +50,9 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
     }
 
     auto *description = new QLabel(definition->description, this);
-    description->setWordWrap(true);
+    description->setObjectName("parameterDescription");description->setWordWrap(true);
+    description->setMinimumWidth(0);auto descriptionPolicy=QSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);descriptionPolicy.setHeightForWidth(true);description->setSizePolicy(descriptionPolicy);
+    description->setContentsMargins(0,2,0,4);description->setAlignment(Qt::AlignTop|Qt::AlignLeft);
     description->setTextFormat(Qt::PlainText);
     form_->addWidget(description, 0, 0, 1, 2);
     int row = 1;
@@ -113,7 +117,7 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             if(combo==shaderMode){combo->view()->setMinimumWidth(420);combo->view()->setMaximumWidth(520);combo->view()->setTextElideMode(Qt::ElideMiddle);combo->view()->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);}
             combo->setToolTip(value.toString());
             if(combo!=shaderMode)combo->setCurrentText(value.toString());
-            const auto fit = [combo, shaderMode, shaderCategory] { const int width=std::max(70, combo->fontMetrics().horizontalAdvance(combo->currentText()) + 40);combo->setFixedWidth(combo==shaderMode || combo==shaderCategory?140:width); };
+            const auto fit = [combo, shaderMode, shaderCategory] { const int width=std::max(70, combo->fontMetrics().horizontalAdvance(combo->currentText()) + 40);combo->setFixedWidth(combo==shaderMode || combo==shaderCategory?120:std::min(width,120)); };
             fit();
             if(combo!=shaderMode)connect(combo, &QComboBox::currentTextChanged, this,
                     [this, id, combo, fit](const QString &v) { fit(); combo->setToolTip(v); emit parameterChanged(id, v); });
@@ -147,9 +151,9 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         }
         auto *label = new QLabel(parameter.label, this);
         label->setObjectName(QStringLiteral("parameterLabel_") + id);
-        label->setWordWrap(false);
+        label->setWordWrap(!parameter.label.contains("Vulkan",Qt::CaseInsensitive));
         label->setMinimumWidth(0);
-        label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        auto labelPolicy=QSizePolicy(parameter.label.contains("Vulkan",Qt::CaseInsensitive)?QSizePolicy::Minimum:QSizePolicy::Ignored,QSizePolicy::Preferred);labelPolicy.setHeightForWidth(label->wordWrap());label->setSizePolicy(labelPolicy);
         editor->setObjectName(QStringLiteral("parameter_") + id);
         if (parameter.type == ParameterType::File) {
             form_->addWidget(label, row++, 0, 1, 2);
@@ -197,8 +201,24 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         updateOutput();connect(outputMode,&QComboBox::currentTextChanged,this,[updateOutput](const QString &){updateOutput();});
         connect(keepAspect_,&QCheckBox::toggled,this,[this](bool enabled){if(enabled)setInputSize(inputSize_);});
     }
+    QTimer::singleShot(0,this,[this]{updateTextHeights();});
     if (definition->parameters.isEmpty())
         form_->addWidget(new QLabel(QStringLiteral("该节点没有可调参数。"), this), row, 0, 1, 2);
+}
+
+void ParameterEditor::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateTextHeights();
+}
+
+void ParameterEditor::updateTextHeights()
+{
+    form_->activate();
+    for(int i=0;i<form_->count();++i)if(auto *label=qobject_cast<QLabel*>(form_->itemAt(i)->widget());label && label->wordWrap() && label->width()>0){
+        label->setMinimumHeight(0);
+        label->setMinimumHeight(label->heightForWidth(label->width()));
+    }
 }
 
 void ParameterEditor::clear()

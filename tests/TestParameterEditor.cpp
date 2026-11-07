@@ -1,4 +1,9 @@
 #include "ui/ParameterEditor.h"
+#include "ui/ThemePackage.h"
+#include <QTemporaryDir>
+#include <QScrollArea>
+#include <QVBoxLayout>
+#include <QImage>
 #include "graph/FilterCatalog.h"
 #include "graph/FilterGraph.h"
 #include "app/Style.h"
@@ -13,6 +18,26 @@ using namespace vsr;
 class TestParameterEditor final : public QObject {
     Q_OBJECT
 private slots:
+    void shaderDescriptionTracksScrollViewportWidth(){
+        FilterGraph graph;const int index=graph.add("anime4k");QWidget panel;auto *layout=new QVBoxLayout(&panel);layout->setContentsMargins(0,0,0,0);auto *header=new QLabel("高级参数",&panel);header->setFixedHeight(32);layout->addWidget(header);
+        auto *scroll=new QScrollArea(&panel);scroll->setWidgetResizable(true);scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);auto *editor=new ParameterEditor;QFont font("Comic Sans MS");font.setPixelSize(13);editor->setFont(font);editor->setNode(FilterCatalog::find("anime4k"),graph.at(index));scroll->setWidget(editor);layout->addWidget(scroll);panel.show();
+        for(int width:{330,260,290,243}){panel.resize(width,480);QTest::qWait(60);auto *text=editor->findChild<QLabel*>("parameterDescription");QVERIFY(text);QVERIFY(text->sizePolicy().hasHeightForWidth());QVERIFY2(text->height()>=text->heightForWidth(text->width()),"The shader description must keep its full wrapped height inside the scroll area");}
+        panel.grab().save(QDir(QCoreApplication::applicationDirPath()).filePath("shader-description-viewport.png"));
+    }
+    void narrowPanelKeepsParameterText(){
+        for(const auto &id:{"ncnn_still","anime4k"}){FilterGraph graph;const int index=graph.add(id);ParameterEditor editor;editor.setNode(FilterCatalog::find(id),graph.at(index));editor.resize(260,1400);editor.show();QTest::qWait(50);
+            for(auto *label:editor.findChildren<QLabel*>()){QVERIFY2(label->geometry().right()<editor.width(),qPrintable(label->text()));const int flags=label->wordWrap()?Qt::TextWordWrap:Qt::TextSingleLine;const auto bounds=label->fontMetrics().boundingRect(QRect(0,0,label->width(),10000),flags,label->text());QVERIFY2(label->height()>=bounds.height(),qPrintable(label->text()));}
+            editor.grab().save(QDir(QCoreApplication::applicationDirPath()).filePath(QString("parameters-%1-followup.png").arg(id)));
+        }
+    }
+    void themePackageRoundTrip(){
+        QTemporaryDir original,moved;QImage image(32,24,QImage::Format_RGB32);image.fill(Qt::red);QVERIFY(image.save(original.filePath("background.png")));
+        QSettings source(original.filePath("themes.ini"),QSettings::IniFormat);source.setValue("skin_name","roundtrip");source.setValue("VSP-Main/image","background.png");source.setValue("VSP-Main/brightness",42);source.setValue("VSP-Settings/color","#123456");source.sync();
+        QString error,installed;const auto zip=original.filePath("theme.zip");QVERIFY2(ThemePackage::exportPack(source.fileName(),zip,error),qPrintable(error));
+        QVERIFY2(ThemePackage::importPack(zip,moved.filePath("themes.ini"),installed,error),qPrintable(error));QSettings result(installed,QSettings::IniFormat);QCOMPARE(result.value("VSP-Main/brightness").toInt(),42);QCOMPARE(result.value("VSP-Settings/color").toString(),"#123456");
+        const auto background=QDir(QFileInfo(installed).absolutePath()).filePath(result.value("VSP-Main/image").toString());QCOMPARE(QImage(background),image);
+        source.setValue("VSP-Main/image","../outside.png");source.sync();QVERIFY(QFile::copy(source.fileName(),original.filePath("skin.ini")));QVERIFY(!ThemePackage::importPack(original.path(),moved.filePath("other.ini"),installed,error));
+    }
     void initTestCase(){QFont font("Segoe UI Variable");font.setPixelSize(13);qApp->setFont(font);qApp->setStyleSheet(applicationStyleSheet());}
     void shaderCategoryPreservesPathsAndWidth() {
         auto definition=*FilterCatalog::find("anime4k");
@@ -21,13 +46,13 @@ private slots:
         FilterGraph graph;const int index=graph.add("anime4k");graph.setParameter(index,"mode",longPath);
         ParameterEditor editor;editor.resize(243,800);editor.setNode(&definition,graph.at(index));editor.show();QTest::qWait(20);
         auto *mode=editor.findChild<QComboBox *>("parameter_mode");auto *category=editor.findChild<QComboBox *>("parameter_category");
-        QCOMPARE(mode->currentData().toString(),longPath);QCOMPARE(mode->width(),140);QVERIFY(mode->toolTip().contains(longPath));QVERIFY(mode->toolTip().contains("非 N 卡独占"));QCOMPARE(mode->view()->maximumWidth(),520);
+        QCOMPARE(mode->currentData().toString(),longPath);QCOMPARE(mode->width(),120);QVERIFY(mode->toolTip().contains(longPath));QVERIFY(mode->toolTip().contains("非 N 卡独占"));QCOMPARE(mode->view()->maximumWidth(),520);
         const auto *label=editor.findChild<QLabel *>("parameterLabel_mode");QVERIFY(label->geometry().right()<mode->geometry().left());QVERIFY(label->width()>=label->fontMetrics().horizontalAdvance(label->text()));QVERIFY(label->height()>=label->fontMetrics().height());
-        for(const auto *text:editor.findChildren<QLabel *>())if(text->objectName().startsWith("parameterLabel_"))QVERIFY2(text->width()>=text->fontMetrics().horizontalAdvance(text->text()),qPrintable(text->objectName()));
+        for(const auto *text:editor.findChildren<QLabel *>())if(text->objectName().startsWith("parameterLabel_") && !text->wordWrap())QVERIFY2(text->width()>=text->fontMetrics().horizontalAdvance(text->text()),qPrintable(text->objectName()));
         editor.grab().save(QCoreApplication::applicationDirPath()+"/parameter-shaders-long-path-1.0.4.png");
         QSignalSpy changed(&editor,&ParameterEditor::parameterChanged);
         category->setCurrentText("基础锐化");QVERIFY(mode->count()>0);for(int i=0;i<mode->count();++i)QCOMPARE(FilterCatalog::shaderCategory(mode->itemData(i).toString()),QString("基础锐化"));
-        category->setCurrentText("自定义 GLSL");QCOMPARE(mode->currentData().toString(),QString("自定义 GLSL"));QCOMPARE(mode->width(),140);
+        category->setCurrentText("自定义 GLSL/HLSL");QCOMPARE(mode->currentData().toString(),QString("自定义 GLSL"));QCOMPARE(mode->width(),120);
         QCOMPARE(changed.last().at(0).toString(),QString("mode"));QCOMPARE(changed.last().at(1).toString(),QString("自定义 GLSL"));
         editor.grab().save(QCoreApplication::applicationDirPath()+"/parameter-shaders-1.0.4.png");
     }

@@ -342,6 +342,7 @@ if(BUILD_TESTING)
         src/backend/StartupWarmup.cpp
         src/backend/StartupWarmup.h
         tests/TestFrameBridge.cpp
+        src/ui/MultiCompareView.cpp src/ui/MultiCompareView.h
         src/ui/CompareView.cpp
         src/ui/CompareView.h
         src/backend/ThreeFpApi.cpp
@@ -359,6 +360,7 @@ if(BUILD_TESTING)
 
     qt_add_executable(vsr_preview_tests
         tests/TestPreviewPane.cpp
+        src/ui/MultiCompareView.cpp src/ui/MultiCompareView.h
         src/ui/CompareView.cpp
         src/ui/CompareView.h
         src/ui/PreviewPane.cpp

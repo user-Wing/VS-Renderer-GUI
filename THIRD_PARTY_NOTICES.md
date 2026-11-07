@@ -93,3 +93,7 @@ The Windows runtime uses the official VapourSynth R81 ABI3 wheel (LGPL-2.1-or-la
 - Qwen3-ASR-0.6B INT8、sherpa-onnx、numpy 与 Python 放在独立 AI-Subtitles ZIP；来源、精确文件哈希及各依赖许可证在包内 `SOURCES.json` / `resource-manifest.json` / `licenses`。
 - 单帧 NCNN 使用用户已安装 VideoEnhancer 的 upscale-ncnn-py 1.2.0 Windows CPython 3.12 wheel 与 Param-Bin 模型资源，未引入 Torch；wrapper BSD-3-Clause 原许可和元数据保留于 `runtime/ncnn/licenses`。模型文件逐项哈希见该目录 manifest，模型各依原作者许可，不统一标作本项目 MIT。
 - 新增 havsfunc/adjust/nnedi3_resample/vsutil/mvsfunc 脚本与 FFT3DFilter、MiscFilters API4 DLL；保留原文件版权头、包 dist-info 和运行时哈希。旧 API3 插件未加入本轮运行目录。
+
+## PawnIO.Modules
+
+CPU 功耗读取使用 PawnIO.Modules 0.2.11 的原始签名模块（LGPL-2.1-or-later），来源、哈希、版权与完整源码获取入口见 [assets/pawnio/NOTICE.md](assets/pawnio/NOTICE.md)，许可见 [COPYING](assets/pawnio/COPYING)。运行包将说明和许可放在 `licenses/PawnIO-Modules/`；驱动和 PawnIOLib.dll 复用用户已有安装。NVIDIA 功耗接口动态读取已安装的 NVML，不随包重新分发驱动库。
