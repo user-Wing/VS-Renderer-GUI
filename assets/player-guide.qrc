@@ -1,1 +1,1 @@
-<RCC><qresource prefix="/filters"><file>player-guide.json</file></qresource></RCC>
+<RCC><qresource prefix="/filters"><file>player-guide.json</file><file>player-menu-descriptions.json</file></qresource></RCC>

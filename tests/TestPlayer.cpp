@@ -90,6 +90,8 @@
 #include <QFontInfo>
 #include <QTextLayout>
 #include "player/PlayerMenu.h"
+#include <QHelpEvent>
+#include <QToolTip>
 #include <windows.h>
 #include <cstdio>
 #include <cmath>
@@ -103,6 +105,17 @@ class TestPlayer final : public QObject {
     QString configPath() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
     Q_OBJECT
 private slots:
+    void sharedFilterMenuDescriptions(){
+        PlayerWindow player;const auto path=QDir(PresetStore::directory()).filePath("preset-descriptions.json");QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));const auto original=file.readAll();file.close();const auto restore=qScopeGuard([&]{PresetStore::write(path,QString::fromUtf8(original));});auto entries=QJsonDocument::fromJson(original).object();
+        const QStringList algorithms{"scaling/Nearest","scaling/Bilinear","scaling/Bicubic","scaling/Lanczos3","builtin/Anime-4-Jinc.vpy","scaling/Spline36","scaling/SuperXbr","builtin/Anime-5-D3D11.vpy","scaling/Lanczos4"};for(int i=0;i<algorithms.size();++i)entries.insert(algorithms[i],QString("shared-%1").arg(i));
+        const QStringList ids{"playerProcessing","playerUpsampling","playerAnimeFilters","playerPassthroughFilters","playerSecondUpsampling","playerDownsampling","playerInterpolation","playerInterpolationAuto","playerInterpolationJinc","playerInterpolationD3D11","playerSuperInterpolation"};const QStringList keys{"processing","upsampling","anime4k","passThrough","secondUpsampling","downsampling","interpolation","interpolationAuto","interpolationJinc","interpolationD3D11","superInterpolation"};for(int i=0;i<ids.size();++i)entries.insert("menu/"+keys[i],"header-"+ids[i]);
+        entries.insert("interpolation/auto/Jinc","auto-jinc");entries.insert("interpolation/auto/D3D11","auto-d3d11");entries.insert("builtin/Interpolation-0-RIFE.vpy","rife-full");entries.insert("builtin/Interpolation-0-RIFE-D3D11.vpy","rife-full-d3d11");QVERIFY(PresetStore::write(path,QString::fromUtf8(QJsonDocument(entries).toJson())));
+        player.showContextMenu(QPoint(20,20));auto *menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);
+        for(const auto &prefix:QStringList{"playerPrimaryScale","playerSecondScale","playerDownscale"})for(int i=0;i<algorithms.size();++i){auto *action=menu->findChild<QAction*>(prefix+QString::number(i));QVERIFY(action);QCOMPARE(action->toolTip(),QString("shared-%1").arg(i));}
+        for(const auto &id:ids){auto *folder=menu->findChild<QMenu*>(id);QVERIFY2(folder,qPrintable(id));QCOMPARE(folder->menuAction()->toolTip(),"header-"+id);}
+        QCOMPARE(menu->findChild<QAction*>("playerInterpolationAutoJinc")->toolTip(),QString("auto-jinc"));QCOMPARE(menu->findChild<QAction*>("playerInterpolationAutoD3D11")->toolTip(),QString("auto-d3d11"));QCOMPARE(menu->findChild<QAction*>("playerInterpolationJinc0")->toolTip(),QString("rife-full"));QCOMPARE(menu->findChild<QAction*>("playerInterpolationD3D110")->toolTip(),QString("rife-full-d3d11"));
+        auto *up=menu->findChild<QMenu*>("playerUpsampling");auto *anime=menu->findChild<QMenu*>("playerAnimeFilters");up->popup(QPoint(30,30));const auto pos=up->actionGeometry(anime->menuAction()).center();QHelpEvent help(QEvent::ToolTip,pos,up->mapToGlobal(pos));QApplication::sendEvent(up,&help);QCOMPARE(QToolTip::text(),QString("header-playerAnimeFilters"));QToolTip::hideText();menu->close();
+    }
     void idleGuideTargetsAndMediaVisibility(){
         PlayerWindow player;player.show();QTRY_VERIFY(player.idleGuide_->isVisible());QFile file(player.idleGuide_->configPath());QVERIFY(file.open(QIODevice::ReadOnly));const auto guide=QJsonDocument::fromJson(file.readAll()).object().value("playerGuide").toObject();QVERIFY(!guide.value("center").toObject().value("text").toString().isEmpty());
         for(const auto &entry:guide.value("guides").toArray())for(const auto &target:entry.toObject().value("targets").toArray())QVERIFY2(player.controls_->findChild<QWidget*>(target.toString()),qPrintable(target.toString()));

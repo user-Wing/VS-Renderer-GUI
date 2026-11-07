@@ -246,6 +246,7 @@ void PlayerWindow::ensureProfiles() {
         if(!document.isObject())return;
         entries=document.object();descriptionFile.close();
     }else if(descriptionFile.exists())return;
+    QFile menuDescriptions(":/filters/player-menu-descriptions.json");if(menuDescriptions.open(QIODevice::ReadOnly)){const auto defaults=QJsonDocument::fromJson(menuDescriptions.readAll()).object();for(auto it=defaults.begin();it!=defaults.end();++it)if(!entries.contains(it.key())){entries.insert(it.key(),it.value());changed=true;}}
     for(const auto &name:builtin.entryList({"*.vpy"},QDir::Files))if(!entries.contains("builtin/"+name)){entries.insert("builtin/"+name,QString());changed=true;}
     if(changed)PresetStore::write(descriptions,QString::fromUtf8(QJsonDocument(entries).toJson(QJsonDocument::Indented)));
 }

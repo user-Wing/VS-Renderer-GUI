@@ -8,6 +8,8 @@
 
 空置教程由`PlayerIdleGuide.h`绘制，默认数据为`assets/player-guide.json`；控件ID在`PlayerControls.cpp`定义，布局刷新仍由`PlayerPlaylist.cpp::updateChrome`驱动。外部配置复用滤镜说明JSON的`playerGuide`字段，Full在`vpy/`下，Single在启动器旁。文件监听支持保存后刷新，单文件打包不内嵌用户的外部说明配置。
 
+滤镜菜单说明由`PlayerMenus.cpp`读取同一JSON：Jinc/D3D11沿用既有builtin键，其他算法共用`scaling/`键，分类标题用`menu/`键，补帧自动档独立使用`interpolation/auto/`键。`assets/player-menu-descriptions.json`提供缺失键默认值，由`ensureProfiles`补齐而不覆盖用户内容；菜单重新打开时读取最新说明。
+
 本轮入口：`PlayerImageTools`负责比例尺寸、位深与Full GLSL/内置HLSL图片导出；Lite通过FFmpeg编码且关闭质量搜索。`PageTheme.h`使用独立底层QWidget绘图并即时刷新，跳过PreviewPane子树；`ThemePackage.h`管理主题包。`WrappedFileCombo.h`处理文件名换行；`PortableChart.h`将配置旁Pareto图保存为相对路径，并兼容单文件内嵌图。`tools/jxl-runtime.cmake`保留SIMD并修补Win64的向量跨函数传参对齐；版本未改变。字幕、滑块、功耗入口仍分别为`PlayerSubtitles`/Native `AssSubtitleRenderer`、`CompareView`和`PowerSensors`，功耗权限边界见 [研究记录](development/pawnio-power.md)。
 
 ## 1. 发心与边界
@@ -135,6 +137,8 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 文档纪律：结构/决策变化当天更新本地图；操作变化只改对应 docs 指南；用户可见变化写 changelog；测试按版本与轮次更新同一台账，不新建 `docs/update-版本.md`、`validation-版本.md`。原始日志留 `build/`，必要证据放 `development/evidence/`；不携带用户媒体。README、本地测试数据和开发记录不得混入上游 PR。
 
 ## 10. 当前状态
+
+下一轮按用户要求将Lite配置封装进入压缩包；本轮只补齐Full菜单说明并覆盖本地Full，未实施该打包变化。
 
 1.1.0 已落地三段缩放、多路输出、单帧NCNN、主题、音量/快捷键和动态缓冲；本轮追加图片导出与主题可见性修复，同步现有Full和单文件。指定背景图已在Renderer四页及Player主界面/设置实窗验收，图片位深和Lite FFmpeg路径专项通过；JPEGli后端仅8位。此前GBC指定尖峰已完成一次0丢帧复测，CPU功耗仍因驱动权限显示N/A；全量回归与长期播放没有通过结论，详见台账。
 

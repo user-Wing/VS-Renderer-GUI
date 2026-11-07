@@ -17,6 +17,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QFile>
 #include <QDateTime>
 #include <QFileDialog>
 #include <QProcess>
@@ -117,8 +118,16 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     user->addAction(tr("加载 VPY 文件…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("加载 VPY"),PresetStore::directory(),"VapourSynth (*.vpy)");if(!path.isEmpty())loadPreset(path);});
     presets->setEnabled(!imageMode_);
 #endif
-    auto *processing=PlayerMenu::add(menu,tr("图像处理"));
-    auto *scalingFilters=PlayerMenu::add(processing,tr("上采样滤镜"));scalingFilters->setObjectName("playerUpsampling");
+    QFile descriptions(
+#ifdef VSR_LITE_PLAYER
+        QDir(QFileInfo(settings_->fileName()).absolutePath()).filePath("preset-descriptions.json")
+#else
+        QDir(PresetStore::directory()).filePath("preset-descriptions.json")
+#endif
+    );QJsonObject notes;if(descriptions.open(QIODevice::ReadOnly))notes=QJsonDocument::fromJson(descriptions.readAll()).object();
+    const auto description=[&](const QString &key){return notes.value(key).toString();};
+    auto *processing=PlayerMenu::add(menu,tr("图像处理"));processing->setObjectName("playerProcessing");processing->menuAction()->setToolTip(description("menu/processing"));
+    auto *scalingFilters=PlayerMenu::add(processing,tr("上采样滤镜"));scalingFilters->setObjectName("playerUpsampling");scalingFilters->menuAction()->setToolTip(description("menu/upsampling"));
     auto *scalingGroup=new QActionGroup(scalingFilters);
     const QStringList animeFiles{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
     const auto scaleChoice=[&](QMenu *folder,int stage){
@@ -132,14 +141,16 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     const auto autoPath=QDir(PresetStore::directory()).filePath("builtin/Anime.vpy");
     auto *automatic=scalingFilters->addAction(tr("自动切换（推荐）"),this,[this,autoPath]{loadPreset(autoPath);});
     automatic->setToolTip(PresetStore::description(autoPath));automatic->setCheckable(true);automatic->setChecked(profile()=="Anime" && fixedAnimeStage()<0);scalingGroup->addAction(automatic);
-    auto *animeMenu=PlayerMenu::add(scalingFilters,tr("Anime4K V4 CNN+"));
+    auto *animeMenu=PlayerMenu::add(scalingFilters,tr("Anime4K V4 CNN+"));animeMenu->setObjectName("playerAnimeFilters");animeMenu->menuAction()->setToolTip(description("menu/anime4k"));
     for(int stage:{0,1,2,3,6,7})scaleChoice(animeMenu,stage);
-    scalingFilters->addSeparator();auto *passThroughFilters=PlayerMenu::add(scalingFilters,tr("常规直通模式"));
+    scalingFilters->addSeparator();auto *passThroughFilters=PlayerMenu::add(scalingFilters,tr("常规直通模式"));passThroughFilters->setObjectName("playerPassthroughFilters");passThroughFilters->menuAction()->setToolTip(description("menu/passThrough"));
     const QStringList algorithmNames{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc (Anti-Alias)","Spline36","Super-XBR","D3D11","Lanczos4"};
+    const QStringList algorithmKeys{"scaling/Nearest","scaling/Bilinear","scaling/Bicubic","scaling/Lanczos3","builtin/Anime-4-Jinc.vpy","scaling/Spline36","scaling/SuperXbr","builtin/Anime-5-D3D11.vpy","scaling/Lanczos4"};
     const auto algorithms=[&](QMenu *folder,const QString &key,const QString &id,bool primary){
         auto *group=new QActionGroup(folder);
         for(int algorithm:{4,7,3,8,5,2,1,0,6}){
             auto *action=folder->addAction(algorithmNames[algorithm]);action->setObjectName(id+QString::number(algorithm));
+            action->setToolTip(description(algorithmKeys[algorithm]));
             action->setCheckable(true);action->setChecked(settings_->value(key,4).toInt()==algorithm && (!primary || direct_ && !nativeAnime_));group->addAction(action);
             connect(action,&QAction::triggered,this,[this,key,algorithm,primary]{
                 if(primary)loadPreset(QDir(PresetStore::directory()).filePath(algorithm==4?"builtin/Anime-4-Jinc.vpy":"builtin/Anime-5-D3D11.vpy"));
@@ -148,23 +159,24 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
         }
     };
     algorithms(passThroughFilters,"render/upscale","playerPrimaryScale",true);
-    auto *second=PlayerMenu::add(processing,tr("第二上采样滤镜"));second->setObjectName("playerSecondUpsampling");
+    auto *second=PlayerMenu::add(processing,tr("第二上采样滤镜"));second->setObjectName("playerSecondUpsampling");second->menuAction()->setToolTip(description("menu/secondUpsampling"));
     algorithms(second,"render/secondUpscale","playerSecondScale",false);
-    auto *down=PlayerMenu::add(processing,tr("下采样"));down->setObjectName("playerDownsampling");
+    auto *down=PlayerMenu::add(processing,tr("下采样"));down->setObjectName("playerDownsampling");down->menuAction()->setToolTip(description("menu/downsampling"));
     algorithms(down,"render/downscale","playerDownscale",false);
 #ifndef VSR_LITE_PLAYER
-    auto *interpolation=PlayerMenu::add(processing,tr("补帧"));auto *interpolationGroup=new QActionGroup(interpolation);
+    auto *interpolation=PlayerMenu::add(processing,tr("补帧"));interpolation->setObjectName("playerInterpolation");interpolation->menuAction()->setToolTip(description("menu/interpolation"));auto *interpolationGroup=new QActionGroup(interpolation);
     const auto interpolationChoice=[&](QMenu *folder,const QString &name,int stage,bool automatic,int renderer){
         auto *action=folder->addAction(name,this,[this,stage,automatic,renderer]{setInterpolation(stage,automatic,renderer);});
+        action->setObjectName(automatic?QString("playerInterpolationAuto%1").arg(renderer?"D3D11":"Jinc"):QString("playerInterpolation%1%2").arg(renderer?"D3D11":"Jinc").arg(stage));
         action->setCheckable(true);action->setChecked(interpolationStage()==stage && interpolationAuto_==automatic && interpolationRenderer()==renderer);interpolationGroup->addAction(action);
         const QStringList files{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};
-        auto nameFile=files[stage];if(renderer)nameFile.replace(".vpy","-D3D11.vpy");action->setToolTip(PresetStore::description(QDir(PresetStore::directory()).filePath("builtin/"+nameFile)));return action;
+        auto nameFile=files[stage];if(renderer)nameFile.replace(".vpy","-D3D11.vpy");action->setToolTip(automatic?description(renderer?"interpolation/auto/D3D11":"interpolation/auto/Jinc"):PresetStore::description(QDir(PresetStore::directory()).filePath("builtin/"+nameFile)));return action;
     };
-    auto *autoInterpolation=PlayerMenu::add(interpolation,tr("自动切换"));
+    auto *autoInterpolation=PlayerMenu::add(interpolation,tr("自动切换"));autoInterpolation->setObjectName("playerInterpolationAuto");autoInterpolation->menuAction()->setToolTip(description("menu/interpolationAuto"));
     for(int renderer=0;renderer<2;++renderer)interpolationChoice(autoInterpolation,renderer?tr("D3D11 模式"):tr("Jinc 模式"),0,true,renderer)->setEnabled(!interpolationStages(renderer).isEmpty());
-    for(int renderer=0;renderer<2;++renderer){interpolation->addSeparator();auto *folder=PlayerMenu::add(interpolation,renderer?tr("D3D11 模式"):tr("Jinc 模式"));for(int stage=0;stage<4;++stage)interpolationChoice(folder,interpolationNames().at(stage),stage,false,renderer);}
+    for(int renderer=0;renderer<2;++renderer){interpolation->addSeparator();auto *folder=PlayerMenu::add(interpolation,renderer?tr("D3D11 模式"):tr("Jinc 模式"));folder->setObjectName(renderer?"playerInterpolationD3D11":"playerInterpolationJinc");folder->menuAction()->setToolTip(description(renderer?"menu/interpolationD3D11":"menu/interpolationJinc"));for(int stage=0;stage<4;++stage)interpolationChoice(folder,interpolationNames().at(stage),stage,false,renderer);}
     interpolation->addSeparator();interpolation->addAction(tr("关闭"),this,[this]{setInterpolation(-1,false);});
-    auto *super=PlayerMenu::add(processing,tr("超分补帧组合"));
+    auto *super=PlayerMenu::add(processing,tr("超分补帧组合"));super->setObjectName("playerSuperInterpolation");super->menuAction()->setToolTip(description("menu/superInterpolation"));
     const QStringList superFiles{"Super-0-A4K-RIFE-A4K.vpy","Super-1-A4K-RIFE-Jinc.vpy","Super-2-A4K-RIFE-D3D11.vpy","Super-3-RIFE-A4K.vpy"};
     const QStringList superNames{tr("Anime4K 2160 → RIFE 整帧540p → Anime4K 2160"),tr("Anime4K 2160 → RIFE 整帧540p → Jinc 2160"),tr("Anime4K 2160 → RIFE 整帧540p → D3D11 2160"),tr("1080 → RIFE 半尺寸推理/保留原帧 → Anime4K 2160")};
     for(int stage=0;stage<superFiles.size();++stage){const auto path=QDir(PresetStore::directory()).filePath("builtin/"+superFiles[stage]);auto *action=super->addAction(superNames[stage],this,[this,path]{loadPreset(path);});action->setCheckable(true);action->setChecked(superInterpolationStage()==stage);action->setToolTip(PresetStore::description(path));}
