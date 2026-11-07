@@ -30,7 +30,7 @@ Full的`vpy/preset-descriptions.json`也管理算法和菜单标题的鼠标悬�
 
 分类标题使用`menu/`开头的键，包括`upsampling`、`secondUpsampling`、`downsampling`、`anime4k`、`passThrough`、`interpolation`等。补帧自动切换的两种输出模式分别使用`interpolation/auto/Jinc`和`interpolation/auto/D3D11`，与`builtin/Interpolation-0-RIFE.vpy`及其D3D11变体的全宽高RIFE说明分开。新增默认键见源码`assets/player-menu-descriptions.json`；补齐缺失键时保留已有说明和`playerGuide`。
 
-内置 Anime4K 使用原生 HLSL；修改过的 VPY 或不兼容着色器保留原 GLSL。231/915 个库条目已预编译；归档里的源文件和配套字节码一起按需提取，不要求每次重新转换。不支持的 COMPUTE、CHROMA、OFFSET 等语义仍明确拒绝或回退。
+内置 Anime4K 使用原生 HLSL；修改过的 VPY 或不兼容着色器保留原 GLSL。302/915 个库条目已预编译；归档里的源文件和配套字节码一起按需提取，不要求每次重新转换。不支持的 COMPUTE、CHROMA、OFFSET 等语义仍明确拒绝或回退。
 
 原始高度 ≥2160p 时禁用内置 Anime4K，Jinc/D3D11 保持可选。渲染设置完整列出八档，单击选择起始档位、勾选参与自动切换，D3D11 必选；Tab 与底栏显示实际生效链路。自定义 VPY 不受此内置限制，需自行评估资源。
 
@@ -77,9 +77,11 @@ Full 默认将未修改正文的内置 Anime4K 交给原生 D3D11/HLSL。内置 
 
 ### 当前支持边界
 
-通用 GLSL 导入支持 `MAIN` / `PREKERNEL` / `LUMA` 的多 pass 像素着色器，以及受支持的 `BIND`、`SAVE`、`WHEN`、`WIDTH`、`HEIGHT`、`COMPONENTS` 语义。按 MAIN → PREKERNEL 阶段执行，各阶段保留文件顺序；覆盖当前 PREKERNEL 图像时不接受显式宽高。中间纹理使用 FP16，`COMPONENTS` 1～4 正确补齐未存储的通道；每份文件最多 128 个 pass、每 pass 最多 8 个纹理绑定。
+通用 GLSL 导入支持 `MAIN` / `PREKERNEL` / `LUMA` 的多 pass 像素着色器，以及受支持的 `BIND`、`SAVE`、`WHEN`、`WIDTH`、`HEIGHT`、`COMPONENTS` 语义。按 MAIN → PREKERNEL 阶段执行，各阶段保留文件顺序；覆盖当前 PREKERNEL 图像时不接受显式宽高。中间纹理使用 FP16，`COMPONENTS` 1～4 正确补齐未存储的通道；每份文件最多 128 个 pass、每 pass 最多 16 个纹理绑定。
 
 尺寸表达式支持 `.w/.h`、`.width/.height` 及 `+ - * / > < = !`；`WHEN` 为 0 时跳过对应 pass。`NATIVE` 仅可用于读取原始宽高，不提供其像素采样；依赖被跳过 pass 的纹理等运行时不兼容情况会明确失败。仅支持程序所定义的普通 SDR RGB 路径；HDR、BT.2020/P3 色域、额外显示变换等情况会被拒绝或回退。LUMA hook 先按当前受支持 SDR 矩阵提取亮度，再合回 RGB；不代表支持 CHROMA 或 HDR shader。
+
+每个像素pass最多读取16张纹理，导入、缓存校验和原生执行使用同一D3D11限制；完整Mode A（49个pass、最多15个绑定）已完成编译及1×/2×/3×/4× GPU输出对照。此结论不扩展到未实现的计算着色器等语义。
 
 `CHROMA` 等未实现 hook、计算着色器、外部纹理、`OFFSET`、`#include` 和不支持的指令不会被忽略。每份文件的实际支持情况以导入检查结果为准，不能仅因扩展名正确或语言编译成功就视为兼容。
 

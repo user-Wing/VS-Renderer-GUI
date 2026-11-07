@@ -1,0 +1,12 @@
+********* Start testing of TestShaderPackage *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestShaderPackage::initTestCase()
+FAIL!  : TestShaderPackage::sixteenBindingsReachGpu() 'result.error.isEmpty()' returned FALSE. (At most eight texture bindings are supported.)
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestShaderPackage.cpp(38) : failure location
+WARNING: TestShaderPackage::completeModeACompiles() testdata ../assets/anime4k-v4-a.glsl could not be located!
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestShaderPackage.cpp(57) : message location
+FAIL!  : TestShaderPackage::completeModeACompiles() '!path.isEmpty()' returned FALSE. ()
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestShaderPackage.cpp(58) : failure location
+PASS   : TestShaderPackage::cleanupTestCase()
+Totals: 2 passed, 2 failed, 0 skipped, 0 blacklisted, 107ms
+********* Finished testing of TestShaderPackage *********

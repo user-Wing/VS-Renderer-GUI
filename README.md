@@ -6,6 +6,8 @@ Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS
 
 [下载便携包](https://github.com/user-Wing/VS-Renderer-GUI/releases) · [ModelScope 下载源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) · [操作指南](docs/README.md) · [更新日志](changelog.md)
 
+单文件播放器内附可编辑的教程与滤镜说明默认配置；首次启动写到程序旁的 `preset-descriptions.json`，保存后即时刷新。
+
 源码版本：**1.1.0，本地开发版，未发布**。全量回归仍有未关闭的失败，下载入口中的历史版本不自动包含本轮功能。验收范围见 [版本测试台账](development/validation.md)。
 
 本轮增加独立的主上采样、第二上采样和下采样选择、200% 音量、可配置快捷键与页面背景；Renderer 支持最多三路处理输出加原片对比。图片可缩放后通过 RAW 中间图像转换，AI 字幕提供独立可下载组件；使用与限制见 [Player 指南](docs/player.md) 和 [Renderer 指南](docs/renderer.md)。

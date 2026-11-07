@@ -117,9 +117,13 @@ protected:
     }
 };
 PlayerWindow::PlayerWindow() {
+    auto darkPalette=palette();darkPalette.setColor(QPalette::Window,QColor("#202124"));
+    darkPalette.setColor(QPalette::WindowText,QColor("#e8eaed"));setPalette(darkPalette);setAutoFillBackground(true);
     const QString configPath = qEnvironmentVariable("VSR_PLAYER_CONFIG", QDir(QCoreApplication::applicationDirPath()).filePath("player.ini"));
 #ifdef VSR_LITE_PLAYER
     const bool newConfiguration = qEnvironmentVariableIntValue("VSR_PLAYER_NEW_CONFIG") == 1 || !QFileInfo::exists(configPath);
+    const auto descriptions=QDir(QFileInfo(configPath).absolutePath()).filePath("preset-descriptions.json");
+    if(!QFileInfo::exists(descriptions))QFile::copy(QDir(QCoreApplication::applicationDirPath()).filePath("preset-descriptions.json"),descriptions);
 #endif
     settings_ = std::make_unique<QSettings>(configPath, QSettings::IniFormat);
     language_=std::make_unique<PlayerLanguage>(settings_->value("basic/language","zh_CN").toString());

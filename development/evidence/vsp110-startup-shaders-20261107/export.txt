@@ -1,0 +1,21 @@
+********* Start testing of TestExportPipeline *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestExportPipeline::initTestCase()
+QWARN  : TestExportPipeline::commandBridgeAndHistory() QFontDatabase: Cannot find font directory C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/build/mingw-release/lib/fonts.
+Note that Qt no longer ships fonts. Deploy some (from https://dejavu-fonts.github.io/ for example) or switch to fontconfig.
+QWARN  : TestExportPipeline::commandBridgeAndHistory() This plugin does not support propagateSizeHints()
+QWARN  : TestExportPipeline::commandBridgeAndHistory() This plugin does not support raise()
+PASS   : TestExportPipeline::commandBridgeAndHistory()
+PASS   : TestExportPipeline::batchOutputNames()
+PASS   : TestExportPipeline::rewritesThreeFuiMapsAndPlaceholders()
+PASS   : TestExportPipeline::addsVideoMapAndCudaUploadWhenNeeded()
+PASS   : TestExportPipeline::rejectsUnsupportedComplexGraph()
+QWARN  : TestExportPipeline::exportsThroughRealProcessPipe(complete-mkv) This plugin does not support propagateSizeHints()
+QWARN  : TestExportPipeline::exportsThroughRealProcessPipe(complete-mkv) This plugin does not support propagateSizeHints()
+QWARN  : TestExportPipeline::exportsThroughRealProcessPipe(complete-mkv) This plugin does not support propagateSizeHints()
+QWARN  : TestExportPipeline::exportsThroughRealProcessPipe(complete-mkv) This plugin does not support propagateSizeHints()
+PASS   : TestExportPipeline::exportsThroughRealProcessPipe(complete-mkv)
+PASS   : TestExportPipeline::exportsThroughRealProcessPipe(stop-mkv)
+PASS   : TestExportPipeline::cleanupTestCase()
+Totals: 9 passed, 0 failed, 0 skipped, 0 blacklisted, 10833ms
+********* Finished testing of TestExportPipeline *********

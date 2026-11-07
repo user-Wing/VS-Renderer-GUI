@@ -1,0 +1,218 @@
+[
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Restore/Anime4K_Restore_CNN_Soft_UL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Restore/Anime4K_Restore_CNN_Soft_VL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Restore/Anime4K_Restore_CNN_UL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Restore/Anime4K_Restore_CNN_VL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Upscale/Anime4K_Upscale_CNN_x2_UL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Upscale/Anime4K_Upscale_CNN_x2_VL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Upscale/Anime4K_Upscale_GAN_x3_L.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Upscale/Anime4K_Upscale_GAN_x3_VL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Upscale/Anime4K_Upscale_GAN_x4_UL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Upscale/Anime4K_Upscale_GAN_x4_UUL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_UL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/bloc97--Anime4K/glsl/Upscale+Denoise/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/deus0ww--mpv-conf/shaders/artcnn/Luma/ArtCNN_C4F32.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/deus0ww--mpv-conf/shaders/artcnn/Luma/ArtCNN_C4F32_DN.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/deus0ww--mpv-conf/shaders/artcnn/Luma/ArtCNN_C4F32_DS.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/deus0ww--mpv-conf/shaders/artcnn/Luma/ArtCNN_C4F32_LL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/deus0ww--mpv-conf/shaders/artcnn/Luma/ArtCNN_C4F32_SH.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Ani/Ani4Kv2_ArtCNN_C4F32_i2.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Ani/AniSD_ArtCNN_C4F32_i4.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_AIO_optQ.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Restore_CNN_Soft_UL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Restore_CNN_Soft_VL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Restore_CNN_UL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Restore_CNN_VL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Upscale_CNN_x2_UL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Upscale_CNN_x2_VL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Upscale_Denoise_CNN_x2_UL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x3_L.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x3_VL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x4_UL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/Anime4K/Anime4K_Upscale_GAN_x4_UUL.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/ArtCNN/ArtCNN_Legacy_C4F32_RGB.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/hooke007--mpv_PlayKit/portable_config/shaders/FSRCNNX/FSRCNNX_x2_56_16_4_1.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/Sirosky--Upscale-Hub/Ani4k-v2-ArtCNN/Ani4Kv2_ArtCNN_C4F32_i2.glsl",
+    "reusedPrevious": false
+  },
+  {
+    "compiled": true,
+    "error": "",
+    "file": "C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/assets/mpv-shaders/Sirosky--Upscale-Hub/AniSD-ArtCNN/AniSD_ArtCNN_C4F32_i4.glsl",
+    "reusedPrevious": false
+  }
+]

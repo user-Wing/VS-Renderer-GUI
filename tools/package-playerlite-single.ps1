@@ -24,11 +24,12 @@ if (!$stage.StartsWith($buildRoot, [StringComparison]::OrdinalIgnoreCase)) { thr
 if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $stage | Out-Null
 # FFmpeg is provided externally beside the launcher or through PATH.
-# User configuration stays beside the launcher and is never embedded.
+# Player settings and themes stay beside the launcher. Editable descriptions
+# are shipped as defaults and copied beside player.ini only when absent.
 $ffmpegFiles = @((Get-Content -LiteralPath (Join-Path $SourceDirectory 'release.json') -Raw | ConvertFrom-Json).ffmpegOnlyFiles)
 $ffmpegPattern = '^(ffmpeg|ffprobe)\.exe$|^(avcodec|avdevice|avfilter|avformat|avutil|swresample|swscale)(-\d+)?\.dll$'
 Get-ChildItem -LiteralPath $SourceDirectory -Force | Where-Object {
-    $_.Name -notin @('player.ini','themes.ini','themes','preset-descriptions.json') -and $_.Name -notin $ffmpegFiles -and $_.Name -notmatch $ffmpegPattern
+    $_.Name -notin @('player.ini','themes.ini','themes') -and $_.Name -notin $ffmpegFiles -and $_.Name -notmatch $ffmpegPattern
 } | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
 }

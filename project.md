@@ -4,9 +4,11 @@
 
 高 DPI 全屏底边控制栏定位于 `PlayerPlaylist.cpp::updateChrome`；Qt 全局坐标在 300% 缩放下可能把物理最后一像素舍入到逻辑边界外，仅全屏容许右/下各一个逻辑像素。Full/Lite 的 `fullscreenPhysicalBottomEdge` 使用 Win32 真实屏幕坐标覆盖左右端和中点；48F 专项入口为 `remote48FrameCadence`，由环境变量指定设备素材，不内置媒体路径。NuxBox 的 Tab 24F 报告未复现，用户复测已恢复。Full 内置旧VPY的插件名兼容位于`PlayerProfiles.cpp::nativeBuiltinCompatible`，只接受完整当前模板或已知旧插件名模板，继续拒绝实际修改过的Python正文。
 
+本轮续修：`ShaderPackage.cpp`和`CustomShader.h`统一使用D3D11的16个采样器槽；包格式及旧缓存语义不变，Native须同步重编。`apply-update.ps1`同盘移动已准备的payload，异盘复制；`PlayerInfo`仅在Tab显示时查询GPU/功耗，`PlayerWindow`提前设置深色底色。单文件默认说明随包保存，首次启动写到配置旁，之后不覆盖手工修改。
+
 历史续修记录：`src/render/ShaderPackage.cpp`增加单文件多pass HLSL导入；含`//!HOOK`的HLSL复用现有MAIN/PREKERNEL指令解析，每段独立编译并保留资源反射检查。普通单pass HLSL契约与Native二进制包格式不变，缓存语义键升级v7。`tests/TestShaderPackage.cpp`覆盖重复main的多段输入；本地独立产物`dist/VS-Player-MoeSR.exe`保留原`dist/VS-Player.exe`，未改版本或发布。
 
-空置教程由`PlayerIdleGuide.h`绘制，默认数据为`assets/player-guide.json`；控件ID在`PlayerControls.cpp`定义，布局刷新仍由`PlayerPlaylist.cpp::updateChrome`驱动。外部配置复用滤镜说明JSON的`playerGuide`字段，Full在`vpy/`下，Single在启动器旁。文件监听支持保存后刷新，单文件打包不内嵌用户的外部说明配置。
+空置教程由`PlayerIdleGuide.h`绘制，默认数据为`assets/player-guide.json`；控件ID在`PlayerControls.cpp`定义，布局刷新仍由`PlayerPlaylist.cpp::updateChrome`驱动。外部配置复用滤镜说明JSON的`playerGuide`字段，Full在`vpy/`下，Single在启动器旁。文件监听支持保存后刷新，单文件携带说明默认配置，首次写出后已有外部文件优先。
 
 滤镜菜单说明由`PlayerMenus.cpp`读取同一JSON：Jinc/D3D11沿用既有builtin键，其他算法共用`scaling/`键，分类标题用`menu/`键，补帧自动档独立使用`interpolation/auto/`键。`assets/player-menu-descriptions.json`提供缺失键默认值，由`ensureProfiles`补齐而不覆盖用户内容；菜单重新打开时读取最新说明。
 

@@ -14,6 +14,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QProcess>
+#include <QElapsedTimer>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSignalSpy>
@@ -30,6 +31,11 @@ void payload(const QString &root){for(const auto &name:QStringList{"VSRenderer.e
 class TestUpdates : public QObject {
     Q_OBJECT
 private slots:
+    void sameVolumeUpdateReusesPreparedFiles(){
+        QTemporaryDir dir;const auto target=dir.filePath("portable"),source=dir.filePath("payload");payload(source);write(target+"/vs-player.exe","old");write(target+"/player.ini","user");
+        const auto identity=[](const QString &path){auto handle=CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()),FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,0,nullptr);BY_HANDLE_FILE_INFORMATION info{};const bool ok=handle!=INVALID_HANDLE_VALUE && GetFileInformationByHandle(handle,&info);if(handle!=INVALID_HANDLE_VALUE)CloseHandle(handle);return ok?(quint64(info.nFileIndexHigh)<<32)|info.nFileIndexLow:quint64(0);};
+        const auto prepared=identity(source+"/FFF.Native.dll");QVERIFY(prepared);QProcess apply;QElapsedTimer elapsed;elapsed.start();apply.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-update.ps1"),"-ParentPid","0","-Source",source,"-Target",target,"-NoLaunch"});QVERIFY(apply.waitForFinished(30000));QVERIFY2(apply.exitCode()==0,apply.readAllStandardError().constData());qInfo()<<"prepared-directory update ms"<<elapsed.elapsed();QCOMPARE(identity(target+"/FFF.Native.dll"),prepared);QVERIFY(!QFileInfo::exists(source));QFile ini(target+"/player.ini");QVERIFY(ini.open(QIODevice::ReadOnly));QCOMPARE(ini.readAll(),QByteArray("user"));
+    }
     void componentVersionsAndLayouts(){QVERIFY(ComponentDownloads::newer("102.0","99.0"));QVERIFY(!ComponentDownloads::newer("0.83","0.83.0"));QVERIFY(ComponentDownloads::newer("20261003","20260929"));QJsonArray files;for(const auto &path:QStringList{"aria2-next/v2.8.3/aria2-next-2.8.3-windows-x86_64.exe","aria2-next/v2.8.2/aria2-next-2.8.2-source.zip","aria2-next/v2.8.2/aria2-next-2.8.2-windows-x86_64.exe"})files<<QJsonObject{{"Path",path},{"Type","blob"},{"Size",100},{"Sha256",QString(64,'a')}};const auto versions=ComponentDownloads::releases("aria2-next",files);QCOMPARE(versions.size(),2);QCOMPARE(versions.first().version,QString("2.8.3"));QCOMPARE(ComponentDownloads::destination("mkvtoolnix"),QString("runtime/mkvtoolnix"));QVERIFY(ComponentDownloads::destination("bad").isEmpty());
         files={QJsonObject{{"Path","MadVR/madVR09217.7z"},{"Type","blob"},{"Size",100},{"Sha256",QString(64,'a')}}};QCOMPARE(ComponentDownloads::releases("MadVR",files).first().version,QString("0.92.17"));
         QTemporaryDir tmp;QByteArray pe(128,'\0');pe.replace(0,2,"MZ");qToLittleEndian<quint32>(64,pe.data()+60);pe.replace(64,4,QByteArray("PE\0\0",4));qToLittleEndian<quint16>(0x8664,pe.data()+68);write(tmp.filePath("wrapper/deep/mkvmerge.exe"),pe);QCOMPARE(ComponentDownloads::payloadDirectory("mkvtoolnix",tmp.path()),tmp.filePath("wrapper/deep"));write(tmp.filePath("duplicate/mkvmerge.exe"),pe);QVERIFY(ComponentDownloads::payloadDirectory("mkvtoolnix",tmp.path()).isEmpty());

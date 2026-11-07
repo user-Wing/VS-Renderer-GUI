@@ -55,9 +55,15 @@ try {
         foreach ($process in $busy) { Stop-Process -Id $process.Id -Force -ErrorAction Stop }
         Start-Sleep -Milliseconds 200
     } while ($true)
-    New-Item -ItemType Directory -Path $incoming | Out-Null
-    & robocopy.exe $sourceRoot $incoming /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
-    if ($LASTEXITCODE -ge 8) { throw "Payload copy failed: $LASTEXITCODE" }
+    # The extracted payload is disposable. On the same volume, retain its files
+    # by renaming the directory instead of copying the entire runtime again.
+    if ([IO.Path]::GetPathRoot($sourceRoot) -eq [IO.Path]::GetPathRoot($incoming)) {
+        [IO.Directory]::Move($sourceRoot, $incoming)
+    } else {
+        New-Item -ItemType Directory -Path $incoming | Out-Null
+        & robocopy.exe $sourceRoot $incoming /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+        if ($LASTEXITCODE -ge 8) { throw "Payload copy failed: $LASTEXITCODE" }
+    }
     Get-ChildItem -LiteralPath $targetRoot -File -Filter '*.ini' | Copy-Item -Destination $incoming -Force
     $oldPresets = Join-Path $targetRoot 'vpy'
     $newPresets = Join-Path $incoming 'vpy'

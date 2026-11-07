@@ -46,6 +46,21 @@ class TestPlayer final : public QObject {
     QByteArray previous_;bool existed_=false;
     QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
 private slots:
+    void packagedDescriptionsSeedOnlyMissingConfig(){
+        QTemporaryDir directory;const auto bundled=QDir(QCoreApplication::applicationDirPath()).filePath("preset-descriptions.json");
+        QFile original(bundled);const bool existed=original.exists();QByteArray saved;if(original.open(QIODevice::ReadOnly))saved=original.readAll();original.close();
+        const auto previous=qgetenv("VSR_PLAYER_CONFIG");const bool hadEnvironment=qEnvironmentVariableIsSet("VSR_PLAYER_CONFIG");
+        const auto restore=qScopeGuard([&]{if(existed){QFile file(bundled);if(file.open(QIODevice::WriteOnly))file.write(saved);}else QFile::remove(bundled);if(hadEnvironment)qputenv("VSR_PLAYER_CONFIG",previous);else qunsetenv("VSR_PLAYER_CONFIG");});
+        const QByteArray defaults=R"({"menu/scaling":{"description":"packaged Full description"},"playerGuide":{"center":{"text":"Lite GLSL/HLSL"}}})";
+        QFile file(bundled);QVERIFY(file.open(QIODevice::WriteOnly));QCOMPARE(file.write(defaults),defaults.size());file.close();
+        qputenv("VSR_PLAYER_CONFIG",directory.filePath("player.ini").toUtf8());
+        {PlayerWindow player;}
+        QFile external(directory.filePath("preset-descriptions.json"));QVERIFY(external.open(QIODevice::ReadOnly));QCOMPARE(external.readAll(),defaults);external.close();
+        const QByteArray custom=R"({"playerGuide":{"center":{"text":"manual changes"}}})";
+        QVERIFY(external.open(QIODevice::WriteOnly));external.write(custom);external.close();
+        {PlayerWindow player;}
+        QVERIFY(external.open(QIODevice::ReadOnly));QCOMPARE(external.readAll(),custom);
+    }
     void categoryHoverDescriptionSurvivesSubmenu(){
         PlayerMenu parent(nullptr);auto *child=PlayerMenu::add(&parent,"Category");auto *leaf=child->addAction("Algorithm");auto *plain=parent.addAction("Plain");
         const auto text=QString("Configured category description");child->menuAction()->setToolTip(text);child->menuAction()->setProperty("playerDescription",text);

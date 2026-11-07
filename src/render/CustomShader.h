@@ -105,7 +105,7 @@ public:
         const auto text=[&](std::string& out){uint32_t n=0;if(!integer(n) || n>4096 || at+n>bytes.size())return false;out.assign(bytes.data()+at,n);at+=n;return out.find('\0')==std::string::npos;};
         uint32_t count=0;Pipeline next;bool valid=std::memcmp(bytes.data(),"VSRHLSL1",8)==0 && integer(count) && count>0 && count<=128;
         for(uint32_t i=0;valid && i<count;++i){Pass p;uint32_t bindings=0,length=0;
-            valid=text(p.hook) && (p.hook=="LUMA" || p.hook=="MAIN" || p.hook=="PREKERNEL") && text(p.save) && text(p.width) && text(p.height) && text(p.when) && integer(bindings) && bindings<=8;
+            valid=text(p.hook) && (p.hook=="LUMA" || p.hook=="MAIN" || p.hook=="PREKERNEL") && text(p.save) && text(p.width) && text(p.height) && text(p.when) && integer(bindings) && bindings<=D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT;
             for(uint32_t j=0;valid && j<bindings;++j){std::string name;valid=text(name);p.bindings.push_back(name);}
             valid=valid && integer(length) && length>=4 && length<=16*1024*1024 && at+length<=bytes.size();
             if(valid){p.bytecode.assign(bytes.data()+at,bytes.data()+at+length);valid=std::memcmp(p.bytecode.data(),"DXBC",4)==0;at+=length;next.passes_.push_back(std::move(p));}
@@ -144,15 +144,15 @@ public:
             if(!eval(p.width,saved,targetWidth,targetHeight,fw) || !eval(p.height,saved,targetWidth,targetHeight,fh) || fw<1 || fh<1 || fw>16384 || fh>16384){error_="Invalid custom shader output dimensions.";return false;}
             const unsigned width=unsigned(std::lround(fw)),height=unsigned(std::lround(fh));
             if(!surface(surfaces_[i],width,height))return false;
-            ID3D11ShaderResourceView* views[8]{};
+            ID3D11ShaderResourceView* views[D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT]{};
             for(size_t b=0;b<p.bindings.size();++b){const auto it=saved.find(p.bindings[b]);if(it==saved.end()){error_="Unavailable custom shader texture: "+p.bindings[b];return false;}views[b]=it->second->view.Get();}
             auto* target=surfaces_[i].target.Get();context->OMSetRenderTargets(1,&target,nullptr);context->OMSetBlendState(nullptr,nullptr,0xffffffff);
             const D3D11_VIEWPORT viewport{0,0,float(width),float(height),0,1};context->RSSetViewports(1,&viewport);context->IASetInputLayout(nullptr);context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
             context->VSSetShader(vertex_.Get(),nullptr,0);context->PSSetShader(shaders_[i].Get(),nullptr,0);
             const auto* hooked=saved["HOOKED"];const float constants[]{float(hooked->width),float(hooked->height),1.0f/hooked->width,1.0f/hooked->height,float(width),float(height),1.0f/width,1.0f/height};
             context->UpdateSubresource(constants_.Get(),0,nullptr,constants,0,0);auto* cb=constants_.Get();context->PSSetConstantBuffers(0,1,&cb);
-            ID3D11SamplerState* samplers[8];for(auto& sampler:samplers)sampler=sampler_.Get();context->PSSetSamplers(0,8,samplers);context->PSSetShaderResources(0,8,views);context->Draw(3,0);
-            ID3D11ShaderResourceView* empty[8]{};context->PSSetShaderResources(0,8,empty);context->OMSetRenderTargets(0,nullptr,nullptr);saved[p.save]=&surfaces_[i];
+            ID3D11SamplerState* samplers[D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT];for(auto& sampler:samplers)sampler=sampler_.Get();context->PSSetSamplers(0,D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,samplers);context->PSSetShaderResources(0,D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,views);context->Draw(3,0);
+            ID3D11ShaderResourceView* empty[D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT]{};context->PSSetShaderResources(0,D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT,empty);context->OMSetRenderTargets(0,nullptr,nullptr);saved[p.save]=&surfaces_[i];
         }
         if(!merge())return false;
         processed_=saved[prekernel?"PREKERNEL":"MAIN"];error_.clear();return true;

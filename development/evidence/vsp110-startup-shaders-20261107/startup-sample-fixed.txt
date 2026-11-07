@@ -1,0 +1,61 @@
+4 DEBUG-vsp-startup main
+12 DEBUG-vsp-startup QApplication
+17 DEBUG-vsp-startup constructor
+28 DEBUG-vsp-startup widgets-ready
+30 DEBUG-vsp-startup profiles-ready
+47 DEBUG-vsp-startup settings-ready
+47 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::WinIdChange QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+48 DEBUG-vsp-startup event QLabel "playerInfoPanel" QEvent::WinIdChange QColor(ARGB 0, 0, 0, 0)
+48 DEBUG-vsp-startup event QLabel "playerAudioInfoPanel" QEvent::WinIdChange QColor(ARGB 0, 0, 0, 0)
+48 DEBUG-vsp-startup event QWidget "playerFullscreenTitle" QEvent::WinIdChange QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+48 DEBUG-vsp-startup event QWidget "playerControls" QEvent::WinIdChange QColor(ARGB 0, 0, 0, 0)
+48 DEBUG-vsp-startup event QWidget "playerPlaylistPanel" QEvent::WinIdChange QColor(ARGB 0, 0, 0, 0)
+51 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Show QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+51 DEBUG-vsp-startup show-returned
+53 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+54 DEBUG-vsp-startup first-paint-returned
+128 DEBUG-vsp-startup event QWidget "playerControls" QEvent::Show QColor(ARGB 0, 0, 0, 0)
+128 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+129 DEBUG-vsp-startup event QWidget "playerControls" QEvent::Paint QColor(ARGB 0, 0, 0, 0)
+131 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+132 DEBUG-vsp-startup event QWidget "playerControls" QEvent::Paint QColor(ARGB 0, 0, 0, 0)
+246 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+348 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+457 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+571 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+587 DEBUG-vsp-startup resource-sample-enter
+587 DEBUG-vsp-startup resource-sample-returned
+587 DEBUG-vsp-startup event QWidget "playerControls" QEvent::Paint QColor(ARGB 0, 0, 0, 0)
+677 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+784 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+899 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+1005 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+1118 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+1131 DEBUG-vsp-startup resource-sample-enter
+1131 DEBUG-vsp-startup resource-sample-returned
+1227 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+1332 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+1443 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+1552 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+1637 DEBUG-vsp-startup resource-sample-enter
+1637 DEBUG-vsp-startup resource-sample-returned
+1659 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+1783 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+1878 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+1988 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+2099 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+2147 DEBUG-vsp-startup resource-sample-enter
+2147 DEBUG-vsp-startup resource-sample-returned
+2206 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+2317 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+2428 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+2538 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+2646 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::Paint QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+2648 DEBUG-vsp-startup resource-sample-enter
+2648 DEBUG-vsp-startup resource-sample-returned
+2667 DEBUG-vsp-startup event QWidget "playerControls" QEvent::WinIdChange QColor(ARGB 0, 0, 0, 0)
+2668 DEBUG-vsp-startup event vsr::PlayerWindow "" QEvent::WinIdChange QColor(ARGB 1, 0.12549, 0.129412, 0.141176)
+2672 DEBUG-vsp-startup event QWidget "playerInfoPanel" QEvent::WinIdChange QColor(ARGB 0, 0, 0, 0)
+2672 DEBUG-vsp-startup event QWidget "playerAudioInfoPanel" QEvent::WinIdChange QColor(ARGB 0, 0, 0, 0)
+2673 DEBUG-vsp-startup event QWidget "playerFullscreenTitle" QEvent::WinIdChange QColor(ARGB 0, 0, 0, 0)
+2673 DEBUG-vsp-startup event QWidget "playerPlaylistPanel" QEvent::WinIdChange QColor(ARGB 0, 0, 0, 0)

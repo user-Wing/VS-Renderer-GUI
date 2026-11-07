@@ -17,6 +17,7 @@
 #include <windows.h>
 #include <d3dcompiler.h>
 #include <d3d11shader.h>
+#include <d3d11.h>
 #include <cmath>
 #include <algorithm>
 
@@ -105,13 +106,14 @@ bool parse(const QString &text,QList<Pass> &passes,QString &error) {
         if(!QRegularExpression("^[A-Za-z_][A-Za-z_0-9]*$").match(pass.save).hasMatch() || pass.save=="OUTPUT" || pass.save=="NATIVE"){error="Unsupported SAVE name: "+pass.save;return false;}
         if(pass.hook=="PREKERNEL" && pass.save=="PREKERNEL" && (d.contains("WIDTH") || d.contains("HEIGHT"))){error="PREKERNEL cannot resize the hooked image.";return false;}
         if(d.contains("COMPONENTS")){bool ok=false;pass.components=d.value("COMPONENTS").first().toInt(&ok);if(!ok || pass.components<1 || pass.components>4){error="COMPONENTS must be between 1 and 4.";return false;}}
-        pass.bindings=d.value("BIND");if(pass.bindings.size()>8){error="At most eight texture bindings are supported.";return false;}
+        pass.bindings=d.value("BIND");
         // NATIVE geometry is known, but its pre-conversion pixels are not exposed.
         // Anime4K declares this binding only for NATIVE.w/h in WHEN expressions.
         if(pass.bindings.contains("NATIVE")){
             if(QRegularExpression("\\bNATIVE(?:_\\w+)?\\b").match(block.body).hasMatch()){error="Sampling NATIVE pixels is not supported by the RGB importer.";return false;}
             pass.bindings.removeAll("NATIVE");
         }
+        if(pass.bindings.size()>D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT){error="At most 16 texture bindings are supported.";return false;}
         QSet<QString> seen;
         for(const auto &name:pass.bindings){if(!names.contains(name) || name=="OUTPUT" || seen.contains(name)){error="Unknown or repeated BIND texture: "+name;return false;}seen.insert(name);}
         pass.width=resolve(pass.width);pass.height=resolve(pass.height);pass.when=resolve(pass.when);
@@ -171,7 +173,7 @@ bool validCache(const QByteArray &bytes) {
     const auto integer=[&](quint32 &value){if(at+4>bytes.size())return false;const auto* p=reinterpret_cast<const unsigned char*>(bytes.constData()+at);value=quint32(p[0])|(quint32(p[1])<<8)|(quint32(p[2])<<16)|(quint32(p[3])<<24);at+=4;return true;};
     const auto field=[&](bool code){quint32 size=0;if(!integer(size) || size>(code?16u*1024*1024:4096u) || at+size>bytes.size())return false;if(code && (size<4 || bytes.mid(at,4)!="DXBC"))return false;at+=size;return true;};
     quint32 passes=0;if(!integer(passes) || passes==0 || passes>128)return false;
-    for(quint32 i=0;i<passes;++i){for(int f=0;f<5;++f)if(!field(false))return false;quint32 bindings=0;if(!integer(bindings) || bindings>8)return false;for(quint32 b=0;b<bindings;++b)if(!field(false))return false;if(!field(true))return false;}
+    for(quint32 i=0;i<passes;++i){for(int f=0;f<5;++f)if(!field(false))return false;quint32 bindings=0;if(!integer(bindings) || bindings>D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT)return false;for(quint32 b=0;b<bindings;++b)if(!field(false))return false;if(!field(true))return false;}
     return at==bytes.size();
 }
 }

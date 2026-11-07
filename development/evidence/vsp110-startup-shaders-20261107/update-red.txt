@@ -1,0 +1,11 @@
+********* Start testing of TestUpdates *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestUpdates::initTestCase()
+QINFO  : TestUpdates::sameVolumeUpdateReusesPreparedFiles() prepared-directory update ms 906
+FAIL!  : TestUpdates::sameVolumeUpdateReusesPreparedFiles() Compared values are not the same
+   Actual   (identity(target+"/FFF.Native.dll")): 33214047252887491
+   Expected (prepared)                          : 4785074605111064
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestUpdates.cpp(37) : failure location
+PASS   : TestUpdates::cleanupTestCase()
+Totals: 2 passed, 1 failed, 0 skipped, 0 blacklisted, 942ms
+********* Finished testing of TestUpdates *********

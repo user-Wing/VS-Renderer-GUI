@@ -50,7 +50,7 @@ void PlayerWindow::updateInfo() {
              <<tr("CPU：%1 · GPU：%2 · 内存：%3 MiB").arg(usage_.processCpu>=0?QString::number(usage_.processCpu,'f',1)+"%":tr("采样中"),usage_.gpu>=0?QString::number(usage_.gpu,'f',1)+"%":tr("未提供")).arg(usage_.memoryMiB);
         static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));layoutInfoPanels();return;
     }
-    usage_=resources_.sample();
+    usage_=resources_.sample(infoVisible_);
     const auto refreshed = QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();
     if (!refreshed.isEmpty()) media_ = refreshed;
     applyBlurayMetadata();

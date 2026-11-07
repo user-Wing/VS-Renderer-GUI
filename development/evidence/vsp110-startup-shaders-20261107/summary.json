@@ -1,0 +1,71 @@
+{
+  "version": "1.1.0",
+  "nativePin": "72af915f8bf2567155c1f87851a6fa263f73b14f",
+  "textureBindingsPerPass": 16,
+  "modeAPasses": 49,
+  "newLibraryCompiles": 36,
+  "newLibraryFailures": 0,
+  "shaderTests": 17,
+  "updateTests": 5,
+  "exportTests": 9,
+  "fullFocusedTests": 5,
+  "liteFocusedTests": 5,
+  "countsIncludeInitAndCleanup": true,
+  "protectedFullFiles": 27,
+  "fullConfigUnchanged": true,
+  "liteConfigTopLevelKeys": 43,
+  "liteOnlyTextChange": "playerGuide.center.text third line -> Lite GLSL/HLSL",
+  "noBundledThemes": true,
+  "desktopUiAcceptance": "left to user; not performed",
+  "updaterSmallFixtureMs": {
+    "before": 906,
+    "after": 606
+  },
+  "hiddenHardwareSampleMs": {
+    "before": 448,
+    "after": "<1"
+  },
+  "nativeFirstPaintAcceptance": "not measured on Windows desktop; offscreen timings are not native evidence",
+  "releaseChanged": false,
+  "fullArchiveRepacked": false,
+  "artifacts": {
+    "dist\\VS-GUI-Full\\vs-player.exe": {
+      "bytes": 17737894,
+      "sha256": "391ba24f8921395572065d421c067ddc76734858303f5d31f11ecbaf213c1297"
+    },
+    "dist\\VS-GUI-Full\\VSRenderer.exe": {
+      "bytes": 4025711,
+      "sha256": "2e0d18cdb8a43e1d04057dbc9494c7012a913afe0a910b5104019d8fcc4064fa"
+    },
+    "dist\\VS-GUI-Full\\FFF.Native.dll": {
+      "bytes": 6818816,
+      "sha256": "bb7b2f170a00f89668ad2c4d6072ca7cc02b16ea6db07fe15b64be611409ff81"
+    },
+    "dist\\VS-GUI-Full\\runtime\\tools\\apply-update.ps1": {
+      "bytes": 8427,
+      "sha256": "ccabb0413fea380dd3e644db78d72d356cccec08eca2b593bc52c62a2f5202e4"
+    },
+    "dist\\VS-GUI-Full\\shaders\\mpv-shaders.7z": {
+      "bytes": 77575327,
+      "sha256": "08ca298992b64fe02430fcadfcd4e224afec91a5343476577e0720090babe14a"
+    },
+    "dist\\VS-GUI-Full\\shaders\\anime4k-v4-a.glsl.vsrhlsl": {
+      "bytes": 381096,
+      "sha256": "c3dfb102dd3f650b5d941f124d5394d19b5002fae1775208d079ff10641eb8c7"
+    },
+    "dist\\VS-GUI-Full\\shaders\\anime4k-v4-a.glsl.vsrhlsl.json": {
+      "bytes": 135,
+      "sha256": "d87b2ff6904dffebcee1698b232924477dd6b51d69f88ccb4450741ee14cb69b"
+    },
+    "dist\\VS-Player.exe": {
+      "bytes": 40776697,
+      "sha256": "a2004abe255d3caf476b2bb981c7e89fce6b9fb1e1eaff8bdc152670b635f69f"
+    },
+    "dist\\preset-descriptions.json": {
+      "bytes": 9498,
+      "sha256": "7c7202dd56d1db05c6609d31c8ed9af8c0fd2427b3164da10c51ca563677a307"
+    }
+  },
+  "nativeBuiltWithRuntimeHeaderSha256": "37cd85322927300ea0f352f405b1d6707ff50782540bf74943776678e0bf0316",
+  "modeAPixelReference": "Unmodified deployed GLSL in a standalone OpenGL context versus tests/CustomShaderProbe.cpp; FP16 intermediates, before final player scaler"
+}

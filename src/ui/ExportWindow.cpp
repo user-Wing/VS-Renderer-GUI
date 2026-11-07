@@ -52,11 +52,11 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     tabs_ = new QTabWidget(this);
     tabs_->setObjectName(QStringLiteral("exportTabs"));
     tabs_->setStyleSheet(QStringLiteral(
-        "QTabWidget::pane{border:1px solid #c8c8c8;}"
-        "QTabWidget::tab-bar{left:13px;}"
-        "QTabBar::tab{background:#e9e9e9;color:#4a4a4a;border:1px solid #c8c8c8;padding:9px 20px;margin-right:4px;}"
-        "QTabBar::tab:selected{background:#d9ebf7;color:#005a9e;border-bottom:3px solid #0067c0;font-weight:600;}"
-        "QTabBar::tab:hover:!selected{background:#f0f6fb;border-color:#7baed6;}"));
+        "QTabWidget::pane{border:1px solid #50535a;}"
+        "QTabWidget::tab-bar{left:0;}"
+        "QTabBar::tab{background:#27292e;color:#c8cbd1;border:1px solid #50535a;padding:4px 12px;margin-right:2px;}"
+        "QTabBar::tab:selected{background:#343840;color:#e8eaed;border-bottom:1px solid #8ab4f8;}"
+        "QTabBar::tab:hover:!selected{background:#30343b;border-color:#7086a4;}"));
     layout->addWidget(tabs_);
     message_ = new QLabel(this);
     message_->setWordWrap(true);
