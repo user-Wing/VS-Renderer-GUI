@@ -214,7 +214,7 @@ PlayerWindow::PlayerWindow() {
     connect(resetZoom_,&QPushButton::clicked,this,[this]{pane_->adoptView(1,0,0);emit pane_->viewChanged(1,0,0);});
     timeline_ = new ChapterTimeline(this); timeline_->setObjectName("playerTimeline");
     controls_=new PlayerChromePanel(central);controls_->setObjectName("playerControls");auto *transport=new QVBoxLayout(controls_);transport->setContentsMargins(0,0,0,0);transport->setSpacing(4);layout->addWidget(controls_);buildTransport(transport);
-    message_ = new QLabel(controls_); message_->setObjectName("playerStatus"); message_->setContentsMargins(8, 0, 8, 0); transport->addWidget(message_);message_->hide();statusTimer_=new QTimer(this);statusTimer_->setSingleShot(true);statusTimer_->setInterval(3000);connect(statusTimer_,&QTimer::timeout,message_,&QWidget::hide);
+    message_ = new QLabel(controls_); message_->setObjectName("playerStatus"); message_->setContentsMargins(8, 0, 8, 0); message_->setFixedHeight(message_->fontMetrics().horizontalAdvance("GLSL")+8);message_->setProperty("minimalControl",true);transport->addWidget(message_);statusTimer_=new QTimer(this);statusTimer_->setSingleShot(true);statusTimer_->setInterval(3000);connect(statusTimer_,&QTimer::timeout,this,[this]{message_->clear();message_->setToolTip({});});
     buildPlaylist(central);
     imageTools_=new PlayerImageTools(pane_,central);layout->insertWidget(0,imageTools_);
     connect(imageTools_,&PlayerImageTools::errorOccurred,this,&PlayerWindow::setError);
@@ -236,7 +236,7 @@ PlayerWindow::PlayerWindow() {
         pane_->setImage(image);pane_->surface()->setFocus();
         imageTools_->setReady(true);
         rendererBadge_->setText("Image");videoBadge_->setText(QFileInfo(source_).suffix().toUpper());audioBadge_->setText("—");decoderBadge_->setText(QFileInfo(source_).suffix().compare("avif",Qt::CaseInsensitive)==0?"libavif / dav1d":"Image");hdrBadge_->setText("—");
-        showStatus(tr("图片：%1 × %2 · 左右键切图 · 滚轮缩放").arg(image.width()).arg(image.height()));
+        showStatus(tr("打开文件：%1").arg(QFileInfo(source_).fileName()));
         updateInfo();
     });
     connect(imageLoader_.get(),&PlayerImage::failed,this,[this](const QString &error){if(imageMode_){imageAnimation_->stop();imagePagePending_=false;playing_=false;const auto message=tr("图片解码失败：%1").arg(error);setError(message);pane_->setPlaceholderText(message);}});
@@ -276,7 +276,7 @@ PlayerWindow::PlayerWindow() {
         }
         lastFrame_ = static_cast<int>(frame.frameIndex);
         preindexDisc();
-        showStatus(hlslFallback_.isEmpty()?tr("已加载：%1").arg(QFileInfo(source_).fileName()):hlslFallback_);
+        showStatus(hlslFallback_.isEmpty()?tr("打开文件：%1").arg(QFileInfo(source_).fileName()):hlslFallback_);
         if (autoPlay_ && seekUiTarget_<0 && (lav_ || clock_->snapshot().state == ThreeFpState::Ready || clock_->snapshot().state == ThreeFpState::Paused)) { togglePlayback(); if (playing_) autoPlay_ = false; }
         const int target=frameAtPosition100ns(position(),clip_.totalFrames,clip_.fpsNumerator,clip_.fpsDenominator);
         if(playing_ && frame.frameIndex+1<clip_.totalFrames && frame.frameIndex<target)requestFrame(target);
@@ -370,8 +370,8 @@ bool PlayerWindow::openFile(const QString &input) {
         if(playlists.size()!=1)return openBluRay(root);
         QString error;mediaInput_=BlurayCatalog::playbackInput(path,&error);if(mediaInput_.isEmpty()){setError(error);return false;}
     }
-    if(image){clock_->stop();output_->stop();profileResize_->stop();playing_=autoPlay_ && imagePages_>1;autoPlay_=false;play_->setText(playing_?QStringLiteral("Ⅱ"):QStringLiteral("▶"));pane_->setSurfaceActive(false);pane_->setPlaceholderText(tr("正在解码图片…"));timeline_->setValue(0);timeline_->setProperty("chapters",QJsonArray());timeline_->setProperty("duration",0);time_->setText("00:00:00.000");frame_->setText("0");duration_->setText("/ —");showStatus(tr("正在解码图片…"));imageLoader_->open(source_);return true;}
-    return openMedia();
+    if(image){clock_->stop();output_->stop();profileResize_->stop();playing_=autoPlay_ && imagePages_>1;autoPlay_=false;play_->setText(playing_?QStringLiteral("Ⅱ"):QStringLiteral("▶"));pane_->setSurfaceActive(false);pane_->setPlaceholderText(tr("正在解码图片…"));timeline_->setValue(0);timeline_->setProperty("chapters",QJsonArray());timeline_->setProperty("duration",0);time_->setText("00:00:00.000");frame_->setText("0");duration_->setText("/ —");showStatus(tr("打开文件：%1").arg(QFileInfo(source_).fileName()));imageLoader_->open(source_);return true;}
+    const bool opened=openMedia();if(opened)showStatus(tr("打开文件：%1").arg(QFileInfo(source_).fileName()));return opened;
 }
 bool PlayerWindow::openMedia() {
 #ifdef VSR_LITE_PLAYER
@@ -397,7 +397,7 @@ bool PlayerWindow::openMedia() {
         const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height());
         if(speed_!=1) { lav_->setRate(speed_); lav_->volume(0,true);clock_->setMuted(mute_->isChecked()); }
         rendererBadge_->setText("madVR");showStatus(tr("madshi video renderer · LAV DirectShow 输入"));
-    } else { rendererBadge_->setText(direct_?"3FP":"VS"); if(direct_) {ready_=true;pane_->setSurfaceActive(!minimalMode_);if(preset_.isEmpty())showStatus({});} else refreshScript(); } return true;
+    } else { rendererBadge_->setText(direct_?"3FP":"VS"); if(direct_) {ready_=true;pane_->setSurfaceActive(!minimalMode_);if(preset_.isEmpty())showStatus(tr("打开文件：%1").arg(QFileInfo(source_).fileName()));} else refreshScript(); } return true;
 }
 void PlayerWindow::refreshScript() {
     if ((discMenu_ && discMenu_->active()) || imageMode_ || audioMode_ || source_.isEmpty() || mediaInput_.isEmpty() || (madvrMode() && !networkSource())) return;
@@ -623,7 +623,7 @@ void PlayerWindow::nextFile(int direction) {
     while(next>=0 && next<files_.size() && blurayGroups_.value(files_[next])=="menu")next+=direction;
     if(next>=0 && next<files_.size())openFile(files_[next]);
 }
-void PlayerWindow::showStatus(const QString &message) {if(!message.isEmpty() && lastStatus_==message)return;lastStatus_=message;message_->setText(message);message_->setToolTip(message);message_->setVisible(!message.isEmpty() && !minimalMode_);if(message.isEmpty())statusTimer_->stop();else statusTimer_->start();}
+void PlayerWindow::showStatus(const QString &message) {if(!message.isEmpty() && lastStatus_==message)return;lastStatus_=message;message_->setText(message);message_->setToolTip(message);message_->show();if(message.isEmpty())statusTimer_->stop();else statusTimer_->start();}
 void PlayerWindow::setError(const QString &message) {showStatus(message);}
 void PlayerWindow::updateState() {
     updateDecodeBuffer();
@@ -662,7 +662,7 @@ void PlayerWindow::updateState() {
     if (snap.state == ThreeFpState::Ready && !rateApplied_) { rateApplied_ = true; clock_->setPlaybackRate(speed_); }
     if (!positionRestored_ && (snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused || snap.state == ThreeFpState::Playing)) {
         media_ = QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();
-        if(lastStatus_.isEmpty())showStatus(tr("已加载：%1").arg(QFileInfo(source_).fileName()));
+        if(lastStatus_.isEmpty())showStatus(tr("打开文件：%1").arg(QFileInfo(source_).fileName()));
         applyBlurayMetadata();
         if(!networkSource())loadAudioMetadata();
         applyAudioEffects();
@@ -795,11 +795,11 @@ bool PlayerWindow::handleShortcut(QKeyEvent *event){
 void PlayerWindow::updateMinimalControls(){
     if(!controls_)return;
     for(auto *widget:controls_->findChildren<QWidget*>(QString(),Qt::FindDirectChildrenOnly))widget->setVisible(!minimalMode_ || widget->property("minimalControl").toBool());
-    message_->setVisible(!minimalMode_ && statusTimer_->isActive() && !message_->text().isEmpty());
+    message_->show();
     videoSplit_->setVisible(!minimalMode_);
     if(minimalMode_){
         if(!property("minimalMode").toBool())normalWindowSize_=size();
-        infoVisible_=false;static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();playlistPanel_->hide();lyricLabel_->hide();audioSubtitle_->hide();message_->hide();equalizerButton_->hide();speedButton_->hide();
+        infoVisible_=false;static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();playlistPanel_->hide();lyricLabel_->hide();audioSubtitle_->hide();equalizerButton_->hide();speedButton_->hide();
         pane_->setImage({});pane_->setSurfaceActive(false);setMinimumSize(360,70);
         if(!isFullScreen())resize(420,controls_->sizeHint().height()+40);
     }else {setMinimumSize(420,160);equalizerButton_->show();}

@@ -23,6 +23,8 @@
 #include "ui/PresetCommunityDialog.h"
 #include "ui/CompareView.h"
 #include "ui/ParameterEditor.h"
+#include "ui/PageTheme.h"
+#include <QScopeGuard>
 #include "graph/FilterCatalog.h"
 #include <QCheckBox>
 #include <QFont>
@@ -74,6 +76,15 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void suppliedThemeAllPagesAndPreviewIsolation(){
+        const auto image=qEnvironmentVariable("VSR_THEME_TEST_IMAGE");if(image.isEmpty())QSKIP("Set VSR_THEME_TEST_IMAGE");QVERIFY(QFileInfo::exists(image));
+        const auto ini=QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini");QFile original(ini);const bool existed=original.exists();QByteArray saved;if(original.open(QIODevice::ReadOnly))saved=original.readAll();original.close();const auto restore=qScopeGuard([&]{QFile file(ini);if(existed){file.open(QIODevice::WriteOnly);file.write(saved);}else file.remove();});
+        QSettings settings(ini,QSettings::IniFormat);settings.clear();settings.sync();MainWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));const QStringList keys{"VSR-Main","VSR-Compare","VSR-Settings","VSR-BDRemux"};
+        for(int i=0;i<keys.size();++i){window.selectPage(i);QTest::qWait(80);auto *page=window.pages_->widget(i);const auto before=page->grab().toImage();settings.setValue(keys[i]+"/image",image);settings.setValue(keys[i]+"/transparency",15);settings.setValue(keys[i]+"/brightness",80);settings.sync();applyPageTheme(page,ini,keys[i]);QTest::qWait(80);const auto after=page->grab().toImage();int changed=0,total=0;for(int y=0;y<before.height();y+=7)for(int x=0;x<before.width();x+=7){++total;if(before.pixel(x,y)!=after.pixel(x,y))++changed;}QVERIFY2(changed>total/50,qPrintable(keys[i]));
+            for(auto *pane:page->findChildren<PreviewPane*>())QVERIFY(!pane->property("pageThemeContainer").toBool());
+            const auto output=qEnvironmentVariable("VSR_THEME_ARTIFACTS");if(!output.isEmpty())window.grab().save(QDir(output).filePath(keys[i]+".png"));
+        }
+    }
     void independentVideoRoutes(){
         QTemporaryDir directory;const auto file=directory.filePath("routes.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=128x72:rate=24","-t","3","-c:v","ffv1",file});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
         MainWindow window;window.show();QVERIFY(window.loadSource(file));

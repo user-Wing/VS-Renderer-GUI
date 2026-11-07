@@ -16,11 +16,11 @@
 
 导出先选处理路，加入队列时冻结对应 VPY；预设仍只包含当前一路，“导入到新路”另建一路。项目 JSON schema 2 保存路数组和显示状态，旧单路项目仍可读取。额外路当前执行 VS/GLSL，只有第一路支持现有末尾 HLSL 预览提取。
 
-“工作文件夹”在后台扫描常见视频格式，默认最大深度 3，可在设置中调整；旁边的下拉框切换源。软链接目录不递归。
+“工作文件夹”在后台扫描常见视频格式，默认最大深度 3，可在设置中调整；旁边的下拉框切换源。长文件名在下拉列表中自动换行，完整显示；软链接目录不递归。
 
 “NCNN 单帧超分”提供用户现有 VideoEnhancer 包内 21 个超分/降噪模型。仅处理单帧 SDR RGB24；视频或实时 Player 自动跳过。场景识别模型保留在运行资源中，不出现在超分菜单。未将 NCNN 引入实时视频播放。
 
-页面背景按 `VSR-Main`、`VSR-Compare`、`VSR-BDRemux`、`VSR-Settings`、`VSR-About` 分别保存到 `themes.ini`。新增的 QTGMC/SMDegrain 依赖 havsfunc，BM3D/FFT3DFilter 使用已验证的 API4 插件；未把旧 API3 DLL 混入运行目录。
+页面背景按 `VSR-Main`、`VSR-Compare`、`VSR-BDRemux`、`VSR-Settings`、`VSR-About` 分别保存到 `themes.ini`，保存后立即刷新。主界面和比对页面的背景不覆盖视频预览；BD Remux背景可铺满页面，表格保留可读的半透明底色。新增的 QTGMC/SMDegrain 依赖 havsfunc，BM3D/FFT3DFilter 使用已验证的 API4 插件；未把旧 API3 DLL 混入运行目录。
 
 ## 多路图像比对与取色
 

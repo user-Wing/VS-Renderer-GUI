@@ -1,4 +1,4 @@
-"""Offline single-image Anime4K export; viewing never runs a VS graph."""
+"""Offline bundled GLSL image export; viewing never runs a VS graph."""
 import sys
 import subprocess
 from pathlib import Path
@@ -6,12 +6,26 @@ import vapoursynth as vs
 
 source, destination, shader, ffmpeg = sys.argv[1:5]
 width, height = map(int, sys.argv[5:7])
+shader_path = Path(shader)
+if shader_path.is_file():
+    shader_text = shader_path.read_bytes().decode("utf-8").lstrip("\ufeff")
+else:
+    root = shader_path.parent
+    while not (root / "mpv-shaders.7z").is_file():
+        if root == root.parent:
+            raise FileNotFoundError(shader)
+        root = root.parent
+    shader_text = subprocess.check_output(
+        [str(root.parent / "runtime/tools/7z.exe"), "x", "-so", "-bd", "-bsp0", "-spd",
+         str(root / "mpv-shaders.7z"), shader_path.relative_to(root).as_posix()],
+        creationflags=0x08000000).decode("utf-8").lstrip("\ufeff")
 core = vs.core
 core.num_threads = 4
 clip = core.ffms2.Source(source, cache=False, alpha=True)
 yuv = core.resize.Bicubic(clip, format=vs.YUV444P16, matrix_s="709",
                            range_in_s="full", range_s="full")
-result = core.placebo.Shader(yuv, shader=shader, width=width, height=height,
+processor = core.vsrplacebo if hasattr(core, "vsrplacebo") else core.placebo
+result = processor.Shader(yuv, shader_s=shader_text, width=width, height=height,
                              filter="ewa_lanczos", antiring=0.5)
 result = core.resize.Point(result, format=vs.RGB48, matrix_in_s="709",
                             range_in_s="full", range_s="full")

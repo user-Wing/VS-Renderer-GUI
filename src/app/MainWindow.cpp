@@ -1,6 +1,7 @@
 #include "app/MainWindow.h"
 #include "app/RenderRoute.h"
 #include "ui/PageTheme.h"
+#include "ui/WrappedFileCombo.h"
 #include "app/Style.h"
 #include "player/PlayerLanguage.h"
 #include "ui/About.h"
@@ -563,7 +564,7 @@ QWidget *MainWindow::buildSidebar()
     browse->setObjectName(QStringLiteral("rendererBrowse"));
     sourceFilter_->setCurrentIndex(QSettings().value(QStringLiteral("sourceFilter"),0).toInt());
     sourceInputStack_=new QStackedWidget(input);sourceInputStack_->setMinimumWidth(0);sourceInputStack_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);sourceInputStack_->addWidget(sourcePath_);
-    sourceChoice_=new QComboBox(input);sourceChoice_->setObjectName("rendererSourceChoice");sourceChoice_->setMinimumContentsLength(6);sourceChoice_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);sourceInputStack_->addWidget(sourceChoice_);
+    sourceChoice_=new WrappedFileCombo(input);sourceChoice_->setObjectName("rendererSourceChoice");sourceChoice_->setMinimumContentsLength(6);sourceChoice_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);sourceInputStack_->addWidget(sourceChoice_);
     inputRow->addWidget(sourceInputStack_,1);
     auto *folder=new QPushButton(QStringLiteral("打开文件夹"),input);folder->setObjectName("rendererFolderImport");connect(folder,&QPushButton::clicked,this,[this]{scanWorkingFolder();});
     connect(sourceChoice_,&QComboBox::currentIndexChanged,this,[this](int index){if(index>=0)loadSource(sourceChoice_->itemData(index).toString());});

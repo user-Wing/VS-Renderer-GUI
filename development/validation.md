@@ -12,6 +12,18 @@
 
 原报告原样合并至 [history.md](history.md)，按原文件名索引，每份保留字节数和 SHA-256。原文中的“当前”、路径和发布状态属于记录当时。`build/` 不是持久证据库：报告引用该目录，不保证换机器后日志仍可读。1.0.12 精选 CSV/日志保存在 [evidence](evidence/player-kernel-1.0.12/summary.json)。
 
+## 1.1.0 图片导出、主题可见性与浮层续修（2026-11-07）
+
+本轮不重测视频尖峰。构建Renderer、Full Player、Lite Player、VSCap及四个相关测试目标。专项日志和截图位于`build/vsp110-ui-images-20261107/`，不作为发行附件或全量回归通过依据。
+
+- 主题：旧事件过滤器绘图被不透明页面覆盖，红/蓝背景像素断言先失败；改为独立底层QWidget后通过。参数套件10项通过（含init/cleanup），同时覆盖长文件名无省略换行。使用维护者指定的ModelScope-Manager“小圆/background.png”在Renderer主界面、比对、设置、BD Remux四页以及Player主界面、设置实窗截图，已检查主界面/BD/Player设置截图。页面即时刷新，PreviewPane子树不变透明；没有以编译成功代替图像验收。
+- Full专项7项通过（含init/cleanup）：实际PNG8/16、JXL8/10/12/16输出后读回；比例解析与HLSL Jinc；旧Anime4K及选定库GLSL离线图片缩放（含Alpha/ICC）；图片对话框；状态3秒清空且高度稳定、EQ位于控制栏上方、音频下拉在反复布局时保持可见；指定Player主题。未逐项验收整个GLSL库。
+- Lite专项4项通过（含init/cleanup）：FFmpeg传统缩放和HLSL缩放导出PNG8/16，实际JXL12读回；五种HLSL内核保持浮点2.5及Alpha0.5；界面无GLSL选择且质量搜索关闭。没有调用AWJ。JPEGli固定依赖只支持8位，未伪造10位JPEG选项。
+- Renderer专项3项通过（含init/cleanup）：指定主题四页即时可见及预览隔离。Pareto旧设备绝对路径回退同名本地图并保存相对路径；单文件运行目录内的内嵌图可被发现。
+- 真实JXL读回先触发AVX2崩溃，GDB定位到DequantBlock向量参数跨函数后的栈对齐；在固定libjxl版本的可复现CMake补丁中传递等值标量因子、函数内重建相同向量，并内联DequantLane。保留AVX2，以上8/10/12/16位样本随后全部通过；未扩称覆盖所有大图。
+
+本轮覆盖现有Full及单文件，主题图复制到两份配置旁并使用相对路径；Pareto.avif保持原图且加入单文件负载。不改版本或GitHub Release。部署前按授权停止现有Full VSCap；28个保护文件中仅Full的player.ini/themes.ini及单文件的player.ini发生预期变化，原始背景图及Pareto图不变，单文件新增独立themes.ini。Full三个程序与Native逐字节匹配构建、2223项清单核对通过；Single为26,692,388字节，95文件/94项清单、负载校验及代码/数据节匹配通过，含原Pareto图及主题归档工具/许可，无FFmpeg或player.ini。专项之外没有补做单文件启动/退出清理、全量回归或长时间播放验收。
+
 ## 1.1.0 播放、界面与主题续修（2026-11-07）
 
 本轮按维护者新授权，实际测试 GBC S01E02 2:15–2:35、K-ON S01E06 多轨字幕及 Yuru Camp Movie 音频；不继承上一轮“未测”为通过，也不等同全量回归。

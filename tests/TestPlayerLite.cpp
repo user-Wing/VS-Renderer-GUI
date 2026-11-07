@@ -3,6 +3,9 @@
 #include <QDateTime>
 #include <QColorSpace>
 #include "ui/PageTheme.h"
+#include "player/PlayerImageTools.h"
+#include <QToolButton>
+#include "image/ImageJxl.h"
 #include "player/PlayerAudioMetadata.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/VapourSynthFrameServer.h"
@@ -38,6 +41,12 @@ class TestPlayer final : public QObject {
 private slots:
     void pageThemeVisible(){QTemporaryDir directory;QImage background(16,16,QImage::Format_RGB32);background.fill(Qt::green);const auto path=directory.filePath("green.png"),ini=directory.filePath("themes.ini");QVERIFY(background.save(path));QSettings settings(ini,QSettings::IniFormat);settings.setValue("VSP-Main/image",path);settings.setValue("VSP-Main/transparency",0);settings.setValue("VSP-Main/brightness",100);settings.sync();QLabel label("Text");label.setStyleSheet("background:#101010;color:white;");label.resize(240,100);applyPageTheme(&label,ini,"VSP-Main");label.show();QTest::qWait(50);QCOMPARE(label.grab().toImage().pixelColor(4,4),QColor(Qt::green));}
 
+    void ffmpegImageExportDepthAndResize(){
+        QTemporaryDir dir;ImageOutput output;output.source=dir.filePath("source.png");output.image=QImage(32,24,QImage::Format_RGBA64);output.image.fill(QColor(80,140,210,180));QVERIFY(output.image.save(output.source));output.size=QSize(48,36);
+        for(const auto &algorithm:QStringList{"hlsl:jinc","lanczos3"})for(int bits:{8,16}){output.resizeAlgorithm=algorithm;output.format="png";output.bitDepth=QString::number(bits);output.destination=dir.filePath(QString("%1-%2.png").arg(algorithm.startsWith("hlsl")?"hlsl":"ffmpeg").arg(bits));const auto error=PlayerImageTools::writeOutput(output);QVERIFY2(error.isEmpty(),qPrintable(error));QFile file(output.destination);QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(int(uchar(file.read(25)[24])),bits);QCOMPARE(QImage(output.destination).size(),output.size);}
+        output.format="jxl";output.bitDepth="12";output.destination=dir.filePath("twelve.jxl");QCOMPARE(PlayerImageTools::writeOutput(output),QString());QString error;const auto decoded=readJxl(output.destination,&error);QVERIFY2(!decoded.isNull(),qPrintable(error));QCOMPARE(decoded.text("sourceBitDepth"),"12");
+        PlayerWindow player;player.show();QVERIFY(player.openFile(output.source));QTRY_VERIFY(!player.pane_->image().isNull());auto *tools=player.findChild<PlayerImageTools*>();tools->findChild<QToolButton*>("imageTool_convert")->click();auto *mode=player.findChild<QComboBox*>("imageConvertMode");QVERIFY(mode);QCOMPARE(mode->count(),1);QVERIFY(!mode->isEnabled());QVERIFY(!player.findChild<QComboBox*>("imageConvertShader"));mode->window()->close();
+    }
     void hlslImageResampling(){
         ThreeFpApi api;QVERIFY(api.available());QImage image(17,11,QImage::Format_RGBA32FPx4);image.setColorSpace(QColorSpace::SRgbLinear);for(int y=0;y<image.height();++y){auto *p=reinterpret_cast<float*>(image.scanLine(y));for(int x=0;x<image.width();++x){p[x*4]=2.5f;p[x*4+1]=.25f;p[x*4+2]=.75f;p[x*4+3]=.5f;}}
         for(unsigned algorithm=0;algorithm<5;++algorithm){const auto result=api.resampleImage(image,QSize(31,19),algorithm);QVERIFY(!result.isNull());QCOMPARE(result.size(),QSize(31,19));const auto straight=result.convertToFormat(QImage::Format_RGBA32FPx4);const auto *pixel=reinterpret_cast<const float*>(straight.constScanLine(9))+15*4;QVERIFY(std::abs(pixel[0]-2.5f)<.002f);QVERIFY(std::abs(pixel[3]-.5f)<.002f);QCOMPARE(result.colorSpace(),image.colorSpace());}

@@ -4,6 +4,7 @@
 #include "backend/ThreeFpPlayer.h"
 #include "ui/PreviewPane.h"
 #include <QCoreApplication>
+#include <QApplication>
 #include <QFileInfo>
 #include <QDateTime>
 #include <cmath>
@@ -174,7 +175,7 @@ void PlayerWindow::updateInfo() {
     if(!externalAudio_.isEmpty())files<<tr("外部音频：%1").arg(externalAudio_);
     if(!externalSubtitle_.isEmpty())files<<tr("字幕 1：%1").arg(externalSubtitle_);
     if(!externalSecondarySubtitle_.isEmpty())files<<tr("字幕 2：%1").arg(externalSecondarySubtitle_);
-    lines=files+lines;static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));info_->raise();
+    lines=files+lines;static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));if(!QApplication::activePopupWidget())info_->raise();
     updateAudioInfo(audio,audioRate);
     layoutInfoPanels();
 }

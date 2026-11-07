@@ -65,7 +65,7 @@ int PlayerWindow::superInterpolationStage() const {
     return QStringList{"Super-0-A4K-RIFE-A4K.vpy","Super-1-A4K-RIFE-Jinc.vpy","Super-2-A4K-RIFE-D3D11.vpy","Super-3-RIFE-A4K.vpy"}.indexOf(file.fileName());
 }
 void PlayerWindow::updateAlgorithmBadges(){
-    message_->setVisible(statusTimer_ && statusTimer_->isActive() && !minimalMode_ && !message_->text().isEmpty());
+    message_->show();
     const bool video=!minimalMode_ && !imageMode_ && !audioMode_ && !madvrMode() && !(discMenu_ && discMenu_->active());algorithmBadge_->setVisible(video);interpolationBadge_->hide();if(!video)return;
     const int interpolation=interpolationStage();
     if(superInterpolationStage()>=0 && !direct_){algorithmBadge_->setText(superInterpolationStage()==2?"D3D11":superInterpolationStage()==1?"Jinc":"A4K");interpolationBadge_->setText("RIFE 960×540");interpolationBadge_->show();}

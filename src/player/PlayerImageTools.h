@@ -14,7 +14,7 @@ struct ImageOutput {
     QTransform transform;
     QRect crop;
     QSize size;
-    QString format; // Empty uses Qt's lossless PNG writer; otherwise the AWJ backend.
+    QString format; // Empty uses Qt's PNG writer; otherwise Full uses AWJ and Lite uses FFmpeg.
     int quality = 70, speed = 5;
     bool visualQuality = false;
     QString chroma = "420", bitDepth = "auto", alpha = "auto";
@@ -32,6 +32,8 @@ public:
     static QStringList conversionArguments(const ImageOutput &output, const QString &input, const QString &directory);
     static QString writeOutput(const ImageOutput &output); // Empty string means success.
     static QString writeEditorImport(const QImage &image, const QString &path, const QString &name);
+    static int outputBitDepth(const ImageOutput &output);
+    static QSize scaledSize(const QSize &source,const QString &ratio);
     static QImage resample(const QImage &image, const QSize &size, const QString &algorithm);
 signals:
     void errorOccurred(const QString &error);

@@ -59,7 +59,7 @@ VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处�
 - 图片使用 CPU 解码，动图当前显示首帧；复杂 PSD/RAW 支持以编辑器实际能力为准。
 - Player 配置保存在程序旁 `player.ini`；Renderer 使用独立设置。更新前保留自定义 VPY、项目、截图及配置，按 [更新说明](docs/portable-updates.md) 操作。
 
-页面背景支持主题库及 ZIP/7z 导入、ZIP 导出；三／四路预览可用同位置滑块比较。设置中的 Pareto 图入口和功耗显示要求见 [Player 指南](docs/player.md)。
+页面背景支持即时应用、主题库及 ZIP/7z 导入、ZIP 导出，视频预览保持清晰；三／四路预览可用同位置滑块比较。图片导出支持比例尺寸和内置HLSL重新采样，Full另可选内置GLSL；单文件版直接使用FFmpeg且不提供质量搜索。设置中的便携Pareto图入口和功耗显示要求见 [Player 指南](docs/player.md)。
 
 ## 开发与反馈
 

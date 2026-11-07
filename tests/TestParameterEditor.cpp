@@ -1,5 +1,8 @@
 #include "ui/ParameterEditor.h"
 #include "ui/ThemePackage.h"
+#include "ui/PageTheme.h"
+#include "ui/WrappedFileCombo.h"
+#include <QScrollBar>
 #include <QTemporaryDir>
 #include <QScrollArea>
 #include <QVBoxLayout>
@@ -18,6 +21,16 @@ using namespace vsr;
 class TestParameterEditor final : public QObject {
     Q_OBJECT
 private slots:
+    void folderFileNamesWrapWithoutElision(){
+        QWidget host;WrappedFileCombo combo(&host);combo.resize(180,30);const auto name=QString("Long.Animation.Movie.")+QString(250,'X')+".2160p48.AV1.SC_TC_JP_EN.mkv";combo.addItem(name);host.show();combo.showPopup();QTest::qWait(80);auto *view=qobject_cast<QListView*>(combo.view());QVERIFY(view);QVERIFY(view->sizeHintForRow(0)>combo.fontMetrics().height()*2);QCOMPARE(view->horizontalScrollBar()->maximum(),0);QCOMPARE(combo.currentText(),name);view->window()->grab().save(QDir(QCoreApplication::applicationDirPath()).filePath("wrapped-folder-filename.png"));combo.hidePopup();
+    }
+    void pageThemePaintsAndReloadsImmediately(){
+        QTemporaryDir dir;QImage red(100,100,QImage::Format_RGB32);red.fill(Qt::red);QVERIFY(red.save(dir.filePath("red.png")));QImage blue=red;blue.fill(Qt::blue);QVERIFY(blue.save(dir.filePath("blue.png")));
+        QSettings settings(dir.filePath("themes.ini"),QSettings::IniFormat);settings.setValue("VSR-Main/image","red.png");settings.setValue("VSR-Main/transparency",0);settings.setValue("VSR-Main/brightness",100);settings.sync();
+        QWidget page;page.resize(400,300);auto *layout=new QVBoxLayout(&page);auto *container=new QWidget(&page);layout->addWidget(container);applyPageTheme(&page,settings.fileName(),"VSR-Main");page.show();QTest::qWait(50);
+        const auto a=page.grab().toImage().pixelColor(200,150);QVERIFY2(a.red()>a.blue()+50,"Theme is hidden behind styled page containers");
+        settings.setValue("VSR-Main/image","blue.png");settings.sync();applyPageTheme(&page,settings.fileName(),"VSR-Main");QTest::qWait(30);const auto b=page.grab().toImage().pixelColor(200,150);QVERIFY(b.blue()>b.red()+50);
+    }
     void shaderDescriptionTracksScrollViewportWidth(){
         FilterGraph graph;const int index=graph.add("anime4k");QWidget panel;auto *layout=new QVBoxLayout(&panel);layout->setContentsMargins(0,0,0,0);auto *header=new QLabel("高级参数",&panel);header->setFixedHeight(32);layout->addWidget(header);
         auto *scroll=new QScrollArea(&panel);scroll->setWidgetResizable(true);scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);auto *editor=new ParameterEditor;QFont font("Comic Sans MS");font.setPixelSize(13);editor->setFont(font);editor->setNode(FilterCatalog::find("anime4k"),graph.at(index));scroll->setWidget(editor);layout->addWidget(scroll);panel.show();

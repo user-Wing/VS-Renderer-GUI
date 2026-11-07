@@ -3,6 +3,7 @@
 #include <QTableWidget>
 #include "ui/About.h"
 #include "ui/PageTheme.h"
+#include "player/PortableChart.h"
 #include "player/PlayerAiSubtitles.h"
 #include "player/PlayerChromePanel.h"
 #include "player/PlayerDiscMenu.h"
@@ -109,6 +110,7 @@ void PlayerWindow::applyAppearance() {
     static_cast<PlayerChromePanel *>(controls_)->setTransparency(settings_->value("theme/bottomTransparency",0).toInt());
     static_cast<PlayerChromePanel *>(playlistPanel_)->setTransparency(settings_->value("theme/playlistTransparency",50).toInt());
     settings_->setValue("theme/bottomTransparency",std::clamp(settings_->value("theme/bottomTransparency",0).toInt(),0,100));settings_->setValue("theme/playlistTransparency",std::clamp(settings_->value("theme/playlistTransparency",50).toInt(),0,100));
+    resolveParetoImage(*settings_);
     const auto skin=QDir(QFileInfo(settings_->fileName()).absolutePath()).filePath("themes.ini");
     applyPageTheme(pane_->findChild<QLabel*>("previewPlaceholder"),skin,"VSP-Main");
     for(auto *dialog:findChildren<QDialog *>()){dialog->setFont(font);if(dialog->objectName()=="playerSettings")applyPageTheme(dialog,skin,"VSP-Settings");}
@@ -206,9 +208,8 @@ void PlayerWindow::showSettings() {
     if(!settings_->contains("render/paretoImage"))settings_->setValue("render/paretoImage",QString());
     auto *pareto=new QPushButton(tr("查看超分算法Pareto图"),&dialog);pareto->setObjectName("playerParetoChart");
     connect(pareto,&QPushButton::clicked,&dialog,[this,&dialog]{
-        const auto name=settings_->value("render/paretoImage").toString().trimmed();
-        const auto path=QDir(QFileInfo(settings_->fileName()).absolutePath()).absoluteFilePath(name);
-        if(name.isEmpty() || !QFileInfo::exists(path)){QMessageBox::information(&dialog,tr("Pareto图"),tr("请在 %1 的 [render] 中设置 paretoImage=图片路径，支持相对路径。").arg(settings_->fileName()));return;}
+        const auto path=resolveParetoImage(*settings_);
+        if(path.isEmpty()){QMessageBox::information(&dialog,tr("Pareto图"),tr("请在 %1 的 [render] 中设置 paretoImage=图片路径，支持相对路径。").arg(settings_->fileName()));return;}
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     });render->addRow(pareto);
     render->addRow(new QLabel(tr("自动切换参与档位"),&dialog));render->addRow(animeStages);

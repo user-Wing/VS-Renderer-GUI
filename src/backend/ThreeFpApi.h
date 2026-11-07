@@ -243,6 +243,7 @@ public:
     ThreeFpResult play(void *handle) const;
     ThreeFpResult pause(void *handle) const;
     ThreeFpResult setLoudnessNormalization(void *handle,bool enabled) const;
+    bool hasImageResampler() const;
     QImage resampleImage(const QImage &image,const QSize &size,unsigned algorithm) const;
     QSize processingSize(void *handle) const;
     ThreeFpResult setDecodeBuffer(void *handle,quint64 bytes,unsigned frames) const;

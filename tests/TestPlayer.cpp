@@ -4,6 +4,8 @@
 #include "player/PlayerImage.h"
 #include "bluray/BlurayCatalog.h"
 #include "player/PlayerInfoPanel.h"
+#include "player/PortableChart.h"
+#include "ui/PageTheme.h"
 #include "player/PlayerDiscMenu.h"
 #include "player/PlayerTracks.h"
 #include "graph/VpyScriptBuilder.h"
@@ -1095,14 +1097,32 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         QVERIFY(player.setScalingAlgorithms(ThreeFpScalingAlgorithm::Lanczos4,ThreeFpScalingAlgorithm::Lanczos4));QVERIFY(player.submitFrame(frame));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0,5000);ThreeFpPixelProbe pixel{};QVERIFY(player.samplePixel(150,150,pixel));QVERIFY(std::isfinite(pixel.red));
         frame.width=1280;frame.height=960;for(int p=0;p<3;++p){frame.planes[p]=QByteArray(1280*960*2,char(128));frame.strides[p]=2560;}QVERIFY(pane.surface()->width()<frame.width);const auto before=player.snapshot().swapChainPresents;QVERIFY(player.submitFrame(frame));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().swapChainPresents>before,5000);
     }
+    void suppliedPlayerThemeImmediate(){
+        const auto source=qEnvironmentVariable("VSR_THEME_TEST_IMAGE");if(source.isEmpty())QSKIP("Set VSR_THEME_TEST_IMAGE");QTemporaryDir dir;const auto ini=dir.filePath("themes.ini");QSettings theme(ini,QSettings::IniFormat);for(const auto &page:QStringList{"VSP-Main","VSP-Settings"}){theme.setValue(page+"/image",source);theme.setValue(page+"/transparency",15);theme.setValue(page+"/brightness",80);}theme.sync();
+        PlayerWindow player;player.show();auto *placeholder=player.pane_->findChild<QLabel*>("previewPlaceholder");const auto before=placeholder->grab().toImage();applyPageTheme(placeholder,ini,"VSP-Main");QTest::qWait(50);QVERIFY(placeholder->grab().toImage()!=before);const auto artifacts=qEnvironmentVariable("VSR_THEME_ARTIFACTS");if(!artifacts.isEmpty())placeholder->grab().save(QDir(artifacts).filePath("VSP-Main.png"));
+        bool checked=false;QTimer::singleShot(150,&player,[&]{auto *dialog=player.findChild<QDialog*>("playerSettings");if(!dialog)return;applyPageTheme(dialog,ini,"VSP-Settings");QTest::qWait(50);QVERIFY(dialog->findChild<QWidget*>("pageTheme"));if(!artifacts.isEmpty())dialog->grab().save(QDir(artifacts).filePath("VSP-Settings.png"));checked=true;dialog->reject();});player.showSettings();QVERIFY(checked);
+    }
+    void imageDepthRatioAndHlslExport(){
+        QCOMPARE(PlayerImageTools::scaledSize(QSize(320,200),"50%"),QSize(160,100));QCOMPARE(PlayerImageTools::scaledSize(QSize(320,200),"2x"),QSize(640,400));QCOMPARE(PlayerImageTools::scaledSize(QSize(320,200),"1:2"),QSize(160,100));QVERIFY(PlayerImageTools::scaledSize(QSize(320,200),"0").isEmpty());
+        QTemporaryDir dir;ImageOutput output;output.source=dir.filePath("source.png");output.image=QImage(32,24,QImage::Format_RGBA64);output.image.fill(QColor(30,120,180,200));output.image.setColorSpace(QColorSpace::SRgb);QVERIFY(output.image.save(output.source));
+        for(const auto &format:QStringList{"png","jxl","avif","webp","jpgli"}){output.format=format;QCOMPARE(PlayerImageTools::outputBitDepth(output),format=="png"?16:format=="jxl"?12:format=="avif"?10:8);}
+        for(int bits:{8,16}){output.format="png";output.bitDepth=QString::number(bits);output.destination=dir.filePath(QString("png-%1.png").arg(bits));output.size=QSize(64,48);output.resizeAlgorithm="hlsl:jinc";const auto error=PlayerImageTools::writeOutput(output);QVERIFY2(error.isEmpty(),qPrintable(error));QFile file(output.destination);QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(int(uchar(file.read(25)[24])),bits);QCOMPARE(QImage(output.destination).size(),output.size);}
+        for(int bits:{8,10,12,16}){output.format="jxl";output.bitDepth=QString::number(bits);output.destination=dir.filePath(QString("jxl-%1.jxl").arg(bits));const auto error=PlayerImageTools::writeOutput(output);QVERIFY2(error.isEmpty(),qPrintable(error));QString detail;const auto decoded=readJxl(output.destination,&detail);QVERIFY2(!decoded.isNull(),qPrintable(detail));QCOMPARE(decoded.text("sourceBitDepth").toInt(),bits);}
+    }
+    void portableParetoAndOverlayControls(){
+        QTemporaryDir dir;QFile figure(dir.filePath("Pareto.avif"));QVERIFY(figure.open(QIODevice::WriteOnly));figure.write("test");figure.close();QSettings settings(dir.filePath("player.ini"),QSettings::IniFormat);settings.setValue("render/paretoImage","Z:/old-device/VS-GUI-Full/Pareto.avif");QCOMPARE(resolveParetoImage(settings),dir.filePath("Pareto.avif"));QCOMPARE(settings.value("render/paretoImage").toString(),"Pareto.avif");
+        PlayerWindow player;player.show();const auto height=player.controls_->height();player.showStatus("打开文件：example.mkv");QVERIFY(player.message_->height()>=player.message_->fontMetrics().horizontalAdvance("GLSL"));QTest::qWait(3100);QVERIFY(player.message_->text().isEmpty());player.showStatus("打开文件：example.mkv");QVERIFY(player.message_->text().isEmpty());QCOMPARE(player.controls_->height(),height);
+        player.showEqualizer();QVERIFY(player.equalizerPopup_);QVERIFY(player.equalizerPopup_->frameGeometry().bottom()<player.controls_->mapToGlobal(QPoint()).y());player.equalizerPopup_->close();
+        auto *panel=static_cast<PlayerInfoPanel*>(player.info_);panel->showText("Info body\nVideo details");panel->show();panel->audioMode()->showPopup();for(int i=0;i<10;++i){player.layoutInfoPanels();QTest::qWait(20);}QVERIFY(panel->audioMode()->view()->isVisible());panel->audioMode()->hidePopup();
+    }
     void imageRefinementAlgorithms() {
         QTemporaryDir directory;QImage image(32,24,QImage::Format_ARGB32);for(int y=0;y<24;++y)for(int x=0;x<32;++x)image.setPixelColor(x,y,QColor(x%4<2?0:220,y%4<2?0:200,80,128));image.setColorSpace(QColorSpace::SRgb);
         ImageOutput output;output.image=image;output.source=directory.filePath("input.png");QVERIFY(image.save(output.source));output.size=QSize(64,48);output.destination=directory.filePath("output.png");
-        QImage jinc,lanczos;for(const auto &algorithm:QStringList{"jinc","lanczos3","lanczos4","anime4k"}){output.resizeAlgorithm=algorithm;const auto error=PlayerImageTools::writeOutput(output);QVERIFY2(error.isEmpty(),qPrintable(algorithm+": "+error));const QImage scaled(output.destination);QCOMPARE(scaled.size(),output.size);QVERIFY(std::abs(scaled.pixelColor(30,20).alpha()-128)<2);QVERIFY(scaled.colorSpace().isValid());if(algorithm=="jinc")jinc=scaled;if(algorithm=="lanczos4")lanczos=scaled;}
+        QImage jinc,lanczos;for(const auto &algorithm:QStringList{"jinc","lanczos3","lanczos4","anime4k","glsl:mpv-shaders/bloc97--Anime4K/glsl/Upscale/Anime4K_Upscale_CNN_x2_S.glsl"}){output.resizeAlgorithm=algorithm;const auto error=PlayerImageTools::writeOutput(output);QVERIFY2(error.isEmpty(),qPrintable(algorithm+": "+error));const QImage scaled(output.destination);QCOMPARE(scaled.size(),output.size);QVERIFY(std::abs(scaled.pixelColor(30,20).alpha()-128)<2);QVERIFY(scaled.colorSpace().isValid());if(algorithm=="jinc")jinc=scaled;if(algorithm=="lanczos4")lanczos=scaled;}
         QVERIFY(jinc!=lanczos);output.resizeAlgorithm="lanczos4";output.size=QSize(13,9);QCOMPARE(PlayerImageTools::writeOutput(output),QString());QCOMPARE(QImage(output.destination).size(),output.size);
         QImage wide(20000,2,QImage::Format_RGB32);wide.fill(Qt::cyan);const auto small=PlayerImageTools::resample(wide,QSize(37,3),"jinc");QCOMPARE(small.size(),QSize(37,3));QCOMPARE(small.pixelColor(18,1),QColor(Qt::cyan));
         QImage precise(11,9,QImage::Format_RGBA64);precise.setColorSpace(QColorSpace::SRgb);precise.fill(QColor::fromRgbF(.02,.25,.75,.5));for(const auto &algorithm:QStringList{"jinc","lanczos4"}){const auto resized=PlayerImageTools::resample(precise,QSize(19,17),algorithm);QCOMPARE(resized.depth(),64);QVERIFY(resized.colorSpace().isValid());QVERIFY(std::abs(resized.pixelColor(9,8).alphaF()-.5)<1.0/65535);}
-        output.format="avif";for(int bits:{8,10,12,16}){output.image.setText("sourceBitDepth",QString::number(bits));auto args=PlayerImageTools::conversionArguments(output,output.source,directory.path());QCOMPARE(args[args.indexOf("--bit-depth")+1],bits<=10?QString("10"):QString("12"));}
+        output.format="avif";for(int bits:{8,10,12,16}){output.image.setText("sourceBitDepth",QString::number(bits));auto args=PlayerImageTools::conversionArguments(output,output.source,directory.path());QCOMPARE(args[args.indexOf("--bit-depth")+1],QString("10"));}
     }
 
     void interpolationLowestWarning() {

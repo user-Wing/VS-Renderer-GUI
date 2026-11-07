@@ -9,6 +9,7 @@
 #include <QPainter>
 #include <QScrollArea>
 #include <QComboBox>
+#include <QAbstractItemView>
 #include <algorithm>
 
 namespace vsr {
@@ -32,7 +33,7 @@ public:
         baseFont_=QFont("Comic Sans MS",9);setFont(baseFont_);
         scroll_=new QScrollArea(this);scroll_->setObjectName("playerInfoTextArea");scroll_->setFrameShape(QFrame::NoFrame);scroll_->setWidgetResizable(false);scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         text_=new QLabel; text_->setTextFormat(Qt::PlainText);text_->setAlignment(Qt::AlignTop|Qt::AlignLeft);text_->setMargin(0);scroll_->setWidget(text_);
-        audioMode_=new QComboBox(this);audioMode_->setObjectName("playerInfoAudioMode");audioMode_->addItems({tr("音频简略信息"),tr("音频详细信息")});
+        audioMode_=new QComboBox(this);audioMode_->setObjectName("playerInfoAudioMode");audioMode_->addItems({tr("音频简略信息"),tr("音频详细信息")});audioMode_->view()->window()->setWindowFlag(Qt::WindowStaysOnTopHint,true);
         opacityText_=new QLabel(tr("透明度"),this);percent_=new QLabel(this);percent_->setObjectName("playerInfoOpacityPercent");
         opacity_=new QSlider(Qt::Horizontal,this);opacity_->setObjectName("playerInfoOpacity");opacity_->setRange(0,100);opacity_->setValue(50);opacity_->setToolTip(tr("信息面板背景透明度"));
         grip_=new PlayerInfoGrip(this);grip_->setObjectName("playerInfoResize");
@@ -69,7 +70,7 @@ private:
         if(!opacity_ || !grip_)return;
         auto font=baseFont_;if(!baseSize_.isEmpty())font.setPointSizeF(std::clamp(9.*std::min(double(width())/baseSize_.width(),double(height())/baseSize_.height()),9.,24.));setFont(font);
         opacityText_->setFont(font);percent_->setFont(font);const QFontMetrics metrics(font);const int footer=std::max(metrics.height()+20,opacity_->sizeHint().height()+12),gap=std::max(12,qRound(height()*.05));setContentsMargins(0,0,0,footer+gap);
-        const int header=std::max(32,audioMode_->sizeHint().height());audioMode_->setGeometry(12,8,220,header);const int textTop=right_?12:header+16;scroll_->setGeometry(12,textTop,width()-24,std::max(1,height()-footer-gap-textTop));text_->setFont(font);text_->adjustSize();
+        const int header=std::max(32,audioMode_->sizeHint().height());audioMode_->setGeometry(12,8,220,header);const int textTop=right_?12:header+16;scroll_->setGeometry(12,textTop,width()-24,std::max(1,height()-footer-gap-textTop));text_->setFont(font);text_->adjustSize();audioMode_->raise();
         const int labelWidth=metrics.horizontalAdvance(tr("透明度"))+8,percentWidth=metrics.horizontalAdvance("100%")+8;
         opacityText_->setGeometry(12,height()-footer,labelWidth,metrics.height()+8);percent_->setGeometry(width()-percentWidth-28,height()-footer,percentWidth,metrics.height()+8);percent_->setText(QString::number(opacity_->value())+"%");opacity_->setGeometry(labelWidth+20,height()-footer+4,std::max(40,width()-labelWidth-percentWidth-58),metrics.height());grip_->setGeometry(width()-22,height()-22,20,20);
         setStyleSheet(QString("QLabel#playerInfoPanel{font-size:%1pt;background:transparent;color:#f4f4f4;} QLabel,QSlider,QSizeGrip,QScrollArea,QScrollArea QWidget{font-size:%1pt;background:transparent;color:#f4f4f4;} QComboBox{background:#303238;color:#f4f4f4;} QSlider::groove:horizontal{background:#666;height:4px;} QSlider::handle:horizontal{background:#c8d4ea;width:12px;margin:-4px 0;}").arg(font.pointSizeF()));update();

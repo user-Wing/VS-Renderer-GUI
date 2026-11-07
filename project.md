@@ -4,7 +4,7 @@
 
 历史续修记录：`src/render/ShaderPackage.cpp`增加单文件多pass HLSL导入；含`//!HOOK`的HLSL复用现有MAIN/PREKERNEL指令解析，每段独立编译并保留资源反射检查。普通单pass HLSL契约与Native二进制包格式不变，缓存语义键升级v7。`tests/TestShaderPackage.cpp`覆盖重复main的多段输入；本地独立产物`dist/VS-Player-MoeSR.exe`保留原`dist/VS-Player.exe`，未改版本或发布。
 
-本轮入口：`PlayerSubtitles.cpp` 与 Native `AssSubtitleRenderer.cpp` 负责字幕加载和跳转；`CompareView` 复用 `MultiCompareView` 的三/四路滑块；`PageTheme.h` / `ThemePackage.h` 管理多页面主题与包；`PlayerResources.cpp` / `PowerSensors.h` 读取现有 PawnIO/NVML。功耗接口和权限边界见 [研究记录](development/pawnio-power.md)。Pareto 路径保存在程序旁 `player.ini` 的 `[render] paretoImage`，相对路径以该 INI 所在目录为基准。
+本轮入口：`PlayerImageTools`负责比例尺寸、位深与Full GLSL/内置HLSL图片导出；Lite通过FFmpeg编码且关闭质量搜索。`PageTheme.h`使用独立底层QWidget绘图并即时刷新，跳过PreviewPane子树；`ThemePackage.h`管理主题包。`WrappedFileCombo.h`处理文件名换行；`PortableChart.h`将配置旁Pareto图保存为相对路径，并兼容单文件内嵌图。`tools/jxl-runtime.cmake`保留SIMD并修补Win64的向量跨函数传参对齐；版本未改变。字幕、滑块、功耗入口仍分别为`PlayerSubtitles`/Native `AssSubtitleRenderer`、`CompareView`和`PowerSensors`，功耗权限边界见 [研究记录](development/pawnio-power.md)。
 
 ## 1. 发心与边界
 
@@ -122,7 +122,7 @@
 
 1. 明确变更范围，复现问题；修改相关模块，构建并运行对应测试。测试选择与结果写入 [版本测试台账](development/validation.md)，步骤见 [构建](docs/dependencies.md) / [测量](docs/performance-debugging.md)。
 2. Native 用 API20 固定脚本和补丁；历史 API14/18 脚本只用于对应基线。GUI 使用 CMake preset。
-3. 本轮基础修正直接部署现有 `dist/VS-GUI-Full`，保留用户配置、预设与色彩文件；不创建新的发行目录或单文件附件。精简播放器仅暂存在 `build/playerlite-runtime`，不再生成 PlayerLite 发行目录。`tools/deploy-local-runtime.py` 增量部署并核对 INI/VPY/ICC/LUT 哈希；它会修改运行目录，文档整理时不运行。
+3. 本轮直接覆盖现有 `dist/VS-GUI-Full` 和 `dist/VS-Player.exe`，保留用户预设与色彩文件；仅按任务修改主题及Pareto配置，不创建新的发行目录。精简播放器暂存在`build/vsp110-playerlite-runtime`，不再生成PlayerLite发行目录。`tools/deploy-local-runtime.py`增量部署并核对INI/VPY/ICC/LUT哈希；它会修改运行目录，文档整理时不运行。
 4. 打包前明确 Full、历史 Lite 或当前 PlayerLite；`package-portable.ps1 -Edition Lite` 是历史 Full 删减版，不能充当当前 PlayerLite。单文件从构建暂存用 `package-playerlite-single.ps1` 生成；完整流程见 [便携更新](docs/portable-updates.md)。
 5. 解压、依赖、启动、配置和清单验证后才可报告包完成；源码推送、草稿、附件上传、正式发布分别记录，需要相应任务授权。
 
@@ -130,7 +130,7 @@
 
 ## 10. 当前状态
 
-1.1.0 已落地三段缩放、最多三路处理输出、单帧 NCNN、页面主题、音量/快捷键和动态缓冲等功能；Native、PhotoCraft、AWJ 已更新。本轮基础修正部署至既有 `dist/VS-GUI-Full`；AI ZIP与此前单文件附件不重新制作。全量回归仍有失败、超时及异常退出历史，续修结果分别留存，当前不作为发布验收通过；GBC第二集2:15–2:35按要求暂不测试，PawnIO功耗采集及性能达标项尚未完成，详见台账。
+1.1.0 已落地三段缩放、多路输出、单帧NCNN、主题、音量/快捷键和动态缓冲；本轮追加图片导出与主题可见性修复，同步现有Full和单文件。指定背景图已在Renderer四页及Player主界面/设置实窗验收，图片位深和Lite FFmpeg路径专项通过；JPEGli后端仅8位。此前GBC指定尖峰已完成一次0丢帧复测，CPU功耗仍因驱动权限显示N/A；全量回归与长期播放没有通过结论，详见台账。
 
 1.0.15 同步近期3FP内核和可迁移的启动优化，保留多轨视频硬解试探修复；单文件使用更高压缩率。Full输出至 `dist/VS-GUI-Full`，单文件为 `dist/VS-Player.exe`；具体测试范围、启动采样及限制见测试台账。运行中的VSCap原文件保留，发行压缩包与附件由维护者手动制作、上传。
 

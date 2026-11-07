@@ -6,6 +6,10 @@
 #include "image/ImageHdr.h"
 #include "player/PlayerPng.h"
 #include <QComboBox>
+#include <QLineEdit>
+#ifndef VSR_LITE_PLAYER
+#include "graph/FilterCatalog.h"
+#endif
 #include <QCheckBox>
 #include <QSignalBlocker>
 #include <QColorSpace>
@@ -146,9 +150,20 @@ QString PlayerImageTools::writeEditorImport(const QImage &image,const QString &p
 }
 ImageOutput PlayerImageTools::currentOutput() const {ImageOutput output;output.source=source_;output.image=pane_->image();output.transform=pane_->imageTransform();return output;}
 QString PlayerImageTools::backendPath() {return optionalRuntimeExecutable("awj","AWJ.com");}
+int PlayerImageTools::outputBitDepth(const ImageOutput &o){
+    bool ok=false;const int chosen=o.bitDepth.toInt(&ok);if(ok)return chosen;
+    return o.format=="png"?16:o.format=="jxl"?12:o.format=="avif"?10:8;
+}
+QSize PlayerImageTools::scaledSize(const QSize &source,const QString &text){
+    auto value=text.trimmed().toLower();value.remove(QChar(0x00d7));value.remove('x');bool percent=value.endsWith('%');if(percent)value.chop(1);value.replace(':','/');const auto parts=value.split('/');bool ok=false;double factor=parts.value(0).toDouble(&ok);if(!ok)return {};
+    if(parts.size()==2){bool denominatorOk=false;const double denominator=parts[1].toDouble(&denominatorOk);if(!denominatorOk || denominator<=0)return {};factor/=denominator;}else if(parts.size()>2)return {};
+    if(percent)factor/=100.;if(!std::isfinite(factor) || factor<=0 || source.width()*factor>65535 || source.height()*factor>65535)return {};
+    return QSize(qMax(1,qRound(source.width()*factor)),qMax(1,qRound(source.height()*factor)));
+}
 QStringList PlayerImageTools::conversionArguments(const ImageOutput &o,const QString &input,const QString &directory) {
     QStringList args{"-i",input,"-o",directory,"--format",extension(o.format),"--template","result",o.visualQuality?"--visual-quality":"--quality",QString::number(o.quality),"--alpha",o.alpha,"--image-size-limit","none","--keep-metadata","--no-summary","--no-log"};
-    if(o.format=="avif"){int bits=o.image.text("sourceBitDepth").toInt();if(bits<=0)bits=o.image.depth()>32?16:8;const auto depth=o.bitDepth=="auto"?QString::number(bits<=10?10:12):o.bitDepth;args<<"--avif-encoder"<<"aom"<<"--avif-color-representation"<<"yuv"<<"--chroma"<<o.chroma<<"--bit-depth"<<depth;}
+    args<<"--bit-depth"<<QString::number(outputBitDepth(o));
+    if(o.format=="avif")args<<"--avif-encoder"<<"aom"<<"--avif-color-representation"<<"yuv"<<"--chroma"<<o.chroma;
     if(o.format=="jpgli")args<<"--chroma"<<o.chroma;
     if(o.format=="avif" || o.format=="webp" || o.format=="jxl")args<<"--speed"<<QString::number(o.speed);
     if(o.visualQuality)args<<"--visual-quality-gpu";
@@ -166,27 +181,36 @@ QString PlayerImageTools::writeOutput(const ImageOutput &o) {
             const QRect source=o.transform.inverted().mapRect(QRectF(o.crop).translated(bounds.topLeft())).toAlignedRect().intersected(image.rect());
             image=image.copy(source);
         }
-        if(!o.size.isEmpty() && o.resizeAlgorithm!="anime4k"){
+        if(!o.size.isEmpty() && o.resizeAlgorithm!="anime4k" && !o.resizeAlgorithm.startsWith("glsl:")){
             const bool swap=std::abs(o.transform.m12())>.5;
             const QSize size=swap?QSize(o.size.height(),o.size.width()):o.size;
-#ifdef VSR_LITE_PLAYER
-            ThreeFpApi api;api.available();image=api.resampleImage(image,size,unsigned(QStringList{"nearest","bilinear","jinc","lanczos3","lanczos4"}.indexOf(o.resizeAlgorithm)));
-#else
-            image=resample(image,size,o.resizeAlgorithm);
+            if(o.resizeAlgorithm.startsWith("hlsl:")){
+                ThreeFpApi api;if(!api.available() || !api.hasImageResampler())return tr("原生 HLSL 图片重新采样接口不可用。");
+                const bool floating=image.pixelFormat().typeInterpretation()==QPixelFormat::FloatingPoint;
+                image=api.resampleImage(image,size,unsigned(QStringList{"nearest","bilinear","jinc","lanczos3","lanczos4"}.indexOf(o.resizeAlgorithm.mid(5))));
+                if(!floating && !image.isNull())image=image.convertToFormat(QImage::Format_RGBA64_Premultiplied);
+            }else{
+#ifndef VSR_LITE_PLAYER
+                image=resample(image,size,o.resizeAlgorithm);
 #endif
+            }
         }
         image=image.transformed(o.transform);
         if(image.isNull())return tr("图像处理失败，内存不足或尺寸无效。");
     }
-    if(!o.size.isEmpty() && o.resizeAlgorithm=="anime4k"){
-        if(o.size.width()<image.width() || o.size.height()<image.height())return tr("Anime4K 用于放大，请用 Jinc 或 Lanczos 进行缩小。");
+    if(!o.size.isEmpty() && (o.resizeAlgorithm=="anime4k" || o.resizeAlgorithm.startsWith("glsl:"))){
+#ifndef VSR_LITE_PLAYER
+        if(o.resizeAlgorithm=="anime4k" && (o.size.width()<image.width() || o.size.height()<image.height()))return tr("Anime4K 用于放大，请用 Jinc 或 Lanczos 进行缩小。");
         const auto input=temporary.filePath("anime-input.png"),result=temporary.filePath("anime-output.png"),script=temporary.filePath("resize-anime.py");
         ImageSaveFile staged(input);if(!staged.open(QIODevice::WriteOnly))return staged.errorString();QImageWriter writer(&staged,"png");if(!writer.write(image))return writer.errorString();if(!staged.commit())return staged.errorString();
         QFile resource(":/image-tools/resize-anime.py"),file(script);if(!resource.open(QIODevice::ReadOnly) || !file.open(QIODevice::WriteOnly))return tr("无法准备 Anime4K 脚本。");file.write(resource.readAll());file.close();
-        const QDir runtime(QCoreApplication::applicationDirPath());QProcess process;process.setProcessChannelMode(QProcess::MergedChannels);process.start(runtime.filePath("runtime/python/python.exe"),{script,input,result,runtime.filePath("shaders/anime4k-a-fast.glsl"),runtime.filePath("ffmpeg.exe"),QString::number(o.size.width()),QString::number(o.size.height())});
+        const QDir runtime(QCoreApplication::applicationDirPath());QProcess process;process.setProcessChannelMode(QProcess::MergedChannels);process.start(runtime.filePath("runtime/python/python.exe"),{script,input,result,runtime.filePath(o.resizeAlgorithm.startsWith("glsl:")?"shaders/"+o.resizeAlgorithm.mid(5):QString("shaders/anime4k-a-fast.glsl")),runtime.filePath("ffmpeg.exe"),QString::number(o.size.width()),QString::number(o.size.height())});
         if(!process.waitForStarted())return process.errorString();QByteArray log;while(!process.waitForFinished(100)){log+=process.readAll();if(log.size()>65536)log=log.right(65536);if(QThread::currentThread()->isInterruptionRequested()){process.kill();process.waitForFinished();return tr("已取消输出。");}}log+=process.readAll();
         if(process.exitCode()!=0 || process.exitStatus()!=QProcess::NormalExit)return tr("Anime4K 调整尺寸失败：%1").arg(QString::fromUtf8(log.right(4096)));
-        const auto color=image.colorSpace();image=QImage(result);image.setColorSpace(color);if(image.isNull())return tr("无法读取 Anime4K 输出。");
+        const auto color=image.colorSpace();image=QImage(result);image.setColorSpace(color);if(image.isNull())return tr("无法读取 GLSL 输出。");
+#else
+        return tr("GLSL 图片滤镜仅在 Full 可用。");
+#endif
     }
     if(QThread::currentThread()->isInterruptionRequested())return tr("已取消输出。");
     ImageSaveFile destination(o.destination);
@@ -198,11 +222,15 @@ QString PlayerImageTools::writeOutput(const ImageOutput &o) {
     const auto resultPath=temporary.filePath("result."+extension(o.format));
     QProcess ff;const auto floatImage=image.convertToFormat(QImage::Format_RGBA32FPx4);
     QStringList args{"-v","error","-f","rawvideo","-pixel_format","gbrapf32le","-video_size",QString("%1x%2").arg(image.width()).arg(image.height()),"-i","pipe:0","-frames:v","1"};
-    if(o.format=="avif")args<<"-c:v"<<"libaom-av1"<<"-still-picture"<<"1"<<"-crf"<<QString::number((100-o.quality)*63/100)<<"-cpu-used"<<QString::number(std::clamp(o.speed,0,8))<<"-pix_fmt"<<"yuv444p10le";
+    if(o.format=="avif")args<<"-c:v"<<"libaom-av1"<<"-still-picture"<<"1"<<"-crf"<<QString::number((100-o.quality)*63/100)<<"-cpu-used"<<QString::number(std::clamp(o.speed,0,8))<<"-pix_fmt"<<(QString("yuv%1p").arg(o.chroma=="auto"?"420":o.chroma)+(outputBitDepth(o)>8?QString::number(outputBitDepth(o))+"le":QString()));
     else if(o.format=="webp")args<<"-c:v"<<"libwebp"<<"-quality"<<QString::number(o.quality);
-    else if(o.format=="jxl")args<<"-c:v"<<"libjxl"<<"-distance"<<QString::number((100-o.quality)/10.);
+    else if(o.format=="jxl")args<<"-c:v"<<"libjxl"<<"-distance"<<QString::number((100-o.quality)/10.)<<"-pix_fmt"<<"rgba64le"<<"-bits_per_raw_sample"<<QString::number(outputBitDepth(o));
     else if(o.format=="jpgli")args<<"-c:v"<<"mjpeg"<<"-q:v"<<QString::number(std::clamp(2+(100-o.quality)*29/100,2,31));
-    else args<<"-pix_fmt"<<"rgba64be";
+    else args<<"-pix_fmt"<<(outputBitDepth(o)>8?"rgba64be":"rgba");
+    if(!o.size.isEmpty() && !o.resizeAlgorithm.startsWith("hlsl:")){
+        const auto flags=o.resizeAlgorithm=="nearest"?QString("neighbor"):o.resizeAlgorithm=="bilinear"?QString("bilinear"):QString("lanczos");
+        args<<"-vf"<<QString("scale=%1:%2:flags=%3:param0=%4").arg(o.size.width()).arg(o.size.height()).arg(flags).arg(o.resizeAlgorithm=="lanczos4"?4:3);
+    }
     args<<"-y"<<resultPath;const auto bundled=QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe");ff.start(QFileInfo::exists(bundled)?bundled:QString("ffmpeg.exe"),args);if(!ff.waitForStarted())return ff.errorString();
     QByteArray row(image.width()*4,Qt::Uninitialized);
     for(int component:{1,2,0,3})for(int y=0;y<image.height();++y){auto *line=reinterpret_cast<float*>(row.data());const auto *pixels=reinterpret_cast<const float*>(floatImage.constScanLine(y));for(int x=0;x<image.width();++x)line[x]=pixels[x*4+component];ff.write(row);while(ff.bytesToWrite()>4*1024*1024){if(QThread::currentThread()->isInterruptionRequested()){ff.kill();ff.waitForFinished();return tr("已取消输出。");}if(!ff.waitForBytesWritten(1000) && ff.state()==QProcess::NotRunning)return QString::fromUtf8(ff.readAllStandardError());}}
@@ -220,7 +248,7 @@ QString PlayerImageTools::writeOutput(const ImageOutput &o) {
         input=temporary.filePath("input.awsraw");QFile pixels(input);if(!pixels.open(QIODevice::WriteOnly))return pixels.errorString();
         const auto rgba=image.convertToFormat(QImage::Format_RGBA64);QDataStream header(&pixels);header.setByteOrder(QDataStream::LittleEndian);header.writeRawData("AWSRAW1\0",8);header<<quint32(rgba.width())<<quint32(rgba.height())<<quint32(1)<<quint32(1)<<quint32(16)<<quint32(rgba.width()*8)<<quint64(rgba.width())*rgba.height()*8;
         for(int y=0;y<rgba.height();++y)if(pixels.write(reinterpret_cast<const char*>(rgba.constScanLine(y)),rgba.width()*8)!=rgba.width()*8)return pixels.errorString();pixels.close();arguments=conversionArguments(o,input,temporary.path());
-        if(o.format=="png" && image.depth()>32)arguments<<"--bit-depth"<<"16";
+
     }
     if(hdr){
         auto tagged=image;if(!tagged.colorSpace().isValid())tagged.setColorSpace(QColorSpace::SRgb);
@@ -260,26 +288,55 @@ void PlayerImageTools::startOutput(const ImageOutput &output,bool desktop) {
 }
 void PlayerImageTools::convertImage() {
     auto output=currentOutput();auto *dialog=new QDialog(window());dialog->setAttribute(Qt::WA_DeleteOnClose);dialog->setWindowTitle(tr("缩放、压缩和转换格式"));dialog->setMinimumWidth(640);auto *form=new QFormLayout(dialog);
-    auto *format=new QComboBox(dialog);format->setObjectName("imageConvertFormat");for(const auto &id:QStringList{"avif","webp","jxl","jpgli","png"})format->addItem(id=="jpgli"?QStringLiteral("JPEG(JPEGli)"):id.toUpper(),id);
+    auto *format=new QComboBox(dialog);format->setObjectName("imageConvertFormat");for(const auto &id:QStringList{"avif","webp","jxl","jpgli","png"})format->addItem(id=="jpgli"?QStringLiteral("JPEG (JPEGli)"):id.toUpper(),id);
+#ifdef VSR_LITE_PLAYER
+    format->setItemText(format->findData("jpgli"),tr("JPEG (FFmpeg)"));
+#endif
     auto *mode=new QComboBox(dialog);mode->addItems({tr("固定编码质量"),tr("目标视觉质量(自动搜索)")});mode->setObjectName("imageConvertMode");
     auto *quality=new QSpinBox(dialog);quality->setRange(1,100);quality->setValue(70);quality->setObjectName("imageConvertQuality");
     auto *speed=new QSpinBox(dialog);speed->setRange(0,10);speed->setValue(5);speed->setObjectName("imageConvertSpeed");
-    auto *chroma=new QComboBox(dialog);chroma->addItems({"420","422","444","auto"});chroma->setToolTip(tr("AVIF 使用 YUV；4:2:0 为兼容优先，auto 跟随源采样。"));
+    auto *chroma=new QComboBox(dialog);chroma->setObjectName("imageConvertChroma");for(const auto &sampling:QStringList{"420","422","444"})chroma->addItem("yuv"+sampling+"p",sampling);chroma->addItem(tr("自动"),"auto");chroma->setToolTip(tr("AVIF 使用 YUV；4:2:0 为兼容优先，auto 跟随源采样。"));
     auto *depth=new QComboBox(dialog);depth->setObjectName("imageConvertDepth");depth->addItem(tr("自动(8→10，最高12bit)"),"auto");for(const auto &bits:QStringList{"8","10","12"})depth->addItem(bits,bits);auto *alpha=new QComboBox(dialog);alpha->addItem(tr("自动保留透明"),"auto");alpha->addItem(tr("强制保留"),"force");alpha->addItem(tr("移除透明"),"off");
-    form->addRow(tr("输出格式"),format);form->addRow(tr("压缩模式"),mode);form->addRow(tr("质量(1–100)"),quality);form->addRow(tr("速度(0慢/10快)"),speed);form->addRow(tr("色度采样"),chroma);form->addRow(tr("AVIF 位深"),depth);form->addRow(tr("Alpha"),alpha);
+    form->addRow(tr("输出格式"),format);form->addRow(tr("压缩模式"),mode);form->addRow(tr("质量(1–100)"),quality);form->addRow(tr("速度(0慢/10快)"),speed);form->addRow(tr("色度采样"),chroma);form->addRow(tr("位深"),depth);form->addRow(tr("Alpha"),alpha);
     auto *resize=new QCheckBox(tr("调整输出尺寸"),dialog);resize->setObjectName("imageConvertResize");form->addRow(resize);
     const auto original=transformedBounds(output).size().toSize();
     auto *width=new QSpinBox(dialog),*height=new QSpinBox(dialog);width->setRange(1,65535);height->setRange(1,65535);width->setValue(original.width());height->setValue(original.height());width->setObjectName("imageConvertWidth");height->setObjectName("imageConvertHeight");
     auto *aspect=new QCheckBox(tr("固定比例（取消后拉伸）"),dialog);aspect->setChecked(true);
-    auto *algorithm=new QComboBox(dialog);algorithm->setObjectName("imageConvertResample");for(const auto &name:QStringList{"jinc","lanczos3","lanczos4","bilinear","nearest"})algorithm->addItem(name,name);
+    auto *algorithm=new QComboBox(dialog);algorithm->setObjectName("imageConvertResample");for(const auto &name:QStringList{"jinc","lanczos3","lanczos4","bilinear","nearest"}){
+#ifndef VSR_LITE_PLAYER
+        algorithm->addItem(name,name);
+#else
+        if(name!="jinc")algorithm->addItem("FFmpeg · "+name,name);
+#endif
+    }
+    ThreeFpApi imageApi;if(imageApi.available() && imageApi.hasImageResampler()){for(const auto &name:QStringList{"jinc","lanczos3","lanczos4","bilinear","nearest"})algorithm->addItem("HLSL · "+name,"hlsl:"+name);
+#ifdef VSR_LITE_PLAYER
+        algorithm->setCurrentIndex(algorithm->findData("hlsl:jinc"));
+#endif
+    }
+#ifndef VSR_LITE_PLAYER
+    auto *shader=new QComboBox(dialog);shader->setObjectName("imageConvertShader");shader->setEditable(true);shader->setInsertPolicy(QComboBox::NoInsert);shader->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);shader->setMinimumContentsLength(20);
+    if(const auto *definition=FilterCatalog::find("anime4k"))for(const auto &parameter:definition->parameters)if(parameter.id=="mode")for(const auto &file:parameter.choices)if(file!="自定义 GLSL")shader->addItem(file,file);
+    algorithm->addItem(tr("内置 GLSL 滤镜"),"glsl");form->addRow(tr("GLSL 滤镜"),shader);shader->setEnabled(false);connect(algorithm,&QComboBox::currentIndexChanged,dialog,[=]{shader->setEnabled(resize->isChecked() && algorithm->currentData()=="glsl");});connect(resize,&QCheckBox::toggled,dialog,[=](bool enabled){shader->setEnabled(enabled && algorithm->currentData()=="glsl");});
+#endif
+    auto *sizeMode=new QComboBox(dialog);sizeMode->setObjectName("imageConvertSizeMode");sizeMode->addItems({tr("分辨率"),tr("缩放比例")});auto *ratio=new QLineEdit("100%",dialog);ratio->setToolTip(tr("2x 为每边放大两倍；50% 或 1:2 为每边缩小到一半。"));ratio->setObjectName("imageConvertRatio");ratio->setPlaceholderText("2x / 50% / 1:2");form->addRow(tr("尺寸输入"),sizeMode);form->addRow(tr("缩放比例"),ratio);
+    connect(ratio,&QLineEdit::textChanged,dialog,[=](const QString &text){const auto size=scaledSize(original,text);if(!size.isEmpty()){const QSignalBlocker a(width),b(height);width->setValue(size.width());height->setValue(size.height());}});
     form->addRow(tr("宽度"),width);form->addRow(tr("高度"),height);form->addRow(aspect);form->addRow(tr("重新采样"),algorithm);
-    const auto resizeEnabled=[=](bool enabled){width->setEnabled(enabled);height->setEnabled(enabled);aspect->setEnabled(enabled);algorithm->setEnabled(enabled);};connect(resize,&QCheckBox::toggled,dialog,resizeEnabled);resizeEnabled(false);
+    const auto resizeEnabled=[=](bool enabled){sizeMode->setEnabled(enabled);ratio->setEnabled(enabled && sizeMode->currentIndex()==1);width->setEnabled(enabled && sizeMode->currentIndex()==0);height->setEnabled(enabled && sizeMode->currentIndex()==0);aspect->setEnabled(enabled && sizeMode->currentIndex()==0);algorithm->setEnabled(enabled);};connect(resize,&QCheckBox::toggled,dialog,resizeEnabled);resizeEnabled(false);connect(sizeMode,&QComboBox::currentIndexChanged,dialog,[=]{resizeEnabled(resize->isChecked());});
     connect(width,&QSpinBox::valueChanged,dialog,[=](int value){if(aspect->isChecked()){const QSignalBlocker block(height);height->setValue(qMax(1,qRound(value*double(original.height())/qMax(1,original.width()))));}});
     connect(height,&QSpinBox::valueChanged,dialog,[=](int value){if(aspect->isChecked()){const QSignalBlocker block(width);width->setValue(qMax(1,qRound(value*double(original.width())/qMax(1,original.height()))));}});
     auto *note=new QLabel(tr("固定质量只编码一次；视觉质量会反复编码并测量，适合追求体积。\nAVIF 使用 AOM，默认 YUV 4:2:0；GPU 仅加速视觉质量指标。\nPNG 100 无损；JPEG 100 为最高质量，仍为有损。"),dialog);note->setWordWrap(true);form->addRow(note);
-    const auto update=[=]{const auto id=format->currentData().toString();speed->setEnabled(id=="avif"||id=="webp"||id=="jxl");chroma->setEnabled(id=="avif"||id=="jpgli");depth->setEnabled(id=="avif");alpha->setEnabled(id!="jpgli");if(id=="jpgli")alpha->setCurrentIndex(2);if(id=="png"){mode->setCurrentIndex(0);quality->setValue(100);}mode->setEnabled(id!="png");};connect(format,&QComboBox::currentIndexChanged,dialog,update);update();
+    const auto update=[=]{const auto id=format->currentData().toString();speed->setEnabled(id=="avif"||id=="webp"||id=="jxl");chroma->setEnabled(id=="avif"||id=="jpgli");const QSignalBlocker blocker(depth);depth->clear();const QStringList supported=id=="png"?QStringList{"8","16"}:id=="jxl"?QStringList{"8","10","12","16"}:id=="avif"?QStringList{"8","10","12"}:QStringList{"8"};for(const auto &bits:supported)depth->addItem(bits,bits);ImageOutput defaults;defaults.format=id;depth->setCurrentIndex(depth->findData(QString::number(outputBitDepth(defaults))));depth->setEnabled(supported.size()>1);depth->setToolTip(id=="jpgli"?tr("当前 JPEG 编码器只支持 8-bit 输出。"):QString());alpha->setEnabled(id!="jpgli");if(id=="jpgli")alpha->setCurrentIndex(2);if(id=="png"){mode->setCurrentIndex(0);quality->setValue(100);}mode->setEnabled(id!="png" && mode->count()>1);};connect(format,&QComboBox::currentIndexChanged,dialog,update);update();
+#ifdef VSR_LITE_PLAYER
+    mode->removeItem(1);mode->setCurrentIndex(0);mode->setEnabled(false);mode->setToolTip(tr("Lite 直接调用 FFmpeg，仅固定质量，不进行视觉质量搜索。"));
+    note->setText(tr("直接使用 FFmpeg 编码，仅固定质量；不提供视觉质量搜索。\nAVIF 使用 AOM，默认 YUV 4:2:0；PNG 无损，JPEG 为有损。"));
+#endif
     auto *buttons=saveButtons(dialog);form->addRow(buttons);connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
-    connect(buttons,&QDialogButtonBox::accepted,this,[=,this]() mutable {if(resize->isChecked()){output.size=QSize(width->value(),height->value());output.resizeAlgorithm=algorithm->currentData().toString();}output.format=format->currentData().toString();output.destination=chooseOutput(dialog,output.source,extension(output.format));if(output.destination.isEmpty())return;output.quality=quality->value();output.speed=speed->value();output.visualQuality=mode->currentIndex()==1;output.chroma=chroma->currentText();output.bitDepth=depth->currentData().toString();output.alpha=alpha->currentData().toString();startOutput(output);dialog->accept();});dialog->show();
+    connect(buttons,&QDialogButtonBox::accepted,this,[=,this]() mutable {if(resize->isChecked() && sizeMode->currentIndex()==1 && scaledSize(original,ratio->text()).isEmpty()){QMessageBox::warning(dialog,tr("缩放比例无效"),tr("请输入 2x、50% 或 1:2 这样的正比例。"));return;}if(resize->isChecked()){output.size=sizeMode->currentIndex()==1?scaledSize(original,ratio->text()):QSize(width->value(),height->value());output.resizeAlgorithm=algorithm->currentData().toString();
+#ifndef VSR_LITE_PLAYER
+        if(output.resizeAlgorithm=="glsl")output.resizeAlgorithm="glsl:"+shader->currentData().toString();
+#endif
+    }output.format=format->currentData().toString();output.destination=chooseOutput(dialog,output.source,extension(output.format));if(output.destination.isEmpty())return;output.quality=quality->value();output.speed=speed->value();output.visualQuality=mode->currentIndex()==1;output.chroma=chroma->currentData().toString();output.bitDepth=depth->currentData().toString();output.alpha=alpha->currentData().toString();startOutput(output);dialog->accept();});dialog->show();
 }
 void PlayerImageTools::recycleImage() {
     const auto path=source_;if(QMessageBox::question(this,tr("删除到回收站"),tr("将 %1 移入回收站？").arg(QFileInfo(path).fileName()))!=QMessageBox::Yes)return;
