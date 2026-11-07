@@ -1,4 +1,4 @@
-// Single-file PlayerLite bootstrapper. Windows 10+ provides tar.exe for tar.xz extraction.
+// Single-file PlayerLite bootstrapper. Windows 10+ provides tar.exe for tar.gz extraction.
 // Each run unpacks beside the launcher, waits for the player, then removes its runtime.
 // Qt/player dependencies are embedded; FFmpeg is external. player.ini lives beside this EXE.
 #define WIN32_LEAN_AND_MEAN
@@ -104,7 +104,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show
     SECURITY_ATTRIBUTES lockAttributes={sizeof(SECURITY_ATTRIBUTES),NULL,TRUE};
     lock=CreateFileW(lockPath,GENERIC_READ|GENERIC_WRITE,0,&lockAttributes,CREATE_NEW,FILE_ATTRIBUTE_HIDDEN,NULL);
     if(lock==INVALID_HANDLE_VALUE)goto done;
-    swprintf_s(archive,4096,L"%ls\\payload.tar.xz",runtime);swprintf_s(player,4096,L"%ls\\vs-player.exe",runtime);
+    swprintf_s(archive,4096,L"%ls\\payload.tar.gz",runtime);swprintf_s(player,4096,L"%ls\\vs-player.exe",runtime);
     HANDLE output=CreateFileW(archive,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
     if(output==INVALID_HANDLE_VALUE){fail(L"Cannot write runtime archive.");goto done;}
     pos.QuadPart=size.QuadPart-sizeof(footer)-(LONGLONG)footer.zipSize;
@@ -115,7 +115,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show
     wchar_t tar[4096];GetSystemDirectoryW(tar,4000);wcscat_s(tar,4096,L"\\tar.exe");
     swprintf_s(command,8192,L"\"%ls\" -xf \"%ls\" -C \"%ls\"",tar,archive,runtime);
     int unpacked=launchAndWait(tar,command,parent);DeleteFileW(archive);
-    if(!unpacked || !exists(player)){fail(L"Cannot unpack PlayerLite. Windows tar.exe with XZ support is required.");goto done;}
+    if(!unpacked || !exists(player)){fail(L"Cannot unpack PlayerLite. Windows tar.exe with gzip support is required.");goto done;}
     swprintf_s(envPath,32768,L"%ls;%ls",runtime,externalPath);SetEnvironmentVariableW(L"PATH",envPath);
     wchar_t config[4096];swprintf_s(config,4096,L"%ls\\player.ini",parent);SetEnvironmentVariableW(L"VSR_PLAYER_CONFIG",config);SetEnvironmentVariableW(L"VSR_SINGLE_PLAYER_PATH",self);
     if(!exists(config))SetEnvironmentVariableW(L"VSR_PLAYER_NEW_CONFIG",L"1");

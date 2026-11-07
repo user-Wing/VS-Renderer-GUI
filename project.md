@@ -125,7 +125,7 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 1. 明确变更范围，复现问题；修改相关模块，构建并运行对应测试。测试选择与结果写入 [版本测试台账](development/validation.md)，步骤见 [构建](docs/dependencies.md) / [测量](docs/performance-debugging.md)。
 2. Native 用 API20 固定脚本和补丁；历史 API14/18 脚本只用于对应基线。GUI 使用 CMake preset。
 3. 本轮直接覆盖现有 `dist/VS-GUI-Full` 和 `dist/VS-Player.exe`，保留用户预设与色彩文件；仅按任务修改主题及Pareto配置，不创建新的发行目录。精简播放器暂存在`build/vsp110-playerlite-runtime`，不再生成PlayerLite发行目录。`tools/deploy-local-runtime.py`增量部署并核对INI/VPY/ICC/LUT哈希；它会修改运行目录，文档整理时不运行。
-4. 打包前明确 Full、历史 Lite 或当前 PlayerLite；`package-portable.ps1 -Edition Lite` 是历史 Full 删减版，不能充当当前 PlayerLite。单文件从构建暂存用 `package-playerlite-single.ps1` 生成；完整流程见 [便携更新](docs/portable-updates.md)。
+4. 打包前明确Full、历史Lite或当前PlayerLite；`package-portable.ps1 -Edition Lite`是历史Full删减版，不能充当当前PlayerLite。单文件从构建暂存用`package-playerlite-single.ps1`生成tar.gz level 1负载，启动后临时解包、退出清理；Full/Single均排除themes目录及用户主题INI。Full压缩包为`dist/1.1.0.7z`；只创建Release草稿，附件由维护者上传。完整流程见 [便携更新](docs/portable-updates.md)。
 5. 解压、依赖、启动、配置和清单验证后才可报告包完成；源码推送、草稿、附件上传、正式发布分别记录，需要相应任务授权。
 
 文档纪律：结构/决策变化当天更新本地图；操作变化只改对应 docs 指南；用户可见变化写 changelog；测试按版本与轮次更新同一台账，不新建 `docs/update-版本.md`、`validation-版本.md`。原始日志留 `build/`，必要证据放 `development/evidence/`；不携带用户媒体。README、本地测试数据和开发记录不得混入上游 PR。

@@ -15,7 +15,7 @@ $compiler = 'C:\Private\Soft\QT\Tools\mingw1310_64\bin\gcc.exe'
 if (!(Test-Path -LiteralPath $compiler)) { throw "Missing compiler: $compiler" }
 $work = Join-Path $root 'build\playerlite-single'
 $stage = Join-Path $work 'stage'
-$zip = Join-Path $work 'payload.tar.xz'
+$zip = Join-Path $work 'payload.tar.gz'
 $runner = Join-Path $work 'launcher.exe'
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 $stage = [IO.Path]::GetFullPath($stage)
@@ -28,7 +28,7 @@ New-Item -ItemType Directory -Path $stage | Out-Null
 $ffmpegFiles = @((Get-Content -LiteralPath (Join-Path $SourceDirectory 'release.json') -Raw | ConvertFrom-Json).ffmpegOnlyFiles)
 $ffmpegPattern = '^(ffmpeg|ffprobe)\.exe$|^(avcodec|avdevice|avfilter|avformat|avutil|swresample|swscale)(-\d+)?\.dll$'
 Get-ChildItem -LiteralPath $SourceDirectory -Force | Where-Object {
-    $_.Name -ne 'player.ini' -and $_.Name -notin $ffmpegFiles -and $_.Name -notmatch $ffmpegPattern
+    $_.Name -notin @('player.ini','themes.ini','themes') -and $_.Name -notin $ffmpegFiles -and $_.Name -notmatch $ffmpegPattern
 } | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
 }
@@ -60,9 +60,9 @@ Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $_.Name -ne 'r
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'resource-manifest.json') -Encoding UTF8
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 $compress = @'
-import pathlib, sys, tarfile, lzma
+import pathlib, sys, tarfile
 source = pathlib.Path(sys.argv[1])
-with tarfile.open(sys.argv[2], 'w:xz', preset=9 | lzma.PRESET_EXTREME) as archive:
+with tarfile.open(sys.argv[2], 'w:gz', compresslevel=1) as archive:
     for path in sorted(source.rglob('*')):
         if path.is_file():
             archive.add(path, arcname=path.relative_to(source).as_posix(), recursive=False)
