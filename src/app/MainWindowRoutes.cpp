@@ -31,7 +31,8 @@ bool MainWindow::addRoute(){
     routes_[routeIndex_].groups=currentTimeGroups();routes_[routeIndex_].preset=activePreset_;
     routes_.append(RouteState{});auto *pane=compareView_->addProcessedPane();additionalRoutes_.push_back(std::make_unique<RenderRoute>(api_,pane,this));auto *changedRoute=additionalRoutes_.back().get();connect(pane,&PreviewPane::viewChanged,this,[this,changedRoute](float zoom,float x,float y){if(!syncView_->isChecked())return;sourcePane_->adoptView(zoom,x,y);sourcePlayer_->setView(zoom,x,y);processedPane_->adoptView(zoom,x,y);processedPlayer_->setView(zoom,x,y);for(auto &route:additionalRoutes_)if(route.get()!=changedRoute)route->setView(zoom,x,y);});
     if(syncView_->isChecked())additionalRoutes_.back()->setView(sourcePane_->zoom(),sourcePane_->pan().x(),sourcePane_->pan().y());
-    selectRoute(routes_.size()-1);validateScript();return true;
+    additionalRoutes_.back()->reset(sourcePath_->text().isEmpty()?QStringLiteral("等待视频"):QStringLiteral("源已打开\n点击“渲染预览”生成右侧画面"));
+    selectRoute(routes_.size()-1);return true;
 }
 void MainWindow::selectRoute(int index){
     if(index<0 || index>=routes_.size())return;
@@ -44,7 +45,7 @@ void MainWindow::removeRoute(){
     else {additionalRoutes_.erase(additionalRoutes_.begin()+removed-1);compareView_->removeProcessedPane(removed);}
     routes_.removeAt(removed);routeIndex_=qMin(removed,int(routes_.size())-1);activePreset_=routes_[routeIndex_].preset;replaceTimeGroups(routes_[routeIndex_].groups);
     for(int i=0;i<routes_.size();++i)compareView_->setRouteVisible(i,routes_[i].visible);updateRouteChoices();
-    if(removed==0){const auto editing=routeIndex_;selectRoute(0);validateScript();selectRoute(editing);}
+    if(removed==0){pendingPreview_=false;frameServer_->unloadScript();processedPlayer_->stop();vsScriptReady_=vsFramePending_=false;processedPane_->setSurfaceActive(false);processedPane_->setPlaceholderText(QStringLiteral("源已打开\n点击“渲染预览”生成右侧画面"));processedPane_->setBadge(QStringLiteral("VS · 待渲染"));}
 }
 void MainWindow::renderAdditionalRoute(int index){
     if(index<1 || index>=routes_.size() || sourcePath_->text().isEmpty())return;

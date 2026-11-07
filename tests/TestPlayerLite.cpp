@@ -60,6 +60,15 @@ private slots:
         player.settings_->setValue("render/downscale",4);player.applyScaling();player.clock_->redraw();QTest::qWait(100);const auto downJinc=player.clock_->capture();QVERIFY(!downNearest.isNull());QVERIFY(!downJinc.isNull());QVERIFY(downNearest!=downJinc);
     }
 
+    void minimalModeKeepsPlaybackPosition(){
+        QTemporaryDir directory;const auto file=directory.filePath("minimal-position.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=24","-f","lavfi","-i","sine=frequency=440:sample_rate=48000","-t","15","-c:v","ffv1","-c:a","flac",file});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
+        PlayerWindow player;player.settings_->setValue("playback/remember",false);player.resize(1100,650);player.show();QVERIFY(player.openFile(file));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0,15000);
+        player.seekTime(50000000);QTRY_VERIFY_WITH_TIMEOUT(player.position()>=49000000,5000);if(player.playing_)player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
+        QTest::keyClick(&player,Qt::Key_Period);QVERIFY(player.minimalMode_);QTest::qWait(500);QVERIFY(player.position()>=49000000);QVERIFY(!player.playing_);QVERIFY(player.snapshot().state!=ThreeFpState::Playing);
+        QTest::keyClick(&player,Qt::Key_Period);QVERIFY(!player.minimalMode_);QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0,5000);QVERIFY(player.position()>=49000000);QVERIFY(!player.playing_);QVERIFY(player.snapshot().state!=ThreeFpState::Playing);
+        player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Playing);QTest::keyClick(&player,Qt::Key_Period);QVERIFY(player.minimalMode_);QTRY_COMPARE(player.snapshot().state,ThreeFpState::Playing);const auto at=player.position();QVERIFY(at>=49000000);QTest::qWait(350);QVERIFY(player.position()>at);
+        const auto audioAt=player.position();QTest::keyClick(&player,Qt::Key_Period);QVERIFY(!player.minimalMode_);QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0 && player.snapshot().state==ThreeFpState::Playing,5000);QVERIFY(player.position()>=audioAt-1000000);
+    }
     void minimalModeDoesNotDecodeVideo(){
         QTemporaryDir directory;const auto path=directory.filePath("audio-mode.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=24","-f","lavfi","-i","sine=frequency=440:sample_rate=48000","-t","4","-c:v","ffv1","-c:a","flac",path});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
         PlayerWindow player;player.show();QVERIFY(player.openFile(path));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().decodedVideoFrames>2,15000);player.setMinimalMode(true);

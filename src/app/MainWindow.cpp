@@ -145,7 +145,7 @@ MainWindow::MainWindow(QWidget *parent)
     addRouteButton_=new QPushButton(QStringLiteral("加路"),root);addRouteButton_->setObjectName("rendererAddRoute");removeRouteButton_=new QPushButton(QStringLiteral("减路"),root);routeRow->addWidget(addRouteButton_,1,0);routeRow->addWidget(removeRouteButton_,1,1);
     auto *showRoute=new QPushButton(QStringLiteral("显示"),root),*hideRoute=new QPushButton(QStringLiteral("隐藏"),root);showRoute->setObjectName("rendererShowRoute");hideRoute->setObjectName("rendererHideRoute");routeRow->addWidget(showRoute,1,2);routeRow->addWidget(hideRoute,1,3);qobject_cast<QVBoxLayout*>(featureOne_->layout())->addLayout(routeRow);
     connect(addRouteButton_,&QPushButton::clicked,this,[this]{addRoute();});connect(removeRouteButton_,&QPushButton::clicked,this,&MainWindow::removeRoute);connect(routeChoice_,&QComboBox::currentIndexChanged,this,&MainWindow::selectRoute);
-    const auto visibility=[this](bool visible){routes_[routeIndex_].visible=visible;compareView_->setRouteVisible(routeIndex_,visible);if(routeIndex_>0)additionalRoutes_[routeIndex_-1]->setVisible(visible);else if(!visible){frameServer_->unloadScript();processedPlayer_->stop();vsScriptReady_=false;}else validateScript();updateRouteChoices();};
+    const auto visibility=[this](bool visible){routes_[routeIndex_].visible=visible;compareView_->setRouteVisible(routeIndex_,visible);if(routeIndex_>0)additionalRoutes_[routeIndex_-1]->setVisible(visible);else if(!visible){frameServer_->unloadScript();processedPlayer_->stop();vsScriptReady_=false;}updateRouteChoices();};
     connect(showRoute,&QPushButton::clicked,this,[visibility]{visibility(true);});connect(hideRoute,&QPushButton::clicked,this,[visibility]{visibility(false);});updateRouteChoices();
 
 
@@ -318,7 +318,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(frameServer_.get(), &VapourSynthFrameServer::initialized, this, [this](bool ok) {
         if (!pendingPreview_) return;
         pendingPreview_ = false;
-        if (ok) validateScript();else setStatus(frameServer_->errorString(),true);
+        if (ok) {const int editing=routeIndex_;selectRoute(0);validateScript();selectRoute(editing);}else setStatus(frameServer_->errorString(),true);
     });
     language_->updateWidgets(this);
 }
@@ -730,7 +730,7 @@ QWidget *MainWindow::buildWorkspace()
         const auto percent=[](double value){return value<0?QString("--"):QString::number(value,'f',1)+"%";};
         const auto update=[&](QLabel *label,ThreeFpPlayer *player,const QString &name){const auto snap=player->snapshot();const auto total=snap.presentedVideoFrames+snap.droppedVideoFrames;
             label->setText(QStringLiteral("%1 · CPU %2  GPU %3  内存 %4 MiB\n丢帧 %5 / %6 (%7%)").arg(name,percent(usage.cpu),percent(usage.gpu)).arg(usage.memoryMiB).arg(snap.droppedVideoFrames).arg(total).arg(total?100.0*snap.droppedVideoFrames/total:0,0,'f',2));};
-        update(sourceMonitor_,sourcePlayer_.get(),QStringLiteral("源视频"));update(processedMonitor_,processedPlayer_.get(),QStringLiteral("处理后"));
+        update(sourceMonitor_,sourcePlayer_.get(),QStringLiteral("源视频"));update(processedMonitor_,processedPlayer_.get(),routes_.size()==1?QStringLiteral("处理后"):QStringLiteral("路1"));
     });monitorTimer->start();
     layout->addWidget(buildTransport());
     return workspace;
@@ -961,6 +961,7 @@ bool MainWindow::loadSource(const QString &path)
         setStatus(api_.errorString(), true);
         return false;
     }
+    pendingPreview_=false;frameServer_->unloadScript();processedPlayer_->stop();
     const bool left = sourcePlayer_->openFile(path);
     sourcePane_->setSurfaceActive(left);
     processedPane_->setSurfaceActive(false);
@@ -984,8 +985,7 @@ bool MainWindow::loadSource(const QString &path)
     sourcePrimeStarted_ = false;
     setStatus(left ? QStringLiteral("源已打开；正在预取首帧，点击“渲染预览”可生成右侧 VS 输出。")
                    : QStringLiteral("3FP 打开源失败。"), !left);
-    if(left && !additionalRoutes_.empty()){const int editing=routeIndex_;for(int i=1;i<routes_.size();++i){selectRoute(i);renderAdditionalRoute(i);}selectRoute(editing);}
-    if (left && !activePreset_.isEmpty()) QTimer::singleShot(0, this, &MainWindow::validateScript);
+    for(auto &route:additionalRoutes_)route->reset(left?QStringLiteral("源已打开\n点击“渲染预览”生成右侧画面"):QStringLiteral("源视频打开失败"));
     return left;
 }
 

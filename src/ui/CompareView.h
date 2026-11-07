@@ -22,6 +22,7 @@ signals:
 private:
     void updateLayout();
     MultiCompareView *view_;
+    QString processedTitle_;
     QList<bool> visible_{true,true};
     CompareMode mode_=CompareMode::SideBySide;
 };

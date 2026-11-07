@@ -85,6 +85,22 @@ private slots:
             const auto output=qEnvironmentVariable("VSR_THEME_ARTIFACTS");if(!output.isEmpty())window.grab().save(QDir(output).filePath(keys[i]+".png"));
         }
     }
+    void routesWaitForManualPreview(){
+        QTemporaryDir directory;const auto file=directory.filePath("manual.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=128x72:rate=24","-t","3","-c:v","ffv1",file});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
+        MainWindow window;window.show();QVERIFY(window.loadSource(file));const auto hint=window.processedPane_->findChild<QLabel*>("previewPlaceholder")->text();window.findChild<QPushButton*>("rendererShowRoute")->click();QTest::qWait(150);QVERIFY(!window.vsScriptReady_);
+        QVERIFY(window.addRoute());QTest::qWait(700);QVERIFY(!window.vsScriptReady_);QCOMPARE(window.additionalRoutes_[0]->snapshot().presentedVideoFrames,0ull);
+        auto *view=window.compareView_->findChild<MultiCompareView*>();QCOMPARE(view->pane(2)->findChild<QLabel*>("previewPlaceholder")->text(),hint);
+        QVERIFY(window.addRoute());QTest::qWait(700);for(const auto &route:window.additionalRoutes_)QCOMPARE(route->snapshot().presentedVideoFrames,0ull);
+        for(int i=1;i<4;++i){bool title=false;for(auto *label:view->pane(i)->findChildren<QLabel*>())title|=label->text()==QString("路%1").arg(i);QVERIFY(title);}
+        window.validateScript();QTRY_VERIFY_WITH_TIMEOUT(window.additionalRoutes_[1]->snapshot().presentedVideoFrames>0,20000);QCOMPARE(window.additionalRoutes_[0]->snapshot().presentedVideoFrames,0ull);QVERIFY(!window.vsScriptReady_);
+        QVERIFY(window.loadSource(file));QTest::qWait(700);for(int i=1;i<4;++i)QCOMPARE(view->pane(i)->findChild<QLabel*>("previewPlaceholder")->text(),hint);
+        window.removeRoute();window.removeRoute();bool processed=false;for(auto *label:window.processedPane_->findChildren<QLabel*>())processed|=label->text()=="处理后";QVERIFY(processed);
+    }
+    void previewInitializationKeepsRequestedRoute(){
+        QTemporaryDir directory;const auto file=directory.filePath("pending.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=128x72:rate=24","-t","3","-c:v","ffv1",file});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
+        MainWindow window;window.show();QVERIFY(window.loadSource(file));window.validateScript();QVERIFY(window.addRoute());
+        QTRY_VERIFY_WITH_TIMEOUT(window.processedPlayer_->snapshot().presentedVideoFrames>0,5000);QCOMPARE(window.additionalRoutes_[0]->snapshot().presentedVideoFrames,0ull);QCOMPARE(window.routeIndex_,1);
+    }
     void independentVideoRoutes(){
         QTemporaryDir directory;const auto file=directory.filePath("routes.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=128x72:rate=24","-t","3","-c:v","ffv1",file});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
         MainWindow window;window.show();QVERIFY(window.loadSource(file));

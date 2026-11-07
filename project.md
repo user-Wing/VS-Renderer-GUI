@@ -68,6 +68,8 @@
 
 ## 5. UI 地图
 
+Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和载入预设不触发预览，`RenderRoute::reset`清理旧输出。`CompareView`按处理路数维护标题。Player的`setMinimalMode`使用待恢复时间戳重新打开解码器，保留播放/暂停意图；底栏提示区仅占一行。
+
 | 入口与导航 | 文件 |
 | --- | --- |
 | Renderer：导入 → 时间组/处理链 → 参数/脚本 → 源与输出预览 → 预设/导出 | `src/app/MainWindow*.cpp`、`src/ui/ParameterEditor.cpp`、`CompareView.cpp` |

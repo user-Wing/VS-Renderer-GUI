@@ -7,7 +7,6 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QLineEdit>
-#include <QTimer>
 
 namespace vsr {
 void MainWindow::showCommunity(){PresetCommunityDialog dialog([this](const QString &path,bool current){loadPreset(path,current);},this);dialog.exec();}
@@ -59,9 +58,8 @@ void MainWindow::loadPreset(const QString &path, bool currentGroup)
         sourceFilter_->setCurrentIndex(sourceFilter_->findData(data.value("sourceFilter").toInt()));
         refreshPipeline(graph_.nodes().isEmpty() ? -1 : 0);
         if (sourcePath_->text().isEmpty() && QFileInfo::exists(data.value("sourcePath").toString()))
-            { if(loadSource(data.value("sourcePath").toString()))QTimer::singleShot(0,this,&MainWindow::validateScript); return; }
+            { loadSource(data.value("sourcePath").toString()); return; }
     }
     setStatus(QStringLiteral("已载入 VPY：%1").arg(QFileInfo(path).fileName()));
-    if (!sourcePath_->text().isEmpty()) validateScript();
 }
 }

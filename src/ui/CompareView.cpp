@@ -3,7 +3,7 @@
 #include "ui/PreviewPane.h"
 #include <QVBoxLayout>
 namespace vsr {
-CompareView::CompareView(QWidget *parent,const QString &leftTitle,const QString &rightTitle):QWidget(parent),view_(new MultiCompareView(this)) {
+CompareView::CompareView(QWidget *parent,const QString &leftTitle,const QString &rightTitle):QWidget(parent),view_(new MultiCompareView(this)),processedTitle_(rightTitle) {
     setMinimumSize(640,240);auto *layout=new QVBoxLayout(this);layout->setContentsMargins(0,0,0,0);layout->addWidget(view_);
     view_->setSourceControlsVisible(false);sourcePane()->setTitle(leftTitle);sourcePane()->setBadge(QStringLiteral("Fit"));processedPane()->setTitle(rightTitle);processedPane()->setBadge(QStringLiteral("VS · 待渲染"));updateLayout();
 }
@@ -16,6 +16,7 @@ double CompareView::splitRatio() const { return view_->divisionX(); }
 void CompareView::setSplitRatio(double ratio){view_->setDivision(ratio,.5);}
 void CompareView::setMode(CompareMode mode){if(mode_!=mode){mode_=mode;updateLayout();}}
 void CompareView::updateLayout(){
+    for(int i=1;i<visible_.size();++i)view_->pane(i)->setTitle(visible_.size()==2?processedTitle_:QString("路%1").arg(i));
     QList<int> assignments;for(int i=0;i<visible_.size();++i)if(visible_[i])assignments<<i;
     const auto layout=mode_==CompareMode::Slider?(assignments.size()==4?MultiCompareView::FourWipe:assignments.size()==3?MultiCompareView::ThreeLeft:MultiCompareView::Wipe):(assignments.size()==4?MultiCompareView::Four:assignments.size()==3?MultiCompareView::ThreeNormal:MultiCompareView::Pair);
     view_->setSlots(assignments,layout);emit visiblePaneCountChanged(assignments.size());

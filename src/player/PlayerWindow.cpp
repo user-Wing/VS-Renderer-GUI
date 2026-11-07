@@ -214,7 +214,7 @@ PlayerWindow::PlayerWindow() {
     connect(resetZoom_,&QPushButton::clicked,this,[this]{pane_->adoptView(1,0,0);emit pane_->viewChanged(1,0,0);});
     timeline_ = new ChapterTimeline(this); timeline_->setObjectName("playerTimeline");
     controls_=new PlayerChromePanel(central);controls_->setObjectName("playerControls");auto *transport=new QVBoxLayout(controls_);transport->setContentsMargins(0,0,0,0);transport->setSpacing(4);layout->addWidget(controls_);buildTransport(transport);
-    message_ = new QLabel(controls_); message_->setObjectName("playerStatus"); message_->setContentsMargins(8, 0, 8, 0); message_->setFixedHeight(message_->fontMetrics().horizontalAdvance("GLSL")+8);message_->setProperty("minimalControl",true);transport->addWidget(message_);statusTimer_=new QTimer(this);statusTimer_->setSingleShot(true);statusTimer_->setInterval(3000);connect(statusTimer_,&QTimer::timeout,this,[this]{message_->clear();message_->setToolTip({});});
+    message_ = new QLabel(controls_); message_->setObjectName("playerStatus"); message_->setContentsMargins(8, 0, 8, 0); message_->setFixedHeight(message_->fontMetrics().height()+4);message_->setProperty("minimalControl",true);transport->addWidget(message_);statusTimer_=new QTimer(this);statusTimer_->setSingleShot(true);statusTimer_->setInterval(3000);connect(statusTimer_,&QTimer::timeout,this,[this]{message_->clear();message_->setToolTip({});});
     buildPlaylist(central);
     imageTools_=new PlayerImageTools(pane_,central);layout->insertWidget(0,imageTools_);
     connect(imageTools_,&PlayerImageTools::errorOccurred,this,&PlayerWindow::setError);
@@ -809,7 +809,7 @@ void PlayerWindow::setMinimalMode(bool enabled){
     if(imageMode_ || (discMenu_ && discMenu_->active()) || minimalMode_==enabled)return;
     const auto at=position();const bool resume=playing_ || autoPlay_;minimalMode_=enabled;updateMinimalControls();
     if(!enabled && !isFullScreen())resize(normalWindowSize_.expandedTo(QSize(1000,500)));
-    if(!source_.isEmpty()){server_->unloadScript();output_->stop();clock_->pause();setDirectMode(true);openMedia();settingsPosition_=at;autoPlay_=resume;}
+    if(!source_.isEmpty()){server_->unloadScript();output_->stop();clock_->pause();playing_=false;seekPending_=false;seekUiTarget_=queuedSeek_=-1;rateApplied_=false;resumeAt_=at;autoPlay_=resume;setDirectMode(true);openMedia();}
 }
 void PlayerWindow::dragEnterEvent(QDragEnterEvent *event) {
     if(event->mimeData()->hasUrls()){dragStatus_=message_->text();event->acceptProposedAction();}
