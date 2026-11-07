@@ -10,6 +10,8 @@
 
 滤镜菜单说明由`PlayerMenus.cpp`读取同一JSON：Jinc/D3D11沿用既有builtin键，其他算法共用`scaling/`键，分类标题用`menu/`键，补帧自动档独立使用`interpolation/auto/`键。`assets/player-menu-descriptions.json`提供缺失键默认值，由`ensureProfiles`补齐而不覆盖用户内容；菜单重新打开时读取最新说明。
 
+父分类的实际悬停触发由`PlayerMenu.cpp`管理：`PlayerMenus`将JSON文字绑定到分类动作的`playerDescription`属性，悬停时主动刷新提示，进入子菜单、离开分类或关闭菜单后停止；不依赖系统生成延迟ToolTip事件。
+
 本轮入口：`PlayerImageTools`负责比例尺寸、位深与Full GLSL/内置HLSL图片导出；Lite通过FFmpeg编码且关闭质量搜索。`PageTheme.h`使用独立底层QWidget绘图并即时刷新，跳过PreviewPane子树；`ThemePackage.h`管理主题包。`WrappedFileCombo.h`处理文件名换行；`PortableChart.h`将配置旁Pareto图保存为相对路径，并兼容单文件内嵌图。`tools/jxl-runtime.cmake`保留SIMD并修补Win64的向量跨函数传参对齐；版本未改变。字幕、滑块、功耗入口仍分别为`PlayerSubtitles`/Native `AssSubtitleRenderer`、`CompareView`和`PowerSensors`，功耗权限边界见 [研究记录](development/pawnio-power.md)。
 
 ## 1. 发心与边界

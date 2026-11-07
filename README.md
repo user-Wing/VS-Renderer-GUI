@@ -14,7 +14,7 @@ Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS
 
 Full 与单文件播放器修复了部分高 DPI 屏幕全屏底边无法唤出控制栏的问题；专项验证范围见[测试台账](development/validation.md)。
 
-空置教程、滤镜算法和菜单分类说明均可通过JSON编辑，支持调整教程文字与虚线指引；配置位置见[Player指南](docs/player.md)。
+空置教程、滤镜算法和菜单分类说明均可通过JSON编辑，支持调整教程文字与虚线指引；停留在父分类标题即可查看说明，配置位置见[Player指南](docs/player.md)。
 
 ## 功能介绍
 

@@ -3,11 +3,21 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QStyleOptionMenuItem>
+#include <QToolTip>
+#include <QEnterEvent>
+#include <QCursor>
 #include <cmath>
 
 namespace vsr {
 PlayerMenu::PlayerMenu(QWidget *parent) : QMenu(parent) {
     setToolTipsVisible(true);
+    descriptionTimer_.setInterval(200);
+    connect(&descriptionTimer_,&QTimer::timeout,this,&PlayerMenu::showDescription);
+    connect(this,&QMenu::hovered,this,[this](QAction *action){
+        if(action==descriptionAction_)return;
+        clearDescription();
+        if(action && actions().contains(action) && action->menu() && !action->property("playerDescription").toString().isEmpty()){descriptionAction_=action;descriptionTimer_.start();}
+    });
     QApplication::setEffectEnabled(Qt::UI_AnimateMenu,false);QApplication::setEffectEnabled(Qt::UI_FadeMenu,false);
     setWindowFlags(windowFlags()|Qt::FramelessWindowHint|Qt::NoDropShadowWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -24,7 +34,23 @@ QMenu *PlayerMenu::add(QMenu *parent,const QString &title) {
 void PlayerMenu::showEvent(QShowEvent *event) {
     QMenu::showEvent(event);reveal_=0;setProperty("menuReveal",0.0);elapsed_.restart();animation_.start();
 }
-void PlayerMenu::hideEvent(QHideEvent *event) {animation_.stop();QMenu::hideEvent(event);}
+void PlayerMenu::hideEvent(QHideEvent *event) {animation_.stop();clearDescription();QMenu::hideEvent(event);}
+void PlayerMenu::enterEvent(QEnterEvent *event) {
+    QMenu::enterEvent(event);if(auto *parent=dynamic_cast<PlayerMenu*>(parentWidget()))parent->clearDescription();
+}
+void PlayerMenu::leaveEvent(QEvent *event) {
+    QMenu::leaveEvent(event);if(descriptionAction_ && !actionGeometry(descriptionAction_).contains(mapFromGlobal(QCursor::pos())))clearDescription();
+}
+void PlayerMenu::clearDescription() {
+    descriptionTimer_.stop();if(descriptionAction_)QToolTip::hideText();descriptionAction_.clear();
+}
+void PlayerMenu::showDescription() {
+    if(!isVisible() || !descriptionAction_ || activeAction()!=descriptionAction_){clearDescription();return;}
+    const auto area=actionGeometry(descriptionAction_);const auto text=descriptionAction_->property("playerDescription").toString();
+    if(text.isEmpty()){clearDescription();return;}
+    // A submenu can cancel the platform's delayed ToolTip event while its parent stays hovered.
+    QToolTip::showText(mapToGlobal(QPoint(area.left()+12,area.bottom()+4)),text,this,area);
+}
 void PlayerMenu::paintEvent(QPaintEvent *) {
     QPainter painter(this);painter.setRenderHint(QPainter::Antialiasing);
     painter.setCompositionMode(QPainter::CompositionMode_Source);painter.fillRect(rect(),Qt::transparent);painter.setCompositionMode(QPainter::CompositionMode_SourceOver);

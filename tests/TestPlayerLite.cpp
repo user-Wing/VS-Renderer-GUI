@@ -1,5 +1,6 @@
 #include "player/PlayerWindow.h"
 #include "player/PlayerIdleGuide.h"
+#include "player/PlayerMenu.h"
 #include "render/ShaderPackage.h"
 #include <QDateTime>
 #include <QColorSpace>
@@ -34,6 +35,8 @@
 #include <QPushButton>
 #include <QProcess>
 #include <QMenu>
+#include <QToolTip>
+#include <QEnterEvent>
 #include <QListWidget>
 #include "ui/PreviewPane.h"
 #include <windows.h>
@@ -43,6 +46,15 @@ class TestPlayer final : public QObject {
     QByteArray previous_;bool existed_=false;
     QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
 private slots:
+    void categoryHoverDescriptionSurvivesSubmenu(){
+        PlayerMenu parent(nullptr);auto *child=PlayerMenu::add(&parent,"Category");auto *leaf=child->addAction("Algorithm");auto *plain=parent.addAction("Plain");
+        const auto text=QString("Configured category description");child->menuAction()->setToolTip(text);child->menuAction()->setProperty("playerDescription",text);
+        parent.popup(QPoint(30,30));parent.setActiveAction(child->menuAction());child->menuAction()->hover();child->popup(QPoint(220,30));QToolTip::hideText();child->menuAction()->hover();
+        QTRY_COMPARE_WITH_TIMEOUT(QToolTip::text(),text,1500);QToolTip::hideText();QTest::qWait(350);QTRY_COMPARE_WITH_TIMEOUT(QToolTip::text(),text,1500);
+        QEnterEvent enter(QPointF(5,5),QPointF(5,5),QPointF(225,35));QApplication::sendEvent(child,&enter);QTRY_VERIFY(QToolTip::text().isEmpty());QTest::qWait(350);QVERIFY(QToolTip::text().isEmpty());
+        child->hide();parent.setActiveAction(child->menuAction());child->menuAction()->hover();QTRY_COMPARE_WITH_TIMEOUT(QToolTip::text(),text,1500);parent.setActiveAction(plain);plain->hover();QTRY_VERIFY(QToolTip::text().isEmpty());parent.close();
+        child->menuAction()->setToolTip({});child->menuAction()->setProperty("playerDescription",QString());parent.popup(QPoint(30,30));parent.setActiveAction(child->menuAction());child->menuAction()->hover();QTest::qWait(350);QVERIFY(QToolTip::text().isEmpty());parent.close();QToolTip::hideText();
+    }
     void idleGuideJsonControlsAndReload(){
         QTemporaryDir directory;const auto path=directory.filePath("preset-descriptions.json");QFile initial(path);QVERIFY(initial.open(QIODevice::WriteOnly));initial.write("{\"builtin/Anime.vpy\":\"keep\"}");initial.close();
         QWidget host;host.resize(500,400);QWidget controls(&host),timeline(&host);controls.setGeometry(0,300,500,100);timeline.setGeometry(0,294,500,6);QPushButton button(&controls);button.setObjectName("testButton");button.setGeometry(100,10,40,28);

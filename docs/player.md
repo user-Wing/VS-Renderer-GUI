@@ -26,7 +26,7 @@
 
 D3D11/Jinc 和无预设原画使用 3FP 直通，不建立 VS 索引。右键“图像处理”分别选择“上采样滤镜”“第二上采样滤镜”“下采样”。主滤镜中的 Anime4K 六档归在一个子菜单，常规算法单列；第二上采样默认 Jinc (Anti-Alias)，独立于下采样。RTX VSR 开启时提示并改用 D3D11 主直通。Full/Lite 均支持这三段；Lite 不执行任意 VPY 或补帧组合。
 
-Full的`vpy/preset-descriptions.json`也管理算法和菜单标题的鼠标悬停说明，修改后重新打开右键菜单生效。Jinc沿用`builtin/Anime-4-Jinc.vpy`，D3D11沿用`builtin/Anime-5-D3D11.vpy`，你原来填写的内容会在常规直通、第二上采样和下采样中共同显示。其余算法各使用一个`scaling/Nearest`、`scaling/Bilinear`、`scaling/Bicubic`、`scaling/Lanczos3`、`scaling/Lanczos4`、`scaling/Spline36`或`scaling/SuperXbr`键，三个采样菜单共用。
+Full的`vpy/preset-descriptions.json`也管理算法和菜单标题的鼠标悬停说明，修改后重新打开右键菜单生效。停留在“上采样滤镜”“第二上采样滤镜”“补帧”等父分类标题上就会显示说明，不需要移入子菜单；进入子菜单或离开分类后停止显示该分类说明。Jinc沿用`builtin/Anime-4-Jinc.vpy`，D3D11沿用`builtin/Anime-5-D3D11.vpy`，你原来填写的内容会在常规直通、第二上采样和下采样中共同显示。其余算法各使用一个`scaling/Nearest`、`scaling/Bilinear`、`scaling/Bicubic`、`scaling/Lanczos3`、`scaling/Lanczos4`、`scaling/Spline36`或`scaling/SuperXbr`键，三个采样菜单共用。
 
 分类标题使用`menu/`开头的键，包括`upsampling`、`secondUpsampling`、`downsampling`、`anime4k`、`passThrough`、`interpolation`等。补帧自动切换的两种输出模式分别使用`interpolation/auto/Jinc`和`interpolation/auto/D3D11`，与`builtin/Interpolation-0-RIFE.vpy`及其D3D11变体的全宽高RIFE说明分开。新增默认键见源码`assets/player-menu-descriptions.json`；补齐缺失键时保留已有说明和`playerGuide`。
 

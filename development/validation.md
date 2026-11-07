@@ -12,9 +12,17 @@
 
 原报告原样合并至 [history.md](history.md)，按原文件名索引，每份保留字节数和 SHA-256。原文中的“当前”、路径和发布状态属于记录当时。`build/` 不是持久证据库：报告引用该目录，不保证换机器后日志仍可读。1.0.12 精选 CSV/日志保存在 [evidence](evidence/player-kernel-1.0.12/summary.json)。
 
+## 1.1.0 父分类悬停说明续修（2026-11-07）
+
+用户实测上一轮仍需进入子菜单才能看见文字。此前专项只主动发送ToolTip事件，未覆盖真正悬停触发。新增`categoryHoverDescriptionSurvivesSubmenu`从分类动作的Hover进入，不发送ToolTip事件；原实现返回空提示而失败。修复后由`PlayerMenu`在分类悬停时主动刷新配置说明，并在子菜单弹出打断后恢复；进入子菜单、移到普通项目、关闭菜单或说明为空时停止。
+
+offscreen下该交互专项3 passed，配置绑定专项3 passed（各含init/cleanup），覆盖提示恢复和进入子菜单后的取消；界面仍由用户手动验收，不将离屏结果称为Windows实窗通过。本轮只覆盖本地Full，JSON内容和版本保持不变，Lite配置封装继续留到下一轮。
+
+Full已覆盖且与构建产物逐字节一致；26个保护文件（含滤镜说明JSON及INI/VPY/ICC/LUT）哈希不变，单文件EXE保持原SHA-256。新测试不发送ToolTip事件，保留旧实现提示为空的失败日志，避免沿用上一轮人工注入提示事件的通过结论。
+
 ## 1.1.0 滤镜菜单说明（2026-11-07）
 
-原菜单的常规直通算法未绑定外部说明，补帧自动档复用了stage 0全宽高RIFE的说明。`sharedFilterMenuDescriptions`先以原实现运行，实际得到`Nearest`而非配置文本，专项失败；修复后offscreen专项和原有内置档位/外部说明检查共4 passed（包含init/cleanup），覆盖九种算法在上/第二/下三处共享说明、11个分类标题、自动补帧与手动RIFE说明分离，以及发送ToolTip事件后取得分类说明。Qt原生菜单已有悬停提示支持，本轮只补绑定，不改变菜单绘制。
+原菜单的常规直通算法未绑定外部说明，补帧自动档复用了stage 0全宽高RIFE的说明。`sharedFilterMenuDescriptions`先以原实现运行，实际得到`Nearest`而非配置文本，专项失败；修复后offscreen专项和原有内置档位/外部说明检查共4 passed（包含init/cleanup），覆盖九种算法在上/第二/下三处共享说明、11个分类标题、自动补帧与手动RIFE说明分离，以及发送ToolTip事件后取得分类说明。该专项只证明显式ToolTip事件能取得说明，不构成实际悬停触发通过；续修见上一节。
 
 配置仅补缺失键，保留用户已填写的Jinc/D3D11、RIFE及教程内容。按用户要求不进行桌面验收；Lite配置封装进入压缩包留待下一轮，不改版本、Release或远端安装。
 
