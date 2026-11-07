@@ -143,7 +143,7 @@ endif()
 
 qt_add_executable(VSPlayer WIN32
     assets/icons/icons.qrc
-    assets/startup.qrc
+    assets/startup.qrc assets/player-guide.qrc
     src/player/PlayerMenu.cpp src/player/PlayerMenu.h
     src/player/PlayerImageTools.cpp src/player/PlayerImageTools.h
     src/player/PlayerImageResample.cpp assets/image-tools.qrc

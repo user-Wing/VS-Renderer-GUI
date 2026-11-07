@@ -83,10 +83,10 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
         auto *b = new QPushButton(text, this); b->setToolTip(tooltip); b->setFixedWidth(34); row->addWidget(b);b->setProperty("minimalControl",text=="▶" || text=="−1s" || text=="+1s"); connect(b, &QPushButton::clicked, this, action); return b;
     };
     play_ = button(QStringLiteral("▶"), tr("播放 / 暂停 · Space"), [this] { togglePlayback(); }); play_->setObjectName("playerPlay");
-    button("|‹", tr("退一帧"), [this] { stepFrame(-1); });
-    button("›|", tr("进一帧"), [this] { stepFrame(1); });
-    button("−1s", tr("退一秒"), [this] { seekTime(position() - 10000000); });
-    button("+1s", tr("进一秒"), [this] { seekTime(position() + 10000000); });
+    button("|‹", tr("退一帧"), [this] { stepFrame(-1); })->setObjectName("playerPreviousFrame");
+    button("›|", tr("进一帧"), [this] { stepFrame(1); })->setObjectName("playerNextFrame");
+    button("−1s", tr("退一秒"), [this] { seekTime(position() - 10000000); })->setObjectName("playerBackwardSecond");
+    button("+1s", tr("进一秒"), [this] { seekTime(position() + 10000000); })->setObjectName("playerForwardSecond");
     const auto keyframe = [this](int direction) {
         suspendQualityCheck();
         manualFrame_ = -1;
@@ -94,17 +94,17 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
         if (lav_) { clock_->seek(position()); lavKeyPending_ = true; }
         generation_ = clock_->snapshot().timelineGeneration; seekPending_ = clock_->stepKeyframe(direction);
     };
-    button("K‹", tr("上一个关键帧"), [=] { keyframe(-1); });
-    button("›K", tr("下一个关键帧"), [=] { keyframe(1); });
-    button("|◀", tr("上一个视频"), [this] { nextFile(-1); });
-    button("▶|", tr("下一个视频"), [this] { nextFile(1); });
+    button("K‹", tr("上一个关键帧"), [=] { keyframe(-1); })->setObjectName("playerPreviousKeyframe");
+    button("›K", tr("下一个关键帧"), [=] { keyframe(1); })->setObjectName("playerNextKeyframe");
+    button("|◀", tr("上一个视频"), [this] { nextFile(-1); })->setObjectName("playerPreviousFile");
+    button("▶|", tr("下一个视频"), [this] { nextFile(1); })->setObjectName("playerNextFile");
     time_ = new QLineEdit("00:00:00.000", this); time_->setObjectName("playerPosition"); time_->setFixedWidth(110); time_->setToolTip(tr("输入 HH:MM:SS.mmm 或秒数，Enter 精确跳转")); row->addWidget(time_);
     connect(time_, &QLineEdit::returnPressed, this, [this] {
         const auto parts = time_->text().split(':'); bool ok = !parts.isEmpty() && parts.size() <= 3; double seconds = 0;
         for (const auto &part : parts) { bool valid; double value = part.toDouble(&valid); ok = ok && valid && value >= 0; seconds = seconds * 60 + value; }
         if (ok && std::isfinite(seconds) && seconds < 1e9) { seekTime(static_cast<qint64>(std::llround(seconds * 10000000))); time_->clearFocus(); } else setError(tr("时间格式无效。"));
     });
-    duration_ = new QLabel("/ 00:00:00.000", this); row->addWidget(duration_);
+    duration_ = new QLabel("/ 00:00:00.000", this);duration_->setObjectName("playerDuration"); row->addWidget(duration_);
     frame_ = new QLineEdit("0", this); frame_->setObjectName("playerFrame"); frame_->setFixedWidth(65); frame_->setToolTip(tr("精确输出帧号，从 0 开始；Enter 跳转")); row->addWidget(frame_);
     connect(frame_, &QLineEdit::textEdited, this, [this] { frameEditPending_=true; });
     connect(frame_, &QLineEdit::editingFinished, this, [this] { commitFrameEdit(); });
@@ -114,10 +114,10 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     for(auto *widget:QList<QWidget*>{mute_,volume_,volumePercent,rate_})widget->setProperty("minimalControl",true);
     speedButton_=button("▾", tr("倍速配置"), [this] { showSpeedPopup(); }); speedButton_->setObjectName("playerSpeedPopupButton");speedButton_->setProperty("minimalControl",true);
     const auto badge = [this, row](const QString &text) { auto *label = new QLabel(text, this); label->setProperty("playerBadge",true);label->setFixedHeight(28); row->addWidget(label); return label; };
-    videoBadge_ = badge("—"); audioBadge_ = badge("—");
+    videoBadge_ = badge("—");videoBadge_->setObjectName("playerVideoCodec"); audioBadge_ = badge("—");audioBadge_->setObjectName("playerAudioCodec");
     decoderBadge_ = new QPushButton("3FP-HW", this); decoderBadge_->setObjectName("playerDecoder");decoderBadge_->setFixedHeight(28); decoderBadge_->setToolTip(tr("切换 3FP 硬件 / 软件解码")); row->addWidget(decoderBadge_);
     connect(decoderBadge_, &QPushButton::clicked, this, [this] { if (lavVideo_) { showSettings(); return; } const auto current=source_.isEmpty()?settings_->value("decode/mode",2).toUInt():clock_->snapshot().decodeMode;const auto mode = current == 2 ? 1u : 2u; if (clock_->setDecodeMode(mode)) {settings_->setValue("decode/mode",mode);if(!source_.isEmpty())openFile(source_);} });
-    hdrBadge_ = badge("SDR"); rendererBadge_ = badge("VS");algorithmBadge_=badge("Jinc");algorithmBadge_->setObjectName("playerAlgorithm");algorithmBadge_->setToolTip(tr("算法"));interpolationBadge_=badge({});interpolationBadge_->setObjectName("playerInterpolationAlgorithm");interpolationBadge_->setToolTip(tr("补帧算法"));interpolationBadge_->hide();row->addStretch();
+    hdrBadge_ = badge("SDR");hdrBadge_->setObjectName("playerHdr"); rendererBadge_ = badge("VS");rendererBadge_->setObjectName("playerRenderer");algorithmBadge_=badge("Jinc");algorithmBadge_->setObjectName("playerAlgorithm");algorithmBadge_->setToolTip(tr("算法"));interpolationBadge_=badge({});interpolationBadge_->setObjectName("playerInterpolationAlgorithm");interpolationBadge_->setToolTip(tr("补帧算法"));interpolationBadge_->hide();row->addStretch();
 }
 void PlayerWindow::showSpeedPopup() {
     if(speedPopup_ && speedPopup_->isVisible()) {speedPopup_->close();return;}

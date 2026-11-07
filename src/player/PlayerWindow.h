@@ -28,6 +28,7 @@ namespace vsr {
 class ThreeFpPlayer;
 class LavPlayback;
 class PreviewPane;
+class PlayerIdleGuide;
 class ChapterTimeline;
 class PlayerSubtitles;
 class PlayerNetworkInput;
@@ -210,6 +211,7 @@ private:
     std::unique_ptr<VapourSynthFrameServer> server_;
     std::unique_ptr<LavPlayback> lav_;
     PreviewPane *pane_ = nullptr;
+    PlayerIdleGuide *idleGuide_ = nullptr;
     QWidget *hidden_ = nullptr;
     QLabel *info_ = nullptr;
     PlayerInfoPanel *audioInfo_ = nullptr;

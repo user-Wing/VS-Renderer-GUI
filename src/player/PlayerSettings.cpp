@@ -92,11 +92,7 @@ void PlayerWindow::applySettings(bool reopen) {
 void PlayerWindow::applyAppearance() {
     language_->setLanguage(settings_->value("basic/language","zh_CN").toString());
     language_->updateWidgets(this);
-#ifdef VSR_LITE_PLAYER
-    pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nAnime4K / Jinc / D3D11 · Tab 视频信息"));
-#else
-    pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nCtrl+P 加载 VPY 预设 · Tab 视频信息"));
-#endif
+    if(source_.isEmpty())pane_->setPlaceholderText({});
     const QColor color(settings_->value("theme/background","#202124").toString());
     QFontDatabase::setApplicationFallbackFontFamilies(QChar::Script_Han,{settings_->value("theme/chineseFont","Microsoft YaHei UI").toString()});
     const auto latin=settings_->value("theme/latinFont","Comic Sans MS").toString();

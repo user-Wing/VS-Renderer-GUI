@@ -28,7 +28,7 @@ New-Item -ItemType Directory -Path $stage | Out-Null
 $ffmpegFiles = @((Get-Content -LiteralPath (Join-Path $SourceDirectory 'release.json') -Raw | ConvertFrom-Json).ffmpegOnlyFiles)
 $ffmpegPattern = '^(ffmpeg|ffprobe)\.exe$|^(avcodec|avdevice|avfilter|avformat|avutil|swresample|swscale)(-\d+)?\.dll$'
 Get-ChildItem -LiteralPath $SourceDirectory -Force | Where-Object {
-    $_.Name -notin @('player.ini','themes.ini','themes') -and $_.Name -notin $ffmpegFiles -and $_.Name -notmatch $ffmpegPattern
+    $_.Name -notin @('player.ini','themes.ini','themes','preset-descriptions.json') -and $_.Name -notin $ffmpegFiles -and $_.Name -notmatch $ffmpegPattern
 } | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
 }

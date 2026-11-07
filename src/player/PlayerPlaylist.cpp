@@ -1,6 +1,7 @@
 #include "player/PlayerWindow.h"
 #include "player/PlayerChromePanel.h"
 #include "player/PlayerInfoPanel.h"
+#include "player/PlayerIdleGuide.h"
 #include "player/PlayerDiscMenu.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/LavPlayback.h"
@@ -241,6 +242,7 @@ void PlayerWindow::layoutChrome() {
 }
 void PlayerWindow::updateChrome() {
     layoutChrome();
+    if(idleGuide_){idleGuide_->setGeometry(pane_->rect());idleGuide_->setVisible(source_.isEmpty() && !minimalMode_);if(idleGuide_->isVisible()){pane_->setPlaceholderText({});idleGuide_->raise();idleGuide_->update();}}
     if(minimalMode_){playlistPanel_->hide();fullscreenTitle_->hide();controls_->setVisible(isVisible() && !isMinimized());return;}
     const auto *active=qApp->activeWindow();const bool activePlayer=isActiveWindow() || active==controls_ || active==playlistPanel_ || active==fullscreenTitle_ || active==speedPopup_ || active==equalizerPopup_;
     if(!isVisible() || isMinimized() || !activePlayer){controls_->hide();if(playlistPanel_->isWindow())playlistPanel_->hide();fullscreenTitle_->hide();return;}

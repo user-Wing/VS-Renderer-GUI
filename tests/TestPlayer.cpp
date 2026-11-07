@@ -1,4 +1,5 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerIdleGuide.h"
 #include "player/PlayerAiSubtitles.h"
 #include "image/ImageJxl.h"
 #include "player/PlayerImage.h"
@@ -102,6 +103,11 @@ class TestPlayer final : public QObject {
     QString configPath() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
     Q_OBJECT
 private slots:
+    void idleGuideTargetsAndMediaVisibility(){
+        PlayerWindow player;player.show();QTRY_VERIFY(player.idleGuide_->isVisible());QFile file(player.idleGuide_->configPath());QVERIFY(file.open(QIODevice::ReadOnly));const auto guide=QJsonDocument::fromJson(file.readAll()).object().value("playerGuide").toObject();QVERIFY(!guide.value("center").toObject().value("text").toString().isEmpty());
+        for(const auto &entry:guide.value("guides").toArray())for(const auto &target:entry.toObject().value("targets").toArray())QVERIFY2(player.controls_->findChild<QWidget*>(target.toString()),qPrintable(target.toString()));
+        QTemporaryDir directory;QImage image(16,16,QImage::Format_RGB32);image.fill(Qt::red);const auto path=directory.filePath("image.png");QVERIFY(image.save(path));QVERIFY(player.openFile(path));QTRY_VERIFY(!player.idleGuide_->isVisible());
+    }
     void fullscreenPhysicalBottomEdge(){
         POINT original{};GetCursorPos(&original);const auto restore=qScopeGuard([&]{SetCursorPos(original.x,original.y);});
         PlayerWindow player;player.resize(1400,800);player.show();player.activateWindow();player.toggleFullscreen();QTRY_VERIFY(player.isFullScreen());QTRY_VERIFY(player.isActiveWindow());QTest::qWait(200);

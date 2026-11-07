@@ -2,6 +2,10 @@
 
 ## 打开与播放
 
+空置时显示按钮教程和虚线指引，打开媒体或进入极简模式后隐藏。内容保存在滤镜说明JSON的`playerGuide`字段：Full为程序目录下`vpy/preset-descriptions.json`，单文件版为EXE旁的`preset-descriptions.json`。首次补入默认教程会保留已有滤镜说明，编辑保存后即时刷新。
+
+`center.text`修改中间文字，`center.x/y`是相对页面宽高的比例；`guides`中的`targets`指定控件ID，虚线横坐标跟随这些控件中心的平均位置。`length`为向上虚线长度，`xOffset`调整整条指引横向偏移，`textOffsetX`只移动文字，`width`控制文字换行宽度；这些尺寸均为Qt逻辑像素。修改`text`即可改说明，`baselineGap`控制虚线底端与进度条之间的空隙。默认模板位于源码`assets/player-guide.json`。
+
 打开或拖入视频、音频、图片；右键可打开文件夹或网络链接。`Ctrl+O` 打开媒体，`Ctrl+P` 加载 VPY。图片和网络视频不执行 VS 滤镜。
 
 底栏提供播放、逐帧、关键帧、前后文件、时间/帧号输入和倍速。普通视频拖动进度条可预览，松开精确定位并恢复原状态；BD 松开后只提交最终定位，见 [蓝光](bluray.md)。帧号修改后按 Enter 或移开焦点提交。

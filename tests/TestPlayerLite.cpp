@@ -1,4 +1,5 @@
 #include "player/PlayerWindow.h"
+#include "player/PlayerIdleGuide.h"
 #include "render/ShaderPackage.h"
 #include <QDateTime>
 #include <QColorSpace>
@@ -42,6 +43,15 @@ class TestPlayer final : public QObject {
     QByteArray previous_;bool existed_=false;
     QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
 private slots:
+    void idleGuideJsonControlsAndReload(){
+        QTemporaryDir directory;const auto path=directory.filePath("preset-descriptions.json");QFile initial(path);QVERIFY(initial.open(QIODevice::WriteOnly));initial.write("{\"builtin/Anime.vpy\":\"keep\"}");initial.close();
+        QWidget host;host.resize(500,400);QWidget controls(&host),timeline(&host);controls.setGeometry(0,300,500,100);timeline.setGeometry(0,294,500,6);QPushButton button(&controls);button.setObjectName("testButton");button.setGeometry(100,10,40,28);
+        PlayerIdleGuide guide(&host,&controls,&timeline,path);guide.setGeometry(0,0,500,290);host.show();guide.raise();QTest::qWait(80);QFile created(path);QVERIFY(created.open(QIODevice::ReadOnly));auto root=QJsonDocument::fromJson(created.readAll()).object();created.close();QCOMPARE(root.value("builtin/Anime.vpy").toString(),QString("keep"));QVERIFY(root.value("playerGuide").isObject());
+        const auto store=[&](int length){root.insert("playerGuide",QJsonObject{{"center",QJsonObject{{"text",""}}},{"color","#00ff00"},{"guides",QJsonArray{QJsonObject{{"targets",QJsonArray{"testButton"}},{"text",""},{"length",length}}}}});QSaveFile file(path);if(!file.open(QIODevice::WriteOnly))return false;file.write(QJsonDocument(root).toJson());return file.commit();};
+        const auto ink=[&](int x,int top,int bottom){const auto image=guide.grab().toImage();const auto dpi=image.devicePixelRatio();int count=0;for(int y=top;y<=bottom;++y){bool found=false;for(int column=qMax(0,qRound(x*dpi)-2);column<=qMin(image.width()-1,qRound(x*dpi)+2);++column){const auto c=image.pixelColor(column,qRound(y*dpi));found|=c.green()>c.red()+50 && c.green()>c.blue()+50;}count+=found;}return count;};
+        QVERIFY(store(60));QTRY_VERIFY(ink(119,222,282)>10);button.move(180,10);guide.update();QTRY_VERIFY(ink(199,222,282)>10);QCOMPARE(ink(119,222,282),0);
+        QVERIFY(store(120));QTRY_VERIFY(ink(199,166,214)>10);QVERIFY(store(40));QTRY_COMPARE(ink(199,166,214),0);
+    }
     void fullscreenPhysicalBottomEdge(){
         POINT original{};GetCursorPos(&original);const auto restore=qScopeGuard([&]{SetCursorPos(original.x,original.y);});
         PlayerWindow player;player.resize(1400,800);player.show();player.activateWindow();player.toggleFullscreen();QTRY_VERIFY(player.isFullScreen());QTRY_VERIFY(player.isActiveWindow());QTest::qWait(200);

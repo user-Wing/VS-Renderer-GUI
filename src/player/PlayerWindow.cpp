@@ -11,6 +11,7 @@
 #include "bluray/BlurayCatalog.h"
 #include "player/PlayerInfoPanel.h"
 #include "player/PlayerChromePanel.h"
+#include "player/PlayerIdleGuide.h"
 #include "player/PlayerDiscMenu.h"
 #include "player/PlayerTracks.h"
 #include "backend/ThreeFpPlayer.h"
@@ -182,7 +183,7 @@ PlayerWindow::PlayerWindow() {
         "QMenu{background:#292b30;border:1px solid #555;} QMenu::item{padding:6px 36px 6px 12px;} QMenu::right-arrow{width:8px;height:8px;margin-right:8px;} QMenu::item:selected{background:#426da7;}"));
     setProperty("playerBaseStyle",styleSheet());
     auto *central = new QWidget(this); auto *layout = new QVBoxLayout(central); layout->setContentsMargins(0, 0, 0, 2); layout->setSpacing(4); setCentralWidget(central);
-    pane_ = new PreviewPane("VS Player", "VS", central); pane_->setChromeVisible(false); pane_->setPlaceholderText(tr("VS Player\n拖入视频，或按 Ctrl+O 打开\nCtrl+P 加载 VPY 预设 · Tab 视频信息")); videoSplit_=new QSplitter(Qt::Horizontal,central);videoSplit_->setObjectName("playerVideoSplit");videoSplit_->addWidget(pane_);layout->addWidget(videoSplit_,1);
+    pane_ = new PreviewPane("VS Player", "VS", central); pane_->setChromeVisible(false); pane_->setPlaceholderText({}); videoSplit_=new QSplitter(Qt::Horizontal,central);videoSplit_->setObjectName("playerVideoSplit");videoSplit_->addWidget(pane_);layout->addWidget(videoSplit_,1);
     hidden_ = new QWidget(central); hidden_->setAttribute(Qt::WA_NativeWindow); hidden_->resize(320, 180); hidden_->hide();
     clock_ = std::make_unique<ThreeFpPlayer>(api_, hidden_); output_ = std::make_unique<ThreeFpPlayer>(api_, pane_->surface()); output_->setMuted(true); clock_->setAutomaticHdr(true); output_->setAutomaticHdr(true);
     server_ = std::make_unique<VapourSynthFrameServer>(nullptr,false);
@@ -285,6 +286,13 @@ PlayerWindow::PlayerWindow() {
     connect(pane_, &PreviewPane::redrawRequested, this, [this] { if(imageMode_){pane_->surface()->update();return;}if(madvrMode()) { if(lav_) { const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height()); } } else (direct_?clock_:output_)->redraw();
         if(ready_)suspendQualityCheck();if((!direct_ || (nativeAnime_ && qualityStage_!=4 && qualityStage_!=5)) && !profile().isEmpty() && interpolationStage()<0 && superInterpolationStage()<0 && ready_ && !networkSource())profileResize_->start(); });
     ensureProfiles();
+    const auto guidePath=
+#ifdef VSR_LITE_PLAYER
+        QDir(QFileInfo(settings_->fileName()).absolutePath()).filePath("preset-descriptions.json");
+#else
+        QDir(PresetStore::directory()).filePath("preset-descriptions.json");
+#endif
+    idleGuide_=new PlayerIdleGuide(pane_,controls_,timeline_,guidePath);
     nativeAnime_=nativeBuiltinCompatible();
     const auto customShader=settings_->value("render/customShader").toString();
     if(!customShader.isEmpty()){const auto package=ShaderPackage::prepare(customShader,QDir(customShaderDirectory()).filePath("cache"));customShaderPackage_=package.packagePath;if(!package.error.isEmpty())setError(package.error);else {preset_.clear();nativeAnime_=false;qualityStage_=5;}}

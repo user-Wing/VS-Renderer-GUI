@@ -1,0 +1,32 @@
+{
+  "center": {
+    "text": "VS Player\n拖入视频，或按 Ctrl+O 打开\n右键选择内置滤镜 · Tab 视频信息",
+    "x": 0.5,
+    "y": 0.34,
+    "fontSize": 14
+  },
+  "fontSize": 13,
+  "color": "#a5a9af",
+  "baselineGap": 12,
+  "guides": [
+    {"targets": ["playerPlay"], "text": "播放 / 暂停", "length": 48, "width": 90},
+    {"targets": ["playerPreviousFrame", "playerNextFrame"], "text": "逐帧：左退 / 右进", "length": 122, "width": 112},
+    {"targets": ["playerBackwardSecond", "playerForwardSecond"], "text": "快退 / 快进 1 秒", "length": 198, "width": 112},
+    {"targets": ["playerPreviousKeyframe", "playerNextKeyframe"], "text": "上一 / 下一关键帧", "length": 66, "width": 116},
+    {"targets": ["playerPreviousFile", "playerNextFile"], "text": "上一 / 下一文件", "length": 146, "width": 108},
+    {"targets": ["playerPosition"], "text": "输入时间，Enter 跳转", "length": 224, "width": 130},
+    {"targets": ["playerDuration"], "text": "媒体总时长", "length": 60, "width": 92},
+    {"targets": ["playerFrame"], "text": "输入帧号跳转", "length": 142, "width": 96},
+    {"targets": ["playerSpeed", "playerSpeedPopupButton"], "text": "倍速 / 倍速预设", "length": 216, "width": 108},
+    {"targets": ["playerVideoCodec", "playerAudioCodec"], "text": "视频 / 音频编码", "length": 68, "width": 108},
+    {"targets": ["playerDecoder"], "text": "切换硬件 / 软件解码", "length": 148, "width": 130},
+    {"targets": ["playerHdr"], "text": "SDR / HDR 状态", "length": 228, "width": 108},
+    {"targets": ["playerRenderer"], "text": "当前渲染路径", "length": 300, "width": 98},
+    {"targets": ["playerAlgorithm"], "text": "当前滤镜", "length": 66, "width": 82},
+    {"targets": ["playerTimeline"], "text": "拖动进度条定位", "length": 302, "width": 110},
+    {"targets": ["playerVolume"], "text": "拖动调节音量", "length": 302, "width": 100},
+    {"targets": ["playerMute"], "text": "静音 / 恢复", "length": 66, "width": 90, "textOffsetX": -16},
+    {"targets": ["playerEqualizerButton"], "text": "均衡器", "length": 142, "width": 80},
+    {"targets": ["playerVolumePercent"], "text": "输入音量百分比", "length": 222, "width": 104}
+  ]
+}
