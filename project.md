@@ -2,6 +2,8 @@
 
 核对日期：2026-11-07。源码版本 **1.1.0（本地开发，未发布）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
 
+高 DPI 全屏底边控制栏定位于 `PlayerPlaylist.cpp::updateChrome`；Qt 全局坐标在 300% 缩放下可能把物理最后一像素舍入到逻辑边界外，仅全屏容许右/下各一个逻辑像素。Full/Lite 的 `fullscreenPhysicalBottomEdge` 使用 Win32 真实屏幕坐标覆盖左右端和中点；48F 专项入口为 `remote48FrameCadence`，由环境变量指定设备素材，不内置媒体路径。NuxBox 的 Tab 24F 报告未复现，用户复测已恢复。Full 内置旧VPY的插件名兼容位于`PlayerProfiles.cpp::nativeBuiltinCompatible`，只接受完整当前模板或已知旧插件名模板，继续拒绝实际修改过的Python正文。
+
 历史续修记录：`src/render/ShaderPackage.cpp`增加单文件多pass HLSL导入；含`//!HOOK`的HLSL复用现有MAIN/PREKERNEL指令解析，每段独立编译并保留资源反射检查。普通单pass HLSL契约与Native二进制包格式不变，缓存语义键升级v7。`tests/TestShaderPackage.cpp`覆盖重复main的多段输入；本地独立产物`dist/VS-Player-MoeSR.exe`保留原`dist/VS-Player.exe`，未改版本或发布。
 
 本轮入口：`PlayerImageTools`负责比例尺寸、位深与Full GLSL/内置HLSL图片导出；Lite通过FFmpeg编码且关闭质量搜索。`PageTheme.h`使用独立底层QWidget绘图并即时刷新，跳过PreviewPane子树；`ThemePackage.h`管理主题包。`WrappedFileCombo.h`处理文件名换行；`PortableChart.h`将配置旁Pareto图保存为相对路径，并兼容单文件内嵌图。`tools/jxl-runtime.cmake`保留SIMD并修补Win64的向量跨函数传参对齐；版本未改变。字幕、滑块、功耗入口仍分别为`PlayerSubtitles`/Native `AssSubtitleRenderer`、`CompareView`和`PowerSensors`，功耗权限边界见 [研究记录](development/pawnio-power.md)。

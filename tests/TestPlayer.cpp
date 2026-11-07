@@ -102,6 +102,28 @@ class TestPlayer final : public QObject {
     QString configPath() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
     Q_OBJECT
 private slots:
+    void fullscreenPhysicalBottomEdge(){
+        POINT original{};GetCursorPos(&original);const auto restore=qScopeGuard([&]{SetCursorPos(original.x,original.y);});
+        PlayerWindow player;player.resize(1400,800);player.show();player.activateWindow();player.toggleFullscreen();QTRY_VERIFY(player.isFullScreen());QTRY_VERIFY(player.isActiveWindow());QTest::qWait(200);
+        MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);QVERIFY(GetMonitorInfoW(MonitorFromWindow(reinterpret_cast<HWND>(player.winId()),MONITOR_DEFAULTTONEAREST),&monitor));
+        const auto area=monitor.rcMonitor;const int center=(area.left+area.right)/2;
+        for(int x:{int(area.left+1),center,int(area.right-1)}){SetCursorPos(center,(area.top+area.bottom)/2);QTest::qWait(120);player.controls_->hide();SetCursorPos(x,area.bottom-1);QTest::qWait(180);player.updateChrome();
+            const auto pos=player.centralWidget()->mapFromGlobal(QCursor::pos());qInfo()<<"physical-edge"<<x<<area.bottom-1<<"Qt-cursor"<<QCursor::pos()<<"local"<<pos<<"central"<<player.centralWidget()->rect()<<"screen"<<player.screen()->geometry()<<"DPR"<<player.devicePixelRatioF()<<"active"<<player.isActiveWindow()<<"controls-visible"<<player.controls_->isVisible();
+            QVERIFY(player.controls_->isVisible());
+        }
+    }
+    void remote48FrameCadence_data(){QTest::addColumn<int>("algorithm");QTest::newRow("d3d11")<<7;QTest::newRow("jinc")<<4;QTest::newRow("hlsl")<<100;}
+    void remote48FrameCadence(){
+        const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE to a 48 fps media file");QFETCH(int,algorithm);
+        const auto original=qEnvironmentVariable("VSR_NUX_SETTINGS");if(!original.isEmpty()){QSettings sourceSettings(original,QSettings::IniFormat),isolated(configPath(),QSettings::IniFormat);for(const auto &key:sourceSettings.allKeys())isolated.setValue(key,sourceSettings.value(key));isolated.sync();}
+        PlayerWindow player;player.settings_->setValue("playback/remember",false);player.settings_->setValue("subtitle/visible",false);player.resize(1440,900);player.show();for(auto *screen:QApplication::screens())qInfo()<<"available-screen"<<screen->name()<<screen->geometry()<<screen->devicePixelRatio()<<screen->refreshRate();if(qEnvironmentVariableIsSet("VSR_NUX_SCREEN"))player.setScreen(QApplication::screens().at(qEnvironmentVariableIntValue("VSR_NUX_SCREEN")));player.loadPreset(QDir(PresetStore::directory()).filePath(algorithm==4?"builtin/Anime-4-Jinc.vpy":"builtin/Anime-5-D3D11.vpy"));player.toggleFullscreen();
+        QTemporaryDir directory;player.settings_->setValue("render/shaderDirectory",directory.filePath("stored"));if(algorithm==100){QFile shader(directory.filePath("pass.hlsl"));QVERIFY(shader.open(QIODevice::WriteOnly));shader.write("Texture2D<float4> Source:register(t0);SamplerState LinearClamp:register(s0);float4 main(float2 uv:TEXCOORD0):SV_Target{return Source.SampleLevel(LinearClamp,uv,0);}");shader.close();QVERIFY2(player.importCustomShader(shader.fileName()),qPrintable(player.message_->text()));}
+        QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Playing && player.snapshot().presentedVideoFrames>2,20000);QVERIFY(player.direct_);
+        const qint64 seek=(qEnvironmentVariableIsSet("VSR_NUX_SEEK")?qEnvironmentVariableIntValue("VSR_NUX_SEEK"):60)*10000000LL;player.seekTime(seek);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.position()>=qMax<qint64>(0,seek-10000000),15000);QTest::qWait(700);
+        if(qEnvironmentVariableIntValue("VSR_NUX_TAB")){player.infoVisible_=true;player.updateInfo();player.info_->show();}
+        const auto first=player.snapshot();QElapsedTimer wall;wall.start();for(int i=0;i<6;++i){QTest::qWait(1000);const auto s=player.snapshot();qInfo()<<"cadence"<<algorithm<<"wall-ms"<<wall.elapsed()<<"position"<<s.position100ns/1e7<<"decoded"<<s.decodedVideoFrames-first.decodedVideoFrames<<"presented"<<s.presentedVideoFrames-first.presentedVideoFrames<<"dropped"<<s.droppedVideoFrames-first.droppedVideoFrames<<"coalesced"<<s.coalescedVideoFrames-first.coalescedVideoFrames<<"present-wait-ms"<<s.presentWait100ns/1e4<<"upload-ms"<<s.videoUpload100ns/1e4<<"scaling"<<s.videoScalingMode;}
+        const auto last=player.snapshot();const double fps=(last.presentedVideoFrames-first.presentedVideoFrames)*1000./wall.elapsed();qInfo()<<"cadence-summary"<<"fps"<<fps<<"source-fps"<<double(player.clip_.fpsNumerator)/player.clip_.fpsDenominator<<"screen-hz"<<player.screen()->refreshRate()<<"surface-physical"<<player.pane_->surface()->size()*player.pane_->devicePixelRatioF()<<"native-mode"<<last.decodeMode<<"custom-package"<<!player.customShaderPackage_.isEmpty()<<"Tab-fps"<<player.infoCurrentFps_;QVERIFY2(fps>43,"48 fps input should present at least 43 distinct frames per second in this lightweight path");
+    }
     void animatedGifAndTiff(){
         const auto root=qEnvironmentVariable("VSR_ANIMATION_FIXTURES");if(root.isEmpty())QSKIP("Set VSR_ANIMATION_FIXTURES to animated GIF/TIFF fixtures.");
         PlayerWindow player;player.show();QVERIFY(player.openFile(QDir(root).filePath("animated.gif")));QVERIFY(!player.imageMode_);QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>3,10000);const auto before=player.snapshot().presentedVideoFrames;QTest::qWait(500);QVERIFY(player.snapshot().presentedVideoFrames>before);
@@ -149,6 +171,21 @@ private slots:
         const auto size=player.pane_->surface()->size()*player.devicePixelRatioF();ThreeFpPixelProbe pixel{};QVERIFY(player.output_->samplePixel(size.width()/2,size.height()/2,pixel));QVERIFY(pixel.red>.9f && pixel.green<.1f && pixel.blue<.1f);
         QVERIFY(PresetStore::write(shader,"//!DESC Chroma passthrough\n//!HOOK CHROMA\n//!BIND HOOKED\nvec4 hook(){return HOOKED_tex(HOOKED_pos); }\n"));
         player.loadPreset(preset);QTRY_VERIFY2_WITH_TIMEOUT(player.ready_ && player.outputSnapshot().presentedVideoFrames>0,qPrintable(player.message_->text()),20000);QVERIFY(player.customShaderPackage_.isEmpty());QVERIFY(player.hlslFallback_.contains("GLSL"));QVERIFY(!player.direct_);
+    }
+    void legacyBuiltinAnimeUsesNative(){
+        PlayerWindow player;player.settings_->setValue("render/hlsl",true);
+        const QStringList names{"Anime.vpy","Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
+        for(const auto &name:names){const auto path=QDir(PresetStore::directory()).filePath("builtin/"+name);QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));const auto original=file.readAll();file.close();const auto restore=qScopeGuard([&]{PresetStore::write(path,QString::fromUtf8(original));});
+            auto legacy=player.builtinScripts_.value(name);QVERIFY(!legacy.isEmpty());legacy.replace("getattr(core, 'vsrplacebo', core.placebo).Shader(","core.placebo.Shader(");QVERIFY(PresetStore::write(path,legacy));player.loadPreset(path);QVERIFY2(player.nativeBuiltinCompatible(),qPrintable(name));
+            legacy.replace("clip.set_output(0)","clip = core.std.CropRel(clip, left=2, right=2)\nclip.set_output(0)");QVERIFY(PresetStore::write(path,legacy));QVERIFY(!player.nativeBuiltinCompatible());
+        }
+    }
+    void remoteBuiltinHlsl(){
+        const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE for native built-in playback");
+        const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};const int algorithms[]{10,9,11,12,13,14};
+        for(int i=0;i<names.size();++i){PlayerWindow player;player.settings_->setValue("playback/remember",false);player.settings_->setValue("render/hlsl",true);player.resize(1440,900);player.show();player.toggleFullscreen();player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/"+names[i]));QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.snapshot().state==ThreeFpState::Playing && player.outputSnapshot().presentedVideoFrames>2,20000);QVERIFY2(player.nativeAnime_ && player.direct_,qPrintable(names[i]+": "+player.message_->text()));QCOMPARE(player.scalingAlgorithm(),algorithms[i]);
+            const auto before=player.snapshot().presentedVideoFrames;QTest::qWait(1000);QVERIFY(player.snapshot().presentedVideoFrames>before);const auto image=player.clock_->capture();QVERIFY(!image.isNull());player.infoVisible_=true;player.updateInfo();qInfo()<<"native-builtin"<<names[i]<<"algorithm"<<player.scalingAlgorithm()<<"frames"<<player.snapshot().presentedVideoFrames-before<<"capture"<<image.size()<<"status"<<player.message_->text();QVERIFY(player.info_->text().contains("HLSL"));
+        }
     }
     void fullNativeAnimeAndEditedPresetFallback(){
         QTemporaryDir directory;const auto source=directory.filePath("native-anime.mkv");QProcess encoder;

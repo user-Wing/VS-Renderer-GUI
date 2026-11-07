@@ -245,7 +245,7 @@ void PlayerWindow::updateChrome() {
     const auto *active=qApp->activeWindow();const bool activePlayer=isActiveWindow() || active==controls_ || active==playlistPanel_ || active==fullscreenTitle_ || active==speedPopup_ || active==equalizerPopup_;
     if(!isVisible() || isMinimized() || !activePlayer){controls_->hide();if(playlistPanel_->isWindow())playlistPanel_->hide();fullscreenTitle_->hide();return;}
     if(!isFullScreen())controls_->show();
-    const auto pos=centralWidget()->mapFromGlobal(QCursor::pos());const bool inside=centralWidget()->rect().contains(pos);
+    const auto pos=centralWidget()->mapFromGlobal(QCursor::pos());const int edgeRounding=isFullScreen()?1:0;const bool inside=centralWidget()->rect().adjusted(0,0,edgeRounding,edgeRounding).contains(pos);
     const bool moved=QCursor::pos()!=chromePointer_;chromePointer_=QCursor::pos();
     if(infoVisible_ && !imageMode_ && !(discMenu_ && discMenu_->active()) && settings_->value("info/audioDetailed",false).toBool())for(const auto &value:media_.value("streams").toArray()){const auto audio=value.toObject();if(audio.value("type").toString()=="audio" && audio.value("index").toInt()==clock_->snapshot().selectedAudioStream){updateAudioInfo(audio,clock_->snapshot().audioBitRate);break;}}
     if(playlistPanel_->isWindow()) {

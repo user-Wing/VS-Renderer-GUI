@@ -12,6 +12,8 @@ Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS
 
 本地续修支持将多通道模型保存在单个 HLSL 文件中，由 Player 按各段指令顺序执行；格式见 [独立着色器导入](docs/player.md#导入独立-glslhlsl)。旧播放器需要更新后才能读取这种文件。
 
+Full 与单文件播放器修复了部分高 DPI 屏幕全屏底边无法唤出控制栏的问题；专项验证范围见[测试台账](development/validation.md)。
+
 ## 功能介绍
 
 | 程序 | 使用场景 |

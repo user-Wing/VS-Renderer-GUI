@@ -12,6 +12,9 @@
 #include "player/PlayerDiscMenu.h"
 #include "graph/PresetStore.h"
 #include <QApplication>
+#include <QScopeGuard>
+#include <QCursor>
+#include <QScreen>
 #include <QComboBox>
 #include <QDialog>
 #include <QDir>
@@ -39,6 +42,28 @@ class TestPlayer final : public QObject {
     QByteArray previous_;bool existed_=false;
     QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
 private slots:
+    void fullscreenPhysicalBottomEdge(){
+        POINT original{};GetCursorPos(&original);const auto restore=qScopeGuard([&]{SetCursorPos(original.x,original.y);});
+        PlayerWindow player;player.resize(1400,800);player.show();player.activateWindow();player.toggleFullscreen();QTRY_VERIFY(player.isFullScreen());QTRY_VERIFY(player.isActiveWindow());QTest::qWait(200);
+        MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);QVERIFY(GetMonitorInfoW(MonitorFromWindow(reinterpret_cast<HWND>(player.winId()),MONITOR_DEFAULTTONEAREST),&monitor));
+        const auto area=monitor.rcMonitor;const int center=(area.left+area.right)/2;
+        for(int x:{int(area.left+1),center,int(area.right-1)}){SetCursorPos(center,(area.top+area.bottom)/2);QTest::qWait(120);player.controls_->hide();SetCursorPos(x,area.bottom-1);QTest::qWait(180);player.updateChrome();
+            const auto pos=player.centralWidget()->mapFromGlobal(QCursor::pos());qInfo()<<"physical-edge"<<x<<area.bottom-1<<"Qt-cursor"<<QCursor::pos()<<"local"<<pos<<"central"<<player.centralWidget()->rect()<<"screen"<<player.screen()->geometry()<<"DPR"<<player.devicePixelRatioF()<<"active"<<player.isActiveWindow()<<"controls-visible"<<player.controls_->isVisible();
+            QVERIFY(player.controls_->isVisible());
+        }
+    }
+    void remote48FrameCadence_data(){QTest::addColumn<int>("algorithm");QTest::newRow("d3d11")<<7;QTest::newRow("jinc")<<4;QTest::newRow("hlsl")<<100;}
+    void remote48FrameCadence(){
+        const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE to a 48 fps media file");QFETCH(int,algorithm);
+        const auto original=qEnvironmentVariable("VSR_NUX_SETTINGS");if(!original.isEmpty()){QSettings sourceSettings(original,QSettings::IniFormat),isolated(config(),QSettings::IniFormat);for(const auto &key:sourceSettings.allKeys())isolated.setValue(key,sourceSettings.value(key));isolated.sync();}
+        PlayerWindow player;player.settings_->setValue("playback/remember",false);player.settings_->setValue("subtitle/visible",false);player.resize(1440,900);player.show();for(auto *screen:QApplication::screens())qInfo()<<"available-screen"<<screen->name()<<screen->geometry()<<screen->devicePixelRatio()<<screen->refreshRate();if(qEnvironmentVariableIsSet("VSR_NUX_SCREEN"))player.setScreen(QApplication::screens().at(qEnvironmentVariableIntValue("VSR_NUX_SCREEN")));player.loadPreset(QDir(PresetStore::directory()).filePath(algorithm==4?"builtin/Anime-4-Jinc.vpy":"builtin/Anime-5-D3D11.vpy"));player.toggleFullscreen();
+        QTemporaryDir directory;player.settings_->setValue("render/shaderDirectory",directory.filePath("stored"));if(algorithm==100){QFile shader(directory.filePath("pass.hlsl"));QVERIFY(shader.open(QIODevice::WriteOnly));shader.write("Texture2D<float4> Source:register(t0);SamplerState LinearClamp:register(s0);float4 main(float2 uv:TEXCOORD0):SV_Target{return Source.SampleLevel(LinearClamp,uv,0);}");shader.close();QVERIFY2(player.importCustomShader(shader.fileName()),qPrintable(player.message_->text()));}
+        QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Playing && player.snapshot().presentedVideoFrames>2,20000);QVERIFY(player.direct_);
+        const qint64 seek=(qEnvironmentVariableIsSet("VSR_NUX_SEEK")?qEnvironmentVariableIntValue("VSR_NUX_SEEK"):60)*10000000LL;player.seekTime(seek);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.position()>=qMax<qint64>(0,seek-10000000),15000);QTest::qWait(700);
+        if(qEnvironmentVariableIntValue("VSR_NUX_TAB")){player.infoVisible_=true;player.updateInfo();player.info_->show();}
+        const auto first=player.snapshot();QElapsedTimer wall;wall.start();for(int i=0;i<6;++i){QTest::qWait(1000);const auto s=player.snapshot();qInfo()<<"cadence"<<algorithm<<"wall-ms"<<wall.elapsed()<<"position"<<s.position100ns/1e7<<"decoded"<<s.decodedVideoFrames-first.decodedVideoFrames<<"presented"<<s.presentedVideoFrames-first.presentedVideoFrames<<"dropped"<<s.droppedVideoFrames-first.droppedVideoFrames<<"coalesced"<<s.coalescedVideoFrames-first.coalescedVideoFrames<<"present-wait-ms"<<s.presentWait100ns/1e4<<"upload-ms"<<s.videoUpload100ns/1e4<<"scaling"<<s.videoScalingMode;}
+        const auto last=player.snapshot();const double fps=(last.presentedVideoFrames-first.presentedVideoFrames)*1000./wall.elapsed();qInfo()<<"cadence-summary"<<"fps"<<fps<<"source-fps"<<double(player.clip_.fpsNumerator)/player.clip_.fpsDenominator<<"screen-hz"<<player.screen()->refreshRate()<<"surface-physical"<<player.pane_->surface()->size()*player.pane_->devicePixelRatioF()<<"native-mode"<<last.decodeMode<<"custom-package"<<!player.customShaderPackage_.isEmpty()<<"Tab-fps"<<player.infoCurrentFps_;QVERIFY2(fps>43,"48 fps input should present at least 43 distinct frames per second in this lightweight path");
+    }
     void pageThemeVisible(){QTemporaryDir directory;QImage background(16,16,QImage::Format_RGB32);background.fill(Qt::green);const auto path=directory.filePath("green.png"),ini=directory.filePath("themes.ini");QVERIFY(background.save(path));QSettings settings(ini,QSettings::IniFormat);settings.setValue("VSP-Main/image",path);settings.setValue("VSP-Main/transparency",0);settings.setValue("VSP-Main/brightness",100);settings.sync();QLabel label("Text");label.setStyleSheet("background:#101010;color:white;");label.resize(240,100);applyPageTheme(&label,ini,"VSP-Main");label.show();QTest::qWait(50);QCOMPARE(label.grab().toImage().pixelColor(4,4),QColor(Qt::green));}
 
     void ffmpegImageExportDepthAndResize(){

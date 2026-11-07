@@ -257,7 +257,11 @@ bool PlayerWindow::nativeBuiltinCompatible() const {
     QFile file(preset_);if(!file.open(QIODevice::ReadOnly))return false;
     auto actual=QString::fromUtf8(file.readAll());actual.replace("\r\n","\n");
     auto expected=builtinScripts_.value(QFileInfo(preset_).fileName());expected.replace("\r\n","\n");
-    return !expected.isEmpty() && actual.trimmed()==expected.trimmed();
+    if(expected.isEmpty())return false;
+    if(actual.trimmed()==expected.trimmed())return true;
+    // Older stock profiles used the original plugin name for the same shader calls.
+    expected.replace("getattr(core, 'vsrplacebo', core.placebo).Shader(","core.placebo.Shader(");
+    return actual.trimmed()==expected.trimmed();
 #endif
 }
 bool PlayerWindow::hlslColorCompatible() const {
