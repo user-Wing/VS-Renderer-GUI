@@ -101,6 +101,25 @@ private slots:
             QVERIFY(player.controls_->isVisible());
         }
     }
+    void release111Presets(){
+        PlayerWindow player;player.settings_->remove("player/animeStages");player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime.vpy"));QCOMPARE(player.initialQualityStage(),8);
+        player.settings_->setValue("player/animeStages",QStringList{"10","8","0","6","4","5"});QCOMPARE(player.initialQualityStage(),10);
+        player.showContextMenu(QPoint(20,20));const auto menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);const auto anime=menu->findChild<QMenu*>("playerAnimeFilters");QVERIFY(anime);QCOMPARE(anime->actions().size(),8);QCOMPARE(anime->actions()[0]->objectName(),QString("playerAnimeStage8"));QCOMPARE(anime->actions()[1]->objectName(),QString("playerAnimeStage9"));const auto moesr=menu->findChild<QMenu*>("playerMoeSRFilters");QVERIFY(moesr);const auto siblings=qobject_cast<QMenu*>(anime->parentWidget());QVERIFY(siblings);QVERIFY(siblings->actions().indexOf(moesr->menuAction())<siblings->actions().indexOf(anime->menuAction()));
+        const auto descriptions=QJsonDocument::fromJson([]{QFile file(":/filters/player-menu-descriptions.json");file.open(QIODevice::ReadOnly);return file.readAll();}()).object();
+        QCOMPARE(moesr->actions().first()->toolTip(),descriptions.value("builtin/MoeSR-50K.vpy").toString());QVERIFY(!moesr->actions().first()->toolTip().isEmpty());
+        QCOMPARE(anime->actions()[0]->toolTip(),descriptions.value("builtin/Anime-8-A-CNN-Enhanced.vpy").toString());QCOMPARE(anime->actions()[1]->toolTip(),descriptions.value("builtin/Anime-9-A-CNN.vpy").toString());menu->close();
+        player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-8-A-CNN-Enhanced.vpy"));QCOMPARE(player.fixedAnimeStage(),8);QVERIFY(player.nativeBuiltinCompatible());
+    }
+    void builtinHlslModelsHavePicture(){
+        const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE");
+        PlayerWindow player;player.settings_->setValue("basic/autoplay",false);player.settings_->setValue("playback/remember",false);player.settings_->setValue("subtitle/visible",false);player.resize(1440,900);player.show();player.setEnabled(false);
+        for(int stage:{9,8,10}){
+            player.loadPreset(QDir(PresetStore::directory()).filePath(stage==9?"builtin/Anime-9-A-CNN.vpy":stage==8?"builtin/Anime-8-A-CNN-Enhanced.vpy":"builtin/MoeSR-50K.vpy"));
+            if(stage==9){QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.snapshot().presentedVideoFrames>0,20000);player.seekTime(600000000);}QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.position()>590000000,10000);QTest::qWait(500);QVERIFY(!player.customShaderPackage_.isEmpty());
+            const auto image=player.clock_->capture();QVERIFY(!image.isNull());QVERIFY(image.save(QDir(qEnvironmentVariable("VSR_111_CAPTURE",QDir::currentPath())).filePath(QString("mode-a-%1.png").arg(stage))));
+            int low=255,high=0;for(int y=image.height()/4;y<image.height()*3/4;y+=17)for(int x=image.width()/4;x<image.width()*3/4;x+=17){const auto c=image.pixelColor(x,y);const int value=qGray(c.rgb());low=std::min(low,value);high=std::max(high,value);}qInfo()<<"Mode A picture range"<<stage<<low<<high;QVERIFY2(high-low>32,"Enhanced playback must retain spatial image content, not a solid frame");
+        }
+    }
     void remote48FrameCadence_data(){QTest::addColumn<int>("algorithm");QTest::newRow("d3d11")<<7;QTest::newRow("jinc")<<4;QTest::newRow("hlsl")<<100;}
     void remote48FrameCadence(){
         const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE to a 48 fps media file");QFETCH(int,algorithm);
@@ -516,7 +535,7 @@ private slots:
     void nativeAnimeSettingsAndMigration(){
         QSettings settings(config(),QSettings::IniFormat);settings.setValue("render/anime4kFast",true);settings.setValue("player/animeStages",QStringList{"0","1","5"});settings.sync();
         {PlayerWindow player;player.show();QCOMPARE(player.qualityStage(),1);QVERIFY(!player.settings_->contains("render/anime4kFast"));
-            QTimer::singleShot(100,&player,[&]{auto* dialog=player.findChild<QDialog*>("playerSettings");QVERIFY(dialog);auto* list=dialog->findChild<QListWidget*>("playerAnimeStages");QVERIFY(list);QCOMPARE(list->count(),8);QVERIFY(!list->isHidden());
+            QTimer::singleShot(100,&player,[&]{auto* dialog=player.findChild<QDialog*>("playerSettings");QVERIFY(dialog);auto* list=dialog->findChild<QListWidget*>("playerAnimeStages");QVERIFY(list);QCOMPARE(list->count(),11);QVERIFY(!list->isHidden());
                 for(int i=0;i<list->count();++i){QCOMPARE(bool(list->item(i)->flags() & Qt::ItemIsUserCheckable),list->item(i)->data(Qt::UserRole).toInt()!=5);if(list->item(i)->data(Qt::UserRole).toInt()==2)list->setCurrentItem(list->item(i));}
                 dialog->findChild<QPushButton*>("playerConfirmSettings")->click();});player.showSettings();QCOMPARE(player.settings_->value("player/animeStage").toInt(),2);QCOMPARE(player.settings_->value("player/animeStages").toStringList(),QStringList({"0","1","5"}));}
         PlayerWindow reopened;QCOMPARE(reopened.qualityStage(),2);

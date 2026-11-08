@@ -273,5 +273,5 @@ void PlayerWindow::updateChrome() {
     else if(!titleIdle_.isValid() || titleIdle_.elapsed()>=1000)fullscreenTitle_->hide();
     layoutInfoPanels();
 }
-void PlayerWindow::layoutInfoPanels(){const int top=isFullScreen()?fullscreenTitle_->height()+8:0,bottom=overlayChrome_ && isFullScreen()?controls_->height():0;static_cast<PlayerInfoPanel *>(info_)->setOverlayInsets(top,bottom);audioInfo_->setOverlayInsets(top,bottom);if(!QApplication::activePopupWidget()){if(info_->isVisible())info_->raise();if(audioInfo_->isVisible())audioInfo_->raise();}if(fullscreenTitle_->isVisible())fullscreenTitle_->raise();}
+void PlayerWindow::layoutInfoPanels(){const int top=isFullScreen()?fullscreenTitle_->height()+8:0,bottom=overlayChrome_ && isFullScreen()?controls_->height():0;static_cast<PlayerInfoPanel *>(info_)->setOverlayInsets(top,bottom);audioInfo_->setOverlayInsets(top,bottom);if(isActiveWindow() && !QApplication::activePopupWidget()){if(info_->isVisible())info_->raise();if(audioInfo_->isVisible())audioInfo_->raise();}if(fullscreenTitle_->isVisible())fullscreenTitle_->raise();}
 }

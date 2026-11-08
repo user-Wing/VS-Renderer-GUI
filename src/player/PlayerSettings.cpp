@@ -1,3 +1,4 @@
+#include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
 #include "player/PlayerShortcuts.h"
 #include <QTableWidget>
@@ -199,8 +200,8 @@ void PlayerWindow::showSettings() {
     auto *hdrInfo=new QLabel(tr("RTX TrueHDR：按上游的 SDR→HDR 方案处理，仅在 D3D11 直通启用。源像素格式、NVIDIA 驱动和 Windows HDR 输出需满足内核条件。NV Video HDR 的中灰参数不适用于此接口。"),&dialog);hdrInfo->setObjectName("playerHdrMapping");hdrInfo->setWordWrap(true);render->addRow(tr("HDR 映射"),hdrInfo);
     auto *stableViewport=new QCheckBox(tr("划出播放列表/底部控制时不改变渲染分辨率"),&dialog);stableViewport->setObjectName("playerStableViewport");stableViewport->setChecked(settings_->value("render/stableViewport",true).toBool());stableViewport->setToolTip(tr("控制界面覆盖视频，保持视频视口和渲染分辨率，避免重新分配渲染资源及重建增强链。"));render->addRow(stableViewport);
     auto *animeStages=new QListWidget(&dialog);animeStages->setObjectName("playerAnimeStages");
-    const auto allowed=settings_->value("player/animeStages",QStringList{"0","1","2","3","6","7","4","5"}).toStringList();
-    for(int stage:{0,1,2,3,6,7,4,5}){auto *item=new QListWidgetItem(qualityNames().at(stage),animeStages);item->setData(Qt::UserRole,stage);item->setCheckState(stage==5 || allowed.contains(QString::number(stage))?Qt::Checked:Qt::Unchecked);if(stage==5)item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);if(stage==settings_->value("player/animeStage",0).toInt())animeStages->setCurrentItem(item);}
+    const auto allowed=settings_->value("player/animeStages",defaultAnimeStages()).toStringList();
+    for(int stage:builtinAnimeOrder()){auto *item=new QListWidgetItem(qualityNames().at(stage),animeStages);item->setData(Qt::UserRole,stage);item->setCheckState(stage==5 || allowed.contains(QString::number(stage))?Qt::Checked:Qt::Unchecked);if(stage==5)item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);if(stage==settings_->value("player/animeStage",0).toInt())animeStages->setCurrentItem(item);}
     animeStages->ensurePolished();animeStages->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);animeStages->setFixedHeight(animeStages->count()*qMax(animeStages->sizeHintForRow(0),animeStages->fontMetrics().height()+12)+2*animeStages->frameWidth()+4);
     if(!settings_->contains("render/paretoImage"))settings_->setValue("render/paretoImage",QString());
     auto *pareto=new QPushButton(tr("查看超分算法Pareto图"),&dialog);pareto->setObjectName("playerParetoChart");

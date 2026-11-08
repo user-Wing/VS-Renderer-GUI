@@ -1,3 +1,4 @@
+#include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
 #include "player/PlayerInfoPanel.h"
 #include "player/PlayerDiscMenu.h"
@@ -132,7 +133,7 @@ void PlayerWindow::updateInfo() {
           << "" << tr("倍速：%1× · %2").arg(speed_,0,'f',2).arg(preset_.isEmpty() ? tr("原画") : QFileInfo(preset_).fileName());
     lines << tr("补帧：%1").arg(interpolationStage()>=0?interpolationNames().at(interpolationStage())+(interpolationAuto_?tr(" · 自动降档"):tr(" · 手动固定")):tr("未启用"));
     const QStringList algorithms{"Nearest Neighbour","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11","Lanczos4",qualityNames().at(1),qualityNames().at(0),qualityNames().at(2),qualityNames().at(3),qualityNames().at(6),qualityNames().at(7)};
-    const QString scalingName=!customShaderPackage_.isEmpty() && !hlslFailed_ && hlslFallback_.isEmpty()?QString("HLSL"):madvrMode()?QString("madVR"):direct_?algorithms.value(scalingAlgorithm()):interpolationStage()>=0?(interpolationRenderer()?tr("D3D11"):tr("Jinc 直通")):profile()=="Anime"?qualityNames().at(std::clamp(qualityStage_,0,7)):algorithms.value(scalingAlgorithm());
+    const QString scalingName=nativeAnime_ && qualityStage_>=8?qualityNames().value(qualityStage_):!customShaderPackage_.isEmpty() && !hlslFailed_ && hlslFallback_.isEmpty()?QString("HLSL"):madvrMode()?QString("madVR"):direct_?algorithms.value(scalingAlgorithm()):interpolationStage()>=0?(interpolationRenderer()?tr("D3D11"):tr("Jinc 直通")):profile()=="Anime"?qualityNames().at(std::clamp(qualityStage_,0,10)):algorithms.value(scalingAlgorithm());
     lines << tr("上采样：%1 · 第二上采样：%2 · 下采样：%3")
         .arg(!preset_.isEmpty() && profile().isEmpty()?QString("N/A"):scalingName,algorithms.value(settings_->value("render/secondUpscale",4).toInt()),algorithms.value(scalingAlgorithm(true)));
     lines << tr("当前 VPY：%1").arg(preset_.isEmpty()?tr("未启用"):profile().isEmpty()?preset_:QString("%1 · %2（内置预设）").arg(qualityStage_+1).arg(QFileInfo(preset_).fileName()));
@@ -175,7 +176,7 @@ void PlayerWindow::updateInfo() {
     if(!externalAudio_.isEmpty())files<<tr("外部音频：%1").arg(externalAudio_);
     if(!externalSubtitle_.isEmpty())files<<tr("字幕 1：%1").arg(externalSubtitle_);
     if(!externalSecondarySubtitle_.isEmpty())files<<tr("字幕 2：%1").arg(externalSecondarySubtitle_);
-    lines=files+lines;static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));if(!QApplication::activePopupWidget())info_->raise();
+    lines=files+lines;static_cast<PlayerInfoPanel *>(info_)->showText(lines.join('\n'));if(isActiveWindow() && !QApplication::activePopupWidget())info_->raise();
     updateAudioInfo(audio,audioRate);
     layoutInfoPanels();
 }

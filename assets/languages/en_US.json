@@ -803,5 +803,8 @@
   "默认截图保存路径": "Default screenshot folder",
   "默认音量": "Default volume",
   "默认：3FP 原生(709 / 2020 简易模式)": "Default: 3FP native (simple 709 / 2020 mode)",
-  "鼠标滚轮": "Mouse wheel"
+  "鼠标滚轮": "Mouse wheel",
+  "Anime4K A+CNN+额外增强": "Anime4K A+CNN + extra enhancement",
+  "Anime4K A+CNN": "Anime4K A+CNN",
+  "此内置档位需要原生 SDR HLSL 路径。": "This built-in preset requires the native SDR HLSL path."
 }

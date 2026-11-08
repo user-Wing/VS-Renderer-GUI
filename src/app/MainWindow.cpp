@@ -1038,7 +1038,7 @@ void MainWindow::validateScript()
             if(!plan.shaderPath.isEmpty()){
                 if(sourcePlayer_->snapshot().isHdrSource)hlslPreviewFallback_=QStringLiteral("HDR 着色器保留 GLSL 色彩顺序。");
                 else {
-                    const auto package=ShaderPackage::prepare(plan.shaderPath);
+                    const auto package=ShaderPackage::enhance(ShaderPackage::prepare(plan.shaderPath),plan.enhancements);
                     if(package.packagePath.isEmpty())hlslPreviewFallback_=QStringLiteral("HLSL 不兼容，已回退 GLSL：%1").arg(package.error);
                     else {hlslPreviewPackage_=package.packagePath;hlslPreviewParameters_=plan.parameters;groups.first().graph=plan.graph;
                         result=VpyScriptBuilder::buildGroups(sourcePath_->text(),static_cast<SourceFilter>(sourceFilter_->currentData().toInt()),groups);}

@@ -27,13 +27,13 @@ private:
 class PlayerInfoPanel : public QLabel {
 public:
     explicit PlayerInfoPanel(QWidget *parent):QLabel(parent){
-        setObjectName("playerInfoPanel");setWindowFlags(Qt::Tool|Qt::FramelessWindowHint|Qt::WindowDoesNotAcceptFocus|Qt::WindowStaysOnTopHint);setAttribute(Qt::WA_ShowWithoutActivating);setAttribute(Qt::WA_TranslucentBackground);setTextFormat(Qt::PlainText);
+        setObjectName("playerInfoPanel");setWindowFlags(Qt::Tool|Qt::FramelessWindowHint|Qt::WindowDoesNotAcceptFocus);setAttribute(Qt::WA_ShowWithoutActivating);setAttribute(Qt::WA_TranslucentBackground);setTextFormat(Qt::PlainText);
         for(auto *widget=parent;widget;widget=widget->parentWidget())widget->installEventFilter(this);
         setAlignment(Qt::AlignTop|Qt::AlignLeft);setMargin(12);setContentsMargins(0,0,0,30);
         baseFont_=QFont("Comic Sans MS",9);setFont(baseFont_);
         scroll_=new QScrollArea(this);scroll_->setObjectName("playerInfoTextArea");scroll_->setFrameShape(QFrame::NoFrame);scroll_->setWidgetResizable(false);scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         text_=new QLabel; text_->setTextFormat(Qt::PlainText);text_->setAlignment(Qt::AlignTop|Qt::AlignLeft);text_->setMargin(0);scroll_->setWidget(text_);
-        audioMode_=new QComboBox(this);audioMode_->setObjectName("playerInfoAudioMode");audioMode_->addItems({tr("音频简略信息"),tr("音频详细信息")});audioMode_->view()->window()->setWindowFlag(Qt::WindowStaysOnTopHint,true);
+        audioMode_=new QComboBox(this);audioMode_->setObjectName("playerInfoAudioMode");audioMode_->addItems({tr("音频简略信息"),tr("音频详细信息")});
         opacityText_=new QLabel(tr("透明度"),this);percent_=new QLabel(this);percent_->setObjectName("playerInfoOpacityPercent");
         opacity_=new QSlider(Qt::Horizontal,this);opacity_->setObjectName("playerInfoOpacity");opacity_->setRange(0,100);opacity_->setValue(50);opacity_->setToolTip(tr("信息面板背景透明度"));
         grip_=new PlayerInfoGrip(this);grip_->setObjectName("playerInfoResize");

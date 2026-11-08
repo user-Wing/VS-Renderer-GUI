@@ -12,6 +12,11 @@ using namespace vsr;
 class TestVpyScript final : public QObject {
     Q_OBJECT
 private slots:
+    void hlslWithPostEnhancement(){
+        FilterGraph graph;graph.add("crop");const int shader=graph.add("anime4k");graph.setParameter(shader,"shader","test.hlsl");graph.add("sharpen_edges");graph.add("enhance_detail");
+        const auto plan=hlslPreviewPlan(graph);QVERIFY(plan.error.isEmpty());QCOMPARE(plan.shaderPath,QString("test.hlsl"));QCOMPARE(plan.enhancements.size(),2);QCOMPARE(plan.graph.nodes().size(),1);QCOMPARE(plan.graph.nodes().first().definitionId,QString("crop"));
+        graph.add("resize");QVERIFY(hlslPreviewPlan(graph).shaderPath.isEmpty());
+    }
     void rejectsInvalidParameterValues(){
         FilterGraph graph;const int row=graph.add("resize");
         QVERIFY(!graph.setParameter(row,"kernel","Bicubic(clip); __import__('os').system('bad') #"));

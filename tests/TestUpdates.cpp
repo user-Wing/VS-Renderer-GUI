@@ -57,12 +57,12 @@ private slots:
         const auto archive=qEnvironmentVariable("VSR_TEST_UPDATE_ARCHIVE");if(archive.isEmpty())QSKIP("Set VSR_TEST_UPDATE_ARCHIVE to audit a release package");
         QProcess listing;listing.start(tool("7z.exe"),{"l","-slt","-sccUTF-8",archive});QVERIFY(listing.waitForFinished(15000));QCOMPARE(listing.exitCode(),0);const auto text=QString::fromUtf8(listing.readAllStandardOutput());QVERIFY(PortableUpdater::safeArchiveListing(text));
         const auto entries=text.mid(text.indexOf("----------")).split('\n');int paths=0;
-        for(const auto &entry:entries)if(entry.startsWith("Path = ")){auto path=entry.mid(7).trimmed();path.replace('\\','/');QVERIFY2(QRegularExpression("^VS-Renderer-GUI-[0-9.]+-windows-x64$").match(path.section('/',0,0)).hasMatch(),qPrintable(path));++paths;}
+        for(const auto &entry:entries)if(entry.startsWith("Path = ")){auto path=entry.mid(7).trimmed();path.replace('\\','/');QVERIFY2(QRegularExpression("^(VS-Renderer-GUI-[0-9.]+-windows-x64|VS-GUI-Full|VS-GUI-Lite)$").match(path.section('/',0,0)).hasMatch(),qPrintable(path));++paths;}
         QVERIFY(paths>10);
     }
     void payloadLayouts(){
         QTemporaryDir flat;payload(flat.path());QCOMPARE(PortableUpdater::payloadDirectory(flat.path()),flat.path());
-        QTemporaryDir wrapped;const auto child=wrapped.filePath("Any name 1.0.3");payload(child);QCOMPARE(PortableUpdater::payloadDirectory(wrapped.path()),child);
+        QTemporaryDir wrapped;const auto child=wrapped.filePath("VS-GUI-Full");payload(child);QCOMPARE(PortableUpdater::payloadDirectory(wrapped.path()),child);
         payload(wrapped.filePath("second"));QVERIFY(PortableUpdater::payloadDirectory(wrapped.path()).isEmpty());
         QTemporaryDir deep;payload(deep.filePath("one/two"));QVERIFY(PortableUpdater::payloadDirectory(deep.path()).isEmpty());
         QFile::remove(flat.filePath("Qt6Core.dll"));QVERIFY(PortableUpdater::payloadDirectory(flat.path()).isEmpty());

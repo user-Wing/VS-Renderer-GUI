@@ -1,6 +1,7 @@
 #include "render/ShaderPackage.h"
 #include "render/CustomShader.h"
 #include <QTest>
+#include <qfloat16.h>
 #include <d3d11shader.h>
 #include <QDateTime>
 #include <QFile>
@@ -27,6 +28,45 @@ float4 main(float2 uv:TEXCOORD0):SV_Target{return image.Sample(sampleState,uv);}
 class TestShaderPackage final : public QObject {
     Q_OBJECT
 private slots:
+    void moesrIntegerLoadEquivalence(){
+        const auto original=qEnvironmentVariable("VSR_MOESR_ORIGINAL"),optimized=qEnvironmentVariable("VSR_MOESR_OPTIMIZED");if(original.isEmpty() || optimized.isEmpty())QSKIP("Set both MoeSR shader paths");
+        const auto cache=QDir::current().filePath("moesr-test-cache");const auto a=ShaderPackage::prepare(original,cache),b=ShaderPackage::prepare(optimized,cache);QVERIFY2(a.error.isEmpty(),qPrintable(a.error));QVERIFY2(b.error.isEmpty(),qPrintable(b.error));
+        Microsoft::WRL::ComPtr<ID3D11Device> device;Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;QVERIFY(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
+        for(const auto size:{QSize(32,18),QSize(257,145),QSize(1920,1080)}){
+            QVector<qfloat16> pixels(size.width()*size.height()*4);for(int y=0;y<size.height();++y)for(int x=0;x<size.width();++x)for(int c=0;c<4;++c)pixels[(y*size.width()+x)*4+c]=qfloat16(c==3?1.f:float((x*13+y*7+c*41)%251)/250.f);
+            QVector<float> outputs[2];int n=0;for(const auto &path:{a.packagePath,b.packagePath}){
+                shader::Pipeline pipeline;QVERIFY2(pipeline.load(path.toUtf8().constData(),0,0,device.Get()),pipeline.error().c_str());auto *target=pipeline.input(device.Get(),size.width(),size.height());QVERIFY(target);
+                Microsoft::WRL::ComPtr<ID3D11Resource> resource;target->GetResource(&resource);context->UpdateSubresource(resource.Get(),0,nullptr,pixels.constData(),size.width()*8,0);QVERIFY2(pipeline.process(context.Get(),size.width()*2,size.height()*2),pipeline.error().c_str());QCOMPARE(pipeline.width(),unsigned(size.width()*2));
+                pipeline.output()->GetResource(resource.ReleaseAndGetAddressOf());D3D11_TEXTURE2D_DESC desc{};desc.Width=pipeline.width();desc.Height=pipeline.height();desc.MipLevels=desc.ArraySize=1;desc.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+                Microsoft::WRL::ComPtr<ID3D11Texture2D> readback;QVERIFY(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&readback)));context->CopyResource(readback.Get(),resource.Get());D3D11_MAPPED_SUBRESOURCE mapped{};QVERIFY(SUCCEEDED(context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)));
+                auto &out=outputs[n++];out.reserve(desc.Width*desc.Height*3);for(unsigned y=0;y<desc.Height;++y){const auto *row=reinterpret_cast<const qfloat16*>(static_cast<const char*>(mapped.pData)+y*mapped.RowPitch);for(unsigned x=0;x<desc.Width;++x)for(int c=0;c<3;++c)out.append(float(row[x*4+c]));}context->Unmap(readback.Get(),0);
+            }
+            double maximum=0,sum=0;for(int i=0;i<outputs[0].size();++i){const double error=std::abs(outputs[0][i]-outputs[1][i]);maximum=std::max(maximum,error);sum+=error;}const double mean=sum/outputs[0].size();qInfo()<<"MoeSR GPU equivalence"<<size<<"max"<<maximum<<"mean"<<mean;QVERIFY(maximum<0.01);QVERIFY(mean<0.0005);
+        }
+    }
+    void modeAEnhancedSpatialOutput(){
+        const auto original=QTest::qFindTestData("../assets/builtin-shaders/anime4k-mode-a.glsl",__FILE__,__LINE__);QVERIFY(!original.isEmpty());
+        const auto cache=QDir::current().filePath("moesr-test-cache");const auto a=ShaderPackage::prepare(original,cache),b=ShaderPackage::enhance(a,{{{"mode","sharpen_edges"},{"strength",0.3},{"threshold",2}},{{"mode","enhance_detail"},{"strength",0.3}}},cache);QVERIFY2(a.error.isEmpty(),qPrintable(a.error));QVERIFY2(b.error.isEmpty(),qPrintable(b.error));
+        Microsoft::WRL::ComPtr<ID3D11Device> device;Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;QVERIFY(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
+        for(const auto size:{QSize(257,145)}){
+            QVector<qfloat16> pixels(size.width()*size.height()*4);for(int y=0;y<size.height();++y)for(int x=0;x<size.width();++x)for(int c=0;c<4;++c)pixels[(y*size.width()+x)*4+c]=qfloat16(c==3?1.f:float((x*13+y*7+c*41)%251)/250.f);
+            QVector<float> outputs[2];int n=0;for(const auto &path:{a.packagePath,b.packagePath}){
+                shader::Pipeline pipeline;QVERIFY2(pipeline.load(path.toUtf8().constData(),0,0,device.Get()),pipeline.error().c_str());auto *target=pipeline.input(device.Get(),size.width(),size.height());QVERIFY(target);
+                Microsoft::WRL::ComPtr<ID3D11Resource> resource;target->GetResource(&resource);context->UpdateSubresource(resource.Get(),0,nullptr,pixels.constData(),size.width()*8,0);QVERIFY2(pipeline.process(context.Get(),size.width()*2,size.height()*2),pipeline.error().c_str());QCOMPARE(pipeline.width(),unsigned(size.width()*2));
+                pipeline.output()->GetResource(resource.ReleaseAndGetAddressOf());D3D11_TEXTURE2D_DESC desc{};desc.Width=pipeline.width();desc.Height=pipeline.height();desc.MipLevels=desc.ArraySize=1;desc.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+                Microsoft::WRL::ComPtr<ID3D11Texture2D> readback;QVERIFY(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&readback)));context->CopyResource(readback.Get(),resource.Get());D3D11_MAPPED_SUBRESOURCE mapped{};QVERIFY(SUCCEEDED(context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)));
+                auto &out=outputs[n++];out.reserve(desc.Width*desc.Height*3);for(unsigned y=0;y<desc.Height;++y){const auto *row=reinterpret_cast<const qfloat16*>(static_cast<const char*>(mapped.pData)+y*mapped.RowPitch);for(unsigned x=0;x<desc.Width;++x)for(int c=0;c<3;++c)out.append(float(row[x*4+c]));}context->Unmap(readback.Get(),0);
+            }
+            double maximum=0,sum=0;for(int i=0;i<outputs[0].size();++i){const double error=std::abs(outputs[0][i]-outputs[1][i]);maximum=std::max(maximum,error);sum+=error;}const double mean=sum/outputs[0].size();qInfo()<<"Mode A enhancement difference"<<size<<"max"<<maximum<<"mean"<<mean;QVERIFY(mean<0.05);
+        }
+    }
+    void enhancementUsesProcessedImage(){
+        QTemporaryDir dir;const auto path=dir.filePath("constant.hlsl");QVERIFY(writeFile(path,"float4 main(float2 uv:TEXCOORD0):SV_Target{return float4(uv.x,uv.y,(uv.x+uv.y)*0.5,1);}"));
+        const auto result=ShaderPackage::enhance(ShaderPackage::prepare(path,dir.path()),{{{"mode","sharpen_edges"},{"strength",0.3},{"threshold",2}},{{"mode","enhance_detail"},{"strength",0.3}}},dir.path());QVERIFY2(result.error.isEmpty(),qPrintable(result.error));
+        Microsoft::WRL::ComPtr<ID3D11Device> device;Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;QVERIFY(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
+        shader::Pipeline pipeline;QVERIFY(pipeline.load(result.packagePath.toUtf8().constData(),8,8,device.Get()));auto *target=pipeline.input(device.Get(),4,4);QVERIFY(target);const float black[]{0,0,0,1};context->ClearRenderTargetView(target,black);QVERIFY2(pipeline.process(context.Get(),8,8),pipeline.error().c_str());QCOMPARE(pipeline.width(),8u);
+        Microsoft::WRL::ComPtr<ID3D11Resource> resource;pipeline.output()->GetResource(&resource);D3D11_TEXTURE2D_DESC desc{};desc.Width=desc.Height=8;desc.MipLevels=desc.ArraySize=1;desc.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;Microsoft::WRL::ComPtr<ID3D11Texture2D> readback;QVERIFY(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&readback)));context->CopyResource(readback.Get(),resource.Get());D3D11_MAPPED_SUBRESOURCE mapped{};QVERIFY(SUCCEEDED(context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)));const float value=float(*static_cast<const qfloat16*>(mapped.pData));context->Unmap(readback.Get(),0);QVERIFY(std::abs(value-0.0625f)<0.05f);
+    }
     void imageResamplerConstantLayout(){
         const char source[]="cbuffer C:register(b0){float2 inputSize;float2 outputSize;uint algorithm;float3 padding;};float4 main():SV_Target{return float4(inputSize+outputSize,float(algorithm)+padding.x,padding.y+padding.z);}";
         Microsoft::WRL::ComPtr<ID3DBlob> code;QVERIFY(SUCCEEDED(D3DCompile(source,sizeof(source),nullptr,nullptr,nullptr,"main","ps_5_0",0,0,&code,nullptr)));

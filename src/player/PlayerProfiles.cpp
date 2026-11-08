@@ -1,3 +1,4 @@
+#include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
 #include "player/PlayerDiscMenu.h"
 #include "player/PlayerAiSubtitles.h"
@@ -40,25 +41,25 @@ bool PlayerWindow::animeSourceSupported() const {
 int PlayerWindow::fixedAnimeStage() const {
     const QFileInfo file(preset_);
     if(file.absolutePath()!=QDir(PresetStore::directory()).filePath("builtin"))return -1;
-    const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
+    const auto names=builtinAnimeFiles();
     return names.indexOf(file.fileName());
 }
 int PlayerWindow::initialQualityStage() const {
 #ifdef VSR_LITE_PLAYER
-    if(!settings_->value("player/animeAuto",false).toBool())return std::clamp(settings_->value("player/animeStage",5).toInt(),0,7);
+    if(!settings_->value("player/animeAuto",false).toBool())return std::clamp(settings_->value("player/animeStage",5).toInt(),0,10);
 #endif
     if(interpolationStage()>=0)return 4;
     const int fixed=fixedAnimeStage();
     if(fixed>=0)return fixed;
     if(profile()!="Anime")return 0;
-    const QList<int> order{0,1,2,3,6,7,4,5};
-    const auto allowed=settings_->value("player/animeStages",QStringList{"0","1","2","3","6","7","4","5"}).toStringList();
-    const int start=order.indexOf(std::clamp(settings_->value("player/animeStage",0).toInt(),0,7));
+    const auto order=builtinAnimeOrder();
+    const auto allowed=settings_->value("player/animeStages",defaultAnimeStages()).toStringList();
+    const int start=0;
     for(int n=start;n<order.size();++n)if(order[n]==5 || allowed.contains(QString::number(order[n])))return order[n];
     return 5;
 }
 QStringList PlayerWindow::qualityNames() const {
-    return {tr("Anime4K CNN + 额外增强"),tr("Anime4K CNN"),tr("Anime4K no CNN + 额外增强"),tr("Anime4K no CNN"),tr("Jinc 直通"),tr("D3D11 原生直通"),tr("Anime4K 1X · Jinc"),tr("Anime4K 1X · D3D11")};
+    return {tr("Anime4K CNN + 额外增强"),tr("Anime4K CNN"),tr("Anime4K no CNN + 额外增强"),tr("Anime4K no CNN"),tr("Jinc 直通"),tr("D3D11 原生直通"),tr("Anime4K 1X · Jinc"),tr("Anime4K 1X · D3D11"),tr("Anime4K A+CNN+额外增强"),tr("Anime4K A+CNN"),QStringLiteral("MoeSR-50K")};
 }
 int PlayerWindow::superInterpolationStage() const {
     const QFileInfo file(preset_);if(file.absolutePath()!=QDir(PresetStore::directory()).filePath("builtin"))return -1;
@@ -70,7 +71,7 @@ void PlayerWindow::updateAlgorithmBadges(){
     const int interpolation=interpolationStage();
     if(superInterpolationStage()>=0 && !direct_){algorithmBadge_->setText(superInterpolationStage()==2?"D3D11":superInterpolationStage()==1?"Jinc":"A4K");interpolationBadge_->setText("RIFE 960×540");interpolationBadge_->show();}
     else if(interpolation>=0 && !direct_){algorithmBadge_->setText(interpolationRenderer()?"D3D11":"Jinc");interpolationBadge_->setText(QStringList{"RIFE+","RIFE","MVT+","MVT"}.at(interpolation));interpolationBadge_->show();}
-    else if(!direct_ && profile()=="Anime")algorithmBadge_->setText(QStringList{"A4KCNN+","A4KCNN","A4K+","A4K","Jinc","D3D11","A4K-1X-Jinc","A4K-1X-D3D11"}.at(std::clamp(qualityStage_,0,7)));
+    else if(profile()=="Anime" && (nativeAnime_ || !direct_))algorithmBadge_->setText(QStringList{"A4KCNN+","A4KCNN","A4K+","A4K","Jinc","D3D11","A4K-1X-Jinc","A4K-1X-D3D11","A4K-A-CNN+","A4K-A-CNN","MoeSR-50K"}.at(std::clamp(qualityStage_,0,10)));
     else if(!customShaderPackage_.isEmpty() && !hlslFailed_ && hlslFallback_.isEmpty())algorithmBadge_->setText("HLSL");
     else algorithmBadge_->setText(QStringList{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","SuperXbr","D3D11","Lanczos4","A4KCNN","A4KCNN+","A4K+","A4K","A4K-1X-Jinc","A4K-1X-D3D11"}.value(scalingAlgorithm(),"Jinc"));
     if(algorithmBadge_->text()=="HLSL")algorithmBadge_->hide();
@@ -125,6 +126,8 @@ void PlayerWindow::ensureProfiles() {
     return;
 #endif
     const QDir shaders(QDir(QCoreApplication::applicationDirPath()).filePath("shaders"));QDir().mkpath(shaders.absolutePath());
+    for(const auto &name:QStringList{"moesr-50k.hlsl","moesr-50k.hlsl.vsrhlsl","moesr-50k.hlsl.vsrhlsl.json","anime4k-mode-a.glsl","anime4k-mode-a.glsl.vsrhlsl","anime4k-mode-a.glsl.vsrhlsl.json"})
+        if(!QFileInfo::exists(shaders.filePath(name)))QFile::copy(":/filters/builtin-shaders/"+name,shaders.filePath(name));
     if(!QFileInfo::exists(shaders.filePath("anime4k-a-fast.glsl")))QFile::copy(":/filters/anime4k-a-fast.glsl",shaders.filePath("anime4k-a-fast.glsl"));
     if(!QFileInfo::exists(shaders.filePath("anime4k-no-cnn.glsl")))QFile::copy(":/filters/anime4k-no-cnn.glsl",shaders.filePath("anime4k-no-cnn.glsl"));
     const auto oldProcessing=QStringLiteral(
@@ -239,6 +242,13 @@ void PlayerWindow::ensureProfiles() {
         builtinScripts_.insert(QFileInfo(path).fileName(),script);
         if(!QFileInfo::exists(path))PresetStore::write(path,script);
     }
+    for(int stage:{8,9,10}){
+        const auto name=builtinAnimeFiles().at(stage),path=builtin.filePath(name);
+        FilterGraph graph;const int shader=graph.add("anime4k");graph.setParameter(shader,"shader",shaders.filePath(stage==10?"moesr-50k.hlsl":"anime4k-mode-a.glsl"));
+        if(stage==8)for(const auto &mode:QStringList{"sharpen_edges","enhance_detail"}){const int n=graph.add(mode);graph.setParameter(n,"strength",0.3);}
+        const auto script=PresetStore::create(graph,SourceFilter::Ffms2,{},qualityNames().at(stage));builtinScripts_.insert(name,script);
+        if(!QFileInfo::exists(path))PresetStore::write(path,script);
+    }
     const auto descriptions=QDir(PresetStore::directory()).filePath("preset-descriptions.json");
     QFile descriptionFile(descriptions);QJsonObject entries;bool changed=!descriptionFile.exists();
     if(descriptionFile.open(QIODevice::ReadOnly)){
@@ -341,9 +351,9 @@ void PlayerWindow::updateProfile() {
     if(interpolationStage()>=0){if(!interpolationAuto_)showInterpolationWarning(overloaded);else if(overloaded)advanceInterpolation();else showInterpolationWarning(false);return;}
     if(!overloaded)return;
     if(direct_ && !nativeAnime_)qualityStage_=4;
-    const QList<int> order{0,1,2,3,6,7,4,5};
+    const auto order=builtinAnimeOrder();
     int next=order.indexOf(qualityStage_)+1;
-    const auto allowed=settings_->value("player/animeStages",QStringList{"0","1","2","3","6","7","4","5"}).toStringList();
+    const auto allowed=settings_->value("player/animeStages",defaultAnimeStages()).toStringList();
     while(next<order.size()-1 && !allowed.contains(QString::number(order[next])))++next;
     resumeAt_=position();autoPlay_=true;qualityStage_=order.value(next,5);refreshScript();
     showStatus(tr("丢帧超过 5%：切换到 %1。").arg(qualityNames().at(qualityStage_)));
@@ -352,7 +362,7 @@ void PlayerWindow::suspendQualityCheck() {qualityTimer_.invalidate();qualitySett
 int PlayerWindow::scalingAlgorithm(bool downscale) const {
     if(downscale)return std::clamp(settings_->value("render/downscale",4).toInt(),0,8);
     if(!customShaderPackage_.isEmpty() && !hlslFailed_)return 7;
-    if(direct_ && nativeAnime_){const int algorithms[]{10,9,11,12,4,7,13,14};if(qualityStage_!=4 && qualityStage_!=5)return algorithms[std::clamp(qualityStage_,0,7)];}
+    if(direct_ && nativeAnime_ && qualityStage_<8){const int algorithms[]{10,9,11,12,4,7,13,14};if(qualityStage_!=4 && qualityStage_!=5)return algorithms[std::clamp(qualityStage_,0,7)];}
     if(direct_ && qualityStage_==5)return std::clamp(settings_->value("render/upscale",settings_->value("render/d3d11Upscale",7)).toInt(),0,8);
     if(direct_ && qualityStage_==4)return std::clamp(settings_->value("render/upscale",4).toInt(),0,8);
     if(!direct_)return std::clamp(settings_->value("render/secondUpscale",4).toInt(),0,8);

@@ -1,3 +1,4 @@
+#include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
 #include "player/PlayerAiSubtitles.h"
 #include "player/PlayerMenu.h"
@@ -126,25 +127,27 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
         QDir(PresetStore::directory()).filePath("preset-descriptions.json")
 #endif
     );QJsonObject notes;if(descriptions.open(QIODevice::ReadOnly))notes=QJsonDocument::fromJson(descriptions.readAll()).object();
+    QFile defaultsFile(":/filters/player-menu-descriptions.json");if(defaultsFile.open(QIODevice::ReadOnly)){const auto defaults=QJsonDocument::fromJson(defaultsFile.readAll()).object();for(auto it=defaults.begin();it!=defaults.end();++it)if(!notes.contains(it.key()))notes.insert(it.key(),it.value());}
     const auto description=[&](const QString &key){return notes.value(key).toString();};
     const auto describeCategory=[&](QMenu *folder,const QString &key){const auto text=description(key);folder->menuAction()->setToolTip(text);folder->menuAction()->setProperty("playerDescription",text);};
     auto *processing=PlayerMenu::add(menu,tr("图像处理"));processing->setObjectName("playerProcessing");describeCategory(processing,"menu/processing");
     auto *scalingFilters=PlayerMenu::add(processing,tr("上采样滤镜"));scalingFilters->setObjectName("playerUpsampling");describeCategory(scalingFilters,"menu/upsampling");
     auto *scalingGroup=new QActionGroup(scalingFilters);
-    const QStringList animeFiles{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
+    const auto animeFiles=builtinAnimeFiles();
     const auto scaleChoice=[&](QMenu *folder,int stage){
         const auto path=QDir(PresetStore::directory()).filePath("builtin/"+animeFiles[stage]);
         auto *action=folder->addAction(qualityNames().at(stage),this,[this,path]{loadPreset(path);});
         action->setObjectName(QString("playerAnimeStage%1").arg(stage));
-        action->setToolTip(PresetStore::description(path));action->setCheckable(true);
+        action->setToolTip(description("builtin/"+animeFiles[stage]));action->setCheckable(true);
         action->setChecked(fixedAnimeStage()==stage);scalingGroup->addAction(action);
         if(stage!=4 && stage!=5 && !animeSourceSupported())action->setEnabled(false);
     };
     const auto autoPath=QDir(PresetStore::directory()).filePath("builtin/Anime.vpy");
     auto *automatic=scalingFilters->addAction(tr("自动切换（推荐）"),this,[this,autoPath]{loadPreset(autoPath);});
     automatic->setToolTip(PresetStore::description(autoPath));automatic->setCheckable(true);automatic->setChecked(profile()=="Anime" && fixedAnimeStage()<0);scalingGroup->addAction(automatic);
+    auto *moesrMenu=PlayerMenu::add(scalingFilters,QStringLiteral("MoeSR"));moesrMenu->setObjectName("playerMoeSRFilters");scaleChoice(moesrMenu,10);
     auto *animeMenu=PlayerMenu::add(scalingFilters,tr("Anime4K V4 CNN+"));animeMenu->setObjectName("playerAnimeFilters");describeCategory(animeMenu,"menu/anime4k");
-    for(int stage:{0,1,2,3,6,7})scaleChoice(animeMenu,stage);
+    for(int stage:{8,9,0,1,2,3,6,7})scaleChoice(animeMenu,stage);
     scalingFilters->addSeparator();auto *passThroughFilters=PlayerMenu::add(scalingFilters,tr("常规直通模式"));passThroughFilters->setObjectName("playerPassthroughFilters");describeCategory(passThroughFilters,"menu/passThrough");
     const QStringList algorithmNames{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc (Anti-Alias)","Spline36","Super-XBR","D3D11","Lanczos4"};
     const QStringList algorithmKeys{"scaling/Nearest","scaling/Bilinear","scaling/Bicubic","scaling/Lanczos3","builtin/Anime-4-Jinc.vpy","scaling/Spline36","scaling/SuperXbr","builtin/Anime-5-D3D11.vpy","scaling/Lanczos4"};

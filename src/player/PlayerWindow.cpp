@@ -1,3 +1,4 @@
+#include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
 #include "player/PlayerShortcuts.h"
 #include <QClipboard>
@@ -161,14 +162,15 @@ PlayerWindow::PlayerWindow() {
         if (settings_->value("color/engine").toInt() != 0) settings_->setValue("color/engine",0);
         if (settings_->value("player/interpolationAuto").toBool()) settings_->setValue("player/interpolationAuto",false);
         const int stage=settings_->value("player/animeStage",5).toInt();
-        if (stage < 0 || stage > 7) settings_->setValue("player/animeStage",5);
+        if (stage < 0 || stage > 10) settings_->setValue("player/animeStage",5);
     }
     if(settings_->value("render/anime4kFast",false).toBool())settings_->setValue("player/animeStage",1);
     settings_->remove("render/anime4kFast");
-    const QStringList nativeAnimeFiles{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
-    settings_->setValue("player/preset",QDir(PresetStore::directory()).filePath("builtin/"+(settings_->value("player/animeAuto",false).toBool()?QString("Anime.vpy"):nativeAnimeFiles[std::clamp(settings_->value("player/animeStage",5).toInt(),0,7)])));
+    const auto nativeAnimeFiles=builtinAnimeFiles();
+    settings_->setValue("player/preset",QDir(PresetStore::directory()).filePath("builtin/"+(settings_->value("player/animeAuto",false).toBool()?QString("Anime.vpy"):nativeAnimeFiles[std::clamp(settings_->value("player/animeStage",5).toInt(),0,10)])));
     settings_->sync();
 #endif
+    if(settings_->value("player/animeStages").toStringList()==QStringList{"0","1","2","3","6","7","4","5"})settings_->setValue("player/animeStages",defaultAnimeStages());
     preset_=settings_->value("player/preset").toString();
 #ifdef VSR_LITE_PLAYER
     qualityStage_=initialQualityStage();
@@ -433,6 +435,19 @@ void PlayerWindow::refreshScript() {
         nativeAnime_=false;hlslFallback_=tr("当前色彩或预缩放设置需要原 VPY，已回退 GLSL。");
     }
 #endif
+    if(mode=="Anime" && qualityStage_>=8 && !hlslColorCompatible())nativeAnime_=false;
+    if(mode=="Anime" && qualityStage_>=8 && fixedAnimeStage()<0 && (!nativeAnime_ || !animeSourceSupported() || high)){
+        const auto allowed=settings_->value("player/animeStages",defaultAnimeStages()).toStringList();qualityStage_=5;
+        for(int stage:builtinAnimeOrder())if(stage<8 && (stage==5 || allowed.contains(QString::number(stage)))){qualityStage_=stage;break;}
+    }
+    if(mode=="Anime" && qualityStage_>=8){
+        if(!nativeAnime_){setError(tr("此内置档位需要原生 SDR HLSL 路径。"));autoPlay_=false;return;}
+        const auto cache=QDir(customShaderDirectory()).filePath("cache");
+        auto package=ShaderPackage::prepare(qualityStage_==10?":/filters/builtin-shaders/moesr-50k.hlsl":":/filters/builtin-shaders/anime4k-mode-a.glsl",cache);
+        if(qualityStage_==8)package=ShaderPackage::enhance(package,{{{"mode","sharpen_edges"},{"strength",0.3},{"threshold",2.0}},{{"mode","enhance_detail"},{"strength",0.3}}},cache);
+        if(package.packagePath.isEmpty()){setError(package.error);autoPlay_=false;return;}
+        customShaderPackage_=package.packagePath;hlslParameters_.clear();
+    }else if(mode=="Anime"){customShaderPackage_.clear();hlslParameters_.clear();}
     const bool native=
 #ifdef VSR_LITE_PLAYER
         true ||
@@ -466,7 +481,7 @@ void PlayerWindow::refreshScript() {
         else {
             const auto plan=hlslPreviewPlan(graph);hlslFallback_=plan.error;
             if(!plan.shaderPath.isEmpty()){
-                const auto package=ShaderPackage::prepare(plan.shaderPath,QDir(customShaderDirectory()).filePath("cache"));
+                const auto package=ShaderPackage::enhance(ShaderPackage::prepare(plan.shaderPath,QDir(customShaderDirectory()).filePath("cache")),plan.enhancements,QDir(customShaderDirectory()).filePath("cache"));
                 if(package.packagePath.isEmpty())hlslFallback_=tr("HLSL 不兼容，已回退 GLSL：%1").arg(package.error);
                 else {customShaderPackage_=package.packagePath;hlslParameters_=plan.parameters;result=VpyScriptBuilder::build(vsSource,filter,plan.graph);}
             }
@@ -521,7 +536,7 @@ void PlayerWindow::loadPreset(const QString &path) {
 
 #ifdef VSR_LITE_PLAYER
     const auto name=QFileInfo(path).fileName();
-    const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
+    const auto names=builtinAnimeFiles();
     const int stage=names.indexOf(name);if((stage<0 && name!="Anime.vpy") || (stage!=4 && stage!=5 && !animeSourceSupported()))return;
     if(stage>=0)settings_->setValue("player/animeStage",stage);settings_->setValue("player/animeAuto",stage<0);
 #endif

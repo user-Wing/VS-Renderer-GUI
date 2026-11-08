@@ -10,6 +10,7 @@ namespace vsr {
 struct HlslPreviewPlan {
     FilterGraph graph;
     QVariantMap parameters;
+    QList<QVariantMap> enhancements;
     QString shaderPath, error;
 };
 inline HlslPreviewPlan hlslPreviewPlan(const FilterGraph &graph) {
@@ -18,11 +19,14 @@ inline HlslPreviewPlan hlslPreviewPlan(const FilterGraph &graph) {
         if(node.definitionId=="anime4k" && (node.parameters.value("hlsl",true).toBool() || QFileInfo(node.parameters.value("shader").toString()).suffix().compare("hlsl",Qt::CaseInsensitive)==0))shader=i;
     }
     if(shader<0)return plan;
-    if(shader!=last){plan.error=QStringLiteral("着色器后仍有滤镜，保留原有 GLSL 顺序。");return plan;}
+    for(int i=shader+1;i<=last;++i){const auto &node=graph.nodes()[i];if(!node.enabled)continue;
+        if(!QStringList{"sharpen_edges","enhance_detail","crispen_edges"}.contains(node.definitionId)){plan.error=QStringLiteral("着色器后的滤镜不支持 HLSL，保留原有 GLSL 顺序。");return plan;}
+        auto parameters=node.parameters;parameters.insert("mode",node.definitionId);plan.enhancements.append(parameters);
+    }
     plan.parameters=graph.nodes()[shader].parameters;
     plan.shaderPath=plan.parameters.value("shader").toString();
     if(plan.shaderPath.isEmpty())plan.shaderPath=QDir(QCoreApplication::applicationDirPath()).filePath("shaders/"+plan.parameters.value("mode").toString());
-    plan.graph.remove(shader);return plan;
+    for(int i=last;i>=shader;--i)plan.graph.remove(i);return plan;
 }
 inline bool hlslAspectCompatible(const QVariantMap &parameters,const QSize &input,const QSize &output) {
     return parameters.value("output_mode").toString()!=QStringLiteral("指定分辨率") || parameters.value("keep_aspect",true).toBool() ||

@@ -14,8 +14,8 @@ $version = [regex]::Match((Get-Content -LiteralPath (Join-Path $root 'CMakeLists
 if (-not $version) { throw 'Project version not found' }
 $suffix = if ($Edition -eq 'Lite') { '-Lite' } else { '' }
 $stage = Join-Path $root "build/release-stage-$version$suffix"
-# Released 1.0.2 clients require a versioned archive root; install target stays unchanged.
-$archiveRoot = "VS-Renderer-GUI-$version-windows-x64"
+# Stable directory name inside the versioned archive.
+$archiveRoot = if ($Edition -eq 'Full') { 'VS-GUI-Full' } else { 'VS-GUI-Lite' }
 $payload = Join-Path $stage $archiveRoot
 $archive = Join-Path $root "dist/$version$suffix.7z"
 if (Test-Path -LiteralPath $payload) { throw 'Release staging directory already exists; inspect it before creating another package.' }
@@ -55,7 +55,7 @@ if ($Edition -eq 'Lite') {
 }
 $builtin = Join-Path $payload 'vpy/builtin'
 New-Item -ItemType Directory -Path $builtin -Force | Out-Null
-foreach ($name in @('Anime.vpy','Realistic.vpy','Anime-0-CNN-Enhanced.vpy','Anime-1-CNN.vpy','Anime-2-No-CNN-Enhanced.vpy','Anime-3-No-CNN.vpy','Anime-4-Jinc.vpy','Anime-5-D3D11.vpy','Anime-6-1X-Jinc.vpy','Anime-7-1X-D3D11.vpy','Super-0-A4K-RIFE-A4K.vpy','Super-1-A4K-RIFE-Jinc.vpy','Super-2-A4K-RIFE-D3D11.vpy','Super-3-RIFE-A4K.vpy','Interpolation-0-RIFE.vpy','Interpolation-1-RIFE-Half.vpy','Interpolation-2-MVTools-HQ.vpy','Interpolation-3-MVTools.vpy')) {
+foreach ($name in @('Anime.vpy','Realistic.vpy','Anime-0-CNN-Enhanced.vpy','Anime-1-CNN.vpy','Anime-2-No-CNN-Enhanced.vpy','Anime-3-No-CNN.vpy','Anime-4-Jinc.vpy','Anime-5-D3D11.vpy','Anime-6-1X-Jinc.vpy','Anime-7-1X-D3D11.vpy','Anime-8-A-CNN-Enhanced.vpy','Anime-9-A-CNN.vpy','MoeSR-50K.vpy','Super-0-A4K-RIFE-A4K.vpy','Super-1-A4K-RIFE-Jinc.vpy','Super-2-A4K-RIFE-D3D11.vpy','Super-3-RIFE-A4K.vpy','Interpolation-0-RIFE.vpy','Interpolation-1-RIFE-Half.vpy','Interpolation-2-MVTools-HQ.vpy','Interpolation-3-MVTools.vpy')) {
     Copy-Item -LiteralPath (Join-Path $builtinSource $name) -Destination $builtin -Force
     if ($name.StartsWith('Interpolation-')) {
         $variant = $name.Replace('.vpy', '-D3D11.vpy')

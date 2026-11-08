@@ -1,6 +1,6 @@
 # VS Renderer / VS Player / VS Cap
 
-![源码版本 1.1.0](https://img.shields.io/badge/source-1.1.0-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
+![源码版本 1.1.1](https://img.shields.io/badge/source-1.1.1-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
 
 Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片，用 **VSCap** 截图与标注。
 
@@ -12,9 +12,11 @@ Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS
 
 本轮 Full 内置 2026-11-07 FFmpeg shared，最低 CPU 要求为 x86-64-v3（AVX2）；单文件播放器继续使用外置 FFmpeg shared。
 
-源码版本：**1.1.0**。验收范围见 [版本测试台账](development/validation.md)。
+源码版本：**1.1.1，Release 草稿待发布**。全量回归仍有未关闭的失败，下载入口中的历史版本不自动包含本轮功能。验收范围见 [版本测试台账](development/validation.md)。
 
 本轮增加独立的主上采样、第二上采样和下采样选择、200% 音量、可配置快捷键与页面背景；Renderer 支持最多三路处理输出加原片对比。图片可缩放后通过 RAW 中间图像转换，AI 字幕提供独立可下载组件；使用与限制见 [Player 指南](docs/player.md) 和 [Renderer 指南](docs/renderer.md)。
+
+Full 与单文件版均内置 MoeSR-50K 和两个完整 Anime4K Mode A 档位，支持 HLSL 后置锐化与细节增强；Tab 信息窗允许其他应用遮挡。模型实际帧率以本机专项记录为准。
 
 本地续修支持将多通道模型保存在单个 HLSL 文件中，由 Player 按各段指令顺序执行；格式见 [独立着色器导入](docs/player.md#导入独立-glslhlsl)。旧播放器需要更新后才能读取这种文件。
 
@@ -44,11 +46,11 @@ VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处�
 | 分发形式 | 功能与运行要求 |
 | --- | --- |
 | Full | Renderer、Player、VSCap、VS 滤镜及完整编辑/可选后端；以所下载包的组件清单为准 |
-| 单文件 `VS-Player.exe` | 独立播放器，支持原生 Anime4K CNN/no CNN、额外增强、1X、D3D11/Jinc、兼容 GLSL/HLSL 导入、音视频字幕及图片查看；运行时在程序旁展开，退出后清理，同目录保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
+| 单文件 `VS-Player.exe` | 独立播放器，支持内置 MoeSR-50K、Anime4K A+CNN、CNN/no CNN、额外增强、1X、D3D11/Jinc、兼容 GLSL/HLSL 导入、音视频字幕及图片查看；运行时在程序旁展开，退出后清理，同目录保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
 
 从 1.0.13 起仅提供 Full 目录与单文件播放器，不再生成 PlayerLite 发行目录。早期 Lite 包仍按其对应说明使用。
 
-本地单文件已接入与完整版同名的八档缩放预设，无需 VapourSynth，可在右键“图像处理 → 上采样滤镜”或设置中选择；构建和验收边界见 [Native 构建指南](docs/native-api20-build.md#lite-anime4k-fast)。已发布的旧附件不自动包含此功能。
+单文件已接入与完整版一致的 MoeSR 和八档 Anime4K 预设，无需 VapourSynth，可在右键“图像处理 → 上采样滤镜”或设置中选择；构建和验收边界见 [Native 构建指南](docs/native-api20-build.md#lite-anime4k-fast)。已发布的旧附件不自动包含此功能。
 
 ## 快速上手
 

@@ -178,6 +178,44 @@ bool validCache(const QByteArray &bytes) {
 }
 }
 
+ShaderPackageResult ShaderPackage::enhance(const ShaderPackageResult &base,const QList<QVariantMap> &stages,const QString &cacheDirectory) {
+    if(base.packagePath.isEmpty() || stages.isEmpty())return base;
+    const auto bytes=read(base.packagePath);if(!validCache(bytes))return {{},"Invalid base shader package."};
+    QByteArray tail;QDataStream stream(&tail,QIODevice::WriteOnly);stream.setByteOrder(QDataStream::LittleEndian);
+    for(const auto &stage:stages){
+        const auto mode=stage.value("mode").toString();const double strength=stage.value("strength").toDouble(),threshold=stage.value("threshold",0).toDouble();
+        if(!QStringList{"sharpen_edges","enhance_detail","crispen_edges"}.contains(mode) || !std::isfinite(strength) || strength<0 || strength>2 || !std::isfinite(threshold) || threshold<0 || threshold>32)return {{},"Unsupported HLSL enhancement."};
+        Pass pass;pass.hook=pass.save="LUMA";pass.bindings={"HOOKED"};
+        const auto source=QString(R"(Texture2D<float4> image:register(t0);SamplerState smp:register(s0);
+cbuffer Settings:register(b0){float4 sourceSize;float4 outputSize;};
+float4 main(float2 uv:TEXCOORD0):SV_Target {
+    float4 pixel=image.SampleLevel(smp,uv,0);float center=pixel.r,lo=center,hi=center,blur=0;
+    const float weights[9]=%1;
+    [unroll] for(int y=-1;y<=1;++y) [unroll] for(int x=-1;x<=1;++x){
+        float v=image.SampleLevel(smp,uv+float2(x,y)*sourceSize.zw,0).r;
+        lo=min(lo,v);hi=max(hi,v);blur+=v*weights[(y+1)*3+x+1]/%2;
+    }
+    float wide=blur;
+    %3
+    float value=%4;
+    pixel.r=clamp(value,lo,hi);return pixel;
+})").arg(mode=="crispen_edges"?"{0,1,0,1,4,1,0,1,0}":"{1,2,1,2,4,2,1,2,1}",mode=="crispen_edges"?"8.0":"16.0",
+            mode=="enhance_detail"?"wide=0;const float w[5]={1,4,6,4,1};[unroll] for(int y=-2;y<=2;++y) [unroll] for(int x=-2;x<=2;++x) wide+=image.SampleLevel(smp,uv+float2(x,y)*sourceSize.zw,0).r*w[x+2]*w[y+2]/256.0;":"",
+            mode=="sharpen_edges"?QString("abs(center-blur)>%1 ? center+(center-blur)*%2 : center").arg(threshold*256/65535,0,'g',17).arg(strength,0,'g',17):QString("center+(center-blur%1)*%2").arg(mode=="enhance_detail"?"+(blur-wide)*0.5":"").arg(strength,0,'g',17));
+        QString error;if(!compile(pass,source.toUtf8(),true,error))return {{},error};
+        for(const auto &text:QStringList{pass.hook,pass.save,pass.width,pass.height,pass.when})put(stream,text.toUtf8());stream<<quint32(pass.bindings.size());for(const auto &binding:pass.bindings)put(stream,binding.toUtf8());put(stream,pass.bytecode);
+    }
+    QDataStream original(bytes.mid(8,4));original.setByteOrder(QDataStream::LittleEndian);quint32 count=0;original>>count;
+    if(count+stages.size()>128)return {{},"Too many combined shader passes."};
+    QByteArray combined;QDataStream header(&combined,QIODevice::WriteOnly);header.setByteOrder(QDataStream::LittleEndian);header.writeRawData("VSRHLSL1",8);header<<quint32(count+stages.size());combined+=bytes.mid(12);combined+=tail;
+    const auto directory=cacheDirectory.isEmpty()?QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/hlsl":cacheDirectory;
+    if(!QDir().mkpath(directory))return {{},"Cannot create shader cache."};
+    const auto path=QDir(directory).filePath(QString::fromLatin1(QCryptographicHash::hash(combined,QCryptographicHash::Sha256).toHex())+"-post.vsrhlsl");
+    if(read(path)==combined)return {path,{}};
+    QSaveFile file(path);if(!file.open(QIODevice::WriteOnly) || file.write(combined)!=combined.size() || !file.commit())return {{},"Cannot write enhanced shader package."};
+    return {path,{}};
+}
+
 ShaderPackageResult ShaderPackage::prepare(const QString &sourcePath,const QString &cacheDirectory) {
     if(!QFileInfo::exists(sourcePath)){
         QDir directory(QFileInfo(sourcePath).absolutePath());
@@ -202,7 +240,12 @@ ShaderPackageResult ShaderPackage::prepare(const QString &sourcePath,const QStri
     if(QRegularExpression("^\\s*#\\s*include\\b",QRegularExpression::MultilineOption).match(QString::fromUtf8(source)).hasMatch()){result.error="Shader #include is not supported; import a self-contained shader.";return result;}
     const auto packaged=sourcePath+".vsrhlsl";
     const auto metadata=QJsonDocument::fromJson(read(packaged+".json")).object();
-    if(QStringList{"luma-main-prekernel-v7","luma-main-prekernel-params-v8"}.contains(metadata.value("semantics").toString()) && metadata.value("sha256").toString()==QString::fromLatin1(QCryptographicHash::hash(source,QCryptographicHash::Sha256).toHex()) && validCache(read(packaged))){result.packagePath=packaged;return result;}
+    if(!sourcePath.startsWith(':') && QStringList{"luma-main-prekernel-v7","luma-main-prekernel-params-v8"}.contains(metadata.value("semantics").toString()) && metadata.value("sha256").toString()==QString::fromLatin1(QCryptographicHash::hash(source,QCryptographicHash::Sha256).toHex()) && validCache(read(packaged))){result.packagePath=packaged;return result;}
+    if(sourcePath.startsWith(':') && metadata.value("sha256").toString()==QString::fromLatin1(QCryptographicHash::hash(source,QCryptographicHash::Sha256).toHex()) && validCache(read(packaged))){
+        const auto cache=cacheDirectory.isEmpty()?QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/hlsl":cacheDirectory;
+        const auto path=QDir(cache).filePath(metadata.value("sha256").toString()+".vsrhlsl");const auto bytes=read(packaged);
+        if(!QDir().mkpath(cache) || (read(path)!=bytes && !write(path,bytes)))return {{},"Cannot materialize bundled shader."};return {path,{}};
+    }
     const auto glslc=toolPath("glslc"),cross=toolPath("spirv-cross");
     if(!native && (glslc.isEmpty() || cross.isEmpty())){result.error="GLSL conversion tools are missing (runtime/shader-tools/glslc.exe and spirv-cross.exe).";return result;}
     QCryptographicHash hash(QCryptographicHash::Sha256);hash.addData("VSR-HLSL-1.0.17-format1-main-prekernel-native-multipass-params-v8");hash.addData(suffix.toUtf8());hash.addData(source);

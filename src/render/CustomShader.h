@@ -54,15 +54,15 @@ V main(uint id:SV_VertexID){V v;v.uv=float2((id<<1)&2,id&2);v.p=float4(v.uv*floa
            FAILED(device->CreateVertexShader(code->GetBufferPointer(),code->GetBufferSize(),nullptr,&vertex_))){error_="Cannot create custom shader vertex stage.";return false;}
         constexpr char lumaSource[]=R"(Texture2D<float4> tex:register(t0);Texture2D<float4> luma:register(t1);SamplerState smp:register(s0);
 cbuffer C:register(b0){float4 coefficients;float4 range;};
-float4 extract(float4 p:SV_Position,float2 uv:TEXCOORD0):SV_Target{return float4(dot(tex.SampleLevel(smp,uv,0).rgb,coefficients.rgb)*range.x+coefficients.w,0,0,1);}
-float4 merge(float4 p:SV_Position,float2 uv:TEXCOORD0):SV_Target{float4 c=tex.SampleLevel(smp,uv,0);float oldY=dot(c.rgb,coefficients.rgb)*range.x+coefficients.w;c.rgb+=(luma.SampleLevel(smp,uv,0).r-oldY)/range.x;return c;})";
+float4 extract(float2 uv:TEXCOORD0):SV_Target{return float4(dot(tex.SampleLevel(smp,uv,0).rgb,coefficients.rgb)*range.x+coefficients.w,0,0,1);}
+float4 merge(float2 uv:TEXCOORD0):SV_Target{float4 c=tex.SampleLevel(smp,uv,0);float oldY=dot(c.rgb,coefficients.rgb)*range.x+coefficients.w;c.rgb+=(luma.SampleLevel(smp,uv,0).r-oldY)/range.x;return c;})";
         const auto compile=[&](const char* entry,ComPtr<ID3D11PixelShader>& shader){ComPtr<ID3DBlob> blob;return SUCCEEDED(D3DCompile(lumaSource,sizeof(lumaSource),nullptr,nullptr,nullptr,entry,"ps_5_0",0,0,&blob,nullptr)) && SUCCEEDED(device->CreatePixelShader(blob->GetBufferPointer(),blob->GetBufferSize(),nullptr,&shader));};
         D3D11_BUFFER_DESC lb{};lb.ByteWidth=32;lb.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
         if(!compile("extract",extractLuma_) || !compile("merge",mergeLuma_) || FAILED(device->CreateBuffer(&lb,nullptr,&lumaConstants_))){error_="Cannot create luma stages.";reset();return false;}
         D3D11_SAMPLER_DESC s{};s.Filter=D3D11_FILTER_MIN_MAG_MIP_LINEAR;s.AddressU=s.AddressV=s.AddressW=D3D11_TEXTURE_ADDRESS_CLAMP;s.MaxLOD=D3D11_FLOAT32_MAX;
         D3D11_BUFFER_DESC b{};b.ByteWidth=32;b.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
         if(FAILED(device->CreateSamplerState(&s,&sampler_)) || FAILED(device->CreateBuffer(&b,nullptr,&constants_))){error_="Cannot create custom shader constants/sampler.";return false;}
-        shaders_.resize(passes_.size());surfaces_.resize(passes_.size()+3);
+        shaders_.resize(passes_.size());surfaces_.resize(passes_.size()+4);
         for(size_t i=0;i<passes_.size();++i)if(FAILED(device->CreatePixelShader(passes_[i].bytecode.data(),passes_[i].bytecode.size(),nullptr,&shaders_[i]))){error_="Invalid or unsupported custom pixel shader bytecode.";reset();return false;}
         device_=device;return true;
     }
@@ -130,12 +130,12 @@ public:
             context->VSSetShader(vertex_.Get(),nullptr,0);context->PSSetShader(shader,nullptr,0);auto *cb=lumaConstants_.Get();context->PSSetConstantBuffers(0,1,&cb);
             auto *sampler=sampler_.Get();context->PSSetSamplers(0,1,&sampler);ID3D11ShaderResourceView *views[]{a,b};context->PSSetShaderResources(0,2,views);context->Draw(3,0);ID3D11ShaderResourceView *empty[2]{};context->PSSetShaderResources(0,2,empty);context->OMSetRenderTargets(0,nullptr,nullptr);
         };
-        bool lumaActive=false,prekernel=false;
-        const auto merge=[&](){if(!lumaActive)return true;auto *luma=saved["LUMA"];auto &rgb=surfaces_[passes_.size()+1];if(!surface(rgb,luma->width,luma->height))return false;lumaDraw(rgb,mergeLuma_.Get(),input.view.Get(),luma->view.Get());saved["MAIN"]=&rgb;lumaActive=false;return true;};
+        bool lumaActive=false,prekernel=false;Surface *lumaSource=&input;
+        const auto merge=[&](){if(!lumaActive)return true;auto *luma=saved["LUMA"];auto &rgb=surfaces_[passes_.size()+1+(lumaSource==&surfaces_[passes_.size()+1])];if(!surface(rgb,luma->width,luma->height))return false;lumaDraw(rgb,mergeLuma_.Get(),lumaSource->view.Get(),luma->view.Get());saved["MAIN"]=&rgb;prekernel=false;lumaActive=false;return true;};
 
         for(size_t i=0;i<passes_.size();++i){const auto &p=passes_[i];
             if(p.hook!="LUMA" && !merge())return false;
-            if(p.hook=="LUMA" && !lumaActive){auto &luma=surfaces_[passes_.size()];if(!surface(luma,input.width,input.height))return false;lumaDraw(luma,extractLuma_.Get(),input.view.Get(),nullptr);saved["LUMA"]=&luma;lumaActive=true;}
+            if(p.hook=="LUMA" && !lumaActive){lumaSource=saved[prekernel?"PREKERNEL":"MAIN"];auto &luma=surfaces_[passes_.size()];if(!surface(luma,lumaSource->width,lumaSource->height))return false;lumaDraw(luma,extractLuma_.Get(),lumaSource->view.Get(),nullptr);saved["LUMA"]=&luma;lumaActive=true;}
             if(p.hook=="PREKERNEL" && !prekernel){saved["PREKERNEL"]=saved["MAIN"];prekernel=true;}
             saved["HOOKED"]=saved[p.hook];
             float condition=0,fw=0,fh=0;

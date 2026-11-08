@@ -20,5 +20,8 @@
   "menu/interpolationD3D11": "补帧后使用 D3D11 缩放输出。",
   "menu/superInterpolation": "选择超分和补帧的组合处理链。",
   "interpolation/auto/Jinc": "按参与档位自动切换补帧算法，使用 Jinc 缩放输出。",
-  "interpolation/auto/D3D11": "按参与档位自动切换补帧算法，使用 D3D11 缩放输出。"
+  "interpolation/auto/D3D11": "按参与档位自动切换补帧算法，使用 D3D11 缩放输出。",
+  "builtin/Anime-8-A-CNN-Enhanced.vpy": "Anime4K旗舰模型，HLSL大幅优化了性能。\n3060显卡以上性能即可流畅处理108048-216048。",
+  "builtin/Anime-9-A-CNN.vpy": "Anime4K旗舰模型，HLSL大幅优化了性能。\n3060显卡以上性能即可流畅处理108048-216048。",
+  "builtin/MoeSR-50K.vpy": "开发者自训练模型，来自MoeSR(RealHATGan)的蒸馏版本着色器。\n性能要求很高，推荐4070LP以上显卡使用。"
 }

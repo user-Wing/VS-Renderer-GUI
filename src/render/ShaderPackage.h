@@ -1,5 +1,7 @@
 #pragma once
 #include <QString>
+#include <QVariantMap>
+#include <QList>
 
 namespace vsr {
 struct ShaderPackageResult {
@@ -13,6 +15,7 @@ public:
     // optional b0={sourceSize, outputSize} (two float4, xy=size, zw=reciprocal).
     // Multi-pass HLSL: MAIN/PREKERNEL //! directives, standalone main per block.
     // GLSL: mpv MAIN/PREKERNEL pixel hooks; unsupported semantics return an error.
+    static ShaderPackageResult enhance(const ShaderPackageResult &base, const QList<QVariantMap> &stages, const QString &cacheDirectory = {});
     static ShaderPackageResult prepare(const QString &sourcePath, const QString &cacheDirectory = {});
 };
 }

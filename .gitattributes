@@ -13,3 +13,8 @@ patches/3fp-api20-custom-shader.patch text eol=lf -whitespace
 patches/photocraft-vsp-integration.patch text eol=lf -whitespace
 development/evidence/release-1.0.17/** -text -whitespace
 development/evidence/vsp-1.1.0/** -text -whitespace
+
+# Source bytes are hashed by the bundled shader cache metadata.
+assets/builtin-shaders/*.glsl -text -whitespace
+assets/builtin-shaders/*.hlsl -text -whitespace
+assets/builtin-shaders/source/*.hlsl -text -whitespace
