@@ -1,9 +1,9 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-11-08。源码版本 **1.1.1（含未发布的播放控制修复）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 与 `patches/3fp-vsp-1.1.0-network-proxy.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
+核对日期：2026-11-08。源码版本 **1.1.1（含未发布的内置 HLSL 与播放控制修复）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 与 `patches/3fp-vsp-1.1.0-network-proxy.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
 
 
-高 DPI 全屏底边控制栏定位于 `PlayerPlaylist.cpp::updateChrome`；Qt 全局坐标在 300% 缩放下可能把物理最后一像素舍入到逻辑边界外，仅全屏容许右/下各一个逻辑像素。Full/Lite 的 `fullscreenPhysicalBottomEdge` 使用 Win32 真实屏幕坐标覆盖左右端和中点；48F 专项入口为 `remote48FrameCadence`，由环境变量指定设备素材，不内置媒体路径。NuxBox 的 Tab 24F 报告未复现，用户复测已恢复。Full 内置旧VPY的插件名兼容位于`PlayerProfiles.cpp::nativeBuiltinCompatible`，只接受完整当前模板或已知旧插件名模板，继续拒绝实际修改过的Python正文。
+高 DPI 全屏底边控制栏定位于 `PlayerPlaylist.cpp::updateChrome`；Qt 全局坐标在 300% 缩放下可能把物理最后一像素舍入到逻辑边界外，仅全屏容许右/下各一个逻辑像素。Full/Lite 的 `fullscreenPhysicalBottomEdge` 使用 Win32 真实屏幕坐标覆盖左右端和中点；48F 专项入口为 `remote48FrameCadence`，由环境变量指定设备素材，不内置媒体路径。NuxBox 的 Tab 24F 报告未复现，用户复测已恢复。Full/Lite 内置 MoeSR 与 Anime4K 由 `PlayerProfiles.cpp::nativeBuiltinCompatible` 按内置档位识别，统一走原生 HLSL，不执行旧 VPY 正文，也不依赖其中的绝对路径或自定义 VPY 开关。需要执行编辑后的 Python 时，应另存到用户自定义预设。
 
 本轮续修：`ShaderPackage.cpp`和`CustomShader.h`统一使用D3D11的16个采样器槽；包格式及旧缓存语义不变，Native须同步重编。`apply-update.ps1`同盘移动已准备的payload，异盘复制；`PlayerInfo`仅在Tab显示时查询GPU/功耗，`PlayerWindow`提前设置深色底色。单文件默认说明随包保存，首次启动写到配置旁，之后不覆盖手工修改。
 
@@ -19,7 +19,7 @@
 
 发版前审查处置见 [审查复核](development/code-review-1.1.0.md)，实际功能回归及未关闭项见 [测试台账](development/validation.md)。外部 AI 包需确认执行指纹；网络链接只允许用户指定的 LAN 目标，跨源私有地址跳转拒绝。
 
-HLSL 播放控制修复：固定内置 A/MoeSR 档位独立于自定义 VPY 的 HLSL 开关；不兼容时恢复 D3D11 控制，原生 HLSL 切换等待跳转完成并接纳内核已在播放的状态。复现入口为 `builtinHlslPlaybackControls`，覆盖拖入视频自动播放。
+HLSL 播放控制修复：所有内置 Anime4K/MoeSR 档位独立于自定义 VPY 的 HLSL 开关；不兼容时恢复 D3D11 控制，原生 HLSL 切换等待跳转完成并接纳内核已在播放的状态。复现入口为 `builtinHlslPlaybackControls`，覆盖拖入视频自动播放。
 
 1.1.1 内置档位表位于 `PlayerBuiltinProfiles.h`：保留旧 ID 0–7，8/9 为完整 Mode A 的增强/普通档，10 为 MoeSR-50K；默认自动降档 8→0→6→4→5，MoeSR 可选但默认不参与。资源与预编译字节码位于 `assets/builtin-shaders/`，原始 MoeSR 与整数读取生成器分别保留在其 `source/` 和 `tools/optimize-moesr-hlsl.py`。`HlslPreview.h` 仅将支持的后置锐化/细节增强送到 `ShaderPackage::enhance`；其他后置滤镜继续保留 VS 顺序。Native `CustomShader.h` 必须配套重建。
 
@@ -58,7 +58,7 @@ HLSL 播放控制修复：固定内置 A/MoeSR 档位独立于自定义 VPY 的 
 | 软件播放同步与内存预算 | 上游线程/帧池/CPU 域按负载逐级调整；音频从60ms起按告警升至240ms，呈现允许最多250ms的平滑节奏容差；保留VSP的8K关键包参考帧追赶 | 不把显示器限帧记为解码丢帧；CPU预缩放仍默认关闭，8K逐帧实时按素材验收 |
 | AI 字幕外置推理 | 固定 main + #36/#37 Native 音频 tap；Qt 有界传 PCM 到外置 worker，跳转按 generation 隔离 | 模型独立打包并由组件下载器安装；保留旧 GGUF 配置兼容，不移植上游 VB 页面 |
 | Shader 平面输出 | `third_party/vsr-placebo` 直接回读 YUV 平面、合并增强 hooks，独立命名空间与 color 依赖 | 保留标准 placebo 插件作为缺少组件时的兼容路径；不把 VS 吞吐当作 Native 播放帧率 |
-| Full/Lite 原生 Anime4K | `src/render/Anime4KFast.h` 执行 Fast 27、no CNN 16、亮度增强 2 个转换 pass；算法 9～14 对应六种增强变体，1X 按源尺寸处理后复用原生缩放器 | 内置字节码更新仍须重建并验证像素；Full 对修改过正文或不兼容的内置 VPY 保留原执行路径 |
+| Full/Lite 原生 Anime4K | `src/render/Anime4KFast.h` 执行 Fast 27、no CNN 16、亮度增强 2 个转换 pass；算法 9～14 对应六种增强变体，1X 按源尺寸处理后复用原生缩放器 | 内置字节码更新仍须重建并验证像素；Full/Lite 内置档位不回退 GLSL；不兼容色彩或模型失败时明确提示并退回 D3D11，保留播放控制 |
 | 通用 GLSL/HLSL 导入 | `ShaderPackage` 编译并缓存，`CustomShader.h` 执行多 pass；兼容文件无需重建 DLL，播放不引入 VS/Python 依赖 | 当前支持 LUMA/MAIN/PREKERNEL 像素 pass、参数默认值与 gather；NATIVE 只提供尺寸，计算/外部纹理等明确拒绝，详见 Player 指南 |
 | Full/Renderer 提取末尾 shader | 核对本项目图元数据与实际 Python 正文，再将兼容的末尾节点交给原生执行器 | 前序滤镜仍由 VS 执行；不兼容时回退原 GLSL，编码导出保留完整 VPY，不实现任意 VPY→HLSL |
 

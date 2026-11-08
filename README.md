@@ -12,11 +12,11 @@ Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS
 
 本轮 Full 内置 2026-11-07 FFmpeg shared，最低 CPU 要求为 x86-64-v3（AVX2）；单文件播放器继续使用外置 FFmpeg shared。
 
-源码版本：**1.1.1，含尚未发布的播放控制修复**。全量回归仍有未关闭的失败，下载入口中的历史版本不自动包含本轮功能。验收范围见 [版本测试台账](development/validation.md)。
+源码版本：**1.1.1，含尚未发布的内置 HLSL 与播放控制修复**。全量回归仍有未关闭的失败，下载入口中的历史版本不自动包含本轮功能。验收范围见 [版本测试台账](development/validation.md)。
 
 本轮增加独立的主上采样、第二上采样和下采样选择、200% 音量、可配置快捷键与页面背景；Renderer 支持最多三路处理输出加原片对比。图片可缩放后通过 RAW 中间图像转换，AI 字幕提供独立可下载组件；使用与限制见 [Player 指南](docs/player.md) 和 [Renderer 指南](docs/renderer.md)。
 
-Full 与单文件版均内置 MoeSR-50K 和两个完整 Anime4K Mode A 档位，支持 HLSL 后置锐化与细节增强；Tab 信息窗允许其他应用遮挡。模型实际帧率以本机专项记录为准。
+Full 与单文件版均内置 MoeSR-50K 和两个完整 Anime4K Mode A 档位，支持 HLSL 后置锐化与细节增强；Tab 信息窗允许其他应用遮挡。内置 MoeSR 与八个 Anime4K 档位统一使用原生 HLSL，不受自定义 VPY 的 HLSL 开关影响，不回退 GLSL；不兼容时提示并退回 D3D11。模型实际帧率以本机专项记录为准。
 
 本地续修支持将多通道模型保存在单个 HLSL 文件中，由 Player 按各段指令顺序执行；格式见 [独立着色器导入](docs/player.md#导入独立-glslhlsl)。旧播放器需要更新后才能读取这种文件。
 

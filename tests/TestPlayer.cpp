@@ -198,6 +198,21 @@ private slots:
         player.seekTime(50000000);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.position()>40000000,10000);
         frames=player.snapshot().presentedVideoFrames;QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>frames+5,5000);
     }
+    void builtinMenuAlwaysUsesHlsl(){
+        const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE");
+        PlayerWindow player;player.settings_->setValue("render/hlsl",false);player.settings_->setValue("basic/autoplay",true);player.settings_->setValue("playback/remember",false);player.resize(1280,800);player.show();
+        player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.playing_,15000);
+        const QStringList files{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy","Anime-8-A-CNN-Enhanced.vpy","Anime-9-A-CNN.vpy","MoeSR-50K.vpy"};
+        for(int stage:{10,8,9,0,1,2,3,6,7}){
+            // A portable builtin copied from another installation still names the same model.
+            const auto path=QDir(PresetStore::directory()).filePath("builtin/"+files[stage]);QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));const auto original=file.readAll();file.close();const auto restore=qScopeGuard([&]{PresetStore::write(path,QString::fromUtf8(original));});
+            if(stage>=8){auto relocated=QString::fromUtf8(original);relocated.replace(QCoreApplication::applicationDirPath(),"C:/old-portable-install");relocated.prepend("# Legacy portable installation\n");QVERIFY(PresetStore::write(path,relocated));}
+            player.showContextMenu(QPoint(20,20));auto *menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);auto *action=menu->findChild<QAction*>(QString("playerAnimeStage%1").arg(stage));QVERIFY(action);QVERIFY(action->isEnabled());action->trigger();menu->close();
+            qInfo()<<"builtin route"<<stage<<player.qualityStage_<<player.direct_<<player.nativeAnime_<<player.message_->text();
+            QCOMPARE(player.qualityStage_,stage);QVERIFY(player.direct_);QVERIFY(player.nativeAnime_);if(stage>=8)QVERIFY(!player.customShaderPackage_.isEmpty());else {const int algorithms[]{10,9,11,12,4,7,13,14};QCOMPARE(player.scalingAlgorithm(),algorithms[stage]);}
+            QTRY_VERIFY_WITH_TIMEOUT(player.playing_,5000);const auto frames=player.snapshot().presentedVideoFrames;QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>frames+2,5000);QVERIFY(!player.clock_->capture().isNull());
+        }
+    }
     void release111Presets(){
         PlayerWindow player;player.settings_->remove("player/animeStages");player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime.vpy"));QCOMPARE(player.initialQualityStage(),8);
         player.settings_->setValue("player/animeStages",QStringList{"10","8","0","6","4","5"});QCOMPARE(player.initialQualityStage(),10);
@@ -289,7 +304,7 @@ private slots:
         const QStringList names{"Anime.vpy","Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
         for(const auto &name:names){const auto path=QDir(PresetStore::directory()).filePath("builtin/"+name);QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));const auto original=file.readAll();file.close();const auto restore=qScopeGuard([&]{PresetStore::write(path,QString::fromUtf8(original));});
             auto legacy=player.builtinScripts_.value(name);QVERIFY(!legacy.isEmpty());legacy.replace("getattr(core, 'vsrplacebo', core.placebo).Shader(","core.placebo.Shader(");QVERIFY(PresetStore::write(path,legacy));player.loadPreset(path);QVERIFY2(player.nativeBuiltinCompatible(),qPrintable(name));
-            legacy.replace("clip.set_output(0)","clip = core.std.CropRel(clip, left=2, right=2)\nclip.set_output(0)");QVERIFY(PresetStore::write(path,legacy));QVERIFY(!player.nativeBuiltinCompatible());
+            legacy.replace("clip.set_output(0)","clip = core.std.CropRel(clip, left=2, right=2)\nclip.set_output(0)");QVERIFY(PresetStore::write(path,legacy));QVERIFY(player.nativeBuiltinCompatible());
         }
     }
     void remoteBuiltinHlsl(){
@@ -299,7 +314,7 @@ private slots:
             const auto before=player.snapshot().presentedVideoFrames;QTest::qWait(1000);QVERIFY(player.snapshot().presentedVideoFrames>before);const auto image=player.clock_->capture();QVERIFY(!image.isNull());player.infoVisible_=true;player.updateInfo();qInfo()<<"native-builtin"<<names[i]<<"algorithm"<<player.scalingAlgorithm()<<"frames"<<player.snapshot().presentedVideoFrames-before<<"capture"<<image.size()<<"status"<<player.message_->text();QVERIFY(player.info_->text().contains("HLSL"));
         }
     }
-    void fullNativeAnimeAndEditedPresetFallback(){
+    void fullNativeAnimeIgnoresLegacyBuiltinScriptEdits(){
         QTemporaryDir directory;const auto source=directory.filePath("native-anime.mkv");QProcess encoder;
         encoder.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),{"-v","error","-f","lavfi","-i","testsrc2=size=320x180:rate=24:duration=5","-c:v","ffv1","-y",source});
         QVERIFY(encoder.waitForFinished(10000));QCOMPARE(encoder.exitCode(),0);
@@ -310,9 +325,9 @@ private slots:
         auto windowsScript=canonical;windowsScript.replace("\r\n","\n");windowsScript.replace("\n","\r\n");QVERIFY(PresetStore::write(path,windowsScript));
         player.loadPreset(path);QCOMPARE(player.preset_,path);QCOMPARE(player.profile(),QString("Anime"));QVERIFY(player.nativeBuiltinCompatible());QVERIFY(player.openFile(source));
         QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.outputSnapshot().presentedVideoFrames>0,15000);QVERIFY(player.direct_);QVERIFY(player.nativeAnime_);QCOMPARE(player.scalingAlgorithm(),9);QCOMPARE(player.outputSnapshot().videoWidth,320u);QVERIFY(!player.clock_->capture().isNull());
-        // Metadata and filename do not authorize dropping edited Python.
+        // Builtin entries never execute legacy VPY text; custom presets live outside builtin/.
         auto changed=canonical;changed.replace("clip.set_output(0)","clip = core.std.CropRel(clip, left=2, right=2)\nclip.set_output(0)");QVERIFY(PresetStore::write(path,changed));
-        player.loadPreset(path);QVERIFY(!player.nativeBuiltinCompatible());QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && !player.direct_ && player.outputSnapshot().presentedVideoFrames>0,20000);QVERIFY(!player.nativeAnime_);
+        player.loadPreset(path);QVERIFY(player.nativeBuiltinCompatible());QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.direct_ && player.outputSnapshot().presentedVideoFrames>0,20000);QVERIFY(player.nativeAnime_);QCOMPARE(player.outputSnapshot().videoWidth,320u);
     }
     void eightStagesAndExternalDescriptions(){
         PlayerWindow player;QCOMPARE(player.qualityNames().size(),11);
@@ -2184,8 +2199,10 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         QTemporaryDir directory;const auto video=directory.filePath("native-2160.mkv");QProcess ffmpeg;
         ffmpeg.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),{"-v","error","-f","lavfi","-i","testsrc2=size=3840x2160:rate=24:duration=1","-c:v","ffv1","-y",video});QVERIFY(ffmpeg.waitForFinished(15000));QCOMPARE(ffmpeg.exitCode(),0);
         QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",false);settings.setValue("playback/remember",false);settings.sync();
-        PlayerWindow player;player.show();player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-0-CNN-Enhanced.vpy"));QVERIFY(player.openFile(video));QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.direct_ && player.outputSnapshot().presentedVideoFrames>0,15000);QCOMPARE(player.qualityStage(),4);QCOMPARE(player.outputSnapshot().videoHeight,2160u);
-        player.infoVisible_=true;player.updateInfo();QCOMPARE(player.algorithmBadge_->text(),QString("Jinc"));QVERIFY(player.info_->text().contains(QStringLiteral("缩放滤镜：Jinc")));QVERIFY(!player.info_->text().contains(QStringLiteral("缩放滤镜：Anime4K")));
+        for(const auto &name:QStringList{"Anime-0-CNN-Enhanced.vpy","Anime-8-A-CNN-Enhanced.vpy","MoeSR-50K.vpy"}){
+            PlayerWindow player;player.settings_->setValue("render/upscale",4);player.show();player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/"+name));QVERIFY(player.openFile(video));QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.direct_ && player.outputSnapshot().presentedVideoFrames>0,15000);QCOMPARE(player.qualityStage(),4);QCOMPARE(player.outputSnapshot().videoHeight,2160u);QVERIFY(player.customShaderPackage_.isEmpty());QCOMPARE(player.scalingAlgorithm(),4);
+            player.infoVisible_=true;player.updateInfo();QCOMPARE(player.algorithmBadge_->text(),QString("Jinc"));QVERIFY(player.info_->text().contains(QStringLiteral("上采样：Jinc")));QVERIFY(!player.info_->text().contains(QStringLiteral("上采样：Anime4K")));
+        }
     }
     void scalingModeIsolationAndInterpolationStages() {
         PlayerWindow player;player.show();const auto builtin=QDir(PresetStore::directory()).filePath("builtin/");

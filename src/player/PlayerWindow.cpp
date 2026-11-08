@@ -428,17 +428,10 @@ void PlayerWindow::refreshScript() {
     if(!audioMode_ && !media_.value("streams").toArray().isEmpty()){audioOnly=true;for(const auto &entry:media_.value("streams").toArray())if(entry.toObject().value("type").toString()=="video")audioOnly=false;}
     if(!hlslFailed_)hlslFallback_.clear();
     nativeAnime_=nativeBuiltinCompatible() && !hlslFailed_;
-#ifndef VSR_LITE_PLAYER
-    const auto nativeViewport=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();
-    if(nativeAnime_ && (nativeViewport.width()>3840 || nativeViewport.height()>2160)){nativeAnime_=false;hlslFallback_=tr("超过 3840×2160 的滤镜目标保留原 GLSL 尺寸限制。");}
-    if(nativeAnime_ && (!hlslColorCompatible() || settings_->value("performance/resizeBeforeEnhance",false).toBool())){
-        nativeAnime_=false;hlslFallback_=tr("当前色彩或预缩放设置需要原 VPY，已回退 GLSL。");
-    }
-#endif
-    if(mode=="Anime" && qualityStage_>=8 && !hlslColorCompatible())nativeAnime_=false;
-    if(mode=="Anime" && qualityStage_>=8 && fixedAnimeStage()<0 && (!nativeAnime_ || !animeSourceSupported() || high)){
-        const auto allowed=settings_->value("player/animeStages",defaultAnimeStages()).toStringList();qualityStage_=5;
-        for(int stage:builtinAnimeOrder())if(stage<8 && (stage==5 || allowed.contains(QString::number(stage)))){qualityStage_=stage;break;}
+    if(mode=="Anime" && (qualityStage_<4 || qualityStage_>=6) && (!animeSourceSupported() || (high && fixedAnimeStage()<0)))qualityStage_=4;
+    if(mode=="Anime" && qualityStage_!=4 && qualityStage_!=5 && (!nativeAnime_ || !hlslColorCompatible())){
+        nativeAnime_=false;qualityStage_=5;profileFallback_=true;customShaderPackage_.clear();hlslParameters_.clear();
+        hlslFallback_=tr("此内置档位需要原生 SDR HLSL 路径。")+QStringLiteral(" · D3D11");
     }
     if(mode=="Anime" && qualityStage_>=8){
         QString error;
@@ -459,8 +452,7 @@ void PlayerWindow::refreshScript() {
 #ifdef VSR_LITE_PLAYER
         true ||
 #endif
-        !settings_->value("render/customShader").toString().isEmpty() || nativeAnime_ || mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic" || (mode=="Anime" && (!animeSourceSupported() || (high && fixedAnimeStage()<0) || qualityStage_==4 || qualityStage_==5));
-    if(native && mode=="Anime" && (qualityStage_<4 || qualityStage_>=6) && (!animeSourceSupported() || (high && fixedAnimeStage()<0)))qualityStage_=4;
+        mode=="Anime" || !settings_->value("render/customShader").toString().isEmpty() || nativeAnime_ || mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic";
     setDirectMode(native);
     rendererBadge_->setText(direct_?"3FP":"VS");
     applyScaling();
@@ -690,7 +682,7 @@ void PlayerWindow::updateState() {
         resumeAt_=at;autoPlay_=resume;playing_=false;ready_=true;rateApplied_=false;setError(hlslFallback_);return;
     }
 #ifndef VSR_LITE_PLAYER
-    if(snap.state==ThreeFpState::Failed && nativeAnime_ && !hlslFailed_){hlslFailed_=true;hlslFallback_=tr("原生 HLSL 执行失败，已回退 GLSL。");refreshScript();return;}
+    if(snap.state==ThreeFpState::Failed && nativeAnime_ && !hlslFailed_){hlslFailed_=true;hlslFallback_=tr("此内置档位需要原生 SDR HLSL 路径。")+QStringLiteral(" · D3D11");refreshScript();return;}
 #endif
     if(!pendingExternalAudio_.isEmpty() && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Playing || snap.state==ThreeFpState::Paused)){const auto path=pendingExternalAudio_;pendingExternalAudio_.clear();attachAudio(path);}
     if(direct_ && resumeAt_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)) {const auto stored=resumeAt_;resumeAt_=-1;if(!minimalMode_ && !customShaderPackage_.isEmpty())seekTime(stored);else clock_->seek(stored);}

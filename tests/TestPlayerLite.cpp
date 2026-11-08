@@ -128,6 +128,17 @@ private slots:
         player.seekTime(50000000);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.position()>40000000,10000);
         frames=player.snapshot().presentedVideoFrames;QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>frames+5,5000);
     }
+    void builtinMenuAlwaysUsesHlsl(){
+        const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE");
+        PlayerWindow player;player.settings_->setValue("render/hlsl",false);player.settings_->setValue("basic/autoplay",true);player.settings_->setValue("playback/remember",false);player.resize(1280,800);player.show();
+        player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.playing_,15000);
+        for(int stage:{10,8,9,0,1,2,3,6,7}){
+            player.showContextMenu(QPoint(20,20));auto *menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);auto *action=menu->findChild<QAction*>(QString("playerAnimeStage%1").arg(stage));QVERIFY(action);QVERIFY(action->isEnabled());action->trigger();menu->close();
+            qInfo()<<"builtin route"<<stage<<player.qualityStage_<<player.direct_<<player.nativeAnime_<<player.message_->text();
+            QCOMPARE(player.qualityStage_,stage);QVERIFY(player.direct_);QVERIFY(player.nativeAnime_);if(stage>=8)QVERIFY(!player.customShaderPackage_.isEmpty());else {const int algorithms[]{10,9,11,12,4,7,13,14};QCOMPARE(player.scalingAlgorithm(),algorithms[stage]);}
+            QTRY_VERIFY_WITH_TIMEOUT(player.playing_,5000);const auto frames=player.snapshot().presentedVideoFrames;QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>frames+2,5000);QVERIFY(!player.clock_->capture().isNull());
+        }
+    }
     void release111Presets(){
         PlayerWindow player;player.settings_->remove("player/animeStages");player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime.vpy"));QCOMPARE(player.initialQualityStage(),8);
         player.settings_->setValue("player/animeStages",QStringList{"10","8","0","6","4","5"});QCOMPARE(player.initialQualityStage(),10);
