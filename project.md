@@ -1,6 +1,6 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-11-08。源码版本 **1.1.1（Release 草稿待发布）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 与 `patches/3fp-vsp-1.1.0-network-proxy.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
+核对日期：2026-11-08。源码版本 **1.1.1（含未发布的播放控制修复）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 与 `patches/3fp-vsp-1.1.0-network-proxy.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
 
 
 高 DPI 全屏底边控制栏定位于 `PlayerPlaylist.cpp::updateChrome`；Qt 全局坐标在 300% 缩放下可能把物理最后一像素舍入到逻辑边界外，仅全屏容许右/下各一个逻辑像素。Full/Lite 的 `fullscreenPhysicalBottomEdge` 使用 Win32 真实屏幕坐标覆盖左右端和中点；48F 专项入口为 `remote48FrameCadence`，由环境变量指定设备素材，不内置媒体路径。NuxBox 的 Tab 24F 报告未复现，用户复测已恢复。Full 内置旧VPY的插件名兼容位于`PlayerProfiles.cpp::nativeBuiltinCompatible`，只接受完整当前模板或已知旧插件名模板，继续拒绝实际修改过的Python正文。
@@ -18,6 +18,8 @@
 本轮入口：`PlayerImageTools`负责比例尺寸、位深与Full GLSL/内置HLSL图片导出；Lite通过FFmpeg编码且关闭质量搜索。`PageTheme.h`使用独立底层QWidget绘图并即时刷新，跳过PreviewPane子树；`ThemePackage.h`管理主题包。`WrappedFileCombo.h`处理文件名换行；`PortableChart.h`将配置旁Pareto图保存为相对路径，并兼容单文件内嵌图。`tools/jxl-runtime.cmake`保留SIMD并修补Win64的向量跨函数传参对齐；版本未改变。字幕、滑块、功耗入口仍分别为`PlayerSubtitles`/Native `AssSubtitleRenderer`、`CompareView`和`PowerSensors`，功耗权限边界见 [研究记录](development/pawnio-power.md)。
 
 发版前审查处置见 [审查复核](development/code-review-1.1.0.md)，实际功能回归及未关闭项见 [测试台账](development/validation.md)。外部 AI 包需确认执行指纹；网络链接只允许用户指定的 LAN 目标，跨源私有地址跳转拒绝。
+
+HLSL 播放控制修复：固定内置 A/MoeSR 档位独立于自定义 VPY 的 HLSL 开关；不兼容时恢复 D3D11 控制，原生 HLSL 切换等待跳转完成并接纳内核已在播放的状态。复现入口为 `builtinHlslPlaybackControls`，覆盖拖入视频自动播放。
 
 1.1.1 内置档位表位于 `PlayerBuiltinProfiles.h`：保留旧 ID 0–7，8/9 为完整 Mode A 的增强/普通档，10 为 MoeSR-50K；默认自动降档 8→0→6→4→5，MoeSR 可选但默认不参与。资源与预编译字节码位于 `assets/builtin-shaders/`，原始 MoeSR 与整数读取生成器分别保留在其 `source/` 和 `tools/optimize-moesr-hlsl.py`。`HlslPreview.h` 仅将支持的后置锐化/细节增强送到 `ShaderPackage::enhance`；其他后置滤镜继续保留 VS 顺序。Native `CustomShader.h` 必须配套重建。
 

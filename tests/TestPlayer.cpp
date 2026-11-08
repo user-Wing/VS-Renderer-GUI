@@ -174,6 +174,30 @@ private slots:
         QVERIFY(!(GetWindowLongPtrW(panel,GWL_EXSTYLE)&WS_EX_TOPMOST));bool covered=false;
         for(HWND window=GetTopWindow(nullptr);window;window=GetWindow(window,GW_HWNDNEXT)){if(window==cover){covered=true;break;}if(window==panel)break;}QVERIFY(covered);
     }
+    void builtinHlslPlaybackControls_data(){
+        QTest::addColumn<QString>("settingsFile");QTest::addColumn<int>("flow");QTest::newRow("defaults")<<QString()<<0;QTest::newRow("disabled-vpy-hlsl")<<QString()<<4;QTest::newRow("unsupported-color")<<QString()<<5;QTest::newRow("drop-video-autoplay")<<QString()<<6;
+        const auto full=qEnvironmentVariable("VSR_FULL_SETTINGS"),single=qEnvironmentVariable("VSR_SINGLE_SETTINGS");
+        for(int flow=0;flow<4;++flow){if(!full.isEmpty())QTest::newRow(qPrintable(QString("full-settings-%1").arg(flow)))<<full<<flow;if(!single.isEmpty())QTest::newRow(qPrintable(QString("single-settings-%1").arg(flow)))<<single<<flow;}
+    }
+    void builtinHlslPlaybackControls(){
+        const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE");QFETCH(QString,settingsFile);QFETCH(int,flow);
+        QTemporaryDir directory;
+        if(!settingsFile.isEmpty()){QSettings original(settingsFile,QSettings::IniFormat),isolated(configPath(),QSettings::IniFormat);for(const auto &key:original.allKeys())isolated.setValue(key,original.value(key));isolated.sync();}
+        {QSettings isolated(configPath(),QSettings::IniFormat);isolated.setValue("player/preset",QString());if(flow!=2)isolated.remove("render/customShader");if(flow==4)isolated.setValue("render/hlsl",false);isolated.setValue("render/shaderDirectory",directory.filePath("shaders"));isolated.setValue("basic/autoplay",true);isolated.setValue("playback/remember",false);isolated.sync();}
+        PlayerWindow player;player.resize(1440,900);player.show();if(flow!=2)player.loadPreset(QDir(PresetStore::directory()).filePath((flow==1 || flow==6)?"builtin/Anime-8-A-CNN-Enhanced.vpy":"builtin/Anime-5-D3D11.vpy"));if(flow==6){QMimeData mime;mime.setUrls({QUrl::fromLocalFile(source)});QDragEnterEvent enter(QPoint(100,100),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&player,&enter);QVERIFY(enter.isAccepted());QDropEvent drop(QPointF(100,100),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&player,&drop);QVERIFY(drop.isAccepted());}else QVERIFY(player.openFile(source));
+        QTRY_VERIFY_WITH_TIMEOUT(player.playing_ && player.snapshot().presentedVideoFrames>5,15000);
+        if(flow==1 || flow==6)QVERIFY(!player.customShaderPackage_.isEmpty());
+        if(flow==5)player.settings_->setValue("color/engine",1);
+        if(flow==3){player.showContextMenu(QPoint(20,20));auto *menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);auto *action=menu->findChild<QAction*>("playerAnimeStage8");QVERIFY(action);action->trigger();menu->close();}
+        else player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-8-A-CNN-Enhanced.vpy"));QTest::qWait(300);
+        qInfo()<<"builtin switch"<<player.ready_<<player.playing_<<player.nativeAnime_<<player.hlslColorCompatible()<<player.settings_->value("render/hlsl",true)<<player.message_->text();
+        QVERIFY2(player.ready_,qPrintable(player.message_->text()));if(flow!=5)QVERIFY(!player.customShaderPackage_.isEmpty());else {QCOMPARE(player.qualityStage_,5);QVERIFY(player.customShaderPackage_.isEmpty());}QTRY_VERIFY_WITH_TIMEOUT(player.playing_,5000);
+        auto frames=player.snapshot().presentedVideoFrames;QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>frames+5,5000);
+        player.togglePlayback();QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Paused,3000);QVERIFY(!player.playing_);
+        player.togglePlayback();QTRY_VERIFY_WITH_TIMEOUT(player.playing_,3000);frames=player.snapshot().presentedVideoFrames;QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>frames+5,5000);
+        player.seekTime(50000000);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.position()>40000000,10000);
+        frames=player.snapshot().presentedVideoFrames;QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>frames+5,5000);
+    }
     void release111Presets(){
         PlayerWindow player;player.settings_->remove("player/animeStages");player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime.vpy"));QCOMPARE(player.initialQualityStage(),8);
         player.settings_->setValue("player/animeStages",QStringList{"10","8","0","6","4","5"});QCOMPARE(player.initialQualityStage(),10);

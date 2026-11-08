@@ -264,7 +264,7 @@ bool PlayerWindow::nativeBuiltinCompatible() const {
 #ifdef VSR_LITE_PLAYER
     return true;
 #else
-    if(!settings_->value("render/hlsl",true).toBool() || profile()!="Anime")return false;
+    if(profile()!="Anime" || (!settings_->value("render/hlsl",true).toBool() && fixedAnimeStage()<8))return false;
     QFile file(preset_);if(!file.open(QIODevice::ReadOnly))return false;
     auto actual=QString::fromUtf8(file.readAll());actual.replace("\r\n","\n");
     auto expected=builtinScripts_.value(QFileInfo(preset_).fileName());expected.replace("\r\n","\n");

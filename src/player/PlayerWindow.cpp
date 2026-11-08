@@ -441,12 +441,19 @@ void PlayerWindow::refreshScript() {
         for(int stage:builtinAnimeOrder())if(stage<8 && (stage==5 || allowed.contains(QString::number(stage)))){qualityStage_=stage;break;}
     }
     if(mode=="Anime" && qualityStage_>=8){
-        if(!nativeAnime_){setError(tr("此内置档位需要原生 SDR HLSL 路径。"));autoPlay_=false;return;}
-        const auto cache=QDir(customShaderDirectory()).filePath("cache");
-        auto package=ShaderPackage::prepare(qualityStage_==10?":/filters/builtin-shaders/moesr-50k.hlsl":":/filters/builtin-shaders/anime4k-mode-a.glsl",cache);
-        if(qualityStage_==8)package=ShaderPackage::enhance(package,{{{"mode","sharpen_edges"},{"strength",0.3},{"threshold",2.0}},{{"mode","enhance_detail"},{"strength",0.3}}},cache);
-        if(package.packagePath.isEmpty()){setError(package.error);autoPlay_=false;return;}
-        customShaderPackage_=package.packagePath;hlslParameters_.clear();
+        QString error;
+        if(!nativeAnime_)error=tr("此内置档位需要原生 SDR HLSL 路径。");
+        else {
+            const auto cache=QDir(customShaderDirectory()).filePath("cache");
+            auto package=ShaderPackage::prepare(qualityStage_==10?":/filters/builtin-shaders/moesr-50k.hlsl":":/filters/builtin-shaders/anime4k-mode-a.glsl",cache);
+            if(qualityStage_==8)package=ShaderPackage::enhance(package,{{{"mode","sharpen_edges"},{"strength",0.3},{"threshold",2.0}},{{"mode","enhance_detail"},{"strength",0.3}}},cache);
+            if(package.packagePath.isEmpty())error=package.error;
+            else customShaderPackage_=package.packagePath;
+        }
+        hlslParameters_.clear();
+        if(!error.isEmpty()){
+            hlslFallback_=error+QStringLiteral(" · D3D11");qualityStage_=5;profileFallback_=true;nativeAnime_=false;customShaderPackage_.clear();
+        }
     }else if(mode=="Anime"){customShaderPackage_.clear();hlslParameters_.clear();}
     const bool native=
 #ifdef VSR_LITE_PLAYER
@@ -686,7 +693,7 @@ void PlayerWindow::updateState() {
     if(snap.state==ThreeFpState::Failed && nativeAnime_ && !hlslFailed_){hlslFailed_=true;hlslFallback_=tr("原生 HLSL 执行失败，已回退 GLSL。");refreshScript();return;}
 #endif
     if(!pendingExternalAudio_.isEmpty() && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Playing || snap.state==ThreeFpState::Paused)){const auto path=pendingExternalAudio_;pendingExternalAudio_.clear();attachAudio(path);}
-    if(direct_ && resumeAt_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)) {clock_->seek(resumeAt_);resumeAt_=-1;}
+    if(direct_ && resumeAt_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)) {const auto stored=resumeAt_;resumeAt_=-1;if(!minimalMode_ && !customShaderPackage_.isEmpty())seekTime(stored);else clock_->seek(stored);}
     if (snap.state == ThreeFpState::Ready && !rateApplied_) { rateApplied_ = true; clock_->setPlaybackRate(speed_); }
     if (!positionRestored_ && (snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused || snap.state == ThreeFpState::Playing)) {
         media_ = QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();
@@ -716,7 +723,7 @@ void PlayerWindow::updateState() {
     }
     if(pendingAudioStream_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Playing || snap.state==ThreeFpState::Paused)){const int stream=pendingAudioStream_;pendingAudioStream_=-2;selectAudio(stream);}
     if(resumeAt_>=0 && ready_ && !direct_ && !seekPending_ && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)){const auto stored=resumeAt_;resumeAt_=-1;seekTime(stored);}
-    if (autoPlay_ && !seekPending_ && seekUiTarget_<0 && (madvrMode() || direct_ || lastFrame_ >= 0) && (lav_ || snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused)) { togglePlayback(); if (playing_) autoPlay_ = false; }
+    if (autoPlay_ && !seekPending_ && seekUiTarget_<0 && (madvrMode() || direct_ || lastFrame_ >= 0) && (lav_ || snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused || (direct_ && snap.state == ThreeFpState::Playing))) { if(!playing_)togglePlayback(); if (playing_) autoPlay_ = false; }
     if (seekPending_ && snap.timelineGeneration != generation_ && (!direct_ || snap.selectedVideoStream<0 || (snap.presentedVideoFrames>seekPresented_ && snap.frameIndex>=0))) { seekPending_ = false; requested_ = lastFrame_ = -1;
         if(queuedSeek_>=0){const auto next=queuedSeek_;queuedSeek_=-1;seekTime(next);return;}
         if(direct_)seekUiTarget_=-1;

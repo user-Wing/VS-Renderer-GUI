@@ -4,7 +4,14 @@
 
 同版本曾有多轮续修，下列内容汇总留存变化，不保证早期同版本包已全部包含。未核实正式发布日期，不补写日期；工作区版本与发布附件分别确认。整理前完整原文保存在 `development/history.md`。
 
-## 1.1.1（Release 草稿）
+## 未发布修复
+
+### 修复 Fixed
+- 修复关闭自定义 VPY 的 HLSL 开关后，内置 Anime4K A/MoeSR 被误拒绝并导致播放控制失效的问题。
+- 修复增强档位切换后播放状态不同步的问题，恢复暂停、继续及拖入视频自动播放。
+- 不兼容色彩或模型准备失败时退回 D3D11，保持播放控制可用。
+
+## [1.1.1](https://github.com/user-Wing/VS-Renderer-GUI/releases/tag/v1.1.1)
 
 ### 新增 Added
 - Full 与单文件版新增 MoeSR-50K 内置模型及完整 Anime4K A+CNN、A+CNN+额外增强两个 HLSL 档位，支持加入自动降档。

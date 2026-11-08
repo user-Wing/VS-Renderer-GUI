@@ -12,6 +12,14 @@
 
 原报告原样合并至 [history.md](history.md)，按原文件名索引，每份保留字节数和 SHA-256。原文中的“当前”、路径和发布状态属于记录当时。`build/` 不是持久证据库：报告引用该目录，不保证换机器后日志仍可读。1.0.12 精选 CSV/日志保存在 [evidence](evidence/player-kernel-1.0.12/summary.json)。
 
+## 1.1.1 播放控制修复（2026-11-08，未单独发布）
+
+复现两个独立问题：Full 关闭 `render/hlsl` 后固定内置 A 被误拒绝，刷新提前返回导致 `ready_` 为 false、播放按钮失效；原生增强切换的跳转可能已经恢复内核播放，但 GUI 只等待 Ready/Paused，形成内核 Playing、界面未播放且 autoPlay 挂起的状态。Lite 后一场景连续六次复现失败。固定内置 HLSL 档位现独立于自定义 VPY 开关；不兼容或模型准备失败时退回可控的 D3D11；HLSL 视频切换等待跳转完成并接纳内核 Playing 状态，极简音频模式保留原恢复方式。
+
+用户提供的 720p/24fps/15 秒 MP4 覆盖 Full/Lite 各 12 个数据行（各 14 passed，含 init/cleanup）：现有配置、关闭 VPY HLSL、色彩不兼容、冷启动、既有着色器、右键切换及拖入视频自动播放，随后验证暂停、继续、跳转。Lite 原失败场景修复后重复六次全部通过；Full 暂停实片画面及生成 VPY HLSL/回退通过。极简位置保持、拖入自动播放和不兼容回退最终 Full/Lite 各 5 passed。首次扩大跳转等待范围影响极简模式，限定到 HLSL 视频后该项复测通过；未把中间失败删去。
+
+封装后的独立单文件窗口实测及用户确认问题解决；用户确认后停止 computer-use。最终 Full 与单文件已同步到 `dist`，50 个 INI/VPY/主题/custom 文件哈希保持不变，日志与部署清单位于本机 `build/hlsl-freeze-1.1.1/`。GitHub 已发布 1.1.1 附件和本地 `dist/1.1.1.7z` 未更新，不能将旧压缩包当作本次修复产物；本轮不新增性能或全量回归结论。
+
 ## 1.1.1 菜单与单文件封装（2026-11-08）
 
 MoeSR 分类移至 Anime4K 前，Full/Lite 共用菜单和内嵌模型资源，原悬停说明保持不变。Full 专项 4 passed，Lite 专项 6 passed，Shader 全组 21 passed，更新包目录专项 4 passed（均含 init/cleanup，无跳过）；Lite 实片覆盖 A、A+增强和 MoeSR，均有正常空间图像。此前 MoeSR 48fps 未达标结论不变，本轮未重跑性能测试或全量回归。
