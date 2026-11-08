@@ -76,7 +76,7 @@ foreach ($file in $files) { $manifest[$file.FullName.Substring($payload.Length+1
 $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'local-resource-sha256.json') -Encoding UTF8
 Push-Location $stage
 try {
-    & $SevenZip a -t7z $archive $archiveRoot -m0=lzma2 -mx=9 -md=256m -mfb=273 -ms=on -mmt=2 -bb0
+    & $SevenZip a -t7z $archive $archiveRoot -m0=lzma2 -mx=9 -md=256m -mfb=273 -ms=on -mmt=8 -bb0
     if ($LASTEXITCODE -ne 0) { throw 'Compression failed' }
 } finally { Pop-Location }
 & $SevenZip t $archive
