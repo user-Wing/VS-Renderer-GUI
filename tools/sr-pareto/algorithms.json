@@ -1,0 +1,160 @@
+{
+  "title": "超分算法的质量与算力",
+  "description": "对于传统插值，高锐度几乎代表了高振铃。着色器使用HLSL处理算力，GLSL需要将算力乘10。",
+  "xLabel": "处理算力要求(对数刻度)",
+  "yLabel": "处理效果(参考)",
+  "yMin": 0,
+  "yMax": 100,
+  "algorithms": [
+    {
+      "name": "Nearest Neighbour",
+      "compute": 1,
+      "quality": 1,
+      "group": "传统插值"
+    },
+    {
+      "name": "D3D11 原生直通",
+      "compute": 1,
+      "quality": 9,
+      "group": "传统插值"
+    },
+    {
+      "name": "Bilinear",
+      "compute": 2,
+      "quality": 9,
+      "group": "传统插值"
+    },
+    {
+      "name": "Bicubic",
+      "compute": 2,
+      "quality": 13,
+      "group": "传统插值"
+    },
+    {
+      "name": "SoftCubic100",
+      "compute": 3,
+      "quality": 6,
+      "group": "传统插值"
+    },
+    {
+      "name": "Lanczos 3",
+      "compute": 5,
+      "quality": 15,
+      "group": "传统插值"
+    },
+    {
+      "name": "Lanczos 4",
+      "compute": 6,
+      "quality": 11,
+      "group": "传统插值"
+    },
+    {
+      "name": "Jinc(Anti-Aliasing)",
+      "compute": 6,
+      "quality": 17,
+      "group": "传统插值"
+    },
+    {
+      "name": "NGU(Anti-Alias)",
+      "compute": 10,
+      "quality": 21,
+      "group": "传统插值"
+    },
+    {
+      "name": "Anime4K-1X-Jinc",
+      "compute": 15,
+      "quality": 25,
+      "group": "实时着色器"
+    },
+    {
+      "name": "Anime4K-Fast-CNN",
+      "compute": 18,
+      "quality": 40,
+      "group": "实时着色器"
+    },
+    {
+      "name": "Anime4K-Fast-CNN+(HLSL)",
+      "compute": 20,
+      "quality": 45,
+      "group": "实时着色器"
+    },
+    {
+      "name": "Anime4K-A-CNN+(GLSL)",
+      "compute": 42,
+      "quality": 52,
+      "group": "实时着色器"
+    },
+    {
+      "name": "MoeSR-Fast(HLSL)",
+      "compute": 20,
+      "quality": 54,
+      "group": "实时着色器",
+      "preview": true
+    },
+    {
+      "name": "MoeSR-50k(HLSL)",
+      "compute": 110,
+      "quality": 65,
+      "group": "实时着色器"
+    },
+    {
+      "name": "MoE-IR-Gamma(HLSL)",
+      "compute": 20,
+      "quality": 56,
+      "group": "实时着色器",
+      "preview": true
+    },
+    {
+      "name": "MoE-IR-Azimuth(HLSL)",
+      "compute": 80,
+      "quality": 72,
+      "group": "实时着色器",
+      "preview": true
+    },
+    {
+      "name": "RealESR-AVV3-STD",
+      "compute": 300,
+      "quality": 70,
+      "group": "轻量超分模型"
+    },
+    {
+      "name": "AnimeJanaiV3-430k",
+      "compute": 320,
+      "quality": 70,
+      "group": "轻量超分模型"
+    },
+    {
+      "name": "RealCUGAN",
+      "compute": 400,
+      "quality": 72,
+      "group": "轻量超分模型"
+    },
+    {
+      "name": "Waifu2X",
+      "compute": 480,
+      "quality": 65,
+      "group": "轻量超分模型"
+    },
+    {
+      "name": "MoeSR-STD",
+      "compute": 10000,
+      "quality": 85,
+      "group": "深度超分模型"
+    },
+    {
+      "name": "MoE-IR-Zenith",
+      "compute": 300,
+      "quality": 85,
+      "group": "轻量超分模型",
+      "preview": true
+    },
+    {
+      "name": "MoE-IR-Stellium",
+      "compute": 5000,
+      "quality": 93,
+      "group": "深度超分模型",
+      "preview": true
+    }
+  ]
+
+}

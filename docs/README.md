@@ -5,6 +5,7 @@
 | 要做什么 | 指南 |
 | --- | --- |
 | 滤镜、时间组、预设、对比与导出 | [Renderer](renderer.md) |
+| 智能体、多来源、软件工具与对话导入导出 | [Agent](agent.md) |
 | 播放、字幕、音频、预设与快捷键 | [Player](player.md) |
 | 截图、标注、贴图、图片与 PhotoCraft | [截图与图片](capture-images.md) |
 | 打开蓝光、菜单、跨段播放与 Remux | [蓝光](bluray.md) |

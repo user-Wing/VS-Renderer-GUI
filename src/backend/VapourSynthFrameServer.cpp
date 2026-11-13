@@ -426,6 +426,7 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames, bo
         if (durationError == peSuccess && denominatorError == peSuccess && durationNum > 0 && durationDen > 0)
             frame.duration100ns = static_cast<std::int64_t>(std::llround(10000000.0 * durationNum / durationDen));
 
+        int traceError=0;const char *trace=impl_->vsApi->mapGetData(properties,"_VsrTrace",0,&traceError);if(!traceError&&trace){int sizeError=0;const int n=impl_->vsApi->mapGetDataSize(properties,"_VsrTrace",0,&sizeError);if(!sizeError&&n>0&&n<=65536)frame.processingTrace=QString::fromUtf8(trace,n);}
         const auto range = frameProperty(impl_->vsApi, properties, "_ColorRange", 2);
         frame.colorRange = range == 0 ? 2u : (range == 1 ? 1u : 0u);
         frame.colorPrimaries = frameProperty(impl_->vsApi, properties, "_Primaries", 2);

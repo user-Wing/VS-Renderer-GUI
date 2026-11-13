@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstring>
 #include "DesktopCapture.h"
+#include "CaptureEncoding.h"
 #include "UiAccess.h"
 #include "HotkeyEdit.h"
 #include "image/ImageJxl.h"
@@ -426,6 +427,8 @@ protected:
             p.drawImage(selection_, display_, pixelRect(selection_));
             p.setPen(QPen(Qt::white,1,Qt::DashLine));
             p.drawRect(selection_);
+            QSettings prefs(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);const auto rawSize=pixelRect(selection_).size();const auto finalSize=prefs.value("save/format")=="avif"?cap::evenSize(rawSize):rawSize;
+            p.fillRect(QRect(selection_.left(),qMax(0,selection_.top()-24),300,22),QColor(20,22,25,220));p.drawText(QPoint(selection_.left()+5,qMax(17,selection_.top()-7)),QString("输出 %1 × %2%3").arg(finalSize.width()).arg(finalSize.height()).arg(finalSize!=rawSize?QStringLiteral("（AVIF补齐偶数边缘）"):QString()));
             p.setPen(QColor(70,135,200));p.setBrush(Qt::white);
             for(const auto point:{selection_.topLeft(),QPoint(selection_.center().x(),selection_.top()),selection_.topRight(),QPoint(selection_.right(),selection_.center().y()),selection_.bottomRight(),QPoint(selection_.center().x(),selection_.bottom()),selection_.bottomLeft(),QPoint(selection_.left(),selection_.center().y())})p.drawRect(QRect(point-QPoint(3,3),QSize(7,7)));
             p.setBrush(Qt::NoBrush);
@@ -583,6 +586,8 @@ protected:
 
 class CapApp final : public QObject, public QAbstractNativeEventFilter {
     friend class TestCapWorkflow;
+    struct SaveJob {QImage image;QString path,format,encoder;cap::AvifOptions avif;};
+    QList<SaveJob> saveQueue_, failedSaves_;bool saveBusy_=false;
     QSettings settings_;
     QSystemTrayIcon tray_;
     QList<QPointer<PinWindow>> pins_;
@@ -596,7 +601,8 @@ public:
         menu->addAction(QStringLiteral("贴图（剪贴板）"),this,[this]{pastePin();});
         menu->addAction(QStringLiteral("设置"),this,[this]{configure();});
         menu->addSeparator();
-        menu->addAction(QStringLiteral("退出"),qApp,&QApplication::quit);
+        menu->addAction(QStringLiteral("重试失败的保存"),this,[this]{while(!failedSaves_.isEmpty()&&saveQueue_.size()<8)saveQueue_.append(failedSaves_.takeFirst());pumpSaves();});
+        menu->addAction(QStringLiteral("退出"),this,[this]{if(saveBusy_||!saveQueue_.isEmpty()){tray_.showMessage("VS Cap",QStringLiteral("后台仍在保存，请等待完成后退出；不会丢弃已排队截图。"));return;}if(!failedSaves_.isEmpty()&&QMessageBox::warning(nullptr,"VS Cap",QStringLiteral("仍有保存失败的截图，可在托盘重试。确认放弃并退出？"),QMessageBox::Yes|QMessageBox::No)!=QMessageBox::Yes)return;QApplication::quit();});
         tray_.setContextMenu(menu);
         connect(&tray_,&QSystemTrayIcon::activated,this,[this](QSystemTrayIcon::ActivationReason why) {
             if(why==QSystemTrayIcon::Trigger)capture();
@@ -685,75 +691,48 @@ private:
     }
     void saveHdrCaptureAsync(const QImage &image) {
         if(image.text("capHdr")!="scRGB-FP16")return;
-        const auto format=settings_.value("save/format","jxl").toString();
-        const auto path=makePath(format,true);
-        if(format=="avif") {QDir().mkpath(QFileInfo(path).absolutePath());startAvif(image,path);return;}
-        auto *watcher=new QFutureWatcher<bool>(this);
-        connect(watcher,&QFutureWatcher<bool>::finished,this,[this,watcher]{
-            if(!watcher->result())tray_.showMessage("VS Cap",QStringLiteral("HDR 截图自动保存失败，请检查默认保存路径"),QSystemTrayIcon::Warning);
-            watcher->deleteLater();
-        });
-        watcher->setFuture(QtConcurrent::run([image,path,format]{
-            return QDir().mkpath(QFileInfo(path).absolutePath()) && saveCapture(image,path,format);
-        }));
+        const auto format=settings_.value("save/format","jxl").toString();enqueueSave(image,makePath(format,true),format);
     }
-    void storeDir(const QString &path) {
-        settings_.setValue("save/lastDirectory",QFileInfo(path).absolutePath());settings_.sync();
-    }
-    bool startAvif(const QImage &image, const QString &path) {
-        const QString work=QDir(QDir::tempPath()).filePath("vscap-"+QUuid::createUuid().toString(QUuid::WithoutBraces));
-        if(!QDir().mkpath(work))return false;
-        const QString input=QDir(work).filePath("input.png"),encoded=QDir(work).filePath("result.avif");
+    void storeDir(const QString &path){settings_.setValue("save/lastDirectory",QFileInfo(path).absolutePath());settings_.sync();}
+    static QString encodeAvif(const SaveJob &job){
+        auto image=cap::evenImage(job.image);if(image.isNull())return QStringLiteral("无法分配偶数尺寸图像。");
+        if(job.avif.color=="srgb"&&image.text("capHdr")=="scRGB-FP16"){image=cap::preview(image);image.setText("capHdr",{});}
+        else if(job.avif.color=="pq2020"&&image.text("capHdr")!="scRGB-FP16"){
+            if(!image.colorSpace().isValid())image.setColorSpace(QColorSpace::SRgb);
+            image=image.convertedToColorSpace(QColorSpace::SRgbLinear,QImage::Format_RGBA32FPx4);image.setText("capHdr","scRGB-FP16");image.setText("capSdrWhiteNits","80");
+        }
         const bool hdr=image.text("capHdr")=="scRGB-FP16";
-        auto pixels=cap::pngPixels(image);pixels.setColorSpace({});
-        QImageWriter inputWriter(input,"png");
-        if(!hdr && !inputWriter.write(pixels)){
-            QDir(work).removeRecursively();tray_.showMessage("VS Cap",QStringLiteral("AVIF 输入图像写入失败"));return false;
-        }
-        QString backendError;const auto encoder=vsr::optionalRuntimeExecutable("awj","AWJ.com",true,&backendError);
-        if(encoder.isEmpty()){
-            QDir(work).removeRecursively();tray_.showMessage("VS Cap",QStringLiteral("无法准备 AWJ.com：")+backendError);return false;
-        }
-        QStringList args{"-i",input,"-o",work,"--format","avif","--template","result",
-            "--quality",QString::number(settings_.value("avif/quality",70).toInt()),
-            "--avif-encoder","aom","--avif-color-representation","yuv",
-            "--chroma",(image.width()%2 || image.height()%2)?"444":"420",
-            "--bit-depth",hdr?"12":"10","--speed","6",
-            "--alpha","auto","--image-size-limit","none","--keep-metadata","--no-summary","--no-log"};
-        if(hdr)args<< "--color-primaries"<<"9"<<"--transfer-characteristics"<<"16"
-                    <<"--matrix-coefficients"<<"9"<<"--color-range"<<"1";
-        if(hdr){args.removeFirst();args.removeFirst();args<<"--stdin-wgc-rgba16f"<<QString("%1x%2").arg(image.width()).arg(image.height());}
-        auto *process=new QProcess(this);process->setWorkingDirectory(work);
-        process->setProcessChannelMode(QProcess::MergedChannels);
-        connect(process,&QProcess::errorOccurred,this,[this,process,work](QProcess::ProcessError error){
-            if(error!=QProcess::FailedToStart)return;
-            QDir(work).removeRecursively();
-            tray_.showMessage("VS Cap",QStringLiteral("无法启动 AWJ：")+process->errorString());
-            process->deleteLater();
-        });
-        connect(process,QOverload<int,QProcess::ExitStatus>::of(&QProcess::finished),this,
-                [this,process,work,encoded,path](int code,QProcess::ExitStatus status){
-                    bool ok=code==0 && status==QProcess::NormalExit && QFileInfo::exists(encoded);
-                    if(ok){
-                        QFile source(encoded);QSaveFile destination(path);
-                        ok=source.open(QIODevice::ReadOnly) && destination.open(QIODevice::WriteOnly);
-                        while(ok && !source.atEnd()){
-                            const auto bytes=source.read(4*1024*1024);
-                            ok=!bytes.isEmpty() && destination.write(bytes)==bytes.size();
-                        }
-                        if(ok)ok=destination.commit();
-                        else destination.cancelWriting();
-                    }
-                    const auto message=QString::fromUtf8(process->readAll().right(400));
-                    QDir(work).removeRecursively();
-                    tray_.showMessage("VS Cap",ok?QStringLiteral("AWJ AVIF 已保存：")+path:
-                        QStringLiteral("AWJ AVIF 编码失败：")+message,QSystemTrayIcon::Information);
-                    process->deleteLater();
-                });
-        process->start(encoder,args);
-        if(hdr){const auto raw=image.convertToFormat(QImage::Format_RGBA16FPx4);for(int y=0;y<raw.height();++y)process->write(reinterpret_cast<const char*>(raw.constScanLine(y)),raw.width()*8);process->closeWriteChannel();}
-        return true;
+        QTemporaryDir work(QDir::tempPath()+"/vscap-XXXXXX");if(!work.isValid())return QStringLiteral("无法创建编码暂存目录。");
+        const auto input=work.filePath("input.png"),encoded=work.filePath("result.avif");
+        // The HDR raw-input path does not create unused PQ PNG pixels.
+        if(!hdr){auto pixels=cap::pngPixels(image);if(!pixels.colorSpace().isValid())pixels.setColorSpace(QColorSpace::SRgb);if(pixels.colorSpace()!=QColorSpace(QColorSpace::SRgb))pixels=pixels.convertedToColorSpace(QColorSpace::SRgb);pixels.setColorSpace({});QImageWriter writer(input,"png");writer.setCompression(30);if(!writer.write(pixels))return writer.errorString();}
+        QStringList args{"-o",work.path(),"--format","avif","--template","result","--quality",QString::number(job.avif.quality),"--avif-encoder","aom","--avif-color-representation","yuv","--speed",QString::number(job.avif.speed),"--alpha","auto","--image-size-limit","none","--keep-metadata","--no-summary","--no-log"};
+        args+=job.avif.pixelArguments();
+        args<<"--color-primaries"<<(hdr?"9":"1")<<"--transfer-characteristics"<<(hdr?"16":"13")<<"--matrix-coefficients"<<(hdr?"9":"1")<<"--color-range"<<"1";
+        if(hdr)args<<"--stdin-wgc-rgba16f"<<QString("%1x%2").arg(image.width()).arg(image.height());else args<<"-i"<<input;
+        QProcess process;process.setProcessChannelMode(QProcess::MergedChannels);process.start(job.encoder,args);if(!process.waitForStarted(10000))return process.errorString();
+#ifdef Q_OS_WIN
+        HANDLE child=OpenProcess(PROCESS_SET_INFORMATION,FALSE,DWORD(process.processId()));if(child){SetPriorityClass(child,BELOW_NORMAL_PRIORITY_CLASS);CloseHandle(child);}
+#endif
+        QByteArray log;QElapsedTimer timer;timer.start();
+        if(hdr){const auto raw=image.convertToFormat(QImage::Format_RGBA16FPx4);for(int y=0;y<raw.height();++y){if(process.write(reinterpret_cast<const char*>(raw.constScanLine(y)),qint64(raw.width())*8)<0)return QStringLiteral("AVIF输入写入失败。");while(process.bytesToWrite()>4*1024*1024){process.waitForBytesWritten(100);log=(log+process.readAll()).right(65536);if(process.state()==QProcess::NotRunning)return QString::fromUtf8(log);if(timer.elapsed()>300000){process.kill();process.waitForFinished();return QStringLiteral("AVIF输入超时。");}}}}
+        process.closeWriteChannel();while(!process.waitForFinished(100)){log=(log+process.readAll()).right(65536);if(timer.elapsed()>300000){process.kill();process.waitForFinished();return QStringLiteral("AVIF编码超时。");}}
+        log=(log+process.readAll()).right(65536);if(process.exitCode()!=0||process.exitStatus()!=QProcess::NormalExit||!QFileInfo::exists(encoded))return QStringLiteral("AVIF编码失败：")+QString::fromUtf8(log.right(1200));
+        QFile source(encoded);QSaveFile dest(job.path);if(!source.open(QIODevice::ReadOnly)||!dest.open(QIODevice::WriteOnly))return QStringLiteral("AVIF输出不可写。");while(!source.atEnd()){const auto data=source.read(4*1024*1024);if(data.isEmpty()||dest.write(data)!=data.size())return QStringLiteral("AVIF输出写入失败。");}return dest.commit()?QString():dest.errorString();
     }
+    bool enqueueSave(QImage image,const QString &path,const QString &format){
+        if(saveQueue_.size()+failedSaves_.size()>=8){tray_.showMessage("VS Cap",QStringLiteral("保存队列已满，请等待或重试失败任务。截图窗口保留，可稍后保存。"),QSystemTrayIcon::Warning);return false;}
+        SaveJob job{image,path,format,{},cap::AvifOptions::load(settings_)};
+        if(format=="avif"){QString error;job.encoder=vsr::optionalRuntimeExecutable("awj","AWJ.com",true,&error);if(job.encoder.isEmpty()){tray_.showMessage("VS Cap",error,QSystemTrayIcon::Warning);return false;}}
+        saveQueue_.append(std::move(job));pumpSaves();return true;
+    }
+    void pumpSaves(){
+        if(saveBusy_||saveQueue_.isEmpty())return;saveBusy_=true;const auto job=saveQueue_.takeFirst();auto *watcher=new QFutureWatcher<QString>(this);
+        tray_.setToolTip(QString("VS Cap · 保存中 · 等待 %1").arg(saveQueue_.size()));
+        connect(watcher,&QFutureWatcher<QString>::finished,this,[this,watcher,job]{const auto error=watcher->result();watcher->deleteLater();saveBusy_=false;if(!error.isEmpty()){failedSaves_.append(job);tray_.showMessage("VS Cap",error+QStringLiteral("；可在托盘重试。"),QSystemTrayIcon::Warning);}else tray_.showMessage("VS Cap",QStringLiteral("已保存：")+job.path,QSystemTrayIcon::Information);tray_.setToolTip("VS Cap");pumpSaves();});
+        watcher->setFuture(QtConcurrent::run([job]{if(!QDir().mkpath(QFileInfo(job.path).absolutePath()))return QStringLiteral("无法创建保存目录。");return job.format=="avif"?encodeAvif(job):saveCapture(job.image,job.path,job.format)?QString():QStringLiteral("截图或SDR副本写入失败，请检查目录与磁盘空间。");}));
+    }
+    bool startAvif(const QImage &image,const QString &path){return enqueueSave(image,path,"avif");}
     bool output(QImage image, bool pin, const QString &format, bool copy) {
         if(image.isNull())return false;
         if(pin) {addPin(std::move(image));return true;}
@@ -763,9 +742,8 @@ private:
                          QString("%1 (*.%2)").arg(format.toUpper(),format));
         if(path.isEmpty())return false;
         storeDir(path);
-        if(format=="avif")return startAvif(image,path);
-        if(saveCapture(image,path,format))return true;
-        tray_.showMessage("VS Cap",QStringLiteral("截图写入失败"),QSystemTrayIcon::Warning);return false;
+        if(format=="avif"&&cap::evenSize(image.size())!=image.size()){const auto size=cap::evenSize(image.size());if(QMessageBox::question(QApplication::activeModalWidget(),QStringLiteral("AVIF偶数尺寸"),QStringLiteral("最终输出 %1×%2，右/下边缘补齐；不缩放、不裁掉选区。继续？").arg(size.width()).arg(size.height()))!=QMessageBox::Yes)return false;}
+        return enqueueSave(image,path,format);
     }
     void capture() {
         QScreen *screen=QGuiApplication::screenAt(QCursor::pos());
@@ -825,6 +803,9 @@ private:
         QComboBox format;format.setObjectName("capDefaultFormat");format.addItem("JXL · 16-bit 无损","jxl");format.addItem("AVIF · AWJ","avif");format.addItem("PNG · 16-bit 无损","png");
         format.setCurrentIndex(qMax(0,format.findData(settings_.value("save/format","jxl").toString())));
         QSpinBox quality;quality.setObjectName("capAvifQuality");quality.setRange(1,100);quality.setValue(settings_.value("avif/quality",70).toInt());quality.setSuffix(QStringLiteral("（推荐 70）"));
+        QComboBox pixelFormat;pixelFormat.setObjectName("capAvifPixelFormat");pixelFormat.addItems({"444p12","444p10","420p10"});pixelFormat.setCurrentText(cap::AvifOptions::load(settings_).format);
+        QComboBox color; color.setObjectName("capAvifColor");color.addItem(QStringLiteral("自动：SDR sRGB / HDR BT.2020 PQ"),"auto");color.addItem(QStringLiteral("sRGB SDR（HDR生成桌面白位副本）"),"srgb");color.addItem(QStringLiteral("BT.2020 PQ（SDR以80nit白位转换）"),"pq2020");color.setCurrentIndex(qMax(0,color.findData(settings_.value("avif/color","auto"))));
+        QSpinBox speed;speed.setObjectName("capAvifSpeed");speed.setRange(0,10);speed.setValue(settings_.value("avif/speed",6).toInt());
         QWidget saveLocation;QHBoxLayout saveLayout(&saveLocation);saveLayout.setContentsMargins(0,0,0,0);
         QLineEdit saveDirectory(settings_.value("save/defaultDirectory",defaultDirectory()).toString());saveDirectory.setObjectName("capDefaultSaveDirectory");
         QPushButton browse(QStringLiteral("浏览…"));saveLayout.addWidget(&saveDirectory);saveLayout.addWidget(&browse);
@@ -835,7 +816,8 @@ private:
         layout.addRow(QStringLiteral("贴图快捷键"),&pin);
         layout.addRow(QStringLiteral("截图默认保存路径"),&saveLocation);
         layout.addRow(QStringLiteral("默认保存格式"),&format);
-        layout.addRow(QStringLiteral("AWJ AVIF 质量"),&quality);
+        layout.addRow(QStringLiteral("AWJ AVIF 质量"),&quality);layout.addRow(QStringLiteral("AVIF像素格式"),&pixelFormat);layout.addRow(QStringLiteral("AVIF色彩"),&color);layout.addRow(QStringLiteral("AVIF编码速度（低值更慢）"),&speed);
+        QLabel dimensions(QStringLiteral("AVIF输出宽高严格为偶数；奇数选区右/下补齐，不重采样。全屏高精度编辑底图与选区外标注保持不变。"));dimensions.setWordWrap(true);layout.addRow(&dimensions);
         layout.addRow(&uiAccess);
         layout.addRow(&autostart);layout.addRow(&elevatedStartup);layout.addRow(&trayMode);
         QLabel note(QStringLiteral("默认 JXL，16bit×4 通道无损，原生携带 HDR 色彩信息；PNG 为兼容候选。HDR 自动按所选格式保存，JXL/PNG 同时提供 SDR 副本，不生成浮点附件。AWJ AVIF 使用 AOM、默认质量 70。UIAccess 默认关闭，启用后下次启动会请求 Windows 管理员授权，无需驱动或安装证书。"));
@@ -861,6 +843,7 @@ private:
         settings_.setValue("save/defaultDirectory",saveDirectory.text().trimmed().isEmpty()?defaultDirectory():QDir::cleanPath(saveDirectory.text().trimmed()));
         settings_.setValue("general/autostart",autostart.isChecked());
         settings_.setValue("general/minimizeToTray",trayMode.isChecked());
+        settings_.setValue("avif/pixelFormat",pixelFormat.currentText());settings_.setValue("avif/color",color.currentData());settings_.setValue("avif/speed",speed.value());
         settings_.setValue("save/format",format.currentData().toString());
         settings_.setValue("avif/quality",quality.value());
         settings_.setValue("general/uiAccess",uiAccess.isChecked());

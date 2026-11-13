@@ -1,4 +1,6 @@
 #include "ui/ExportWindow.h"
+#include "backend/DetachedExport.h"
+#include <QLockFile>
 #include <QSignalBlocker>
 #include "ui/PreparedFiles.h"
 
@@ -210,33 +212,11 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     connect(stop, &QPushButton::clicked, this, [this] {
         for (auto *item : table_->selectedItems()) stopJob(jobFor(item));
     });
-    connect(&pipeline_, &ExportPipeline::logMessage, log_, &QPlainTextEdit::appendPlainText);
-    connect(&pipeline_, &ExportPipeline::durationKnown, this, [this](double duration) {
-        if (active_) active_->durationSeconds = duration;
-    });
-    connect(&pipeline_, &ExportPipeline::progress, this, [this](qint64 frames, qint64 microseconds) {
-        if (!active_) return;
-        auto *item = active_->item;
-        item->setText(3, QString::number(frames));
-        const double seconds = microseconds / 1000000.0;
-        const double duration = active_->durationSeconds;
-        if (duration > 0 && seconds > 0) {
-            item->setText(2, QStringLiteral("%1%").arg(std::clamp(static_cast<int>(seconds * 100 / duration), 0, 99)));
-            const qint64 running = elapsed_.elapsed() - pausedMilliseconds_ - (pipeline_.isPaused() ? pauseTime_.elapsed() : 0);
-            const qint64 remaining = static_cast<qint64>(std::max(0.0, duration / seconds - 1) * running / 1000);
-            item->setText(4, QStringLiteral("约 %1 分 %2 秒").arg(remaining / 60).arg(remaining % 60));
-        }
-    });
-    connect(&pipeline_, &ExportPipeline::finished, this, [this](bool success, const QString &message) {
-        if (!active_) return;
-        active_->state = active_->state == State::Stopping ? State::Stopped : (success ? State::Completed : State::Failed);
-        active_->item->setText(1, message);
-        if (success) active_->item->setText(2, QStringLiteral("100%"));
-        active_->item->setText(4, QStringLiteral("—"));
-        active_.reset();
-        emit statusMessage(message);
-        QTimer::singleShot(0, this, &ExportWindow::startNext);
-    });
+    connect(table_->model(),&QAbstractItemModel::rowsMoved,this,[this]{QJsonArray ids;for(int row=0;row<table_->topLevelItemCount();++row){const auto j=jobFor(table_->topLevelItem(row));if(j)ids.append(j->id);}exportjobs::write(QDir(exportjobs::root()).filePath("order.json"),{{"ids",ids}});});
+    auto *poll=new QTimer(this);poll->setInterval(750);connect(poll,&QTimer::timeout,this,&ExportWindow::syncWorker);poll->start();
+    syncWorker();
+    if(isBusy())exportjobs::ensureWorker();
+
 }
 
 void ExportWindow::setScriptBuilder(std::function<ScriptBuildResult(const QString &)> builder) { scriptBuilder_ = std::move(builder); }
@@ -292,6 +272,9 @@ void ExportWindow::enqueue(bool batch)
         const auto script = scriptBuilder_(source);
         QString error = script.errors.join('\n');
         QString output = batch ? outputPath(source, directory, naming_->currentIndex() == 0) : singleOutput_->text();
+        QFileInfo outputInfo(output);QString stem=outputInfo.completeBaseName();stem.remove(QRegularExpression("_路[0-9]+(?:_[0-9]+)?$"));stem+=QString("_路%1").arg(selectedRoute()+1);
+        output=QDir(outputInfo.absolutePath()).filePath(stem+".mkv");
+        for(int serial=2;QFileInfo::exists(output)||reservedOutputs.contains(pathKey(output));++serial)output=QDir(outputInfo.absolutePath()).filePath(stem+QString("_%1.mkv").arg(serial));
         if (batch && naming_->currentIndex() == 0) {
             const QString base = output.left(output.size() - 4);
             int serial = 2;
@@ -337,22 +320,29 @@ bool ExportWindow::addJob(const QString &command, const QString &output, const Q
     for (const auto &input : compositionSources_) inputKeys.append(pathKey(input));
     if (inputKeys.contains(outputKey)) return fail(QStringLiteral("输出不能覆盖任何输入视频。"));
     for (const auto &existing : jobs_) {
-        if (existing->sourceKey == sourceKey)
-            return fail(QStringLiteral("此文件已在队列中，停止后请使用“从头重新处理”，不要重复添加。"));
         if (existing->outputKey == outputKey || existing->inputKeys.contains(outputKey) || inputKeys.contains(existing->outputKey))
             return fail(QStringLiteral("输出路径与队列中的输入或输出冲突。"));
     }
+    if(!QFileInfo::exists(exportjobs::workerProgram()))return fail(QStringLiteral("缺少 vs-export-worker.exe，请更新完整程序包。"));
+    QDir().mkpath(exportjobs::root());QLockFile submitLock(QDir(exportjobs::root()).filePath("submit.lock"));if(!submitLock.tryLock(2000))return fail(QStringLiteral("队列正在提交，请重试。"));
+    for(const auto &id:exportjobs::jobs(exportjobs::root())){const auto m=exportjobs::read(QDir(exportjobs::root()).filePath(id+"/job.json"));if(m.isEmpty())continue;
+        if(pathKey(m["output"].toString())==outputKey)return fail(QStringLiteral("输出已被持久队列占用，请使用新的文件名。"));
+        for(const auto &input:m["inputs"].toArray())if(pathKey(input.toString())==outputKey)return fail(QStringLiteral("输出与队列输入冲突。"));
+        if(inputKeys.contains(pathKey(m["output"].toString())))return fail(QStringLiteral("输入与队列输出冲突。"));}
+    if(QFileInfo::exists(output))return fail(QStringLiteral("输出文件已存在，请更换名称；已停止任务可明确选择从头重做。"));
     auto job = std::make_shared<Job>();
-    job->directory = std::make_shared<QTemporaryDir>();
-    QFile file(job->directory->filePath(QStringLiteral("export.vpy")));
+    job->id="job-"+QDateTime::currentDateTimeUtc().toString("yyyyMMddHHmmsszzz")+"-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    job->directory=QDir(exportjobs::root()).filePath(job->id);
+    if(!QDir().mkpath(job->directory))return fail(QStringLiteral("无法创建持久任务目录。"));
+    QSaveFile file(QDir(job->directory).filePath("export.vpy"));
     const QByteArray code = script.toUtf8() +
         "\nimport sys as __vsr_sys\nimport vapoursynth as __vsr_vs\n"
         "__vsr_output = __vsr_vs.get_output(0)\n"
         "__vsr_clip = getattr(__vsr_output, 'clip', __vsr_output)\n"
         "if __vsr_clip.fps_num: print('__VSR_DURATION__=' + str(__vsr_clip.num_frames * __vsr_clip.fps_den / __vsr_clip.fps_num), file=__vsr_sys.stderr, flush=True)\n";
-    if (!job->directory->isValid() || !file.open(QIODevice::WriteOnly) || file.write(code) != code.size())
+    if (!file.open(QIODevice::WriteOnly) || file.write(code) != code.size())
         return fail(QStringLiteral("无法保存导出脚本。"));
-    file.close();
+    if(!file.commit())return fail(QStringLiteral("冻结脚本提交失败。"));
     job->plan = ExportPipeline::buildPlan(command, source, output, file.fileName(), QCoreApplication::applicationDirPath());
     if (!job->plan.error.isEmpty()) return fail(job->plan.error);
     for (const auto &input : compositionSources_)
@@ -372,6 +362,8 @@ bool ExportWindow::addJob(const QString &command, const QString &output, const Q
             args.insert(destination, QStringLiteral("-an"));
         }
     }
+    job->plan.ffmpegArguments.removeAll("-y");if(!job->plan.ffmpegArguments.contains("-n"))job->plan.ffmpegArguments.prepend("-n");
+    if(!exportjobs::write(QDir(job->directory).filePath("job.json"),{{"version",1},{"source",source},{"output",output},{"inputs",QJsonArray::fromStringList(inputKeys)},{"plan",exportjobs::planJson(job->plan)},{"duration",durationSeconds},{"route",selectedRoute()+1}}))return fail(QStringLiteral("任务清单保存失败。"));
     job->source = source;
     job->sourceKey = sourceKey;
     job->inputKeys = inputKeys;
@@ -392,93 +384,47 @@ std::shared_ptr<ExportWindow::Job> ExportWindow::jobFor(QTreeWidgetItem *item) c
     return item ? jobs_.value(item->data(0, Qt::UserRole).toULongLong()) : nullptr;
 }
 
-void ExportWindow::startNext()
-{
-    if (active_) return;
-    if (queuePaused_) { if (!isBusy()) emit idle(); return; }
-    for (int row = 0; row < table_->topLevelItemCount(); ++row) {
-        auto job = jobFor(table_->topLevelItem(row));
-        if (job->state != State::Waiting) continue;
-        active_ = job;
-        job->state = State::Running;
-        job->started = true;
-        job->item->setText(1, QStringLiteral("编码中"));
-        elapsed_.start();
-        pausedMilliseconds_ = 0;
-        pipeline_.start(job->plan);
-        return;
+void ExportWindow::startNext(){if(!exportjobs::ensureWorker())message_->setText(QStringLiteral("编码worker启动失败；任务已保存在磁盘，可稍后重连。"));syncWorker();}
+void ExportWindow::syncWorker(){
+    const bool wasBusy=isBusy();active_.reset();queuePaused_=exportjobs::read(QDir(exportjobs::root()).filePath("queue.json"))["paused"].toBool();
+    for(const auto &id:exportjobs::jobs(exportjobs::root())){
+        const auto dir=QDir(exportjobs::root()).filePath(id);const auto m=exportjobs::read(QDir(dir).filePath("job.json"));if(m.isEmpty())continue;
+        auto st=exportjobs::read(QDir(dir).filePath("status.json"));const auto state=st["state"].toString("waiting");
+        std::shared_ptr<Job> job;for(const auto &j:jobs_)if(j->id==id){job=j;break;}
+        if(st["hidden"].toBool()){if(job){jobs_.remove(job->item->data(0,Qt::UserRole).toULongLong());delete job->item;}continue;}
+        if(!job){job=std::make_shared<Job>();job->id=id;job->directory=dir;job->source=m["source"].toString();job->output=m["output"].toString();job->sourceKey=pathKey(job->source);job->outputKey=pathKey(job->output);job->inputKeys=exportjobs::strings(m["inputs"]);job->item=new QTreeWidgetItem(table_,{QFileInfo(job->output).fileName()});job->item->setData(0,Qt::UserRole,QVariant::fromValue(++nextId_));jobs_[nextId_]=job;}
+        job->state=state=="running"?State::Running:state=="paused"?State::Paused:state=="stopping"?State::Stopping:state=="completed"?State::Completed:state=="failed"?State::Failed:state=="stopped"?State::Stopped:State::Waiting;
+        job->started=job->state!=State::Waiting;job->durationSeconds=st["duration"].toDouble(m["duration"].toDouble());
+        if(state=="running"||state=="paused"||state=="stopping")active_=job;
+        const QMap<QString,QString> names{{"waiting","等待中"},{"running","独立进程编码中"},{"paused","已暂停"},{"stopping","正在停止并封装"},{"completed","已完成"},{"failed","失败/中断（从头重做）"},{"stopped","已停止"}};
+        job->item->setText(1,names.value(state,state));job->item->setToolTip(1,st["message"].toString());job->item->setToolTip(0,job->source+"\n"+job->output+"\n日志："+QDir(dir).filePath("worker.log"));
+        const double seconds=st["microseconds"].toDouble()/1e6,duration=job->durationSeconds;
+        job->item->setText(2,state=="completed"?"100%":duration>0?QString("%1%").arg(qBound(0,int(seconds*100/duration),99)):QStringLiteral("—"));job->item->setText(3,QString::number(qint64(st["frames"].toDouble())));const auto started=QDateTime::fromString(st["started"].toString(),Qt::ISODateWithMs);const qint64 elapsed=started.isValid()?started.secsTo(QDateTime::currentDateTimeUtc()):0;job->item->setText(4,state=="running"&&seconds>0&&duration>seconds?QStringLiteral("约 %1 分（含暂停时间）").arg(qMax<qint64>(0,qint64(elapsed*(duration/seconds-1)/60))):QStringLiteral("—"));
     }
-    emit idle();
+    if(auto selected=jobFor(table_->currentItem());selected){QFile file(QDir(selected->directory).filePath("worker.log"));if(file.open(QIODevice::ReadOnly)){if(file.size()>65536)file.seek(file.size()-65536);const auto text=QString::fromUtf8(file.readAll());if(log_->toPlainText()!=text)log_->setPlainText(text);}}
+    pause_->setText(queuePaused_?QStringLiteral("继续编码队列"):QStringLiteral("挂起 / 暂停队列"));
+    if(wasBusy&&!isBusy())emit idle();
+}
+QJsonArray ExportWindow::jobsStatus() const
+{
+    const QStringList states{"waiting", "running", "paused", "stopping", "stopped", "completed", "failed"};
+    QJsonArray result;
+    for (const auto &job : jobs_)
+        result.append(QJsonObject{{"output", job->output}, {"state", states.value(int(job->state))},
+                                  {"bytes", double(QFileInfo(job->output).size())}});
+    return result;
 }
 
-bool ExportWindow::isBusy() const
-{
-    return active_ || std::any_of(jobs_.cbegin(), jobs_.cend(), [](const auto &job) { return job->state == State::Waiting; });
-}
-
-void ExportWindow::togglePause()
-{
-    const bool pause = !queuePaused_;
-    if (active_ && active_->state != State::Stopping) {
-        if (!pipeline_.setPaused(pause)) { message_->setText(QStringLiteral("暂停/恢复失败，请重试。")); return; }
-        active_->state = pause ? State::Paused : State::Running;
-        active_->item->setText(1, pause ? QStringLiteral("已暂停") : QStringLiteral("编码中"));
-        if (pause) pauseTime_.start(); else pausedMilliseconds_ += pauseTime_.elapsed();
-    }
-    queuePaused_ = pause;
-    pause_->setText(pause ? QStringLiteral("继续编码队列") : QStringLiteral("挂起 / 暂停队列"));
-    if (!pause) startNext();
-}
-
-void ExportWindow::stopJob(const std::shared_ptr<Job> &job)
-{
-    if (!job) return;
-    if (job == active_ && job->state != State::Stopping) {
-        if (pipeline_.isPaused()) {
-            if (!pipeline_.setPaused(false)) return;
-            pausedMilliseconds_ += pauseTime_.elapsed();
-        }
-        job->state = State::Stopping;
-        job->item->setText(1, QStringLiteral("正在停止并完成文件封装…"));
-        pipeline_.cancel();
-    } else if (job->state == State::Waiting) {
-        job->state = State::Stopped;
-        job->item->setText(1, QStringLiteral("已停止(未开始)"));
-    }
-}
-
-void ExportWindow::removeWaiting()
-{
-    for (auto *item : table_->selectedItems()) {
-        auto job = jobFor(item);
-        if (job->started || job == active_) continue;
-        jobs_.remove(item->data(0, Qt::UserRole).toULongLong());
-        delete item;
-    }
-    if (!isBusy()) emit idle();
-}
-
-void ExportWindow::restartStopped()
-{
-    for (auto *item : table_->selectedItems()) {
-        auto job = jobFor(item);
-        if (job->state != State::Stopped && job->state != State::Failed) continue;
-        job->plan.ffmpegArguments.removeAll(QStringLiteral("-n"));
-        if (!job->plan.ffmpegArguments.contains(QStringLiteral("-y"))) job->plan.ffmpegArguments.prepend(QStringLiteral("-y"));
-        job->state = State::Waiting;
-        item->setText(1, QStringLiteral("等待中(从头处理)"));
-        item->setText(2, QStringLiteral("0%"));
-        item->setText(3, QStringLiteral("0"));
-        item->setText(4, QStringLiteral("估算中"));
-    }
+bool ExportWindow::isBusy() const {for(const auto &j:jobs_)if(j->state==State::Waiting||j->state==State::Running||j->state==State::Paused||j->state==State::Stopping)return true;return false;}
+void ExportWindow::togglePause(){
+    auto target=active_;if(!target)for(const auto &j:jobs_)if(j->state==State::Waiting){target=j;break;}
+    if(target)exportjobs::command(target->id,queuePaused_?"resume":"pause");else {queuePaused_=!queuePaused_;exportjobs::write(QDir(exportjobs::root()).filePath("queue.json"),{{"paused",queuePaused_}});}
     startNext();
 }
-
-void ExportWindow::stopAll()
-{
-    for (const auto &job : jobs_) stopJob(job);
-    if (!active_) QTimer::singleShot(0, this, &ExportWindow::startNext);
-}
+void ExportWindow::stopJob(const std::shared_ptr<Job> &job){if(job)exportjobs::command(job->id,"stop");}
+void ExportWindow::removeWaiting(){for(auto *item:table_->selectedItems()){const auto j=jobFor(item);if(!j)continue;if(j->state!=State::Running&&j->state!=State::Paused&&j->state!=State::Stopping)exportjobs::command(j->id,"remove");}startNext();}
+void ExportWindow::restartStopped(){for(auto *item:table_->selectedItems()){const auto j=jobFor(item);if(j&&(j->state==State::Stopped||j->state==State::Failed))exportjobs::command(j->id,"restart");}startNext();}
+void ExportWindow::stopAll(){for(const auto &j:jobs_)stopJob(j);startNext();}
 
 }
 

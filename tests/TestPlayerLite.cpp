@@ -1,3 +1,6 @@
+#include <QFormLayout>
+#include <QCryptographicHash>
+#include <QCheckBox>
 #include "player/PlayerWindow.h"
 #include "player/PlayerAssociations.h"
 #include "player/PlayerIdleGuide.h"
@@ -50,6 +53,56 @@ class TestPlayer final : public QObject {
     QByteArray previous_;bool existed_=false;
     QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
 private slots:
+    void openNguMenu(){runOpenNguMenu();}
+    void openNguPlayback(){runOpenNguPlayback();}
+    void startupTheme(){runStartupTheme();}
+    void infoFpsTracksNativePlayback(){runInfoFpsTracksNativePlayback();}
+    void measureBuiltin1080To2160(){runBuiltin1080To2160();}
+    void hlslOptimizationAcceptance(){runHlslOptimizationAcceptance();}
+private:
+#include "HlslOptimizationAcceptance.inc"
+#include "OpenNguAcceptance.inc"
+private slots:
+    void rememberedActualTracks(){
+        const auto media=qEnvironmentVariable("VSR_TEST_TRACK_MEDIA");if(media.isEmpty())QSKIP("Set tiny track correctness fixture path");
+        QTemporaryDir temp;const auto old=qgetenv("VSR_PLAYER_CONFIG");qputenv("VSR_PLAYER_CONFIG",temp.filePath("player.ini").toUtf8());const auto restore=qScopeGuard([&]{qputenv("VSR_PLAYER_CONFIG",old);});
+        QSettings config(temp.filePath("player.ini"),QSettings::IniFormat);config.setValue("basic/autoplay",false);config.setValue("playback/remember",true);config.setValue("player/muted",true);config.setValue("decode/mode",1);config.sync();
+        int audio=-1,subtitle=-1;
+        {PlayerWindow p;QVERIFY(p.openFile(media));QTRY_VERIFY_WITH_TIMEOUT(p.positionRestored_&&p.ready_,15000);for(const auto &value:p.media_["streams"].toArray()){const auto stream=value.toObject();if(stream["type"]=="audio")audio=stream["index"].toInt();if(stream["type"]=="subtitle")subtitle=stream["index"].toInt();}QVERIFY(audio>=0);QVERIFY(subtitle>=0);p.selectAudio(audio);p.selectSubtitle(0,subtitle);p.subtitleVisible_=false;QTRY_COMPARE_WITH_TIMEOUT(p.clock_->snapshot().selectedAudioStream,audio,10000);p.savePosition();p.settings_->sync();}
+        {PlayerWindow p;QVERIFY(p.openFile(media));QTRY_VERIFY_WITH_TIMEOUT(p.positionRestored_&&p.ready_,15000);QTRY_COMPARE_WITH_TIMEOUT(p.clock_->snapshot().selectedAudioStream,audio,10000);QCOMPARE(p.primarySubtitle_,subtitle);QVERIFY(!p.subtitleVisible_);p.selectSubtitle(0,-1);p.savePosition();p.settings_->sync();}
+        {PlayerWindow p;QVERIFY(p.openFile(media));QTRY_VERIFY_WITH_TIMEOUT(p.positionRestored_&&p.ready_,15000);QCOMPARE(p.primarySubtitle_,-1);}
+    }
+    void rememberedTracksWithPosition(){
+        QTemporaryDir temp;const auto old=qgetenv("VSR_PLAYER_CONFIG");qputenv("VSR_PLAYER_CONFIG",temp.filePath("player.ini").toUtf8());const auto restore=qScopeGuard([&]{qputenv("VSR_PLAYER_CONFIG",old);});
+        PlayerWindow p;p.timer_->stop();p.source_=temp.filePath("fixture.mkv");p.ready_=true;p.positionRestored_=true;p.resumeAt_=-1;p.settings_->setValue("playback/remember",true);p.primarySubtitle_=-1;p.secondarySubtitle_=-1;p.subtitleVisible_=false;p.savePosition();
+        const auto key=QString::fromLatin1(QCryptographicHash::hash(p.source_.toUtf8(),QCryptographicHash::Sha256).toHex());QVERIFY(p.settings_->contains("positions/"+key));QCOMPARE(p.settings_->value("tracks/"+key+"/subtitle").toInt(),-1);QCOMPARE(p.settings_->value("tracks/"+key+"/visible").toBool(),false);
+        p.primarySubtitle_=5;p.secondarySubtitle_=6;p.subtitleVisible_=true;p.restoreRememberedTracks({});QCOMPARE(p.primarySubtitle_,-1);QCOMPARE(p.secondarySubtitle_,-1);QVERIFY(!p.subtitleVisible_);
+        p.settings_->setValue("playback/remember",false);p.primarySubtitle_=7;p.restoreRememberedTracks({});QCOMPARE(p.primarySubtitle_,7);
+    }
+
+    void audioOutputSettingsPersist(){
+        QTemporaryDir dir;const auto previous=qgetenv("VSR_PLAYER_CONFIG");
+        const auto restore=qScopeGuard([&]{if(previous.isNull())qunsetenv("VSR_PLAYER_CONFIG");else qputenv("VSR_PLAYER_CONFIG",previous);});
+        const auto path=dir.filePath("player.ini");qputenv("VSR_PLAYER_CONFIG",path.toUtf8());
+        PlayerWindow player;player.setProperty("settingsPage",5);bool checked=false;
+        QTimer::singleShot(100,&player,[&]{
+            auto *dialog=player.findChild<QDialog*>("playerSettings");if(!dialog)return;
+            const auto close=qScopeGuard([&]{dialog->reject();});
+            auto *renderer=dialog->findChild<QComboBox*>("playerAudioRenderer");
+            auto *endpoint=dialog->findChild<QComboBox*>("playerAudioEndpoint");
+            auto *exclusive=dialog->findChild<QCheckBox*>("playerAudioExclusive");
+            QVERIFY(renderer && endpoint && exclusive);QCOMPARE(renderer->currentData().toString(),QString("3FP"));
+            auto *form=qobject_cast<QFormLayout*>(renderer->parentWidget()->layout());QVERIFY(form);
+            int row=-1;QFormLayout::ItemRole role;form->getWidgetPosition(renderer,&row,&role);QCOMPARE(row,1);
+            QVERIFY(form->itemAt(0,QFormLayout::FieldRole));
+            endpoint->addItem("Saved unavailable test endpoint","test-endpoint");endpoint->setCurrentIndex(endpoint->count()-1);exclusive->setChecked(true);
+            auto *apply=dialog->findChild<QPushButton*>("playerApplySettings");QVERIFY(apply);apply->click();
+            QSettings saved(path,QSettings::IniFormat);QCOMPARE(saved.value("audio/renderer").toString(),QString("3FP"));
+            QCOMPARE(saved.value("audio/endpoint").toString(),QString("test-endpoint"));QVERIFY(saved.value("audio/exclusive").toBool());checked=true;
+        });
+        QTimer::singleShot(5000,&player,[&]{if(auto *dialog=player.findChild<QDialog*>("playerSettings"))dialog->reject();});
+        player.showSettings();QVERIFY(checked);
+    }
     void singleAssociationUsesLauncher(){
         const auto old=qgetenv("VSR_SINGLE_PLAYER_PATH");const auto restore=qScopeGuard([&]{if(old.isNull())qunsetenv("VSR_SINGLE_PLAYER_PATH");else qputenv("VSR_SINGLE_PLAYER_PATH",old);});
         QTemporaryDir dir;const auto path=dir.filePath("VS-Player.exe");qputenv("VSR_SINGLE_PLAYER_PATH",path.toUtf8());QCOMPARE(playerAssociationExecutable(),path);
@@ -88,7 +141,7 @@ private slots:
     void idleGuideJsonControlsAndReload(){
         QTemporaryDir directory;const auto path=directory.filePath("preset-descriptions.json");QFile initial(path);QVERIFY(initial.open(QIODevice::WriteOnly));initial.write("{\"builtin/Anime.vpy\":\"keep\"}");initial.close();
         QWidget host;host.resize(500,400);QWidget controls(&host),timeline(&host);controls.setGeometry(0,300,500,100);timeline.setGeometry(0,294,500,6);QPushButton button(&controls);button.setObjectName("testButton");button.setGeometry(100,10,40,28);
-        PlayerIdleGuide guide(&host,&controls,&timeline,path);guide.setGeometry(0,0,500,290);host.show();guide.raise();QTest::qWait(80);QFile created(path);QVERIFY(created.open(QIODevice::ReadOnly));auto root=QJsonDocument::fromJson(created.readAll()).object();created.close();QCOMPARE(root.value("builtin/Anime.vpy").toString(),QString("keep"));QVERIFY(root.value("playerGuide").isObject());
+        PlayerIdleGuide guide(&host,&controls,&timeline,path);guide.setGeometry(0,0,500,290);host.show();guide.raise();QTest::qWait(80);QFile created(path);QVERIFY(created.open(QIODevice::ReadOnly));auto root=QJsonDocument::fromJson(created.readAll()).object();created.close();created.close();QCOMPARE(root.value("builtin/Anime.vpy").toString(),QString("keep"));QVERIFY(root.value("playerGuide").isObject());
         const auto store=[&](int length){root.insert("playerGuide",QJsonObject{{"center",QJsonObject{{"text",""}}},{"color","#00ff00"},{"guides",QJsonArray{QJsonObject{{"targets",QJsonArray{"testButton"}},{"text",""},{"length",length}}}}});QSaveFile file(path);if(!file.open(QIODevice::WriteOnly))return false;file.write(QJsonDocument(root).toJson());return file.commit();};
         const auto ink=[&](int x,int top,int bottom){const auto image=guide.grab().toImage();const auto dpi=image.devicePixelRatio();int count=0;for(int y=top;y<=bottom;++y){bool found=false;for(int column=qMax(0,qRound(x*dpi)-2);column<=qMin(image.width()-1,qRound(x*dpi)+2);++column){const auto c=image.pixelColor(column,qRound(y*dpi));found|=c.green()>c.red()+50 && c.green()>c.blue()+50;}count+=found;}return count;};
         QVERIFY(store(60));QTRY_VERIFY(ink(119,222,282)>10);button.move(180,10);guide.update();QTRY_VERIFY(ink(199,222,282)>10);QCOMPARE(ink(119,222,282),0);
@@ -135,7 +188,7 @@ private slots:
         for(int stage:{10,8,9,0,1,2,3,6,7}){
             player.showContextMenu(QPoint(20,20));auto *menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);auto *action=menu->findChild<QAction*>(QString("playerAnimeStage%1").arg(stage));QVERIFY(action);QVERIFY(action->isEnabled());action->trigger();menu->close();
             qInfo()<<"builtin route"<<stage<<player.qualityStage_<<player.direct_<<player.nativeAnime_<<player.message_->text();
-            QCOMPARE(player.qualityStage_,stage);QVERIFY(player.direct_);QVERIFY(player.nativeAnime_);if(stage>=8)QVERIFY(!player.customShaderPackage_.isEmpty());else {const int algorithms[]{10,9,11,12,4,7,13,14};QCOMPARE(player.scalingAlgorithm(),algorithms[stage]);}
+            QCOMPARE(player.qualityStage_,stage);QVERIFY(player.direct_);QVERIFY(player.nativeAnime_);if(stage>=8 || stage==6 || stage==7){QVERIFY(!player.customShaderPackage_.isEmpty());QCOMPARE(player.scalingAlgorithm(),stage==6?4:7);}else {const int algorithms[]{10,9,11,12,4,7,4,7};QCOMPARE(player.scalingAlgorithm(),algorithms[stage]);}
             QTRY_VERIFY_WITH_TIMEOUT(player.playing_,5000);const auto frames=player.snapshot().presentedVideoFrames;QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>frames+2,5000);QVERIFY(!player.clock_->capture().isNull());
         }
     }
@@ -522,7 +575,7 @@ private slots:
         const auto original=player.clock_->capture();QVERIFY(!original.isNull());
         player.showContextMenu(player.mapToGlobal(QPoint(80,80)));auto* menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);
         auto* action=menu->findChild<QAction*>(QString("playerAnimeStage%1").arg(stage));if(stage==4 || stage==5)action=menu->findChild<QAction*>(QString("playerPrimaryScale%1").arg(stage==4?4:7));QVERIFY(action);QVERIFY(action->isEnabled());action->trigger();menu->close();
-        QCOMPARE(player.qualityStage(),stage);const int algorithms[]{10,9,11,12,4,7,13,14};QCOMPARE(player.scalingAlgorithm(),algorithms[stage]);
+        QCOMPARE(player.qualityStage(),stage);const int algorithms[]{10,9,11,12,4,7,4,7};QCOMPARE(player.scalingAlgorithm(),algorithms[stage]);
         const auto filtered=player.clock_->capture();QVERIFY(!filtered.isNull());QCOMPARE(filtered.size(),original.size());QCOMPARE(player.outputSnapshot().framePts,pts);
         QVERIFY2(player.clock_->lastError().isEmpty(),qPrintable(player.clock_->lastError()));
         if(stage!=5)QVERIFY2(filtered!=original,"The selected filter must change rendered pixels");

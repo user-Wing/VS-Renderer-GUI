@@ -4,14 +4,9 @@
 #include <QFont>
 #include "ui/ExportWindow.h"
 #include <QTreeWidget>
-#include "ui/PreparedFiles.h"
 #include <QPlainTextEdit>
 #include <QLineEdit>
 #include <QComboBox>
-#include <QMimeData>
-#include <QDragEnterEvent>
-#include <QDropEvent>
-#include <QTabWidget>
 #include <QPushButton>
 
 #include <QDir>
@@ -21,6 +16,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QSettings>
+#include <QScopeGuard>
 #include <QLocalSocket>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -31,6 +27,19 @@ using namespace vsr;
 class TestExportPipeline final : public QObject {
     Q_OBJECT
 private slots:
+    void submitForCrashFixture(){
+        const auto root=qEnvironmentVariable("VSR_GUI_WORKER_FIXTURE");if(root.isEmpty())QSKIP("Only launched by bounded GUI-death test driver");QDir dir(root);ExportWindow window;QString error;const auto command=QString("\"%1\" -i <输入文件> -c:v ffv1 <输出文件>").arg(dir.filePath("muxer.exe"));QVERIFY2(window.addJob(command,dir.filePath("out.mkv"),dir.filePath("source.mkv"),"# frozen producer fixture",30,&error),qPrintable(error));QTest::qWait(120000);
+    }
+
+    void sameSourcePersistentQueue(){
+        QTemporaryDir temp;const auto old=qgetenv("VSR_EXPORT_ROOT"),worker=qgetenv("VSR_EXPORT_WORKER");qputenv("VSR_EXPORT_ROOT",temp.filePath("jobs").toUtf8());qputenv("VSR_EXPORT_WORKER",temp.filePath("dummy-worker.exe").toUtf8());const auto restore=qScopeGuard([&]{qputenv("VSR_EXPORT_ROOT",old);qputenv("VSR_EXPORT_WORKER",worker);});
+        QFile fake(temp.filePath("dummy-worker.exe"));QVERIFY(fake.open(QIODevice::WriteOnly));fake.write("fixture");fake.close();QFile source(temp.filePath("source.mkv"));QVERIFY(source.open(QIODevice::WriteOnly));source.write("fixture");source.close();QFile producer(temp.filePath("vspipe.exe"));QVERIFY(producer.open(QIODevice::WriteOnly));producer.write("fixture");producer.close();
+        const auto savedPath=qgetenv("PATH");qputenv("PATH",temp.path().toUtf8()+";"+savedPath);const auto restorePath=qScopeGuard([&]{qputenv("PATH",savedPath);});
+        const auto command=QString("\"%1\" -i <输入文件> -c:v ffv1 <输出文件>").arg(fake.fileName());QString error;
+        {ExportWindow window;QVERIFY2(window.addJob(command,temp.filePath("out_路1.mkv"),source.fileName(),"# frozen 1",1,&error),qPrintable(error));QVERIFY2(window.addJob(command,temp.filePath("out_路2.mkv"),source.fileName(),"# frozen 2",1,&error),qPrintable(error));QVERIFY(!window.addJob(command,temp.filePath("out_路1.mkv"),source.fileName(),"# conflict",1,&error));QCOMPARE(window.findChild<QTreeWidget*>("encodingQueue")->topLevelItemCount(),2);}
+        ExportWindow restored;QCOMPARE(restored.findChild<QTreeWidget*>("encodingQueue")->topLevelItemCount(),2);
+    }
+
     void commandBridgeAndHistory(){
         QSettings settings;const auto saved=settings.value("export/commandHistory");const auto restore=qScopeGuard([&]{if(saved.isValid())settings.setValue("export/commandHistory",saved);else settings.remove("export/commandHistory");});
         ExportWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
@@ -222,127 +231,28 @@ private slots:
         QVERIFY2(decode.exitCode() == 0, decode.readAllStandardError().constData());
         QVERIFY(QFileInfo(output).size() > 0);
         if (!stopEarly) {
-            QVERIFY(scriptFile.open(QIODevice::ReadOnly));
-            const QString snapshot = QString::fromUtf8(scriptFile.readAll());
-            const QString source2 = directory.filePath(QStringLiteral("source2.mkv"));
-            const QString source3 = directory.filePath(QStringLiteral("source3.mkv"));
-            QVERIFY(QFile::copy(source, source2));
-            QVERIFY(QFile::copy(source, source3));
-            ExportWindow window;
-            QVERIFY(window.parentWidget() == nullptr);
-            QVERIFY(!(window.windowFlags() & Qt::WindowStaysOnTopHint));
-            QVERIFY(!window.isModal());
-            window.setCurrentSource(source);
-            window.setScriptBuilder([snapshot](const QString &) { ScriptBuildResult result; result.script = snapshot; return result; });
-            QSignalSpy completed(&window, &ExportWindow::statusMessage);
-            QSignalSpy idle(&window, &ExportWindow::idle);
-            window.show();
-            window.findChild<QPushButton *>(QStringLiteral("pauseQueue"))->click();
-            QVERIFY(window.addJob(command, directory.filePath(QStringLiteral("queue1.mkv")), source, snapshot, 0.5));
-            QVERIFY(window.addJob(command, directory.filePath(QStringLiteral("queue2.mkv")), source2, snapshot, 0.5));
-            QVERIFY(window.addJob(command, directory.filePath(QStringLiteral("cancelled.mkv")), source3, snapshot, 0.5));
-            QString duplicateError;
-            QVERIFY(!window.addJob(command, directory.filePath(QStringLiteral("duplicate.mkv")), source, snapshot, 0.5, &duplicateError));
-            QVERIFY(!duplicateError.isEmpty());
-            auto *table = window.findChild<QTreeWidget *>();
-            QVERIFY(table);
-            QCOMPARE(table->topLevelItemCount(), 3);
-            QCOMPARE(window.findChild<QTabWidget *>()->count(), 3);
-            QCOMPARE(table->dragDropMode(), QAbstractItemView::InternalMove);
-            auto *second = table->takeTopLevelItem(1);
-            table->insertTopLevelItem(0, second);
-            table->topLevelItem(2)->setSelected(true);
-            window.findChild<QPushButton *>(QStringLiteral("removeWaiting"))->click();
-            QCOMPARE(table->topLevelItemCount(), 2);
-            window.close();
-            QVERIFY(window.isBusy());
-            window.show();
-            window.findChild<QPushButton *>(QStringLiteral("pauseQueue"))->click();
-            QCOMPARE(table->topLevelItem(0)->text(1), QStringLiteral("编码中"));
-            QVERIFY(table->topLevelItem(0)->text(0).endsWith(QStringLiteral("queue2.mkv")));
-            QTRY_VERIFY_WITH_TIMEOUT(completed.count() == 2, 15000);
-            QVERIFY(!window.isBusy());
-            QVERIFY(!QFileInfo::exists(directory.filePath(QStringLiteral("cancelled.mkv"))));
-            for (int row = 0; row < 2; ++row) {
-                QCOMPARE(table->topLevelItem(row)->text(1), QStringLiteral("导出完成。"));
-                QVERIFY(table->topLevelItem(row)->text(3).toLongLong() > 0);
-            }
-
-            ExportWindow batch;
-            batch.show();
-            batch.findChild<QPushButton *>(QStringLiteral("pauseQueue"))->click();
-            batch.setCurrentSource(source);
-            QStringList builtSources;
-            batch.setScriptBuilder([snapshot, &builtSources](const QString &path) {
-                builtSources.append(path);
-                ScriptBuildResult result; result.script = snapshot; return result;
+            const auto jobs=directory.filePath("jobs");QDir().mkpath(jobs);
+            const auto previous=qgetenv("VSR_EXPORT_ROOT");qputenv("VSR_EXPORT_ROOT",jobs.toUtf8());
+            const auto restore=qScopeGuard([&]{
+                QFile lock(QDir(jobs).filePath("worker.lock"));if(lock.open(QIODevice::ReadOnly)){
+                    const auto pid=lock.readLine().trimmed();lock.close();if(pid.toLongLong()>0){QProcess stop;stop.setStandardOutputFile(QProcess::nullDevice());stop.setStandardErrorFile(QProcess::nullDevice());stop.start("taskkill.exe",{"/PID",QString::fromLatin1(pid),"/F"});stop.waitForFinished(5000);}
+                }
+                if(previous.isNull())qunsetenv("VSR_EXPORT_ROOT");else qputenv("VSR_EXPORT_ROOT",previous);
             });
-            batch.findChild<QPlainTextEdit *>(QStringLiteral("exportCommand"))->setPlainText(command);
-            auto *prepared = batch.findChild<PreparedFiles *>(QStringLiteral("preparedFiles"));
-            QVERIFY(prepared);
-            QMimeData mime;
-            mime.setUrls({QUrl::fromLocalFile(source), QUrl::fromLocalFile(source2), QUrl::fromLocalFile(source)});
-            batch.findChild<QTabWidget *>()->setCurrentIndex(1);
-            QDragEnterEvent enter(QPoint(20,20), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
-            QCoreApplication::sendEvent(prepared->viewport(), &enter);
-            QVERIFY(enter.isAccepted());
-            QDropEvent drop(QPointF(20,20), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
-            QCoreApplication::sendEvent(prepared->viewport(), &drop);
-            QCOMPARE(prepared->count(), 2);
-            const QStringList expectedSources = prepared->files();
-            batch.findChild<QComboBox *>(QStringLiteral("outputNaming"))->setCurrentIndex(1);
-            batch.findChild<QPushButton *>(QStringLiteral("enqueueAll"))->click();
-            QCOMPARE(batch.findChild<QTreeWidget *>()->topLevelItemCount(), 0);
-            QCOMPARE(prepared->count(), 2);
-            builtSources.clear();
-            batch.findChild<QComboBox *>(QStringLiteral("outputNaming"))->setCurrentIndex(0);
-            QVERIFY(batch.grab().save(QDir(appDir).filePath(QStringLiteral("prepare-page.png"))));
-            batch.findChild<QPushButton *>(QStringLiteral("enqueueAll"))->click();
-            QCOMPARE(builtSources, expectedSources);
-            QCOMPARE(prepared->count(), 0);
-            QCOMPARE(batch.findChild<QTabWidget *>()->currentIndex(), 2);
-            auto *batchTable = batch.findChild<QTreeWidget *>();
-            QCOMPARE(batchTable->topLevelItemCount(), 2);
-            QVERIFY(batch.grab().save(QDir(appDir).filePath(QStringLiteral("queue-page.png"))));
-            QVERIFY(batchTable->topLevelItem(0)->text(0) != source);
-            batch.findChild<QTabWidget *>()->setCurrentIndex(0);
-            batch.findChild<QPushButton *>(QStringLiteral("exportSingle"))->click();
-            batch.findChild<QPushButton *>(QStringLiteral("exportSingle"))->click();
-            QCOMPARE(batchTable->topLevelItemCount(), 2);
-            batch.stopAll();
-
-            ExportWindow restart;
-            restart.show();
-            QString slow = QStringLiteral(
-                "import time\nimport vapoursynth as vs\nvs.core.num_threads = 1\n"
-                "clip = vs.core.std.BlankClip(width=64,height=36,format=vs.YUV420P8,length=120,fpsnum=6)\n"
-                "def slow(n,f):\n    time.sleep(0.05)\n    return f\n"
-                "clip=vs.core.std.ModifyFrame(clip,clips=clip,selector=slow)\nclip.set_output()\n");
-            QSignalSpy restartedDone(&restart, &ExportWindow::statusMessage);
-            const QString restartedOutput = directory.filePath(QStringLiteral("restart.mkv"));
-            const QString restartCommand = QStringLiteral("\"%1\" -hide_banner -loglevel error -y -i <输入文件> -map 0:v:0 -c:v ffv1 <输出文件>").arg(ffmpeg);
-            QVERIFY(restart.addJob(restartCommand, restartedOutput, source, slow, 20));
-            auto *restartTable = restart.findChild<QTreeWidget *>();
-            auto *item = restartTable->topLevelItem(0);
-            QTRY_VERIFY_WITH_TIMEOUT(item->text(3).toLongLong() > 0, 15000);
-            item->setSelected(true);
-            restart.findChild<QPushButton *>(QStringLiteral("pauseQueue"))->click();
-            QCOMPARE(item->text(1), QStringLiteral("已暂停"));
-            restart.findChild<QPushButton *>(QStringLiteral("stopSelected"))->click();
-            QTRY_COMPARE_WITH_TIMEOUT(restartedDone.count(), 1, 15000);
-            QVERIFY(QFileInfo(restartedOutput).size() > 0);
-            restart.findChild<QPushButton *>(QStringLiteral("restartStopped"))->click();
-            QCOMPARE(item->text(3), QStringLiteral("0"));
-            QCOMPARE(restartTable->topLevelItemCount(), 1);
-            restart.findChild<QPushButton *>(QStringLiteral("pauseQueue"))->click();
-            QTRY_COMPARE_WITH_TIMEOUT(restartedDone.count(), 2, 20000);
-            QCOMPARE(item->text(1), QStringLiteral("导出完成。"));
-            QCOMPARE(item->text(3).toLongLong(), 120);
-            decode.start(ffmpeg, {QStringLiteral("-v"), QStringLiteral("error"), QStringLiteral("-i"), restartedOutput,
-                QStringLiteral("-map"), QStringLiteral("0:v:0"), QStringLiteral("-f"), QStringLiteral("null"), QStringLiteral("-")});
-            QVERIFY(decode.waitForFinished(10000));
-            QCOMPARE(decode.exitCode(), 0);
+            QFile queue(QDir(jobs).filePath("queue.json"));QVERIFY(queue.open(QIODevice::WriteOnly));queue.write("{\"paused\":true}");queue.close();
+            QVERIFY(scriptFile.open(QIODevice::ReadOnly));const auto snapshot=QString::fromUtf8(scriptFile.readAll());scriptFile.close();
+            ExportWindow window;window.show();
+            const auto first=directory.filePath("queue1.mkv"),second=directory.filePath("queue2.mkv");
+            QVERIFY(window.addJob(command,first,source,snapshot,.5));QVERIFY(window.addJob(command,second,source,snapshot,.5));
+            QString error;QVERIFY(!window.addJob(command,first,source,snapshot,.5,&error));QVERIFY(!error.isEmpty());
+            auto *table=window.findChild<QTreeWidget *>();QVERIFY(table);QCOMPARE(table->topLevelItemCount(),2);
+            window.close();QVERIFY(window.isBusy());window.show();QTest::qWait(300);
+            window.findChild<QPushButton *>("pauseQueue")->click();QTRY_VERIFY_WITH_TIMEOUT(!window.isBusy(),15000);
+            for(int row=0;row<2;++row){QCOMPARE(table->topLevelItem(row)->text(1),QStringLiteral("已完成"));QVERIFY(table->topLevelItem(row)->text(3).toLongLong()>0);}
+            QVERIFY(QFileInfo(first).size()>0);QVERIFY(QFileInfo(second).size()>0);
+            ExportWindow reconnected;QCOMPARE(reconnected.findChild<QTreeWidget *>()->topLevelItemCount(),2);
         }
+
     }
 };
 

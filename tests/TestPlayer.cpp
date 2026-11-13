@@ -1,3 +1,5 @@
+#include <QFormLayout>
+#include <QCheckBox>
 #include "player/PlayerWindow.h"
 #include "player/PlayerIdleGuide.h"
 #include "player/PlayerAiSubtitles.h"
@@ -14,6 +16,7 @@
 #include "backend/VapourSynthFrameServer.h"
 #include "backend/FrameTimeline.h"
 #include "backend/LavPlayback.h"
+#include "NguMadvrDiagnostics.h"
 #include "backend/ThreeFpPlayer.h"
 #include "graph/PresetStore.h"
 #include <QApplication>
@@ -105,6 +108,39 @@ class TestPlayer final : public QObject {
     QString configPath() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
     Q_OBJECT
 private slots:
+    void openNguMenu(){runOpenNguMenu();}
+    void openNguPlayback(){runOpenNguPlayback();}
+    void startupTheme(){runStartupTheme();}
+    void infoFpsTracksNativePlayback(){runInfoFpsTracksNativePlayback();}
+    void measureBuiltin1080To2160(){runBuiltin1080To2160();}
+    void hlslOptimizationAcceptance(){runHlslOptimizationAcceptance();}
+private:
+#include "HlslOptimizationAcceptance.inc"
+#include "OpenNguAcceptance.inc"
+private slots:
+    void audioOutputSettingsPersist(){
+        QTemporaryDir dir;const auto previous=qgetenv("VSR_PLAYER_CONFIG");
+        const auto restore=qScopeGuard([&]{if(previous.isNull())qunsetenv("VSR_PLAYER_CONFIG");else qputenv("VSR_PLAYER_CONFIG",previous);});
+        const auto path=dir.filePath("player.ini");qputenv("VSR_PLAYER_CONFIG",path.toUtf8());
+        PlayerWindow player;player.setProperty("settingsPage",5);bool checked=false;
+        QTimer::singleShot(100,&player,[&]{
+            auto *dialog=player.findChild<QDialog*>("playerSettings");if(!dialog)return;
+            const auto close=qScopeGuard([&]{dialog->reject();});
+            auto *renderer=dialog->findChild<QComboBox*>("playerAudioRenderer");
+            auto *endpoint=dialog->findChild<QComboBox*>("playerAudioEndpoint");
+            auto *exclusive=dialog->findChild<QCheckBox*>("playerAudioExclusive");
+            QVERIFY(renderer && endpoint && exclusive);QCOMPARE(renderer->currentData().toString(),QString("3FP"));
+            auto *form=qobject_cast<QFormLayout*>(renderer->parentWidget()->layout());QVERIFY(form);
+            int row=-1;QFormLayout::ItemRole role;form->getWidgetPosition(renderer,&row,&role);QCOMPARE(row,1);
+            QVERIFY(form->itemAt(0,QFormLayout::FieldRole));
+            endpoint->addItem("Saved unavailable test endpoint","test-endpoint");endpoint->setCurrentIndex(endpoint->count()-1);exclusive->setChecked(true);
+            auto *apply=dialog->findChild<QPushButton*>("playerApplySettings");QVERIFY(apply);apply->click();
+            QSettings saved(path,QSettings::IniFormat);QCOMPARE(saved.value("audio/renderer").toString(),QString("3FP"));
+            QCOMPARE(saved.value("audio/endpoint").toString(),QString("test-endpoint"));QVERIFY(saved.value("audio/exclusive").toBool());checked=true;
+        });
+        QTimer::singleShot(5000,&player,[&]{if(auto *dialog=player.findChild<QDialog*>("playerSettings"))dialog->reject();});
+        player.showSettings();QVERIFY(checked);
+    }
     void aiPackageFingerprintTracksRuntime(){
         QTemporaryDir dir;QVERIFY(dir.isValid());
         for(const auto &name:{"worker.py","python.exe","llama-server.exe"}){QFile file(dir.filePath(name));QVERIFY(file.open(QIODevice::WriteOnly));file.write("first");}
@@ -209,7 +245,7 @@ private slots:
             if(stage>=8){auto relocated=QString::fromUtf8(original);relocated.replace(QCoreApplication::applicationDirPath(),"C:/old-portable-install");relocated.prepend("# Legacy portable installation\n");QVERIFY(PresetStore::write(path,relocated));}
             player.showContextMenu(QPoint(20,20));auto *menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);auto *action=menu->findChild<QAction*>(QString("playerAnimeStage%1").arg(stage));QVERIFY(action);QVERIFY(action->isEnabled());action->trigger();menu->close();
             qInfo()<<"builtin route"<<stage<<player.qualityStage_<<player.direct_<<player.nativeAnime_<<player.message_->text();
-            QCOMPARE(player.qualityStage_,stage);QVERIFY(player.direct_);QVERIFY(player.nativeAnime_);if(stage>=8)QVERIFY(!player.customShaderPackage_.isEmpty());else {const int algorithms[]{10,9,11,12,4,7,13,14};QCOMPARE(player.scalingAlgorithm(),algorithms[stage]);}
+            QCOMPARE(player.qualityStage_,stage);QVERIFY(player.direct_);QVERIFY(player.nativeAnime_);if(stage>=8 || stage==6 || stage==7){QVERIFY(!player.customShaderPackage_.isEmpty());QCOMPARE(player.scalingAlgorithm(),stage==6?4:7);}else {const int algorithms[]{10,9,11,12,4,7,13,14};QCOMPARE(player.scalingAlgorithm(),algorithms[stage]);}
             QTRY_VERIFY_WITH_TIMEOUT(player.playing_,5000);const auto frames=player.snapshot().presentedVideoFrames;QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>frames+2,5000);QVERIFY(!player.clock_->capture().isNull());
         }
     }
@@ -232,6 +268,86 @@ private slots:
             int low=255,high=0;for(int y=image.height()/4;y<image.height()*3/4;y+=17)for(int x=image.width()/4;x<image.width()*3/4;x+=17){const auto c=image.pixelColor(x,y);const int value=qGray(c.rgb());low=std::min(low,value);high=std::max(high,value);}qInfo()<<"Mode A picture range"<<stage<<low<<high;QVERIFY2(high-low>32,"Enhanced playback must retain spatial image content, not a solid frame");
         }
     }
+// Local opt-in acceptance: isolated executable directory, user-owned media only.
+void nguHlslPlaybackAcceptance() {
+    const auto source=qEnvironmentVariable("VSR_NGU_SOURCE"),output=qEnvironmentVariable("VSR_NGU_OUTPUT"),mode=qEnvironmentVariable("VSR_NGU_MODE","hlsl");
+    if(source.isEmpty() || output.isEmpty())QSKIP("Set VSR_NGU_SOURCE and VSR_NGU_OUTPUT for local NGU acceptance");
+    SetPriorityClass(GetCurrentProcess(),BELOW_NORMAL_PRIORITY_CLASS);
+    QDir().mkpath(output);
+    QSettings settings(configPath(),QSettings::IniFormat);
+    settings.setValue("basic/autoplay",true);settings.setValue("playback/remember",false);
+    settings.setValue("player/muted",true);settings.setValue("subtitle/visible",false);
+    settings.setValue("player/renderer",mode=="madvr"?"madVR":"VS");
+    settings.setValue("render/shaderDirectory",QDir(output).filePath("imported"));settings.sync();
+    PlayerWindow player;player.show();player.toggleFullscreen();
+    NguMadvrSettingsGuard madvrSettings;
+    if(mode!="madvr")player.loadPreset(QDir(PresetStore::directory()).filePath(mode=="anime"?"builtin/Anime-9-A-CNN.vpy":"builtin/Anime-5-D3D11.vpy"));
+    QElapsedTimer preparation;preparation.start();
+    if(mode=="hlsl")QVERIFY2(player.importCustomShader(qEnvironmentVariable("VSR_NGU_SHADER")),qPrintable(player.message_->text()));
+    const qint64 prepareMs=preparation.elapsed();
+    QVERIFY2(player.openFile(source),qPrintable(player.message_->text()));
+    if(mode=="madvr"){
+        QTRY_VERIFY_WITH_TIMEOUT(player.lav_ && player.lav_->madvrActive() && player.lav_->position()>1000000,30000);
+        QVERIFY(player.clock_->setClockOnly(true)); // Avoid a second renderer in this diagnostic comparison.
+        QVERIFY(madvrSettings.apply(static_cast<IUnknown*>(player.lav_->nativeRendererForDiagnostics()),output,qEnvironmentVariable("VSR_NGU_MADVR_FAMILY")));
+        nguDumpMadvr(static_cast<IUnknown*>(player.lav_->nativeRendererForDiagnostics()),output);
+    }
+    else {
+        QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Playing && player.snapshot().presentedVideoFrames>2,30000);
+        QVERIFY(player.direct_);QCOMPARE(player.snapshot().videoWidth,1920u);QCOMPARE(player.snapshot().videoHeight,1080u);
+        if(mode=="hlsl" || mode=="anime"){
+            QVERIFY2(!player.customShaderPackage_.isEmpty(),qPrintable(player.message_->text()));
+            QVERIFY(player.clock_->setCustomShader(player.customShaderPackage_,3840,2160));
+        }
+    }
+    const qint64 seek=qEnvironmentVariableIntValue("VSR_NGU_SEEK")*10000000LL;
+    player.seekTime(seek);
+    if(mode=="madvr"){player.lav_->resizeVideo(3840,2160);QVERIFY(nguMadvrTarget2x(static_cast<IUnknown*>(player.lav_->nativeRendererForDiagnostics())));}
+    if(mode!="madvr")QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.position()>=qMax<qint64>(0,seek-10000000),20000);
+    QTest::qWait(2500);
+    QJsonObject report{{"mode",mode},{"prepare_ms",prepareMs},{"source",source},{"package",player.customShaderPackage_},
+        {"seek_seconds",double(seek)/1e7},{"screen_hz",player.screen()->refreshRate()},
+        {"surface_width",player.pane_->surface()->width()*player.pane_->devicePixelRatioF()},
+        {"surface_height",player.pane_->surface()->height()*player.pane_->devicePixelRatioF()},
+        {"source_fps",double(player.clip_.fpsNumerator)/qMax(1LL,static_cast<long long>(player.clip_.fpsDenominator))}};
+    if(mode=="madvr"){
+        const auto info=nguMadvrInfo(static_cast<IUnknown*>(player.lav_->nativeRendererForDiagnostics()));report["madvr_info"]=info;
+        const auto rect=info["output_rect"].toArray();QVERIFY(rect.size()==4);QCOMPARE(rect[2].toInt()-rect[0].toInt(),3840);QCOMPARE(rect[3].toInt()-rect[1].toInt(),2160);
+    }
+    QFile ready(QDir(output).filePath("ready"));QVERIFY(ready.open(QIODevice::WriteOnly));ready.write(QByteArray::number(GetCurrentProcessId()));ready.close();
+    const auto first=player.snapshot();QElapsedTimer wall;wall.start();QJsonArray samples;
+    for(int i=0;i<qMax(10,qEnvironmentVariableIntValue("VSR_NGU_SECONDS"));++i){
+        QTest::qWait(1000);const auto s=player.snapshot();
+        samples.append(QJsonObject{{"wall_ms",double(wall.elapsed())},{"position_s",double(player.position())/1e7},
+            {"presented",double(s.presentedVideoFrames-first.presentedVideoFrames)},
+            {"dropped",double(s.droppedVideoFrames-first.droppedVideoFrames)},
+            {"coalesced",double(s.coalescedVideoFrames-first.coalescedVideoFrames)},
+            {"present_wait_ms",double(s.presentWait100ns)/1e4},{"scaling",int(s.videoScalingMode)}});
+    }
+    report["samples"]=samples;report["elapsed_ms"]=double(wall.elapsed());
+    const auto last=player.snapshot();report["fps"]=double(last.presentedVideoFrames-first.presentedVideoFrames)*1000./wall.elapsed();
+    report["decode_mode"]=int(last.decodeMode);report["dropped"]=double(last.droppedVideoFrames-first.droppedVideoFrames);report["coalesced"]=double(last.coalescedVideoFrames-first.coalescedVideoFrames);
+    player.togglePlayback();QTest::qWait(500);
+    if(mode!="madvr"){
+        const auto enhanced=player.clock_->capture();QVERIFY(!enhanced.isNull());QVERIFY(enhanced.save(QDir(output).filePath("output.png")));
+        int lo=255,hi=0;for(int y=0;y<enhanced.height();y+=17)for(int x=0;x<enhanced.width();x+=17){const int l=qGray(enhanced.pixel(x,y));lo=qMin(lo,l);hi=qMax(hi,l);}
+        report["picture_range"]=QJsonArray{lo,hi};QVERIFY2(hi-lo>32,"HLSL output must preserve spatial picture content");
+        report["capture_width"]=enhanced.width();report["capture_height"]=enhanced.height();
+        if(mode=="hlsl"){
+            QVERIFY(player.clock_->setCustomShader({},0,0));QTest::qWait(500);
+            const auto plain=player.clock_->capture();QVERIFY(!plain.isNull());QVERIFY(plain.save(QDir(output).filePath("without.png")));
+            int changed=0;for(int y=0;y<qMin(enhanced.height(),plain.height());y+=3)for(int x=0;x<qMin(enhanced.width(),plain.width());x+=3)if(enhanced.pixel(x,y)!=plain.pixel(x,y))++changed;
+            report["changed_sample_pixels"]=changed;QVERIFY2(changed>100,"Imported HLSL must change actual paused video output");
+        }
+    } else {
+        report["madvr_info_final"]=nguMadvrInfo(static_cast<IUnknown*>(player.lav_->nativeRendererForDiagnostics()));
+        player.activateWindow();player.raise();QTest::qWait(500);player.screen()->grabWindow(0).save(QDir(output).filePath("madvr-osd.png"));
+        const auto frame=player.lav_->capture();report["madvr_capture_available"]=!frame.isNull();if(!frame.isNull())frame.save(QDir(output).filePath("output.png"));
+    }
+    QFile file(QDir(output).filePath("playback.json"));QVERIFY(file.open(QIODevice::WriteOnly));file.write(QJsonDocument(report).toJson());file.close();
+    QVERIFY(mode=="madvr" || last.presentedVideoFrames>first.presentedVideoFrames);
+}
+
     void remote48FrameCadence_data(){QTest::addColumn<int>("algorithm");QTest::newRow("d3d11")<<7;QTest::newRow("jinc")<<4;QTest::newRow("hlsl")<<100;QTest::newRow("mode-a-enhanced")<<108;QTest::newRow("mode-a")<<109;QTest::newRow("moesr")<<110;}
     void remote48FrameCadence(){
         const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE to a 48 fps media file");QFETCH(int,algorithm);
@@ -309,7 +425,7 @@ private slots:
     }
     void remoteBuiltinHlsl(){
         const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE for native built-in playback");
-        const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};const int algorithms[]{10,9,11,12,13,14};
+        const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};const int algorithms[]{10,9,11,12,4,7};
         for(int i=0;i<names.size();++i){PlayerWindow player;player.settings_->setValue("playback/remember",false);player.settings_->setValue("render/hlsl",true);player.resize(1440,900);player.show();player.toggleFullscreen();player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/"+names[i]));QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.snapshot().state==ThreeFpState::Playing && player.outputSnapshot().presentedVideoFrames>2,20000);QVERIFY2(player.nativeAnime_ && player.direct_,qPrintable(names[i]+": "+player.message_->text()));QCOMPARE(player.scalingAlgorithm(),algorithms[i]);
             const auto before=player.snapshot().presentedVideoFrames;QTest::qWait(1000);QVERIFY(player.snapshot().presentedVideoFrames>before);const auto image=player.clock_->capture();QVERIFY(!image.isNull());player.infoVisible_=true;player.updateInfo();qInfo()<<"native-builtin"<<names[i]<<"algorithm"<<player.scalingAlgorithm()<<"frames"<<player.snapshot().presentedVideoFrames-before<<"capture"<<image.size()<<"status"<<player.message_->text();QVERIFY(player.info_->text().contains("HLSL"));
         }
@@ -1795,7 +1911,7 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         QTemporaryDir dir; const auto source=dir.filePath("source.mkv");QProcess ffmpeg;ffmpeg.start("C:/PortableSoft/FFmpegFreeUI ReadyToRun x64/ffmpeg.exe",{"-v","error","-f","lavfi","-i","color=blue:size=160x90:rate=24:duration=8","-c:v","ffv1","-y",source});QVERIFY(ffmpeg.waitForFinished(10000));QCOMPARE(ffmpeg.exitCode(),0);
         const auto script=dir.filePath("slow.vpy");QFile vpy(script);QVERIFY(vpy.open(QIODevice::WriteOnly));vpy.write("import vapoursynth as vs\nimport time\nc=vs.core.std.BlankClip(width=160,height=90,length=192,format=vs.YUV444P16,fpsnum=24,color=[10000,30000,40000])\ndef slow(n):\n    time.sleep(0.10)\n    return c\nvs.core.std.FrameEval(c,eval=slow).set_output()\n");vpy.close();
         PlayerWindow player;player.show();player.loadPreset(script);QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>5,10000);QTRY_VERIFY_WITH_TIMEOUT(player.skippedFrames()>3,10000);
-        player.activateWindow();QTRY_VERIFY(player.isActiveWindow());QTest::keyClick(&player,Qt::Key_Tab);QTest::qWait(100);bool found=false;for(auto *label:player.findChildren<QLabel *>())if(label->text().contains(QStringLiteral("VS 跳过"))){found=true;QVERIFY(label->text().contains(QStringLiteral("GPU：")));}QVERIFY(found);
+        player.activateWindow();QTRY_VERIFY(player.isActiveWindow());QTest::keyClick(&player,Qt::Key_Tab);QTest::qWait(100);bool found=false;for(auto *label:player.findChildren<QLabel *>())if(label->text().contains(QStringLiteral("VS 跳过"))){found=true;QVERIFY(label->text().contains(QStringLiteral("GPU：")));QVERIFY(!label->text().contains(QStringLiteral("实际视频链路")));QVERIFY(!label->text().contains(QStringLiteral("系统首个GPU")));}QVERIFY(found);
         const auto dropped=player.skippedFrames();player.seekTime(0);QTest::qWait(30);QVERIFY(player.skippedFrames()<=dropped+1);
     }
     void followupTransportAndInformationFit(){

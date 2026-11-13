@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>超分算法 · Pareto 前沿</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script src="data.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow"><span class="brand-mark">↗</span> SUPER RESOLUTION <span class="divider">/</span> 算法比较</div>
+      <div class="heading"><div><h1 id="title">超分算法的质量与算力</h1><p id="description">用同一把尺子，找到质量与算力之间的取舍。</p></div><span class="badge">PARETO FRONTIER</span></div>
+    </header>
+    <section class="toolbar" aria-label="数据与显示设置">
+      <div class="actions"><label class="button primary" for="file">打开 JSON <span>↗</span></label><input class="file-input" type="file" id="file" accept=".json,application/json"><button id="reload" type="button">重新读取</button><span id="filename">尚未加载数据</span></div>
+      <div class="display-options"><label class="toggle"><input id="labels" type="checkbox" checked> 显示算法名称</label><label class="toggle"><input id="hide-preview" type="checkbox"> 隐藏 Preview 模型</label></div>
+    </section>
+    <p id="status" role="status" aria-live="polite"></p>
+    <section class="chart-card" aria-label="算法质量与算力图表">
+      <div class="plot-panel"><div class="plot-meta"><span><i class="live-dot"></i> 质量 / 算力分布</span><span>越靠左上，越理想 ↖</span></div><div class="plot-scroll"><svg id="chart" viewBox="0 0 1100 660" role="img" aria-labelledby="chart-title chart-description"></svg></div><div class="plot-caption"><span>横轴为对数刻度 · 每一大格代表 10 倍算力</span><span id="point-count">0 个算法</span></div></div>
+      <aside><div class="aside-heading">算法分组 <span>LEGEND</span></div><div id="legend"></div><div class="line-key"><span></span> Pareto 前沿</div><p class="muted">不存在另一个算法，算力不更高且效果不更差，并至少有一项更优。Preview 模型仅供参考，不参与前沿计算和名单。</p><div class="frontier-heading">前沿算法 <span id="frontier-count">0</span></div><ol id="frontier-list"></ol></aside>
+    </section>
+    <footer><span>原始数值输入，对数坐标展示。效果分数越高越好。</span><a href="README.md">JSON 格式与使用说明 ↗</a></footer>
+    <details><summary>如何替换数据</summary><p>编辑同目录的 <code>algorithms.json</code>，填写 <code>name</code>（名称）、<code>compute</code>（1–10000 的原始算力值）、<code>quality</code>（效果值）。<code>group</code> 为可选分组。双击打开本页后，点击“打开 JSON”选择文件；通过 HTTP 访问时会自动读取同目录 JSON。</p><p>修改文件后点击“重新读取”；若浏览器无法再次读取已选文件，请重新选择。所有数据仅在本地浏览器中处理。</p></details>
+  </main>
+</body>
+</html>

@@ -1,5 +1,21 @@
 # API 20 原生内核构建
 
+## 当前基线：2026-11-13 上游合并
+
+固定 `248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c`（上游 PR #57，已含 #55 CUDA 主优化及互操作续修）。`tools/build-native-api20.ps1` 仅应用 `patches/3fp-vsp-upstream-20261113.patch`，然后复制本库头文件并重新生成通用/SDR HLSL 字节码；不要叠加下文历史三层补丁。API 仍为 20，snapshot 为 **v23 / 608 字节**，Qt 根据新可选导出识别版本，旧字段偏移保持不变。
+
+本机完整 MSVC/IAMF 构建产物来自 `.deps/fff-upstream-20261113`。OpenNGU 使用独立 `VSR3FP_SetUpscaleShader` 执行器，可位于原生直通或已有处理结果之后；旧自定义 shader 接口不变。源码补丁不包含用户提供的私有 OpenNGU 参数。 VS GLSL 导出会合并 MAIN hook 中重复的 MAIN/HOOKED 同义绑定，避免 libplacebo 重定义宏后静默禁用 hook。
+
+上游音频直通是可选模块 seam：Native 负责轨道、WASAPI 独占、ASR 影子解码和回退，IEC 61937 打包由外部模块提供；无模块时保持 PCM。不能将接口回归通过写成 AVR 直通播放通过。当前构建/测试证据见 [本轮记录](../development/upstream-openngu-20261113.md)。下面为旧基线的历史说明。
+
+## 2026-11-10 音频与 UNC 补丁
+
+固定提交仍为 `72af915f8bf2567155c1f87851a6fa263f73b14f`。标准 `tools/build-native-api20.ps1` 按顺序应用原汇总补丁、原网络代理补丁、`patches/3fp-vsp-audio-unc.patch`，再复制 `src/backend/LocalMediaPath.h`、`AudioFormatPolicy.h` 等配套头文件。C ABI 和结构尺寸不变；新增实际音频状态走既有 media-info JSON。
+
+源码包的 `native-core/FFF.Native` 是已经应用三层补丁并复制头文件的快照，不要再次对该快照 apply。可使用它复核修改；常规可复现构建仍使用上面的固定 Git checkout + 标准脚本。包内保留生成的 Anime4KFastShaders.h，但外部 FFmpeg 63/63/61、libass、IAMF 库等 SDK 不在核心源码包内。
+
+本轮 Full/Lite GUI 和专项测试程序已完整链接；WasapiRenderer 与 PlayerSession 经 MSVC `/Zs` 编译检查，修改后的 WasapiRenderer + AsrAudioTap 已单独 MSVC 链接并实际进行硬件协商。**完整 FFF.Native.dll 未重建**，不能把 GUI 构建成功或独立探针等同于新内核完整播放器部署。本地已安装播放器未覆盖。
+
 1.1.0 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`。在该提交的独立 checkout 应用 `patches/3fp-vsp-1.1.0.patch`，再由脚本复制本库的色彩、源像素探测、Anime4K、自定义 shader 与图片重采样头文件。旧的分层补丁留作历史，不叠加到本轮基线。标准脚本已在干净 worktree 完整构建成功。
 
 入口是 `tools/build-native-api20.ps1`，其 NativeRoot 必须固定到上述提交；DependenciesRoot 提供 ffmpeg / vcpkg_installed，LibiamfRoot 提供 IAMF 静态库。最终 Qt 和 Full/Lite 都必须使用同一份 DLL，不能复用旧 snapshot 布局。

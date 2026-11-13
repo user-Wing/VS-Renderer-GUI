@@ -47,6 +47,7 @@ struct LavPlayback::Impl {
     }
     IBaseFilter *filter(const QString &file, const wchar_t *clsid, const QString &folder = "LAVFilters64") {
         const QString path = QDir(QCoreApplication::applicationDirPath()).filePath(folder + "/" + file);
+        if (!QFileInfo::exists(path)) { error = QCoreApplication::translate("LavPlayback","组件未安装：%1。请在设置 → 组件下载中下载 LAV-Filters / MadVR，应用后重启。").arg(path); return nullptr; }
         static QHash<QString,HMODULE> madModules;
         if(folder=="madVR09217") for(const auto &dependency:QStringList{"madHcNet64.dll","mvrSettings64.dll"}) {
             const auto dependencyPath=QDir(QFileInfo(path).absolutePath()).filePath(dependency);
@@ -131,6 +132,7 @@ void LavPlayback::volume(float value, bool muted) { if (impl_->audio) impl_->aud
 QString LavPlayback::error() const { return impl_->error; }
 void LavPlayback::resizeVideo(int width, int height) { if (impl_->window) impl_->window->SetWindowPosition(0,0,width,height); }
 bool LavPlayback::madvrActive() const { return impl_->renderer && impl_->window; }
+void *LavPlayback::nativeRendererForDiagnostics() const { return impl_->renderer; }
 void LavPlayback::setSubtitle(const QImage &image) {
     auto &i=*impl_; if(!i.osd) return; HBITMAP next=nullptr;
     if(!image.isNull()) { BITMAPINFO info{}; info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=image.width();info.bmiHeader.biHeight=-image.height();info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;

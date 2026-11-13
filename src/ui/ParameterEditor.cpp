@@ -201,6 +201,10 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
         updateOutput();connect(outputMode,&QComboBox::currentTextChanged,this,[updateOutput](const QString &){updateOutput();});
         connect(keepAspect_,&QCheckBox::toggled,this,[this](bool enabled){if(enabled)setInputSize(inputSize_);});
     }
+    if(definition->id=="anime4k"){
+        auto *hint=new QLabel(QStringLiteral("勾选预览使用HLSL加速，导出仍然使用GLSL"),this);hint->setObjectName("shaderPreviewExportHint");hint->setWordWrap(true);hint->setMinimumWidth(0);
+        auto policy=QSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);policy.setHeightForWidth(true);hint->setSizePolicy(policy);form_->addWidget(hint,row++,0,1,2);
+    }
     QTimer::singleShot(0,this,[this]{updateTextHeights();});
     if (definition->parameters.isEmpty())
         form_->addWidget(new QLabel(QStringLiteral("该节点没有可调参数。"), this), row, 0, 1, 2);

@@ -67,7 +67,7 @@ void PlayerWindow::attachSubtitle(const QString &path,int slot) {
     externalSubtitleTracks_[slot]={};externalSubtitleIndex_[slot]=-1;
     if(QFileInfo(path).suffix().compare("mks",Qt::CaseInsensitive)==0){const auto source=source_;auto *watcher=new QFutureWatcher<QJsonObject>(this);connect(watcher,&QFutureWatcher<QJsonObject>::finished,this,[this,watcher,path,slot,source]{const auto probe=watcher->result();watcher->deleteLater();if(source_!=source || (slot==0?externalSubtitle_:externalSecondarySubtitle_)!=QFileInfo(path).absoluteFilePath())return;
         for(const auto &entry:probe.value("streams").toArray())if(entry.toObject().value("codec_type").toString()=="subtitle")externalSubtitleTracks_[slot]<<entry;
-        if(externalSubtitleTracks_[slot].isEmpty()){setError(tr("MKS 中未找到字幕轨。"));return;}externalSubtitleIndex_[slot]=externalSubtitleTracks_[slot].first().toObject().value("index").toInt();
+        if(externalSubtitleTracks_[slot].isEmpty()){setError(tr("MKS 中未找到字幕轨。"));return;}bool remembered=false;for(const auto &entry:externalSubtitleTracks_[slot])remembered|=entry.toObject().value("index").toInt()==externalSubtitleIndex_[slot];if(!remembered)externalSubtitleIndex_[slot]=externalSubtitleTracks_[slot].first().toObject().value("index").toInt();
         externalChapters_={};for(const auto &value:probe.value("chapters").toArray()){const auto c=value.toObject();externalChapters_<<QJsonObject{{"start100ns",double(qRound64(c.value("start_time").toString().toDouble()*10000000))},{"title",c.value("tags").toObject().value("title").toString()}};}applyBlurayMetadata();timeline_->setProperty("chapters",media_.value("chapters").toArray());selectSubtitle(slot,-2);showStatus(tr("已挂载 MKS：%1 · %2 轨 · %3 章节").arg(QFileInfo(path).fileName()).arg(externalSubtitleTracks_[slot].size()).arg(externalChapters_.size()));
     });watcher->setFuture(QtConcurrent::run([path]{return PlayerAudioMetadata::probe(path);}));return;}
     selectSubtitle(slot,-2);showStatus(tr("已挂载字幕：%1").arg(QFileInfo(path).fileName()));
@@ -149,14 +149,16 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     auto *animeMenu=PlayerMenu::add(scalingFilters,tr("Anime4K V4 CNN+"));animeMenu->setObjectName("playerAnimeFilters");describeCategory(animeMenu,"menu/anime4k");
     for(int stage:{8,9,0,1,2,3,6,7})scaleChoice(animeMenu,stage);
     scalingFilters->addSeparator();auto *passThroughFilters=PlayerMenu::add(scalingFilters,tr("常规直通模式"));passThroughFilters->setObjectName("playerPassthroughFilters");describeCategory(passThroughFilters,"menu/passThrough");
-    const QStringList algorithmNames{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc (Anti-Alias)","Spline36","Super-XBR","D3D11","Lanczos4"};
-    const QStringList algorithmKeys{"scaling/Nearest","scaling/Bilinear","scaling/Bicubic","scaling/Lanczos3","builtin/Anime-4-Jinc.vpy","scaling/Spline36","scaling/SuperXbr","builtin/Anime-5-D3D11.vpy","scaling/Lanczos4"};
+    const QStringList algorithmNames{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc (Anti-Alias)","Spline36","Super-XBR","D3D11","Lanczos4","","","","","","","OpenNGU"};
+    const QStringList algorithmKeys{"scaling/Nearest","scaling/Bilinear","scaling/Bicubic","scaling/Lanczos3","builtin/Anime-4-Jinc.vpy","scaling/Spline36","scaling/SuperXbr","builtin/Anime-5-D3D11.vpy","scaling/Lanczos4","","","","","","","scaling/OpenNGU"};
     const auto algorithms=[&](QMenu *folder,const QString &key,const QString &id,bool primary){
         auto *group=new QActionGroup(folder);
-        for(int algorithm:{4,7,3,8,5,2,1,0,6}){
+        const QList<int> order=primary?QList<int>{15,4,7,3,8,5,2,1,0,6}:
+            key=="render/secondUpscale"?QList<int>{4,7,15,3,8,5,2,1,0,6}:QList<int>{4,7,3,8,5,2,1,0,6};
+        for(int algorithm:order){
             auto *action=folder->addAction(algorithmNames[algorithm]);action->setObjectName(id+QString::number(algorithm));
             action->setToolTip(description(algorithmKeys[algorithm]));
-            action->setCheckable(true);action->setChecked(settings_->value(key,4).toInt()==algorithm && (!primary || direct_ && !nativeAnime_));group->addAction(action);
+            action->setCheckable(true);action->setChecked(settings_->value(key,primary?15:4).toInt()==algorithm && (!primary || direct_ && (!nativeAnime_ || qualityStage_==4 || qualityStage_==5)));group->addAction(action);
             connect(action,&QAction::triggered,this,[this,key,algorithm,primary]{
                 if(primary)loadPreset(QDir(PresetStore::directory()).filePath(algorithm==4?"builtin/Anime-4-Jinc.vpy":"builtin/Anime-5-D3D11.vpy"));
                 settings_->setValue(key,algorithm);applyScaling();(direct_?clock_:output_)->redraw();

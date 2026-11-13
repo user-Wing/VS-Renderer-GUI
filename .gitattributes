@@ -18,3 +18,6 @@ development/evidence/vsp-1.1.0/** -text -whitespace
 assets/builtin-shaders/*.glsl -text -whitespace
 assets/builtin-shaders/*.hlsl -text -whitespace
 assets/builtin-shaders/source/*.hlsl -text -whitespace
+
+patches/3fp-vsp-audio-unc.patch text eol=lf -whitespace
+patches/3fp-vsp-upstream-20261113.patch text eol=lf -whitespace

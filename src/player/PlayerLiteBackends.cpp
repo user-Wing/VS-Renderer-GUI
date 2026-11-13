@@ -34,5 +34,6 @@ void LavPlayback::showAudioSettings(void *) {}
 bool LavPlayback::setRate(double) { return false; }
 QImage LavPlayback::capture() const { return {}; }
 bool LavPlayback::madvrActive() const { return false; }
+void *LavPlayback::nativeRendererForDiagnostics() const { return nullptr; }
 void LavPlayback::setSubtitle(const QImage &) {}
 }

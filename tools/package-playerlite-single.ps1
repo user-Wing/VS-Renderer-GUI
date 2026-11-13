@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$SourceDirectory = "",
     [string]$OutputFile = ""
 )
@@ -6,8 +6,12 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $version = [regex]::Match((Get-Content -LiteralPath (Join-Path $root 'CMakeLists.txt') -Raw), 'project\(VSRenderer VERSION ([0-9.]+)').Groups[1].Value
 if (!$version) { throw 'Project version not found' }
-if (-not $SourceDirectory) { $SourceDirectory = Join-Path $root 'build\playerlite-runtime' }
+if (-not $SourceDirectory) { $SourceDirectory = Join-Path $root "build/playerlite-runtime-$version" }
 if (-not $OutputFile) { $OutputFile = Join-Path $root 'dist\VS-Player.exe' }
+$sourceRelease = Join-Path $SourceDirectory 'release.json'
+if (!(Test-Path -LiteralPath $sourceRelease)) { throw "Missing staged runtime metadata: $sourceRelease" }
+$sourceVersion = (Get-Content -LiteralPath $sourceRelease -Raw | ConvertFrom-Json).version
+if ($sourceVersion -ne $version) { throw "Runtime version $sourceVersion does not match source version $version; stage a fresh runtime first." }
 $built = Join-Path $SourceDirectory 'vs-player.exe'
 if (!(Test-Path -LiteralPath $built)) { throw "Rebuild VSPlayerLite first: $built" }
 if (!(Test-Path -LiteralPath (Join-Path $SourceDirectory 'FFF.Native.dll'))) { throw "Missing FFF.Native.dll: $SourceDirectory" }

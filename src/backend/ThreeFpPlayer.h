@@ -25,6 +25,7 @@ public:
     void setLoudnessNormalization(bool enabled);
     QSize processingSize() const;
     bool setDecodeBuffer(quint64 bytes,unsigned frames);
+    bool setAudioOutput(const QString &endpoint, bool exclusive);
     bool setClockOnly(bool enabled);
     bool setSoftwarePreScale(int height);
     void stop();
@@ -47,6 +48,7 @@ public:
     bool setVrrPacing(bool enabled);
     bool setScalingAlgorithms(ThreeFpScalingAlgorithm upscale, ThreeFpScalingAlgorithm downscale);
     void setSecondaryScaling(int algorithm);
+    bool setUpscaleShader(const QString &packagePath);
     bool setCustomShader(const QString &packagePath, int outputWidth = 0, int outputHeight = 0);
     bool setChromaAlgorithm(int algorithm);
     void setView(float zoom, float panX, float panY);
@@ -79,6 +81,9 @@ private:
     QWidget *surface_ = nullptr;
     void *handle_ = nullptr;
     QString lastError_;
+    QString audioEndpoint_;
+    bool audioExclusive_ = false;
+    bool audioOutputPending_ = true;
     int chromaAlgorithm_ = 1;
     bool muted_ = false;
     bool clockOnly_ = false;
@@ -91,7 +96,7 @@ private:
     bool customColorSettings_ = false;
     bool antiRinging_ = false;
     QString outputFormat_;
-    QString customShaderPath_;
+    QString customShaderPath_, upscaleShaderPath_;
     int customShaderWidth_ = 0, customShaderHeight_ = 0;
     quint64 subtitleSequence_ = 0;
     bool vrrPresent_ = false;

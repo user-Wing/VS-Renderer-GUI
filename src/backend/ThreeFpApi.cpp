@@ -95,6 +95,17 @@ VideoEnhancementStatus ThreeFpApi::videoEnhancementStatus(void *handle,bool hdr)
     return status;
 }
 
+bool ThreeFpApi::hasAudioOutputControls() const {
+    return available() && library_.resolve("FFF3FP_SetAudioEndpoint") && library_.resolve("FFF3FP_SetAudioExclusiveMode");
+}
+ThreeFpResult ThreeFpApi::setAudioEndpoint(void *handle,const char *endpoint) const {
+    const auto call=reinterpret_cast<OpenFn>(library_.resolve("FFF3FP_SetAudioEndpoint"));
+    return call?call(handle,endpoint):ThreeFpResult::NotSupported;
+}
+ThreeFpResult ThreeFpApi::setAudioExclusiveMode(void *handle,bool exclusive) const {
+    const auto call=reinterpret_cast<ToggleFn>(library_.resolve("FFF3FP_SetAudioExclusiveMode"));
+    return call?call(handle,exclusive?1u:0u):ThreeFpResult::NotSupported;
+}
 bool ThreeFpApi::available() const { const_cast<ThreeFpApi *>(this)->initialize();return library_.isLoaded() && error_.isEmpty(); }
 QString ThreeFpApi::libraryPath() const { return QFileInfo(library_.fileName()).absoluteFilePath(); }
 QString ThreeFpApi::errorString() const { return error_; }
@@ -122,7 +133,13 @@ ThreeFpResult ThreeFpApi::setCustomShader(void *h,const char *path,int width,int
     const auto call=reinterpret_cast<Fn>(library_.resolve("VSR3FP_SetCustomShader"));
     return call?call(h,path,std::uint32_t(width),std::uint32_t(height)):ThreeFpResult::NotSupported;
 }
-ThreeFpResult ThreeFpApi::snapshot(void *h, ThreeFpSnapshot *s) const { if(!available())return ThreeFpResult::NativeFailure;s->version=apiVersion()>=20?22:8;return snapshot_(h,s); }
+ThreeFpResult ThreeFpApi::setUpscaleShader(void *handle, const char *path) const {
+    using Fn=ThreeFpResult(*)(void *,const char *);
+    if(!available())return ThreeFpResult::NativeFailure;
+    const auto call=reinterpret_cast<Fn>(library_.resolve("VSR3FP_SetUpscaleShader"));
+    return call?call(handle,path):ThreeFpResult::NotSupported;
+}
+ThreeFpResult ThreeFpApi::snapshot(void *h, ThreeFpSnapshot *s) const { if(!available())return ThreeFpResult::NativeFailure;s->version=apiVersion()>=20?(library_.resolve("FFF3FP_GetAudioPassthroughState")?23:22):8;return snapshot_(h,s); }
 ThreeFpResult ThreeFpApi::setColorSettings(void *h, const VsrColorSettings *s) const { return setColorSettings_ ? setColorSettings_(h,s) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::colorStatus(void *h, VsrColorStatus *s) const { return colorStatus_ ? colorStatus_(h,s) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::readPixel(void *h, ThreeFpPixelProbe *p) const { if(!available())return ThreeFpResult::NativeFailure;p->version=apiVersion()>=20?20:1;return readPixel_(h,p); }

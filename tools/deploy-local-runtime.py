@@ -52,10 +52,11 @@ def write_json(target, data):
 
 def main():
     backup = ROOT / 'build' / ('deployment-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
-    report = {'upstream': 'cc545d2afc3f7b45058f47434628db6a703c7b07', 'base': '146b5e03c784a01215bcc21b5dee60c97dabb089', 'startupPr': 48, 'editions': {}}
+    report = {'upstream': '248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c', 'base': '72af915f8bf2567155c1f87851a6fa263f73b14f', 'startupPr': 48, 'integrationPr': 57, 'editions': {}}
+    version = re.search(r'project\(VSRenderer VERSION ([0-9.]+)', (ROOT / 'CMakeLists.txt').read_text(encoding='utf-8')).group(1)
     editions = {
-        ROOT / 'dist/VS-GUI-Full': {'VSRenderer.exe': BUILD / 'VSRenderer.exe', 'vs-player.exe': BUILD / 'vs-player.exe', 'vs-cap.exe': BUILD / 'vs-cap.exe'},
-        ROOT / 'build/playerlite-runtime': {'vs-player.exe': BUILD / 'lite/vs-player.exe'},
+        ROOT / 'dist/VS-GUI-Full': {'VSRenderer.exe': BUILD / 'VSRenderer.exe', 'vs-player.exe': BUILD / 'vs-player.exe', 'vs-cap.exe': BUILD / 'vs-cap.exe', 'vs-export-worker.exe': BUILD / 'vs-export-worker.exe'},
+        ROOT / 'build' / ('playerlite-runtime-' + version): {'vs-player.exe': BUILD / 'lite/vs-player.exe'},
     }
     for target, programs in editions.items():
         folder = target.name
@@ -142,6 +143,7 @@ def main():
         release['nativeUpstream'] = report['upstream']
         release['nativeBase'] = report['base']
         release['nativeStartupPr'] = report['startupPr']
+        release['nativeIntegrationPr'] = report['integrationPr']
         write_json(target / 'release.json', release)
         manifest = {p.relative_to(target).as_posix(): {'bytes': p.stat().st_size, 'sha256': digest(p)}
                     for p in sorted(target.rglob('*')) if p.is_file() and p.name != 'resource-manifest.json'}

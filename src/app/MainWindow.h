@@ -6,6 +6,8 @@
 #include "player/PlayerResources.h"
 
 #include <QMainWindow>
+#include <QJsonObject>
+#include <QList>
 
 #include <memory>
 #include <vector>
@@ -27,6 +29,7 @@ class QSplitter;
 class QSpinBox;
 
 class TestAnalysis;
+class TestAgentIntegration;
 
 namespace vsr {
 
@@ -39,6 +42,12 @@ class ExportWindow;
 class ThreeFpPlayer;
 class VapourSynthFrameServer;
 class PlayerLanguage;
+class AgentSession;
+class AgentPage;
+class AgentInstructions;
+class AgentMcpManager;
+class AgentTaskQueue;
+class AgentModelCapabilities;
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
@@ -54,6 +63,12 @@ protected:
 
 private:
     friend class ::TestAnalysis;
+    friend class ::TestAgentIntegration;
+    void initializeAgent();
+    void initializeAgentFeatures();
+    void initializeAgentInteractions();
+    void submitAgentInput(const QString &text);
+    void refreshAgentCompletions();
     QWidget *buildSidebar();
     QWidget *buildParameterPanel();
     QWidget *buildSettingsPage();
@@ -81,7 +96,7 @@ private:
     void updateRouteChoices();
     void renderAdditionalRoute(int index);
     void scanWorkingFolder(const QString &folder = {});
-    struct RouteState {QList<FilterTimeGroup> groups{{QStringLiteral("全片"),0,{}}};QString preset;bool visible=true;};
+    struct RouteState {QList<FilterTimeGroup> groups{{QStringLiteral("全片"),0,{}}};QString preset;bool visible=true;QString previewScript;};
     QList<RouteState> routes_{{}};
     std::vector<std::unique_ptr<RenderRoute>> additionalRoutes_;
     int routeIndex_=0;
@@ -100,8 +115,22 @@ private:
     QString hlslPreviewPackage_, hlslPreviewFallback_;
     QVariantMap hlslPreviewParameters_;
     bool hlslPreviewRetryGlSl_ = false;
+    QJsonObject projectSnapshot() const;
+    bool applyProjectSnapshot(const QJsonObject &root);
+    bool confirmProjectReplacement();
+    void initializeProjectProtection();
+    void checkpointProject();
+    void stepProjectHistory(int direction);
+    QString projectPath_, recoveryPath_;
+    QList<QJsonObject> projectHistory_;
+    int projectHistoryIndex_=0;
+    QJsonObject savedProject_;
+    bool projectApplying_=false, projectProtectionReady_=false;
+    quint64 folderScanGeneration_=0;
     void saveProject();
     void openProject();
+    bool saveProjectTo(const QString &path, QString *error = nullptr);
+    bool openProjectFrom(const QString &path, QString *error = nullptr);
     void showPresets();
     void loadPreset(const QString &path, bool currentGroup = false);
     ScriptBuildResult currentScript(const QString &source = {}) const;
@@ -117,6 +146,12 @@ private:
     std::unique_ptr<ExportWindow> exportWindow_;
     bool pendingPreview_ = false;
     std::unique_ptr<AnalysisPage> analysisPage_;
+    AgentSession *agentSession_ = nullptr;
+    AgentPage *agentPage_ = nullptr;
+    AgentInstructions *agentInstructions_ = nullptr;
+    AgentMcpManager *agentMcp_ = nullptr;
+    AgentTaskQueue *agentQueue_ = nullptr;
+    AgentModelCapabilities *agentModels_ = nullptr;
     QStackedWidget *pages_ = nullptr;
     QWidget *navigation_ = nullptr;
     QList<QAction *> vsActions_;
@@ -128,7 +163,8 @@ private:
     bool hasCopiedFilters_ = false;
     int timeGroupIndex_ = 0;
     QListWidget *timeGroupList_ = nullptr;
-    QSpinBox *groupStart_ = nullptr;
+    QSpinBox *groupStart_ = nullptr, *groupFrame_ = nullptr;
+    qint64 groupFrameBoundary(const FilterTimeGroup &group) const;
     QLineEdit *groupName_ = nullptr;
     QSplitter *content_ = nullptr;
     QWidget *featureOne_ = nullptr, *featureTwo_ = nullptr, *pipelinePanel_ = nullptr, *fileInput_ = nullptr;

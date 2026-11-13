@@ -22,13 +22,17 @@ function Test-DownloadedArchive([string]$Path,[string]$Expected) {
 try {
     if ($installRoot -eq [IO.Path]::GetPathRoot($installRoot).TrimEnd('\') -or !(Test-Path -LiteralPath (Join-Path $installRoot $Launch))) {throw 'Invalid portable installation'}
     $entries=Get-Content -LiteralPath $Plan -Raw | ConvertFrom-Json
-    $destinations=@{'ffmpeg'='.';'mkvtoolnix'='runtime\mkvtoolnix';'MadVR'='madVR09217';'LAV-Filters'='LAVFilters64';'aria2-next'='runtime\tools';'AI-Subtitles'='runtime\ai-subtitles'}
-    $programs=@{'ffmpeg'='ffmpeg.exe';'mkvtoolnix'='mkvmerge.exe';'MadVR'='madVR64.ax';'LAV-Filters'='LAVVideo.ax';'aria2-next'='aria2-next.exe';'AI-Subtitles'='ai-subtitles.json'}
+    $destinations=@{'ffmpeg'='.';'mkvtoolnix'='runtime\mkvtoolnix';'MadVR'='madVR09217';'LAV-Filters'='LAVFilters64';'aria2-next'='runtime\tools';'AI-Subtitles'='runtime\ai-subtitles';'mpv-shaders'='shaders'}
+    $programs=@{'ffmpeg'='ffmpeg.exe';'mkvtoolnix'='mkvmerge.exe';'MadVR'='madVR64.ax';'LAV-Filters'='LAVVideo.ax';'aria2-next'='aria2-next.exe';'AI-Subtitles'='ai-subtitles.json';'mpv-shaders'='mpv-shaders.7z'}
     if (!$entries.Count) {throw 'Empty component plan'}
     foreach($entry in $entries){
         if (!$destinations.ContainsKey($entry.id) -or $entry.version -notmatch '^\d+(\.\d+){0,3}$') {throw 'Invalid component identity/version'}
         $sourceRoot=(Resolve-Path -LiteralPath $entry.source).Path.TrimEnd('\')
         if (!$sourceRoot.StartsWith($planRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or !(Test-Path -LiteralPath (Join-Path $sourceRoot $programs[$entry.id]))) {throw 'Invalid staged component'}
+        if($entry.id -eq 'mpv-shaders'){
+            $manifest=Get-Content -LiteralPath (Join-Path $sourceRoot 'mpv-shaders/manifest.json') -Raw | ConvertFrom-Json
+            if(!$manifest.files.Count -or (Get-Item -LiteralPath (Join-Path $sourceRoot 'mpv-shaders.7z')).Length -eq 0){throw 'Incomplete shader library'}
+        }
         if ((Get-Item -LiteralPath $sourceRoot).Attributes -band [IO.FileAttributes]::ReparsePoint -or (Get-ChildItem -LiteralPath $sourceRoot -Recurse -Force | Where-Object {$_.Attributes -band [IO.FileAttributes]::ReparsePoint} | Select-Object -First 1)) {throw 'Reparse point rejected'}
         $entry | Add-Member -NotePropertyName ResolvedSource -NotePropertyValue $sourceRoot
     }

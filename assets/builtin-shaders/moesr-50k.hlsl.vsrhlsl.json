@@ -1,4 +1,7 @@
 {
-    "semantics": "luma-main-prekernel-params-v8",
-    "sha256": "5ecdfa7cfe1576efcd98f7dc31df96b64fd43b24be43fdc5eeef7103a052ed77"
+  "semantics": "luma-main-prekernel-params-v8",
+  "sha256": "5ecdfa7cfe1576efcd98f7dc31df96b64fd43b24be43fdc5eeef7103a052ed77",
+  "optimization": "moesr-fp32-tail11-texture-order-v1",
+  "referencePackageSha256": "9befd671f24512e74e07121c1dfa6ddafce71f7a936549947b6ddf08ad2a4661",
+  "packageSha256": "1f675064bb8ca1369b295857006eac62f3458834923ca3b947ac904f5536c374"
 }

@@ -6,12 +6,25 @@
 
 #include <QTest>
 #include <QFile>
+#include <QJsonArray>
 
 using namespace vsr;
 
 class TestVpyScript final : public QObject {
     Q_OBJECT
 private slots:
+    void openNguExportUsesGlsl(){
+        FilterGraph graph;const auto index=graph.add("anime4k");graph.at(index)->parameters["mode"]="OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl";
+        const auto script=VpyScriptBuilder::build("input.mkv",SourceFilter::Ffms2,graph);QVERIFY(script.errors.isEmpty());QVERIFY(script.script.contains("OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl"));QVERIFY(!script.script.contains("OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl"));
+    }
+    void exactFrameGroupsAndUnknownNodes(){
+        QList<FilterTimeGroup> groups{{"A",0,{},QString(),0},{"B",0,{},QString(),12},{"C",1,{},QString(),25}};
+        const auto meta=PresetStore::metadata(groups,SourceFilter::Ffms2,"source.mkv",{});QCOMPARE(meta.value("schema").toInt(),3);const auto restored=PresetStore::timeGroups(meta);QCOMPARE(restored[1].startFrame,qint64(12));QCOMPARE(restored[2].startFrame,qint64(25));
+        const auto script=VpyScriptBuilder::buildGroups("source.mkv",SourceFilter::Ffms2,restored);
+        if(const auto path=qEnvironmentVariable("VSR_TEST_VPY_OUT");!path.isEmpty()){QFile f(path);QVERIFY(f.open(QIODevice::WriteOnly));QVERIFY(f.write(script.script.toUtf8())>0);}QVERIFY2(script.errors.isEmpty(),qPrintable(script.errors.join(";")));QVERIFY(script.script.contains("_vsr_begin, _vsr_end = 12, min(src.num_frames, 25)"));
+        auto invalid=meta;QJsonArray nodes{QJsonObject{{"id","new-upstream-unknown-filter"}}};invalid.insert("nodes",nodes);QVERIFY(PresetStore::compatibilityError(invalid).contains(QStringLiteral("更新")));invalid=meta;invalid.insert("schemaVersion",99);QVERIFY(!PresetStore::compatibilityError(invalid).isEmpty());
+    }
+
     void hlslWithPostEnhancement(){
         FilterGraph graph;graph.add("crop");const int shader=graph.add("anime4k");graph.setParameter(shader,"shader","test.hlsl");graph.add("sharpen_edges");graph.add("enhance_detail");
         const auto plan=hlslPreviewPlan(graph);QVERIFY(plan.error.isEmpty());QCOMPARE(plan.shaderPath,QString("test.hlsl"));QCOMPARE(plan.enhancements.size(),2);QCOMPARE(plan.graph.nodes().size(),1);QCOMPARE(plan.graph.nodes().first().definitionId,QString("crop"));

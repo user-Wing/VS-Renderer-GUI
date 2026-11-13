@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.1.1 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.1.2 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,6 +10,25 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent)
+qt_add_library(vsr_agent STATIC src/agent/AgentSession.cpp src/agent/AgentSession.h
+    src/agent/AgentInput.cpp src/agent/AgentInput.h
+    src/agent/AgentModelCapabilities.cpp src/agent/AgentModelCapabilities.h
+    src/agent/AgentLocalFiles.cpp src/agent/AgentLocalFiles.h
+    src/agent/AgentLocalProcess.cpp src/agent/AgentLocalProcess.h
+    src/agent/AgentLocalImages.cpp src/agent/AgentLocalImages.h
+    src/agent/AgentImageMessages.cpp src/agent/AgentImageMessages.h
+    src/agent/AgentContext.cpp src/agent/AgentContext.h
+    src/agent/AgentInstructions.cpp src/agent/AgentInstructions.h
+    src/agent/AgentMcp.cpp src/agent/AgentMcp.h
+    src/agent/AgentNodeRuntime.cpp src/agent/AgentNodeRuntime.h
+    src/agent/AgentTaskQueue.cpp src/agent/AgentTaskQueue.h
+    src/agent/AgentProvider.cpp src/agent/AgentProvider.h
+    src/agent/AgentToolLibrary.cpp src/agent/AgentToolLibrary.h)
+target_include_directories(vsr_agent PUBLIC src)
+target_link_libraries(vsr_agent PUBLIC Qt6::Core Qt6::Network Qt6::Concurrent Qt6::Gui)
+if(WIN32)
+    target_link_libraries(vsr_agent PRIVATE crypt32)
+endif()
 qt_add_library(vsr_optional_runtime STATIC src/runtime/OptionalRuntime.cpp src/runtime/OptionalRuntime.h)
 target_include_directories(vsr_optional_runtime PUBLIC src)
 target_link_libraries(vsr_optional_runtime PUBLIC Qt6::Core)
@@ -38,6 +57,11 @@ target_link_libraries(vsr_shaders PUBLIC Qt6::Core PRIVATE d3dcompiler dxguid)
 
 add_executable(vsr_shader_precompile tools/precompile-shaders.cpp)
 target_link_libraries(vsr_shader_precompile PRIVATE vsr_shaders)
+
+qt_add_executable(VSExportWorker src/backend/export-worker.cpp src/backend/ExportPipeline.cpp src/backend/ExportPipeline.h)
+set_target_properties(VSExportWorker PROPERTIES OUTPUT_NAME "vs-export-worker")
+target_include_directories(VSExportWorker PRIVATE src)
+target_link_libraries(VSExportWorker PRIVATE Qt6::Core)
 
 include(tools/color-runtime.cmake)
 include(tools/planar-shader.cmake)
@@ -82,6 +106,16 @@ qt_add_executable(VSRenderer WIN32
     src/ui/PresetCommunityDialog.h
     src/main.cpp
     src/app/MainWindowPresets.cpp src/app/MainWindowRoutes.cpp
+    src/app/MainWindowAgent.cpp src/app/AgentVideoFrames.cpp src/app/AgentVideoFrames.h src/ui/AgentPage.cpp src/ui/AgentPage.h
+    src/app/MainWindowAgentFeatures.cpp src/app/MainWindowAgentInteractions.cpp
+    src/ui/AgentPageDialogs.cpp
+    src/ui/AgentComposer.cpp src/ui/AgentComposer.h
+    src/ui/AgentChoicePopup.cpp src/ui/AgentChoicePopup.h
+    src/ui/AgentMarkdownView.cpp src/ui/AgentMarkdownView.h
+    src/ui/AgentProviderDialog.cpp src/ui/AgentProviderDialog.h
+    src/ui/AgentInstructionsDialog.cpp src/ui/AgentInstructionsDialog.h
+    src/ui/AgentMcpDialog.cpp src/ui/AgentMcpDialog.h
+    src/ui/AgentTaskDialog.cpp src/ui/AgentTaskDialog.h
     src/app/MainWindowTimeGroups.cpp
     src/player/PlayerResources.cpp
     src/player/PlayerLanguage.cpp
@@ -119,13 +153,15 @@ qt_add_executable(VSRenderer WIN32
 )
 
 target_include_directories(VSRenderer PRIVATE src third_party/vapoursynth/include)
-target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network vsr_bluray vsr_components pdh psapi dxgi)
+target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network vsr_agent vsr_bluray vsr_components pdh psapi dxgi)
 target_compile_definitions(VSRenderer PRIVATE VSR_VERSION="${PROJECT_VERSION}")
 
 if(WIN32)
     configure_file(assets/icons/renderer.rc "${CMAKE_CURRENT_BINARY_DIR}/renderer-icons.rc" @ONLY)
     set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/renderer-icons.rc" PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/renderer.ico")
     target_sources(VSRenderer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/renderer-icons.rc")
+    option(VSR_STAGE_VS_RUNTIME "Stage local Python/VS runtime after linking" ON)
+    if(VSR_STAGE_VS_RUNTIME)
     add_custom_command(TARGET VSRenderer POST_BUILD
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_SOURCE_DIR}/tools/stage-vapoursynth-runtime.ps1"
@@ -133,6 +169,7 @@ if(WIN32)
         COMMENT "Staging bundled Python and VapourSynth runtime"
         VERBATIM
     )
+    endif()
 endif()
 
 if(MSVC)
@@ -216,7 +253,7 @@ if(NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/shaders/mpv-shaders.7z")
     foreach(program VSRenderer VSPlayer)
         add_custom_command(TARGET ${program} POST_BUILD
             COMMAND "${CMAKE_COMMAND}" -E copy_directory
-                "${CMAKE_SOURCE_DIR}/assets/mpv-shaders" "$<TARGET_FILE_DIR:${program}>/shaders/mpv-shaders"
+                "${CMAKE_SOURCE_DIR}/assets/mpv-shaders/bloc97--Anime4K" "$<TARGET_FILE_DIR:${program}>/shaders/mpv-shaders/bloc97--Anime4K"
             VERBATIM)
     endforeach()
 endif()
@@ -257,6 +294,10 @@ if(BUILD_TESTING)
     target_include_directories(vsr_shader_tests PRIVATE src)
     target_link_libraries(vsr_shader_tests PRIVATE vsr_shaders Qt6::Core Qt6::Test d3d11)
     add_test(NAME native-shader-packages COMMAND vsr_shader_tests)
+    qt_add_executable(vsr_anime_fusion_tests tests/TestAnime4KFusion.cpp)
+    target_include_directories(vsr_anime_fusion_tests PRIVATE src)
+    target_link_libraries(vsr_anime_fusion_tests PRIVATE Qt6::Core Qt6::Test d3d11 d3dcompiler dxgi)
+    add_test(NAME anime4k-fusion-correctness COMMAND vsr_anime_fusion_tests)
     add_executable(vsr_update_probe WIN32 tests/UpdateProbe.cpp)
     target_link_libraries(vsr_update_probe PRIVATE user32)
     if(MINGW)
@@ -270,7 +311,7 @@ if(BUILD_TESTING)
     target_include_directories(vsr_cap_workflow_tests PRIVATE src)
     target_compile_definitions(vsr_cap_workflow_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     target_link_libraries(vsr_cap_workflow_tests PRIVATE vsr_optional_runtime Qt6::Widgets Qt6::Test Qt6::Concurrent d3d11 dxgi dwmapi advapi32 shell32 user32 vsr_jxl)
-    add_test(NAME cap-workflow COMMAND vsr_cap_workflow_tests)
+    add_test(NAME cap-workflow COMMAND vsr_cap_workflow_tests -o cap-workflow-results.txt,txt)
     qt_add_executable(vsr_bluray_tests tests/TestBluray.cpp)
     set_target_properties(vsr_bluray_tests PROPERTIES OUTPUT_NAME "vsr-bluray-tests")
     target_link_libraries(vsr_bluray_tests PRIVATE vsr_bluray Qt6::Test)
@@ -344,6 +385,7 @@ if(BUILD_TESTING)
         src/backend/StartupWarmup.cpp
         src/backend/StartupWarmup.h
         tests/TestFrameBridge.cpp
+        src/graph/VpyScriptBuilder.cpp src/graph/FilterGraph.cpp src/graph/FilterCatalog.cpp
         src/ui/MultiCompareView.cpp src/ui/MultiCompareView.h
         src/ui/CompareView.cpp
         src/ui/CompareView.h
@@ -385,16 +427,80 @@ if(BUILD_TESTING)
     )
     target_include_directories(vsr_export_tests PRIVATE src)
     target_link_libraries(vsr_export_tests PRIVATE Qt6::Core Qt6::Widgets Qt6::Test)
-    add_test(NAME export-command-compatibility COMMAND vsr_export_tests)
+    add_test(NAME export-command-compatibility COMMAND vsr_export_tests -o export-test-results.txt,txt)
     target_link_libraries(vsr_export_tests PRIVATE Qt6::Network)
 
     get_target_property(analysis_test_sources VSRenderer SOURCES)
     list(FILTER analysis_test_sources EXCLUDE REGEX "src/main.cpp|VSRenderer_autogen")
     qt_add_executable(vsr_analysis_tests tests/TestAnalysis.cpp ${analysis_test_sources})
     target_include_directories(vsr_analysis_tests PRIVATE src third_party/vapoursynth/include)
-    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_bluray vsr_components pdh psapi dxgi)
+    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_agent vsr_bluray vsr_components pdh psapi dxgi)
     target_compile_definitions(vsr_analysis_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME direct-video-comparison COMMAND vsr_analysis_tests -o analysis-test-results.txt,txt)
+
+    qt_add_executable(vsr_agent_tests tests/TestAgent.cpp)
+    target_link_libraries(vsr_agent_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-protocol COMMAND vsr_agent_tests -o agent-protocol-results.txt,txt)
+    qt_add_executable(vsr_agent_tool_tests tests/TestAgentToolLibrary.cpp)
+    target_link_libraries(vsr_agent_tool_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-tool-library COMMAND vsr_agent_tool_tests)
+    qt_add_executable(vsr_agent_instruction_tests tests/TestAgentInstructions.cpp)
+    target_link_libraries(vsr_agent_instruction_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-instructions COMMAND vsr_agent_instruction_tests)
+    qt_add_executable(vsr_agent_mcp_tests tests/TestAgentMcp.cpp src/ui/AgentMcpDialog.cpp src/ui/AgentMcpDialog.h)
+    target_link_libraries(vsr_agent_mcp_tests PRIVATE vsr_agent Qt6::Widgets Qt6::Test)
+    add_test(NAME agent-mcp COMMAND vsr_agent_mcp_tests)
+    qt_add_executable(vsr_agent_advanced_tests tests/TestAgentAdvanced.cpp)
+    target_link_libraries(vsr_agent_advanced_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-context-and-tasks COMMAND vsr_agent_advanced_tests)
+    qt_add_executable(vsr_agent_input_tests tests/TestAgentInput.cpp)
+    target_link_libraries(vsr_agent_input_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-input COMMAND vsr_agent_input_tests)
+    qt_add_executable(vsr_agent_model_tests tests/TestAgentModelCapabilities.cpp)
+    target_link_libraries(vsr_agent_model_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-model-capabilities COMMAND vsr_agent_model_tests)
+    qt_add_executable(vsr_agent_ui_tests tests/TestAgentUi.cpp src/app/Style.cpp
+        src/ui/AgentPage.cpp src/ui/AgentPage.h src/ui/AgentPageDialogs.cpp
+        src/ui/AgentComposer.cpp src/ui/AgentComposer.h
+        src/ui/AgentChoicePopup.cpp src/ui/AgentChoicePopup.h
+        src/ui/AgentMarkdownView.cpp src/ui/AgentMarkdownView.h
+        src/ui/AgentProviderDialog.cpp src/ui/AgentProviderDialog.h)
+    target_link_libraries(vsr_agent_ui_tests PRIVATE vsr_agent Qt6::Widgets Qt6::Test)
+    add_test(NAME agent-ui COMMAND vsr_agent_ui_tests)
+    qt_add_executable(vsr_agent_dialog_ui_tests tests/TestAgentDialogUi.cpp src/app/Style.cpp
+        src/ui/AgentProviderDialog.cpp src/ui/AgentProviderDialog.h
+        src/ui/AgentTaskDialog.cpp src/ui/AgentTaskDialog.h
+        src/ui/AgentMarkdownView.cpp src/ui/AgentMarkdownView.h)
+    target_link_libraries(vsr_agent_dialog_ui_tests PRIVATE vsr_agent Qt6::Widgets Qt6::Test)
+    add_test(NAME agent-dialog-ui COMMAND vsr_agent_dialog_ui_tests -o agent-dialog-ui-results.txt,txt)
+    qt_add_executable(vsr_agent_transcript_tests tests/TestAgentTranscript.cpp
+        src/ui/AgentMarkdownView.cpp src/ui/AgentMarkdownView.h src/app/Style.cpp)
+    target_link_libraries(vsr_agent_transcript_tests PRIVATE vsr_agent Qt6::Widgets Qt6::Test)
+    add_test(NAME agent-transcript COMMAND vsr_agent_transcript_tests -o agent-transcript-results.txt,txt)
+    qt_add_executable(vsr_agent_access_tests tests/TestAgentAccess.cpp)
+    target_link_libraries(vsr_agent_access_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-access COMMAND vsr_agent_access_tests -o agent-access-results.txt,txt)
+    qt_add_executable(vsr_agent_local_files_tests tests/TestAgentLocalFiles.cpp)
+    target_link_libraries(vsr_agent_local_files_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-local-files COMMAND vsr_agent_local_files_tests -o agent-local-files-results.txt,txt)
+    qt_add_executable(vsr_agent_local_process_tests tests/TestAgentLocalProcess.cpp)
+    target_link_libraries(vsr_agent_local_process_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-local-process COMMAND vsr_agent_local_process_tests -o agent-local-process-results.txt,txt)
+    qt_add_executable(vsr_agent_image_messages_tests tests/TestAgentImageMessages.cpp)
+    target_link_libraries(vsr_agent_image_messages_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-image-messages COMMAND vsr_agent_image_messages_tests -o agent-image-messages-results.txt,txt)
+    qt_add_executable(vsr_agent_local_images_tests tests/TestAgentLocalImages.cpp)
+    target_link_libraries(vsr_agent_local_images_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-local-images COMMAND vsr_agent_local_images_tests -o agent-local-images-results.txt,txt)
+    qt_add_executable(vsr_agent_video_frame_tests tests/TestAgentVideoFrames.cpp src/app/AgentVideoFrames.cpp src/backend/VapourSynthFrameServer.cpp)
+    target_include_directories(vsr_agent_video_frame_tests PRIVATE src third_party/vapoursynth/include)
+    target_link_libraries(vsr_agent_video_frame_tests PRIVATE vsr_agent Qt6::Test)
+    add_test(NAME agent-video-frames COMMAND vsr_agent_video_frame_tests -o agent-video-frame-results.txt,txt)
+    qt_add_executable(vsr_agent_integration_tests tests/TestAgentIntegration.cpp ${analysis_test_sources})
+    target_include_directories(vsr_agent_integration_tests PRIVATE src third_party/vapoursynth/include)
+    target_link_libraries(vsr_agent_integration_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_agent vsr_bluray vsr_components pdh psapi dxgi)
+    target_compile_definitions(vsr_agent_integration_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
+    add_test(NAME agent-software-integration COMMAND vsr_agent_integration_tests -o agent-integration-results.txt,txt)
 
     get_target_property(player_test_sources VSPlayer SOURCES)
     list(FILTER player_test_sources EXCLUDE REGEX "src/player/main.cpp|VSPlayer_autogen")
@@ -426,13 +532,33 @@ if(BUILD_TESTING)
     add_test(NAME portable-full-update COMMAND vsr_update_tests -o update-test-results.txt,txt)
 
     if(WIN32)
-        set_tests_properties(portable-full-update vs-player-playback direct-video-comparison graph-and-vpy vapoursynth-to-3fp-frame-bridge preview-zoom-and-pan export-command-compatibility
+        set_tests_properties(agent-protocol agent-tool-library agent-software-integration agent-instructions agent-mcp agent-context-and-tasks agent-input agent-model-capabilities agent-ui agent-dialog-ui agent-transcript agent-access agent-local-files agent-local-process agent-image-messages agent-local-images portable-full-update vs-player-playback direct-video-comparison graph-and-vpy vapoursynth-to-3fp-frame-bridge preview-zoom-and-pan export-command-compatibility
             PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     endif()
 endif()
 
-foreach(program VSRenderer VSPlayer VSPlayerLite vsr_graph_tests vsr_parameter_tests vsr_analysis_tests vsr_player_tests vsr_player_lite_tests)
+foreach(program VSRenderer VSPlayer VSPlayerLite vsr_graph_tests vsr_parameter_tests vsr_analysis_tests vsr_agent_integration_tests vsr_player_tests vsr_player_lite_tests)
     if(TARGET ${program})
         target_link_libraries(${program} PRIVATE vsr_shaders)
     endif()
 endforeach()
+
+add_dependencies(VSRenderer VSExportWorker)
+
+if(BUILD_TESTING)
+    add_executable(vsr_audio_path_tests tests/TestAudioPathPolicy.cpp)
+    target_include_directories(vsr_audio_path_tests PRIVATE src)
+    add_test(NAME audio-path-policy COMMAND vsr_audio_path_tests)
+    add_executable(vsr_export_pipe_fixture tests/ExportPipeFixture.cpp)
+    add_test(NAME detached-export-worker COMMAND "${CMAKE_BINARY_DIR}/runtime/python/python.exe" "${CMAKE_SOURCE_DIR}/tests/test-detached-worker.py" $<TARGET_FILE:VSExportWorker> $<TARGET_FILE:vsr_export_pipe_fixture>)
+    add_test(NAME detached-export-gui-survival COMMAND "${CMAKE_BINARY_DIR}/runtime/python/python.exe" "${CMAKE_SOURCE_DIR}/tests/test-gui-worker-survival.py" $<TARGET_FILE:vsr_export_tests> $<TARGET_FILE:VSExportWorker> $<TARGET_FILE:vsr_export_pipe_fixture>)
+    qt_add_executable(vsr_thumbnail_tests tests/TestTimelineThumbnail.cpp)
+    target_include_directories(vsr_thumbnail_tests PRIVATE src)
+    target_link_libraries(vsr_thumbnail_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+    add_test(NAME timeline-thumbnail-correctness COMMAND vsr_thumbnail_tests)
+    if(WIN32)
+        set_tests_properties(agent-video-frames detached-export-worker detached-export-gui-survival anime4k-fusion-correctness timeline-thumbnail-correctness
+            PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+            ENVIRONMENT "QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt6::Core>/../plugins/platforms")
+    endif()
+endif()

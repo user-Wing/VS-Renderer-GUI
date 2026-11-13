@@ -17,6 +17,14 @@
 
 发布包内同时保留 Qt、Python、VapourSynth 等组件随附的许可证文件。重新分发前请核对你所替换的 FFmpeg 和 VapourSynth 插件构建配置。
 
+## Agent 的 Node / npm / MCP 运行时
+
+`runtime/agent/` 使用独立进程提供 MCP stdio 与 Streamable HTTP 连接，不改变 Qt/C++ 模块的许可。Node.js v24.19.0 x64 来自本机既有 Node 安装（MIT，内含组件另见完整声明），npm 11.17.0 为 Artistic-2.0，官方 `@modelcontextprotocol/client` / `@modelcontextprotocol/core` 2.4.0 为 Apache-2.0。对应来源为 [Node.js](https://github.com/nodejs/node/tree/v24.19.0)、[npm CLI](https://github.com/npm/cli/tree/v11.17.0)、[MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)。
+
+`tools/agent-runtime/package-lock.json` 固定 npm 版本及下载完整性；`tools/stage-agent-runtime.ps1` 只安装生产依赖并禁用安装脚本。Node/npm 的完整声明及各依赖法律文件随运行时保留，157 个包实例的具体版本、许可、文件路径与补齐来源见 `runtime/agent/components.json`，简表见 `COMPONENTS.md`。少数 npm 包未自带独立法律文件时，保留其元数据及精确源提交来源，并附有明确标注的标准许可参考，不虚构版权声明。开发测试服务器与 fixtures 不进入运行时。
+
+Agent 的指令、技能与队列设计参考 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/tree/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159)；该仓库仅作为研究参考，未将其 monorepo 或依赖作为本产品运行时分发。
+
 ## 可选 D3D11 色彩运行时
 
 `color/` 使用 MSYS2 UCRT64 二进制包的 libplacebo 7.360.1-2（LGPL-2.1+）、LittleCMS 2.19.1（MIT）及其 shaderc / glslang / SPIRV-Cross / SPIRV-Tools / libdovi / MinGW runtime 等依赖。完整包 URL、版本和 SHA-256 在 `third_party/color/packages.json`，实际部署 DLL 闭包与原始 / 修改后哈希在 `color/runtime.json`；许可证保留于 `color/licenses/`。

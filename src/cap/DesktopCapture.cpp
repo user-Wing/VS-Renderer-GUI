@@ -5,6 +5,7 @@
 #include <QPixmap>
 #include <QColorSpace>
 #include <QImageWriter>
+#include <QSaveFile>
 #include <QTransform>
 #include <QElapsedTimer>
 #include <QtCore/qfloat16.h>
@@ -180,8 +181,8 @@ QImage preview(const QImage &image)
 bool savePng(const QImage &image,const QString &path)
 {
     // Qt maps 0..100 to zlib 0..9; 9 accidentally selected no compression.
-    QImageWriter writer(path,"png");writer.setCompression(70);
+    QSaveFile file(path);if(!file.open(QIODevice::WriteOnly))return false;QImageWriter writer(&file,"png");writer.setCompression(70);
     // The ICC profile in the PNG carries HDR color information without sidecars.
-    return writer.write(pngPixels(image));
+    return writer.write(pngPixels(image)) && file.commit();
 }
 }

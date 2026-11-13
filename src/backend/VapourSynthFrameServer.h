@@ -23,6 +23,7 @@ struct VapourSynthClipInfo {
 };
 
 struct VapourSynthFrame {
+    QString processingTrace;
     int width = 0;
     int height = 0;
     ThreeFpExternalPixelFormat format = ThreeFpExternalPixelFormat::Yuv420P8;

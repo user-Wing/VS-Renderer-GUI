@@ -61,7 +61,7 @@ const QList<FilterDefinition> &catalog() {
      {choice("model", "模型", "AnimeJaNai-V2-2x-Compact-36K", {"AnimeJaNai-V2-2x-Compact-36K"}), integer("gpu", "Vulkan GPU 编号", 0, 0, 15)}},
     {"anime4k", "mpv GLSL/HLSL 着色器", "GPU 超分与着色器", "placebo",
      "按功能选择 GLSL/HLSL；GLSL 支持 VS 编码导出，原生 HLSL 放在处理链末尾用于 D3D11 预览。NIS 标明 NVIDIA 来源但并非 N 卡独占；DP4A 版本需要整数点积支持。补帧请使用 RIFE / MVTools 节点。",
-     {choice("category", "功能分类", "全部", FilterCatalog::shaderCategories()), choice("mode", "着色器", "anime4k-v4-a.glsl", {"anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-no-cnn.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL/HLSL 位置", ""),
+     {choice("category", "功能分类", "全部", FilterCatalog::shaderCategories()), choice("mode", "着色器", "anime4k-v4-a.glsl", {"OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl", "anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-no-cnn.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL/HLSL 位置", ""),
       choice("output_mode", "输出方式", "倍率", {"倍率", "指定分辨率"}),
       choice("scale", "输出倍率", "2×", {"0.5×", "1×", "2×", "3×", "4×"}),
       integer("width", "输出宽度", 1920, 2, 65536), integer("height", "输出高度", 1080, 2, 65536),
@@ -255,7 +255,7 @@ QString FilterCatalog::shaderCategory(const QString &path)
     if(lower.contains("/aa/") || lower.contains("/warpsharp/") || matches("warpsharp|warpline|fxaa|smaa|cmaa|dlaa|faaa|axaa|thin|darken"))return "线条增强与抗锯齿";
     if(lower.contains("/canvas/") || lower.contains("/mirror/") || lower.contains("/plane/") || matches("lensfix|hyperview|stretch|nls-next|rotate|zoom|mirror|un360|seascape|grain|noise|pixellate|plane_|canvas"))return "几何与画面效果";
     if(matches("jpeg444|jpeg420"))return "降噪与修复";
-    if(matches("upscale|artcnn|cunny"))return "超分";
+    if(matches("openngu|upscale|artcnn|cunny"))return "超分";
     if(lower.contains("/deint/") || lower.contains("/dehaasn/") || matches("denoise|nlmeans|restore|deblur|deint|dehaasn|gaussianblur|guided.*smth|clamp|highlight|fixer|pixelclipper"))return "降噪与修复";
     if(matches("upscale|superres|fsrcnn|artcnn|cunny|acnet|ravu|nnedi|anime4k|ani4k|espcn|esrgan|raisr|nvscaler|fsr|sgsr|gsr|superxbr|hqx|mmpx|omniscale|tsubaup|w2x|_x[234]|magickernel|magic_kernel"))return "超分";
     if(lower.contains("/usm/") || matches("sharpen|unsharp|cas|guided.*enh"))return "基础锐化";

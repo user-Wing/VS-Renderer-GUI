@@ -8,5 +8,6 @@ struct FilterTimeGroup {
     qint64 startSeconds = 0;
     FilterGraph graph;
     QString script; // Script-backed single-group presets (including player profiles).
+    qint64 startFrame = -1; // >=0: exact zero-based SOURCE frame, otherwise legacy whole seconds.
 };
 }

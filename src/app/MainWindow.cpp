@@ -1,6 +1,13 @@
 #include "app/MainWindow.h"
+#include "agent/AgentSession.h"
+#include "agent/AgentMcp.h"
+#include "agent/AgentInstructions.h"
+#include "agent/AgentTaskQueue.h"
+#include "agent/AgentModelCapabilities.h"
+#include "app/ProjectProtection.inc"
 #include "app/RenderRoute.h"
 #include "ui/PageTheme.h"
+#include "ui/NavigationIcons.h"
 #include "ui/WrappedFileCombo.h"
 #include "app/Style.h"
 #include "player/PlayerLanguage.h"
@@ -22,6 +29,7 @@
 #include <QSettings>
 #include "update/PortableUpdater.h"
 #include <QCloseEvent>
+#include <QMessageBox>
 #include "backend/ThreeFpPlayer.h"
 #include "backend/VapourSynthFrameServer.h"
 #include "graph/FilterCatalog.h"
@@ -81,7 +89,7 @@ namespace {
 
 class NavigationButton final : public QToolButton {
 public:
-    using QToolButton::QToolButton;
+    explicit NavigationButton(QWidget *parent):QToolButton(parent){setFixedHeight(40);setIconSize(QSize(22,22));setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);}
 protected:
     void paintEvent(QPaintEvent *event) override {
         if (toolButtonStyle() == Qt::ToolButtonIconOnly) { QToolButton::paintEvent(event); return; }
@@ -89,7 +97,7 @@ protected:
         option.text.clear(); option.icon = QIcon();
         QPainter painter(this);
         style()->drawComplexControl(QStyle::CC_ToolButton, &option, &painter, this);
-        icon().paint(&painter, QRect(10, (height() - 16) / 2, 16, 16));
+        icon().paint(&painter, QRect(9, (height() - 22) / 2, 22, 22));
         painter.setPen(palette().color(QPalette::ButtonText));
         painter.drawText(QRect(38, 0, width() - 48, height()), Qt::AlignLeft | Qt::AlignVCenter, text());
     }
@@ -162,12 +170,10 @@ MainWindow::MainWindow(QWidget *parent)
         auto *button = new NavigationButton(navigation_);
         button->setText(i == 0 ? QStringLiteral("VS 实时渲染") : QStringLiteral("图像分析比对"));
         button->setToolTip(button->text());
-        button->setIcon(style()->standardIcon(i == 0 ? QStyle::SP_ComputerIcon : QStyle::SP_FileDialogContentsView));
+        button->setIcon(navigationIcon(i==0?NavigationGlyph::Render:NavigationGlyph::Compare));
         button->setToolButtonStyle(Qt::ToolButtonIconOnly);
         button->setCheckable(true);
         button->setChecked(i == 0);
-        button->setMinimumHeight(36);
-        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         navigationButtons_.append(button);
         navigationLayout->addWidget(button);
         connect(button, &QToolButton::clicked, this, [this, i] { selectPage(i); });
@@ -177,11 +183,9 @@ MainWindow::MainWindow(QWidget *parent)
     settings->setObjectName(QStringLiteral("applicationSettings"));
     settings->setText(QStringLiteral("设置"));
     settings->setToolTip(settings->text());
-    settings->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    settings->setIcon(navigationIcon(NavigationGlyph::Settings));
     settings->setToolButtonStyle(Qt::ToolButtonIconOnly);
     settings->setCheckable(true);
-    settings->setMinimumHeight(36);
-    settings->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     navigationButtons_.append(settings);
     navigationLayout->addWidget(settings);
     connect(settings, &QToolButton::clicked, this, &MainWindow::showSettings);
@@ -194,13 +198,23 @@ MainWindow::MainWindow(QWidget *parent)
     auto *bdButton = new NavigationButton(navigation_);
     bdButton->setText(QStringLiteral("BD 一键 Remux"));
     bdButton->setToolTip(bdButton->text());
-    bdButton->setIcon(style()->standardIcon(QStyle::SP_DriveCDIcon));
+    bdButton->setIcon(navigationIcon(NavigationGlyph::Disc));
     bdButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     bdButton->setCheckable(true);
-    bdButton->setMinimumHeight(36);
     navigationButtons_.append(bdButton);
     navigationLayout->insertWidget(2, bdButton);
     connect(bdButton, &QToolButton::clicked, this, [this] { selectPage(3); });
+    initializeAgent();
+    auto *agentButton = new NavigationButton(navigation_);
+    agentButton->setObjectName("rendererAgentNavigation");
+    agentButton->setText(QStringLiteral("Agent 智能体"));
+    agentButton->setToolTip(agentButton->text());
+    agentButton->setIcon(navigationIcon(NavigationGlyph::Agent));
+    agentButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    agentButton->setCheckable(true);
+    navigationButtons_.append(agentButton);
+    navigationLayout->insertWidget(3, agentButton);
+    connect(agentButton, &QToolButton::clicked, this, [this] { selectPage(4); });
     connect(bluray, &BlurayWidget::playRequested, this, [this](const QVector<BlurayTitle> &titles, int index) {
         QString error;
         const auto playlist = BlurayCatalog::prepare(titles.at(index), &error);
@@ -315,18 +329,27 @@ MainWindow::MainWindow(QWidget *parent)
     stateTimer_->setInterval(33);
     connect(stateTimer_, &QTimer::timeout, this, &MainWindow::updatePlaybackState);
     stateTimer_->start();
+    initializeProjectProtection();
     connect(frameServer_.get(), &VapourSynthFrameServer::initialized, this, [this](bool ok) {
         if (!pendingPreview_) return;
         pendingPreview_ = false;
         if (ok) {const int editing=routeIndex_;selectRoute(0);validateScript();selectRoute(editing);}else setStatus(frameServer_->errorString(),true);
     });
     language_->updateWidgets(this);
+    selectPage(pages_->currentIndex());
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow()
+{
+    if (agentSession_) agentSession_->cancel();
+    if (agentQueue_) agentQueue_->cancelAll();
+    delete agentModels_; delete agentQueue_; delete agentMcp_; delete agentInstructions_;
+}
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    if (pages_ && pages_->currentIndex() == 4)
+        return QMainWindow::eventFilter(watched, event);
     if (isActiveWindow() && event->type() == QEvent::ShortcutOverride) {
         auto *key = static_cast<QKeyEvent *>(event);
         if (key->key() == Qt::Key_Space && key->modifiers() == Qt::NoModifier) {
@@ -372,7 +395,7 @@ void MainWindow::dropEvent(QDropEvent *event)
 
 void MainWindow::selectPage(int index)
 {
-    QTimer::singleShot(0,this,[this,index]{if(index>=0 && index<pages_->count())applyPageTheme(pages_->widget(index),QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini"),QStringList{"VSR-Main","VSR-Compare","VSR-Settings","VSR-BDRemux"}.value(index));});
+    QTimer::singleShot(0,this,[this,index]{if(index>=0 && index<pages_->count())applyPageTheme(pages_->widget(index),QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini"),QStringList{"VSR-Main","VSR-Compare","VSR-Settings","VSR-BDRemux","VSR-Agent"}.value(index));});
     if (index == 1 && !analysisPage_) {
         analysisPage_ = std::make_unique<AnalysisPage>(api_);
         auto *placeholder = pages_->widget(1);
@@ -389,7 +412,7 @@ void MainWindow::selectPage(int index)
     for (int i = 0; i < navigationButtons_.size(); ++i) navigationButtons_[i]->setChecked(i == index);
     for (auto *action : vsActions_) action->setVisible(index == 0);
     frameStatus_->setVisible(index == 0);
-    setStatus(index == 0 ? QStringLiteral("VS 实时渲染") : index == 1 ? QStringLiteral("图像分析比对 · 双路直接解码") : index == 3 ? QStringLiteral("BD 一键 Remux") : QStringLiteral("设置"));
+    setStatus(index == 0 ? QStringLiteral("VS 实时渲染") : index == 1 ? QStringLiteral("图像分析比对 · 最大9路 ") : index == 3 ? QStringLiteral("BD 一键 Remux") : index == 4 ? QStringLiteral("Agent 智能体") : QStringLiteral("设置"));
 }
 
 void MainWindow::showSettings()
@@ -423,7 +446,7 @@ QWidget *MainWindow::buildSettingsPage()
     layout->addWidget(new QLabel(QStringLiteral("语言和主题"), page));
     const auto skinPath=QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini");
     auto *skinButton=new QPushButton(QStringLiteral("多页面背景主题…"),page);skinButton->setObjectName("rendererPageThemes");layout->addWidget(skinButton);
-    connect(skinButton,&QPushButton::clicked,this,[this,skinPath]{if(editPageThemes(this,skinPath,{"VSR-Main","VSR-Compare","VSR-BDRemux","VSR-Settings","VSR-About"}))for(int i=0;i<pages_->count();++i)applyPageTheme(pages_->widget(i),skinPath,QStringList{"VSR-Main","VSR-Compare","VSR-Settings","VSR-BDRemux"}.value(i));});
+    connect(skinButton,&QPushButton::clicked,this,[this,skinPath]{if(editPageThemes(this,skinPath,{"VSR-Main","VSR-Compare","VSR-BDRemux","VSR-Settings","VSR-Agent","VSR-About"}))for(int i=0;i<pages_->count();++i)applyPageTheme(pages_->widget(i),skinPath,QStringList{"VSR-Main","VSR-Compare","VSR-Settings","VSR-BDRemux","VSR-Agent"}.value(i));});
     auto *scanDepth=new QSpinBox(page);scanDepth->setObjectName("rendererScanDepth");scanDepth->setRange(0,16);scanDepth->setValue(QSettings().value("source/scanDepth",3).toInt());layout->addWidget(new QLabel(QStringLiteral("工作文件夹递归深度（0 仅当前目录）"),page));layout->addWidget(scanDepth);connect(scanDepth,&QSpinBox::valueChanged,this,[](int depth){QSettings().setValue("source/scanDepth",depth);});
     auto *language=new QComboBox(page);language->setObjectName("rendererLanguage");language->addItem(QStringLiteral("中文"),"zh_CN");language->addItem("English","en_US");language->setCurrentIndex(qMax(0,language->findData(QSettings().value("appearance/language","zh_CN"))));layout->addWidget(language);
     connect(language,&QComboBox::currentIndexChanged,this,[this,language]{const auto name=language->currentData().toString();QSettings().setValue("appearance/language",name);language_->setLanguage(name);language_->updateWidgets(this);});
@@ -623,7 +646,7 @@ QWidget *MainWindow::buildSidebar()
     connect(pipelineList_, &QListWidget::currentRowChanged, this, &MainWindow::selectPipelineRow);
     connect(pipelineList_, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) {
         activePreset_.clear();
-        graph_.setEnabled(pipelineList_->row(item), item->checkState() == Qt::Checked);
+        graph_.setEnabled(pipelineList_->row(item), item->checkState() == Qt::Checked);checkpointProject();
         setStatus(QStringLiteral("节点状态已更改，VPY 待验证。"));
     });
     connect(up, &QPushButton::clicked, this, [this] {
@@ -674,6 +697,7 @@ QWidget *MainWindow::buildParameterPanel()
         if (id == "shader" && !value.toString().isEmpty()) graph_.setParameter(pipelineList_->currentRow(), "mode", QStringLiteral("自定义 GLSL"));
         if (graph_.setParameter(pipelineList_->currentRow(), id, value))
             setStatus(QStringLiteral("参数已更新，VPY 待验证。"));
+        checkpointProject();
     });
 
     auto *column=new QSplitter(Qt::Vertical,this);column->setObjectName("rendererRightColumn");
@@ -693,7 +717,7 @@ QWidget *MainWindow::buildWorkspace()
     auto *compareLayout = new QHBoxLayout(compareBar);
     compareLayout->setContentsMargins(8, 2, 8, 2);
     compareLayout->setSpacing(12);
-    compareLayout->addWidget(new QLabel(QStringLiteral("双路对比 · 左侧播放时钟 / 右侧 VS 同帧"), compareBar));
+    compareLayout->addWidget(new QLabel(QStringLiteral("2-4路对比 · 左侧播放时钟 / 右侧 VS 同帧"), compareBar));
     runtimeStatus_ = new QLabel(QStringLiteral("就绪"), compareBar);
     runtimeStatus_->setObjectName(QStringLiteral("rendererWarmupState"));
     runtimeStatus_->setStyleSheet(QStringLiteral("border:0;"));
@@ -701,8 +725,8 @@ QWidget *MainWindow::buildWorkspace()
     compareLayout->addStretch();
     syncView_ = new QCheckBox(QStringLiteral("同步视图"), compareBar);
     syncView_->setChecked(true);
-    vrrPresent_ = new QCheckBox(QStringLiteral("VRR 低延迟(实验)"), compareBar);
-    vrrPacing_ = new QCheckBox(QStringLiteral("VRR Pacing(实验)"), compareBar);
+    vrrPresent_ = new QCheckBox(QStringLiteral("VRR 低延迟 (实验)"), compareBar);
+    vrrPacing_ = new QCheckBox(QStringLiteral("VRR Pacing (实验)"), compareBar);
     vrrPresent_->setProperty("vrrToggle", true); vrrPacing_->setProperty("vrrToggle", true);
     vrrPresent_->setToolTip(QStringLiteral("调用 FFF3FP_SetPresentConfig；不支持时保持 VSync。"));
     vrrPacing_->setToolTip(QStringLiteral("调用 FFF3FP_SetPacingConfig；建议与 VRR 低延迟配合。"));
@@ -776,7 +800,7 @@ QWidget *MainWindow::buildTransport()
     scaler->addItem(QStringLiteral("放大：Lanczos 3"), static_cast<int>(ThreeFpScalingAlgorithm::Lanczos3));
     scaler->addItem(QStringLiteral("放大：Jinc 2"), static_cast<int>(ThreeFpScalingAlgorithm::Jinc2));
     scaler->addItem(QStringLiteral("放大：Spline36"), static_cast<int>(ThreeFpScalingAlgorithm::Spline36));
-    scaler->addItem(QStringLiteral("放大：Super-XBR(单阶段)"), static_cast<int>(ThreeFpScalingAlgorithm::SuperXbrSinglePass));
+    scaler->addItem(QStringLiteral("放大：Super-XBR (单阶段)"), static_cast<int>(ThreeFpScalingAlgorithm::SuperXbrSinglePass));
     scaler->addItem(QStringLiteral("放大：Lanczos 4"), static_cast<int>(ThreeFpScalingAlgorithm::Lanczos4));
     scaler->addItem(QStringLiteral("缩放：D3D11 原生直通"),7);
     scaler->setCurrentIndex(scaler->count()-1);
@@ -898,6 +922,7 @@ void MainWindow::populateCatalog()
 
 void MainWindow::refreshPipeline(int selectRow)
 {
+    QTimer::singleShot(0,this,&MainWindow::checkpointProject);
     QSignalBlocker blocker(pipelineList_);
     pipelineList_->clear();
     for (const auto &node : graph_.nodes()) {
@@ -948,6 +973,7 @@ void MainWindow::openSource()
 
 bool MainWindow::loadSource(const QString &path)
 {
+    ++folderScanGeneration_;
     const int folderIndex=sourceChoice_->findData(path);const QSignalBlocker sourceBlocker(sourceChoice_);sourceInputStack_->setCurrentIndex(folderIndex<0?0:1);if(folderIndex>=0)sourceChoice_->setCurrentIndex(folderIndex);
     if (QFileInfo(path).suffix().compare("vpy", Qt::CaseInsensitive) == 0) { loadPreset(path); return true; }
     if (!QFileInfo(path).isFile()) {
@@ -1069,6 +1095,7 @@ void MainWindow::validateScript()
         return;
     }
     processedPlayer_->setMuted(true);
+    routes_[0].previewScript=currentScript().script;
     frameServer_->loadScript(result.script, path);
 }
 
@@ -1096,22 +1123,13 @@ void MainWindow::exportCurrentResult()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    if (exportWindow_ && exportWindow_->isBusy()) {
-        event->ignore();
-        connect(exportWindow_.get(), &ExportWindow::idle, this, &QWidget::close, Qt::UniqueConnection);
-        exportWindow_->stopAll();
-        setStatus(QStringLiteral("正在停止编码并保留输出文件，完成后退出。"));
-        return;
-    }
-    if (analysisPage_ && analysisPage_->exportBusy()) {
-        event->ignore();
-        connect(analysisPage_.get(), &AnalysisPage::exportIdle, this, &QWidget::close, Qt::UniqueConnection);
-        analysisPage_->stopExport();
-        setStatus(QStringLiteral("正在停止对比编码并保留输出文件，完成后退出。"));
-        return;
-    }
-    if (exportWindow_) exportWindow_->close();
-    QMainWindow::closeEvent(event);
+    if(!confirmProjectReplacement()){event->ignore();return;}
+    const bool busy=(exportWindow_&&exportWindow_->isBusy())||(analysisPage_&&analysisPage_->exportBusy());
+    if(busy){QMessageBox box(QMessageBox::Question,QStringLiteral("编码仍在继续"),QStringLiteral("独立编码进程不依赖界面。关闭界面后可以继续，重新打开导出窗口可重连。"),QMessageBox::NoButton,this);auto *background=box.addButton(QStringLiteral("后台继续并关闭界面"),QMessageBox::AcceptRole);auto *stop=box.addButton(QStringLiteral("停止编码并退出"),QMessageBox::DestructiveRole);box.addButton(QMessageBox::Cancel);box.exec();if(box.clickedButton()==stop){if(exportWindow_)exportWindow_->stopAll();if(analysisPage_)analysisPage_->stopExport();}else if(box.clickedButton()!=background){event->ignore();return;}}
+    if (agentSession_) agentSession_->cancel();
+    if (agentQueue_) agentQueue_->cancelAll();
+    if(!recoveryPath_.isEmpty())QFile::remove(recoveryPath_);
+    if(exportWindow_)exportWindow_->close();QMainWindow::closeEvent(event);
 }
 
 void MainWindow::togglePlayback()
@@ -1173,70 +1191,13 @@ QString MainWindow::writePreviewScript(QString *error,const QString &script) con
     return path;
 }
 
-void MainWindow::saveProject()
-{
-    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("保存 VS Renderer 项目"), {},
-                                                      QStringLiteral("VS Renderer Project (*.vsr.json)"));
-    if (path.isEmpty())
-        return;
-    QJsonObject root;
-    root.insert(QStringLiteral("schemaVersion"), 2);
-    root.insert(QStringLiteral("sourcePath"), sourcePath_->text());
-    root.insert(QStringLiteral("sourceFilter"), sourceFilter_->currentData().toInt());
-    const auto data=PresetStore::metadata(currentTimeGroups(),static_cast<SourceFilter>(sourceFilter_->currentData().toInt()),sourcePath_->text(),{});
-    root.insert("nodes",data.value("nodes"));root.insert("timeGroups",data.value("timeGroups"));
-    routes_[routeIndex_].groups=currentTimeGroups();routes_[routeIndex_].preset=activePreset_;
-    QJsonArray routeData;
-    for(const auto &route:routes_){auto entry=PresetStore::metadata(route.groups,static_cast<SourceFilter>(sourceFilter_->currentData().toInt()),sourcePath_->text(),{});entry.insert("visible",route.visible);entry.insert("preset",route.preset);routeData.append(entry);}
-    root.insert("routes",routeData);root.insert("editingRoute",routeIndex_);
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0 || !file.commit()) {
-        setStatus(QStringLiteral("项目保存失败：%1").arg(file.errorString()), true);
-        return;
-    }
-    setStatus(QStringLiteral("项目已保存：%1").arg(QFileInfo(path).fileName()));
-}
-
-void MainWindow::openProject()
-{
-    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("打开 VS Renderer 项目"), {},
-                                                      QStringLiteral("VS Renderer Project (*.vsr.json)"));
-    if (path.isEmpty())
-        return;
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        setStatus(QStringLiteral("项目读取失败：%1").arg(file.errorString()), true);
-        return;
-    }
-    QJsonParseError parseError;
-    const auto document = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-        setStatus(QStringLiteral("项目 JSON 无效：%1").arg(parseError.errorString()), true);
-        return;
-    }
-    const auto root = document.object();
-    additionalRoutes_.clear();while(routes_.size()>1){compareView_->removeProcessedPane(routes_.size()-1);routes_.removeLast();}
-    auto entries=root.value("routes").toArray();if(entries.isEmpty())entries.append(root);
-    routes_.clear();
-    for(int i=0;i<qMin(3,entries.size());++i){const auto entry=entries[i].toObject();RouteState route;route.groups=PresetStore::timeGroups(entry);route.preset=entry.value("preset").toString();route.visible=entry.value("visible").toBool(true);routes_.append(route);if(i>0)createAdditionalRoute();}
-    routeIndex_=qBound(0,root.value("editingRoute").toInt(),int(routes_.size())-1);activePreset_=routes_[routeIndex_].preset;replaceTimeGroups(routes_[routeIndex_].groups);
-    for(int i=0;i<routes_.size();++i)compareView_->setRouteVisible(i,routes_[i].visible);updateRouteChoices();
-    sourceFilter_->setCurrentIndex(sourceFilter_->findData(root.value(QStringLiteral("sourceFilter")).toInt()));
-    refreshPipeline(graph_.nodes().isEmpty() ? -1 : 0);
-    const QString source = root.value(QStringLiteral("sourcePath")).toString();
-    if (!source.isEmpty() && QFileInfo::exists(source))
-        loadSource(source);
-    else
-        sourcePath_->setText(source);
-    setStatus(QStringLiteral("项目已加载：%1").arg(QFileInfo(path).fileName()));
-}
-
 void MainWindow::updatePlaybackState()
 {
     if(sourcePlayer_)for(auto &route:additionalRoutes_)route->sync(sourcePlayer_->snapshot());
     if (!sourcePlayer_ || sourcePath_->text().isEmpty())
         return;
     const auto snap = sourcePlayer_->snapshot();
+    if(sourceFpsNumerator_<=0 && snap.duration100ns>0){const auto media=QJsonDocument::fromJson(sourcePlayer_->mediaInfo().toUtf8()).object();for(const auto &value:media.value("streams").toArray()){const auto v=value.toObject();if(v.value("type")!="video")continue;sourceFpsNumerator_=v.value("averageFrameRateNumerator").toInteger();sourceFpsDenominator_=v.value("averageFrameRateDenominator").toInteger();if(sourceFpsNumerator_>0&&sourceFpsDenominator_>0){sourceTotalFrames_=int(frameAtPosition100ns(snap.duration100ns,INT_MAX,sourceFpsNumerator_,sourceFpsDenominator_)+1);refreshTimeGroups(timeGroupIndex_);}break;}}
     if (sourcePrimePending_ && snap.state != ThreeFpState::Opening) {
         updateParameterInputSize();
         if (snap.decodedVideoFrames > 0) {

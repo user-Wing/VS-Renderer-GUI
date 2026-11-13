@@ -7,6 +7,8 @@
 #include <QTest>
 #include <QWheelEvent>
 #include <QLineF>
+#include <QLabel>
+#include <windows.h>
 
 #include <cmath>
 
@@ -16,6 +18,11 @@ class TestPreviewPane final : public QObject {
     Q_OBJECT
 
 private slots:
+    void nativeSurfaceIsBlackBeforeFirstFrame(){
+        PreviewPane pane("Test","Native");pane.resize(640,400);pane.findChild<QLabel *>("previewPlaceholder")->setStyleSheet("background:white");pane.show();QVERIFY(QTest::qWaitForWindowExposed(&pane));QTest::qWait(50);pane.setSurfaceActive(true);QTest::qWait(50);
+        const auto window=reinterpret_cast<HWND>(pane.surface()->winId());const auto dc=GetDC(window);QVERIFY(dc);const auto pixel=GetPixel(dc,pane.surface()->width()/2,pane.surface()->height()/2);ReleaseDC(window,dc);
+        QVERIFY(pixel!=CLR_INVALID);QCOMPARE(pixel,RGB(0,0,0));
+    }
     void nativePreviewZoomContinuesBeyond1600Percent() {
         PreviewPane pane("Test","Native");pane.resize(640,480);pane.setVideoSize({1920,1080});pane.show();
         auto *surface=pane.surface();const auto at=surface->rect().center();

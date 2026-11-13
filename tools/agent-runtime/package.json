@@ -1,0 +1,10 @@
+{
+  "name": "vs-renderer-agent-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test bridge.test.mjs" },
+  "dependencies": { "@modelcontextprotocol/client": "2.4.0" },
+  "devDependencies": { "@modelcontextprotocol/server": "2.4.0", "zod": "4.6.7" }
+}

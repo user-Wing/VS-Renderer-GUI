@@ -1,5 +1,5 @@
 param(
-    [string]$SourceDirectory = '.deps/ffmpeg-enhanced/07-full-shared',
+    [string]$SourceDirectory = '.deps/ffmpeg-enhanced/09-full-shared-newdav1d',
     [string[]]$OutputDirectory = @('build/mingw-release', 'dist/VS-GUI-Full')
 )
 $ErrorActionPreference = 'Stop'
@@ -29,7 +29,12 @@ foreach ($directory in $OutputDirectory) {
         Move-Item -LiteralPath $resolvedRuntime -Destination (Join-Path $backup 'cli')
     }
     New-Item -ItemType Directory -Path $runtime -Force | Out-Null
-    foreach ($name in @('README.md', 'build-info')) { Copy-Item -LiteralPath (Join-Path $source $name) -Destination $runtime -Recurse -Force }
+    Copy-Item -LiteralPath (Join-Path $source 'README.md') -Destination $runtime -Force
+    New-Item -ItemType Directory -Path (Join-Path $runtime 'build-info') -Force | Out-Null
+    foreach ($name in @('manifest.json','config.mak','build-full09.sh')) {
+        $info = Join-Path $source "build-info/$name"
+        if (Test-Path -LiteralPath $info) { Copy-Item -LiteralPath $info -Destination (Join-Path $runtime 'build-info') -Force }
+    }
     foreach ($name in @('ffmpeg.exe', 'ffprobe.exe', 'ffplay.exe')) {
         $destination = Join-Path $target $name
         if (Test-Path -LiteralPath $destination) { Copy-Item -LiteralPath $destination -Destination $backup -Force }
@@ -54,7 +59,7 @@ foreach ($directory in $OutputDirectory) {
     if (Test-Path -LiteralPath $provenance) { Copy-Item -LiteralPath $provenance -Destination (Join-Path $runtime 'source.json') -Force }
     if ($release) {
         $newFiles = @(Get-ChildItem -LiteralPath $source -File | Where-Object { $_.Extension -in '.dll','.exe' -and $_.Name -notin $sharedFiles } | Select-Object -ExpandProperty Name)
-        $release.ffmpegOnlyFiles = @(@($release.ffmpegOnlyFiles) + $newFiles | Sort-Object -Unique)
+        $release | Add-Member -NotePropertyName ffmpegOnlyFiles -NotePropertyValue @(@($release.ffmpegOnlyFiles) + $newFiles | Where-Object { $_ } | Sort-Object -Unique) -Force
         if (Test-Path -LiteralPath $provenance) { $release | Add-Member -NotePropertyName ffmpegSource -NotePropertyValue (Get-Content -LiteralPath $provenance -Raw | ConvertFrom-Json) -Force }
         $release | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $releasePath -Encoding UTF8
     }

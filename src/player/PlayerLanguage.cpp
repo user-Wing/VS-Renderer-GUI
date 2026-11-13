@@ -21,8 +21,14 @@ PlayerLanguage::PlayerLanguage(const QString &language) {
 }
 PlayerLanguage::~PlayerLanguage(){qApp->removeTranslator(this);}
 void PlayerLanguage::setLanguage(const QString &language){englishEnabled_=language=="en_US";}
-QString PlayerLanguage::translate(const char *,const char *source,const char *,int) const {
-    if(!englishEnabled_)return {};return english_.value(QString::fromUtf8(source));
+QString PlayerLanguage::translate(const char *context,const char *source,const char *,int) const {
+    const auto text=QString::fromUtf8(source);const QByteArray scope(context?context:"");
+    if(scope=="QPlatformTheme" || scope=="QDialogButtonBox" || scope=="QMessageBox"){
+        static const QHash<QString,QString> buttons{{"Save",QStringLiteral("保存")},{"Discard",QStringLiteral("不保存")},{"Don't Save",QStringLiteral("不保存")},{"Cancel",QStringLiteral("取消")},{"Yes",QStringLiteral("是")},{"No",QStringLiteral("否")},{"OK",QStringLiteral("确定")},{"Close",QStringLiteral("关闭")},{"Apply",QStringLiteral("应用")},{"Open",QStringLiteral("打开")}};
+        auto plain=text;plain.remove('&');const auto found=buttons.constFind(plain);
+        if(found!=buttons.cend())return englishEnabled_?(plain=="Discard"?QString("Don't Save"):plain):found.value();
+    }
+    if(!englishEnabled_)return {};return english_.value(text);
 }
 void PlayerLanguage::updateWidgets(QWidget *root) const {
     const auto text=[this](const QString &value){if(englishEnabled_)return english_.value(value,value);for(auto it=english_.begin();it!=english_.end();++it)if(it.value()==value)return it.key();return value;};

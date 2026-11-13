@@ -34,6 +34,8 @@ bool ThreeFpPlayer::createSession()
     configuration.size = sizeof(configuration);
     configuration.version = api_.apiVersion();
     configuration.outputWindow = reinterpret_cast<void *>(surface_->winId());
+    const auto endpointUtf8=audioEndpoint_.toUtf8();
+    configuration.audioEndpointIdUtf8=endpointUtf8.isEmpty()?nullptr:endpointUtf8.constData();
     configuration.decodeMode = decodeMode_;
     configuration.colorMode = automaticHdr_ ? 2 : 0;
     configuration.sdrPeakNits = 100.0f;
@@ -48,12 +50,14 @@ bool ThreeFpPlayer::createSession()
 
     if (!check(api_.create(&configuration, &handle_), QStringLiteral("创建 3FP 会话")))
         return false;
+    audioOutputPending_=true;
     if(clockOnly_)api_.setClockOnly(handle_,true);
     if(softwarePreScaleHeight_)check(api_.setSoftwarePreScale(handle_,softwarePreScaleHeight_),QStringLiteral("CPU pre-scale"));
     if (!check(api_.setScalingAlgorithms(handle_, static_cast<ThreeFpScalingAlgorithm>(static_cast<unsigned>(upscale_) | ((chromaAlgorithm_ + 1) << 8) | (unsigned(secondaryScaling_ + 1) << 24) | (antiRinging_ ? 65536u : 0u)), downscale_), QStringLiteral("设置缩放算法")))
         return false;
     check(api_.setVolume(handle_, volume_, muted_ ? 1u : 0u), QStringLiteral("音量"));
     if (!outputFormat_.isEmpty()) api_.setExternalOutputFormat(handle_, outputFormat_.toUtf8().constData());
+    if (!upscaleShaderPath_.isEmpty() && !check(api_.setUpscaleShader(handle_,upscaleShaderPath_.toUtf8().constData()),QStringLiteral("OpenNGU"))) return false;
     if (!customShaderPath_.isEmpty() && !check(api_.setCustomShader(handle_, customShaderPath_.toUtf8().constData(), customShaderWidth_, customShaderHeight_), QStringLiteral("加载 HLSL 着色器")))
         return false;
     if (customColorSettings_) api_.setColorSettings(handle_, &colorSettings_);
@@ -74,6 +78,17 @@ ThreeFpPlayer::~ThreeFpPlayer()
         api_.stop(handle_);
         api_.destroy(handle_);
     }
+}
+bool ThreeFpPlayer::setAudioOutput(const QString &endpoint,bool exclusive) {
+    if((!endpoint.isEmpty() || exclusive) && !api_.hasAudioOutputControls()) {
+        lastError_=QStringLiteral("当前 3FP 内核不支持音频设备/独占接口，请更新内核。");emit errorOccurred(lastError_);return false;
+    }
+    if(audioEndpoint_==endpoint && audioExclusive_==exclusive)return true;
+    if(handle_ && audioEndpoint_!=endpoint && !check(api_.setAudioEndpoint(handle_,endpoint.toUtf8().constData()),QStringLiteral("音频输出设备")))return false;
+    audioEndpoint_=endpoint;audioExclusive_=exclusive;audioOutputPending_=true;
+    // Exclusive mode is state-gated in the existing ABI. Apply after asynchronous
+    // Open completes, immediately before Play, not while the session is Idle.
+    return true;
 }
 bool ThreeFpPlayer::setClockOnly(bool enabled) { clockOnly_=enabled;return !handle_ || api_.setClockOnly(handle_,enabled)==ThreeFpResult::Success; }
 bool ThreeFpPlayer::enableAudioTap(bool enabled){return handle_ && api_.enableAudioTap(handle_,enabled)==ThreeFpResult::Success;}
@@ -110,6 +125,7 @@ bool ThreeFpPlayer::resetVideoOutput()
 bool ThreeFpPlayer::openFile(const QString &path)
 {
     const QByteArray utf8 = path.toUtf8();
+    audioOutputPending_=true;
     return createSession() && check(api_.open(handle_, utf8.constData()), QStringLiteral("打开媒体"));
 }
 
@@ -122,6 +138,10 @@ bool ThreeFpPlayer::play()
         return true;
     if (state != ThreeFpState::Ready && state != ThreeFpState::Paused && state != ThreeFpState::Ended)
         return false;
+    if(audioOutputPending_ && api_.hasAudioOutputControls()) {
+        if(!check(api_.setAudioExclusiveMode(handle_,audioExclusive_),QStringLiteral("音频独占模式")))return false;
+        audioOutputPending_=false;
+    }
     return check(api_.play(handle_), QStringLiteral("播放"));
 }
 
@@ -217,7 +237,12 @@ bool ThreeFpPlayer::setChromaAlgorithm(int algorithm)
 }
 
 void ThreeFpPlayer::setSecondaryScaling(int algorithm) {
-    secondaryScaling_=std::clamp(algorithm,-1,8);
+    secondaryScaling_=algorithm==15?15:std::clamp(algorithm,-1,8);
+}
+bool ThreeFpPlayer::setUpscaleShader(const QString &path) {
+    if(path==upscaleShaderPath_)return true;
+    if(!createSession() || !check(api_.setUpscaleShader(handle_,path.toUtf8().constData()),QStringLiteral("OpenNGU")))return false;
+    upscaleShaderPath_=path;return true;
 }
 bool ThreeFpPlayer::setCustomShader(const QString &path,int width,int height)
 {

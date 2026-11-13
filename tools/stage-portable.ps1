@@ -2,8 +2,6 @@
     [string]$BuildDirectory = "build/mingw-release",
     [string]$PreviousDirectory = "dist/VS-Renderer-GUI-1.0.1-windows-x64",
     [string]$ShaderDirectory = "C:/PortableSoft/FFmpegFreeUI ReadyToRun x64/libplacebo",
-    [string]$LavDirectory = (Join-Path $PSScriptRoot "../.deps/lav/0.83"),
-    [string]$MadvrDirectory = "C:/PortableSoft/PotPlayer/madVR09217",
     [string]$MkvtoolnixDirectory = "C:/PortableSoft/Mkvtoolnix"
 )
 $ErrorActionPreference = "Stop"
@@ -55,15 +53,6 @@ if (!(Test-Path -LiteralPath (Join-Path $output 'components.json'))) { Copy-Item
 @{version=$version;schema=1;platform='windows-x64'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'release.json') -Encoding UTF8
 New-Item -ItemType Directory -Path (Join-Path $output "languages") -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets/languages/zh_CN.json"), (Join-Path $projectRoot "assets/languages/en_US.json") -Destination (Join-Path $output "languages") -Force
-New-Item -ItemType Directory -Path (Join-Path $output "LAVFilters64"), (Join-Path $output "madVR09217") -Force | Out-Null
-foreach ($filter in @('LAVVideo.ax', 'LAVAudio.ax', 'LAVSplitter.ax', 'COPYING')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $LavDirectory $filter))) { throw "Missing LAV runtime file: $filter in $LavDirectory" }
-}
-Get-ChildItem -LiteralPath $LavDirectory | Copy-Item -Destination (Join-Path $output "LAVFilters64") -Recurse -Force
-$lavNames = @(Get-ChildItem -LiteralPath $LavDirectory -File | Select-Object -ExpandProperty Name)
-Get-ChildItem -LiteralPath (Join-Path $output "LAVFilters64") -Filter '*-lav-*.dll' -File |
-    Where-Object { $_.Name -notin $lavNames } | ForEach-Object { Remove-Item -LiteralPath $_.FullName }
-Get-ChildItem -LiteralPath $MadvrDirectory | Copy-Item -Destination (Join-Path $output "madVR09217") -Recurse -Force
 & (Join-Path $PSScriptRoot 'trim-portable.ps1') -OutputDirectory $output
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md"), (Join-Path $projectRoot "project.md"), (Join-Path $projectRoot "changelog.md"), (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination $output -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "docs/dependencies.md") -Destination (Join-Path $output "DEPENDENCIES.md") -Force

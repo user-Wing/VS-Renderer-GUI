@@ -22,6 +22,8 @@ public:
     bool setRate(double rate);
     QImage capture() const;
     bool madvrActive() const;
+    // Borrowed IUnknown for local renderer diagnostics; valid until close/destruction.
+    void *nativeRendererForDiagnostics() const;
     void setSubtitle(const QImage &image);
 private:
     struct Impl;

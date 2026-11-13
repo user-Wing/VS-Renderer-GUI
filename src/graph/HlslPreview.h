@@ -26,6 +26,10 @@ inline HlslPreviewPlan hlslPreviewPlan(const FilterGraph &graph) {
     plan.parameters=graph.nodes()[shader].parameters;
     plan.shaderPath=plan.parameters.value("shader").toString();
     if(plan.shaderPath.isEmpty())plan.shaderPath=QDir(QCoreApplication::applicationDirPath()).filePath("shaders/"+plan.parameters.value("mode").toString());
+    if(QFileInfo(plan.shaderPath).fileName()=="OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl"){
+        const auto native=QFileInfo(plan.shaderPath).dir().filePath("OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl");
+        if(QFileInfo::exists(native))plan.shaderPath=native;
+    }
     for(int i=last;i>=shader;--i)plan.graph.remove(i);return plan;
 }
 inline bool hlslAspectCompatible(const QVariantMap &parameters,const QSize &input,const QSize &output) {

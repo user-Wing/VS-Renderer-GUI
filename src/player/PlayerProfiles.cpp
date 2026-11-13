@@ -71,9 +71,9 @@ void PlayerWindow::updateAlgorithmBadges(){
     const int interpolation=interpolationStage();
     if(superInterpolationStage()>=0 && !direct_){algorithmBadge_->setText(superInterpolationStage()==2?"D3D11":superInterpolationStage()==1?"Jinc":"A4K");interpolationBadge_->setText("RIFE 960×540");interpolationBadge_->show();}
     else if(interpolation>=0 && !direct_){algorithmBadge_->setText(interpolationRenderer()?"D3D11":"Jinc");interpolationBadge_->setText(QStringList{"RIFE+","RIFE","MVT+","MVT"}.at(interpolation));interpolationBadge_->show();}
-    else if(profile()=="Anime" && (nativeAnime_ || !direct_))algorithmBadge_->setText(QStringList{"A4KCNN+","A4KCNN","A4K+","A4K","Jinc","D3D11","A4K-1X-Jinc","A4K-1X-D3D11","A4K-A-CNN+","A4K-A-CNN","MoeSR-50K"}.at(std::clamp(qualityStage_,0,10)));
+    else if(profile()=="Anime" && (nativeAnime_ || !direct_) && qualityStage_!=4 && qualityStage_!=5)algorithmBadge_->setText(QStringList{"A4KCNN+","A4KCNN","A4K+","A4K","Jinc","D3D11","A4K-1X-Jinc","A4K-1X-D3D11","A4K-A-CNN+","A4K-A-CNN","MoeSR-50K"}.at(std::clamp(qualityStage_,0,10)));
     else if(!customShaderPackage_.isEmpty() && !hlslFailed_ && hlslFallback_.isEmpty())algorithmBadge_->setText("HLSL");
-    else algorithmBadge_->setText(QStringList{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","SuperXbr","D3D11","Lanczos4","A4KCNN","A4KCNN+","A4K+","A4K","A4K-1X-Jinc","A4K-1X-D3D11"}.value(scalingAlgorithm(),"Jinc"));
+    else algorithmBadge_->setText(QStringList{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","SuperXbr","D3D11","Lanczos4","A4KCNN","A4KCNN+","A4K+","A4K","A4K-1X-Jinc","A4K-1X-D3D11",openNguActive_?"OpenNGU":"Jinc"}.value(scalingAlgorithm(),"Jinc"));
     if(algorithmBadge_->text()=="HLSL")algorithmBadge_->hide();
 }
 int PlayerWindow::interpolationStage() const {
@@ -350,11 +350,11 @@ void PlayerWindow::updateProfile() {
 void PlayerWindow::suspendQualityCheck() {qualityTimer_.invalidate();qualitySettling_.restart();}
 int PlayerWindow::scalingAlgorithm(bool downscale) const {
     if(downscale)return std::clamp(settings_->value("render/downscale",4).toInt(),0,8);
-    if(!customShaderPackage_.isEmpty() && !hlslFailed_)return 7;
+    if(!customShaderPackage_.isEmpty() && !hlslFailed_)return nativeAnime_ && qualityStage_==6?4:7;
     if(direct_ && nativeAnime_ && qualityStage_<8){const int algorithms[]{10,9,11,12,4,7,13,14};if(qualityStage_!=4 && qualityStage_!=5)return algorithms[std::clamp(qualityStage_,0,7)];}
-    if(direct_ && qualityStage_==5)return std::clamp(settings_->value("render/upscale",settings_->value("render/d3d11Upscale",7)).toInt(),0,8);
-    if(direct_ && qualityStage_==4)return std::clamp(settings_->value("render/upscale",4).toInt(),0,8);
-    if(!direct_)return std::clamp(settings_->value("render/secondUpscale",4).toInt(),0,8);
+    if(direct_ && (qualityStage_==5 || preset_.isEmpty()))return std::clamp(settings_->value("render/upscale",settings_->value("render/d3d11Upscale",15)).toInt(),0,15);
+    if(direct_ && qualityStage_==4)return std::clamp(settings_->value("render/upscale",15).toInt(),0,15);
+    if(!direct_)return std::clamp(settings_->value("render/secondUpscale",4).toInt(),0,15);
     if(qualityStage_==7 || superInterpolationStage()==2 || (interpolationStage()>=0 && interpolationRenderer()==1))return 7;
     return 4;
 }
@@ -362,15 +362,37 @@ void PlayerWindow::applyScaling() {
     auto *visible=direct_?clock_.get():output_.get();const bool native=scalingAlgorithm()==7;
     visible->setVideoEnhancement(false,settings_->value("render/rtxVsr",false).toBool());
     visible->setVideoEnhancement(true,direct_ && native && settings_->value("render/trueHdr",false).toBool());
-    visible->setSecondaryScaling(settings_->value("render/secondUpscale",4).toInt());
+    openNguActive_=false;
+    const bool wantsOpenNgu=scalingAlgorithm()==15 || settings_->value("render/secondUpscale",4).toInt()==15;
+    const bool openNguCompatible=(source_.isEmpty() || positionRestored_) && !imageMode_ && !audioMode_ && hlslColorCompatible();
+    if(wantsOpenNgu && openNguCompatible){
+        const auto path=settings_->value("render/openNguShader",QDir(QCoreApplication::applicationDirPath()).filePath("shaders/OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl")).toString();
+        const auto shader=ShaderPackage::prepare(path);
+        openNguActive_=shader.error.isEmpty() && visible->setUpscaleShader(shader.packagePath);
+        if(!openNguActive_)hlslFallback_=QStringLiteral("OpenNGU → Jinc: %1").arg(shader.error.isEmpty()?visible->lastError():shader.error);
+        else if(hlslFallback_.startsWith("OpenNGU"))hlslFallback_.clear();
+    }else if(wantsOpenNgu)hlslFallback_=tr("OpenNGU 仅用于 BT.709 SDR，当前回退到 Jinc。");
+    if(!wantsOpenNgu && hlslFallback_.startsWith("OpenNGU"))hlslFallback_.clear();
+    if(!openNguActive_)visible->setUpscaleShader({});
+    const int second=settings_->value("render/secondUpscale",4).toInt();
+    visible->setSecondaryScaling(second==15 && !openNguActive_?4:second);
     visible->setAntiRinging(settings_->value("render/antiring",true).toBool());
-    visible->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(scalingAlgorithm()),static_cast<ThreeFpScalingAlgorithm>(scalingAlgorithm(true)));
+    const int primary=scalingAlgorithm()==15 && !openNguActive_?4:scalingAlgorithm();
+    if(!visible->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(primary),static_cast<ThreeFpScalingAlgorithm>(scalingAlgorithm(true))) && primary==15){
+        openNguActive_=false;visible->setUpscaleShader({});
+        if(!visible->setScalingAlgorithms(ThreeFpScalingAlgorithm::Jinc2,static_cast<ThreeFpScalingAlgorithm>(scalingAlgorithm(true))))
+            visible->setScalingAlgorithms(ThreeFpScalingAlgorithm::D3D11Native,static_cast<ThreeFpScalingAlgorithm>(scalingAlgorithm(true)));
+    }
     if(hlslParameters_.isEmpty()){
         // A new source must publish its own metadata before reusing the remembered shader.
         const bool sourceReady=source_.isEmpty() || positionRestored_;
         const bool compatible=sourceReady && !hlslFailed_ && !imageMode_ && !audioMode_ && !networkSource() && hlslColorCompatible();
         if(!visible->setCustomShader(compatible?customShaderPackage_:QString()) && compatible && !customShaderPackage_.isEmpty()){
             hlslFallback_=tr("自定义 HLSL 未启用：%1").arg(visible->lastError());visible->setCustomShader({});
+            if(nativeAnime_ && (qualityStage_==6 || qualityStage_==7)){
+                customShaderPackage_.clear();hlslFailed_=true;
+                visible->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(scalingAlgorithm()),static_cast<ThreeFpScalingAlgorithm>(scalingAlgorithm(true)));
+            }
         }
         if(sourceReady && !compatible && !hlslFailed_ && !customShaderPackage_.isEmpty())hlslFallback_=tr("当前色彩路径不兼容，自定义 HLSL 已停用。");
     }

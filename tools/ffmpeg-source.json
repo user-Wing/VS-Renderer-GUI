@@ -1,8 +1,11 @@
 {
-  "archive": "07-full-shared.7z",
-  "sha256": "06296918d33886b1dd819e792ada7bf49d146984ba0fef9b1b3dea6f715d6b88",
-  "version": "8.0.git",
-  "buildDate": "2026-11-07",
+  "archive": "09-full-shared-newdav1d.zip",
+  "sha256": "63787cf842aff8dc6a3cd749131ab3a82018194cf9b65764724ff172eb8532cc",
+  "version": "9.1-dev-3586-gfc00db20fc-full09",
+  "buildDate": "2026-11-13",
+  "ffmpegUpstream": "88c46fce27e311c73772d9b83db4047dd83b1294",
+  "ffmpegLocal": "fc00db20fc4346fecf4c2aecd6f79e18ee1e2304",
+  "dav1dCommit": "39834d7f71c85a9c555f2ddd7a7add6d671750de",
   "architecture": "windows-x64",
   "minimumCpu": "x86-64-v3 (AVX2)",
   "sharedAbi": {
@@ -14,6 +17,6 @@
     "swresample": 7,
     "swscale": 10
   },
-  "sourceDirectory": ".deps/ffmpeg-enhanced/07-full-shared",
+  "sourceDirectory": ".deps/ffmpeg-enhanced/09-full-shared-newdav1d",
   "provenance": "User-supplied archive; original README and build-info retained in runtime/ffmpeg."
 }

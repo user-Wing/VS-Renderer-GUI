@@ -54,7 +54,8 @@ enum class ThreeFpScalingAlgorithm : std::uint32_t {
     Anime4KNoCnnEnhanced = 11,
     Anime4KNoCnn = 12,
     Anime4K1xJinc = 13,
-    Anime4K1xD3D11 = 14
+    Anime4K1xD3D11 = 14,
+    OpenNgu = 15
 };
 
 struct ThreeFpConfiguration {
@@ -167,10 +168,13 @@ struct ThreeFpSnapshot {
     std::uint32_t durationKnown, waitingForInput;
     double playbackRate;
     std::uint64_t audioFailures;
+    std::uint32_t audioPassthroughActive, audioPassthroughMode;
+    std::int32_t audioPassthroughCodec;
 };
 
 static_assert(sizeof(ThreeFpConfiguration) == 112);
-static_assert(sizeof(ThreeFpSnapshot) == 592);
+static_assert(sizeof(ThreeFpSnapshot) == 608);
+static_assert(offsetof(ThreeFpSnapshot, audioPassthroughActive) == 592);
 static_assert(offsetof(ThreeFpSnapshot, audioDelay100ns) == 400);
 static_assert(offsetof(ThreeFpSnapshot, uploadCount) == 440);
 static_assert(offsetof(ThreeFpSnapshot, uploadPath) == 456);
@@ -262,12 +266,16 @@ public:
     ThreeFpResult clearExternalAudio(void *handle) const;
     ThreeFpResult setAudioEffects(void *handle, bool enabled, const float *gains, float wave, qint64 delay) const;
     ThreeFpResult audioLevels(void *handle, ThreeFpAudioLevels *levels, bool input) const;
+    bool hasAudioOutputControls() const;
+    ThreeFpResult setAudioEndpoint(void *handle, const char *endpoint) const;
+    ThreeFpResult setAudioExclusiveMode(void *handle, bool exclusive) const;
     ThreeFpResult setVolume(void *handle, float volume, std::uint32_t muted) const;
     ThreeFpResult setPresentConfig(void *handle, bool enabled) const;
     ThreeFpResult setPacingConfig(void *handle, bool enabled) const;
     ThreeFpResult setViewTransform(void *handle, float zoom, float panX, float panY) const;
     ThreeFpResult setScalingAlgorithms(void *handle, ThreeFpScalingAlgorithm upscale,
                                        ThreeFpScalingAlgorithm downscale) const;
+    ThreeFpResult setUpscaleShader(void *handle, const char *path) const;
     ThreeFpResult setCustomShader(void *handle, const char *packagePath, int width, int height) const;
     ThreeFpResult snapshot(void *handle, ThreeFpSnapshot *snapshot) const;
     ThreeFpResult setColorSettings(void *handle, const VsrColorSettings *settings) const;

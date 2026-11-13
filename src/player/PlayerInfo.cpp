@@ -19,7 +19,6 @@
 #include <QPainter>
 #include <windows.h>
 #include <psapi.h>
-#include <dxgi.h>
 
 namespace vsr {
 void PlayerWindow::updateInfo() {
@@ -55,11 +54,11 @@ void PlayerWindow::updateInfo() {
     const auto refreshed = QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();
     if (!refreshed.isEmpty()) media_ = refreshed;
     applyBlurayMetadata();
-    const auto selectedAudio=clock_->snapshot().selectedAudioStream;
+    const auto selectedAudio=clock_->snapshot().selectedAudioStream;const auto selectedVideo=clock_->snapshot().selectedVideoStream;
     QJsonObject video, audio;
     for (const auto &entry : media_.value("streams").toArray()) {
         const auto stream = entry.toObject();
-        if (stream.value("type").toString() == "video" && video.isEmpty()) video = stream;
+        if (stream.value("type").toString() == "video" && (selectedVideo>=0?stream.value("index").toInt()==selectedVideo:video.isEmpty())) video = stream;
         if (stream.value("type").toString() == "audio" && stream.value("index").toInt()==selectedAudio) audio = stream;
     }
     videoBadge_->setText(audioMode_?tr("音频"):video.value("codec").toString("—")); audioBadge_->setText(audio.value("codec").toString("—"));
@@ -69,16 +68,11 @@ void PlayerWindow::updateInfo() {
     hdrBadge_->setToolTip(madvrMode()?tr("HDR / SDR 输出与色调映射由 madVR 控制"):source.isHdrSource ? (rendered.actualColorMode ? tr("HDR 输出") : tr("HDR 源，映射到 SDR 显示器")) : tr("SDR 源"));
     if (!infoVisible_) return;
     // Native already counts only generations that reached Present; coalesced frames are separate.
+    const bool playbackActive=lavVideo_?playing_:source.state==ThreeFpState::Playing;
     const auto count=rendered.presentedVideoFrames;
     if(count<infoLastFrames_){infoLastFrames_=count;infoCurrentFps_=0;infoFpsTimer_.restart();}
     if(infoFpsTimer_.isValid() && infoFpsTimer_.elapsed()>=500){infoCurrentFps_=count>=infoLastFrames_?(count-infoLastFrames_)*1000./infoFpsTimer_.elapsed():0;infoLastFrames_=count;infoFpsTimer_.restart();}
     else if(!infoFpsTimer_.isValid()){infoFpsTimer_.start();infoLastFrames_=count;}
-    QString gpu = tr("未知"); IDXGIFactory1 *factory = nullptr;
-    if (SUCCEEDED(CreateDXGIFactory1(IID_IDXGIFactory1, reinterpret_cast<void **>(&factory)))) {
-        IDXGIAdapter1 *adapter = nullptr;
-        if (SUCCEEDED(factory->EnumAdapters1(0, &adapter))) { DXGI_ADAPTER_DESC1 desc{}; adapter->GetDesc1(&desc); gpu = QString::fromWCharArray(desc.Description); adapter->Release(); }
-        factory->Release();
-    }
     const auto fps = clip_.fpsDenominator > 0 ? static_cast<double>(clip_.fpsNumerator) / clip_.fpsDenominator : 0;
     const auto at = position();
     const auto videoRate = source.videoBitRate ? source.videoBitRate : static_cast<quint64>(video.value("bitRate").toDouble());
@@ -92,15 +86,24 @@ void PlayerWindow::updateInfo() {
     const bool hlsl=direct_ || !customShaderPackage_.isEmpty() && !hlslFailed_ && hlslFallback_.isEmpty();
     const auto outputBits = audio.value("outputValidBitsPerSample").toInt();
     const bool lavAudio=lavAudio_;
-    const auto audioOutput = lavAudio ? tr("由 LAV / DirectShow 协商") : QString("%1 · %2 Hz · %3 声道 · %4 bit")
+    auto audioOutput = lavAudio ? tr("由 LAV / DirectShow 协商") : QString("%1 · %2 Hz · %3 声道 · %4 bit")
         .arg(audio.value("outputFloat").toBool() ? "Float PCM" : "PCM").arg(audio.value("outputSampleRate").toInt()).arg(audio.value("outputChannels").toInt()).arg(outputBits);
+    if(!lavAudio && media_.contains("audioOutputActive")) {
+        if(!media_.value("audioOutputActive").toBool())audioOutput=tr("3FP 输出未激活(暂停时可释放独占设备)");
+        else {
+            audioOutput+=media_.value("audioOutputExclusive").toBool()?tr(" · WASAPI 独占"):tr(" · WASAPI 共享");
+            if(settings_->value("audio/exclusive",false).toBool() && !media_.value("audioOutputExclusive").toBool())audioOutput+=tr("(独占请求已回退)");
+            if(media_.value("audioSourceRate").toInt()>0 && media_.value("audioSourceRate").toInt()!=media_.value("audioOutputRate").toInt())audioOutput+=tr(" · 已重采样");
+        }
+    }
     QStringList lines;
+    auto cpuPowerStatus=usage_.cpuPowerStatus;cpuPowerStatus.replace(QChar(0xff08),'(').replace(QChar(0xff09),')');
     lines << tr("文件名：%1").arg(QFileInfo(source_).fileName())
           << tr("当前时间：%1 · 时间轴：%2 / %3 (%4%) · #帧数：%5 / %6")
              .arg(QDateTime::currentDateTime().toString("HH:mm:ss"), formatTime(at), formatTime(source.duration100ns))
              .arg(source.duration100ns > 0 ? at * 100.0 / source.duration100ns : 0, 0, 'f', 1).arg(lastFrame_).arg(clip_.totalFrames)
           << tr("CPU：%1 · GPU：%2 · 内存：%3 MiB").arg(usage_.processCpu>=0?QString::number(usage_.processCpu,'f',1)+"%":tr("采样中"),usage_.gpu>=0?QString::number(usage_.gpu,'f',1)+"%":tr("未提供")).arg(usage_.memoryMiB)
-          << tr("功耗：CPU %1 · GPU(NVIDIA) %2").arg(usage_.cpuWatts>=0?QString::number(usage_.cpuWatts,'f',1)+" W":usage_.cpuPowerStatus,usage_.gpuWatts>=0?QString::number(usage_.gpuWatts,'f',1)+" W":QString("N/A"))
+          << tr("功耗：CPU %1 · GPU(NVIDIA) %2").arg(usage_.cpuWatts>=0?QString::number(usage_.cpuWatts,'f',1)+" W":cpuPowerStatus,usage_.gpuWatts>=0?QString::number(usage_.gpuWatts,'f',1)+" W":QString("N/A"))
           << ""
           << tr("视频解码器：%1 · VS 源：%2").arg(decoder, direct_ ? tr("原生直通") : preset_.isEmpty() ? "FFMS2" : tr("VPY 定义"))
           << tr("输入：%1 · %2×%3 · %4-%5 · 帧率：%6 · 位率：%7")
@@ -109,11 +112,10 @@ void PlayerWindow::updateInfo() {
           << (madvrMode()?tr("输出：%1 · %2×%3 · 目标帧率：%4 · 显示格式由 madVR 协商%5%6"):tr("输出：%1 · %2×%3 · 目标帧率：%4 · 显示：%5 bit / %6"))
              .arg(madvrMode()?tr("LAV / madVR 协商"):direct_?video.value("pixelFormat").toString():settings_->value("decode/output").toString().isEmpty()?clip_.formatName:settings_->value("decode/output").toString()).arg(clip_.width).arg(clip_.height).arg(fps*speed_,0,'f',3).arg(madvrMode()?QString():QString::number(rendered.videoOutputBitDepth)).arg(madvrMode()?QString():rendered.actualColorMode ? "HDR" : "SDR")
           << (madvrMode()?tr("视频渲染器：madshi video renderer"):tr("视频渲染器：VS Real-Time Video Renderer"))
-          << tr("  设备：%1").arg(gpu)
           << (madvrMode()?tr("  帧与丢帧统计：由 madVR 控制器提供"):tr("  已提交：%1 · 丢帧：%2(VS 跳过 %3 / 原生丢弃 %4 / 合并 %5)")
               .arg(direct_?rendered.presentedVideoFrames:submittedFrames_).arg(skippedFrames_+rendered.droppedVideoFrames+rendered.coalescedVideoFrames).arg(skippedFrames_).arg(rendered.droppedVideoFrames).arg(rendered.coalescedVideoFrames))
           << tr("  实时帧率缺口：%1 fps · 视频落后时钟：%2 ms")
-              .arg(playing_?qMax(0.0,fps*speed_-infoCurrentFps_):0,0,'f',2)
+              .arg(playbackActive?qMax(0.0,fps*speed_-infoCurrentFps_):0,0,'f',2)
               .arg(rendered.frameTimeBaseDenominator>0?qMax(0.0,(at-rendered.framePts*double(rendered.frameTimeBaseNumerator)*1e7/rendered.frameTimeBaseDenominator)/10000):0,0,'f',1)
           << ((madvrMode() || direct_)?tr("  VS 处理：未启用 · 原生直通"):tr("  VS 请求耗时：%1 ms · 同步偏移：%2 ms · 平均呈现等待：%3 ms · 预解码：%4 帧")
               .arg(frameMilliseconds_,0,'f',1).arg((frameTime-at)/10000,0,'f',1).arg(rendered.swapChainPresents?rendered.presentWait100ns/10000.0/rendered.swapChainPresents:0,0,'f',2).arg(prefetchCount()))
@@ -132,11 +134,12 @@ void PlayerWindow::updateInfo() {
               .arg(source.bufferedAudio100ns/10000.0,0,'f',1).arg((source.audioPosition100ns-at)/10000.0,0,'f',1).arg(source.audioTimestampJitterFrames))
           << "" << tr("倍速：%1× · %2").arg(speed_,0,'f',2).arg(preset_.isEmpty() ? tr("原画") : QFileInfo(preset_).fileName());
     lines << tr("补帧：%1").arg(interpolationStage()>=0?interpolationNames().at(interpolationStage())+(interpolationAuto_?tr(" · 自动降档"):tr(" · 手动固定")):tr("未启用"));
-    const QStringList algorithms{"Nearest Neighbour","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11","Lanczos4",qualityNames().at(1),qualityNames().at(0),qualityNames().at(2),qualityNames().at(3),qualityNames().at(6),qualityNames().at(7)};
+    const QStringList algorithms{"Nearest Neighbour","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","Super-XBR","D3D11","Lanczos4",qualityNames().at(1),qualityNames().at(0),qualityNames().at(2),qualityNames().at(3),qualityNames().at(6),qualityNames().at(7),openNguActive_?QString("OpenNGU"):QString("Jinc")};
     const QString scalingName=nativeAnime_ && qualityStage_>=8?qualityNames().value(qualityStage_):!customShaderPackage_.isEmpty() && !hlslFailed_ && hlslFallback_.isEmpty()?QString("HLSL"):madvrMode()?QString("madVR"):direct_?algorithms.value(scalingAlgorithm()):interpolationStage()>=0?(interpolationRenderer()?tr("D3D11"):tr("Jinc 直通")):profile()=="Anime"?qualityNames().at(std::clamp(qualityStage_,0,10)):algorithms.value(scalingAlgorithm());
+    if(hlslFallback_.startsWith("OpenNGU"))lines << hlslFallback_;
     lines << tr("上采样：%1 · 第二上采样：%2 · 下采样：%3")
         .arg(!preset_.isEmpty() && profile().isEmpty()?QString("N/A"):scalingName,algorithms.value(settings_->value("render/secondUpscale",4).toInt()),algorithms.value(scalingAlgorithm(true)));
-    lines << tr("当前 VPY：%1").arg(preset_.isEmpty()?tr("未启用"):profile().isEmpty()?preset_:QString("%1 · %2（内置预设）").arg(qualityStage_+1).arg(QFileInfo(preset_).fileName()));
+    lines << tr("当前 VPY：%1").arg(preset_.isEmpty()?tr("未启用"):profile().isEmpty()?preset_:tr("%1 · %2(内置预设)").arg(qualityStage_+1).arg(QFileInfo(preset_).fileName()));
     if(decodePoolBytes_)lines << tr("动态缓冲池：上限 %1 MiB · 目标 %2 帧 · %3").arg(decodePoolBytes_/1048576).arg(decodePoolFrames_).arg(decodePoolFrames_>8?tr("尖峰前瞻"):tr("常规"));
 
     if(madvrMode())lines << tr("色彩引擎：madVR");
@@ -164,7 +167,7 @@ void PlayerWindow::updateInfo() {
         }
         if(color.fallback[0]) lines << tr("色彩回退 / 限制：%1").arg(QString::fromUtf8(color.fallback));
     }
-    for(auto &line:lines)if(line.contains(tr("已提交：")))line=tr("  当前帧率：%1 fps · ").arg(playing_?infoCurrentFps_:0,0,'f',2)+line.trimmed();
+    for(auto &line:lines)if(line.contains(tr("已提交：")))line=tr("  当前帧率：%1 fps · ").arg(playbackActive?infoCurrentFps_:0,0,'f',2)+line.trimmed();
     if(audioMode_){
         int videoStart=-1,audioStart=-1,audioEnd=-1;
         for(int i=0;i<lines.size();++i){if(lines[i].startsWith(tr("视频解码器：")))videoStart=i;if(lines[i].startsWith(tr("音频解码器：")))audioStart=i;if(lines[i].startsWith(tr("倍速：")))audioEnd=i;}

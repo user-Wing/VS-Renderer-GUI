@@ -4,6 +4,7 @@
 #include "graph/VpyScriptBuilder.h"
 #include <QElapsedTimer>
 #include <QHash>
+#include <QJsonArray>
 #include <QSize>
 #include <QWidget>
 #include <functional>
@@ -34,12 +35,14 @@ public:
                 const QString &script, double durationSeconds, QString *error = nullptr);
     void setComposition(const QString &script, const QStringList &sources, double audioOffset, bool muted, const QString &description, const QSize &outputSize);
     bool isBusy() const;
+    QJsonArray jobsStatus() const;
     void stopAll();
     static QString outputPath(const QString &source, const QString &directory, bool timestamp);
 signals:
     void statusMessage(const QString &message);
     void idle();
 private:
+    void syncWorker();
     enum class State { Waiting, Running, Paused, Stopping, Stopped, Completed, Failed };
     struct Job {
         ExportPlan plan;
@@ -48,7 +51,7 @@ private:
         QString sourceKey;
         QStringList inputKeys;
         QString outputKey;
-        std::shared_ptr<QTemporaryDir> directory;
+        QString id, directory;
         QTreeWidgetItem *item = nullptr;
         double durationSeconds = 0;
         State state = State::Waiting;

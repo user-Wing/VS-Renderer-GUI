@@ -186,13 +186,14 @@ ShaderPackageResult ShaderPackage::enhance(const ShaderPackageResult &base,const
         const auto mode=stage.value("mode").toString();const double strength=stage.value("strength").toDouble(),threshold=stage.value("threshold",0).toDouble();
         if(!QStringList{"sharpen_edges","enhance_detail","crispen_edges"}.contains(mode) || !std::isfinite(strength) || strength<0 || strength>2 || !std::isfinite(threshold) || threshold<0 || threshold>32)return {{},"Unsupported HLSL enhancement."};
         Pass pass;pass.hook=pass.save="LUMA";pass.bindings={"HOOKED"};
-        const auto source=QString(R"(Texture2D<float4> image:register(t0);SamplerState smp:register(s0);
+        const auto source=QString(R"(Texture2D<float4> image:register(t0);
 cbuffer Settings:register(b0){float4 sourceSize;float4 outputSize;};
-float4 main(float2 uv:TEXCOORD0):SV_Target {
-    float4 pixel=image.SampleLevel(smp,uv,0);float center=pixel.r,lo=center,hi=center,blur=0;
+float4 main(float4 position:SV_Position):SV_Target {
+    int2 p=int2(position.xy),last=int2(sourceSize.xy)-1;
+    float4 pixel=image.Load(int3(p,0));float center=pixel.r,lo=center,hi=center,blur=0;
     const float weights[9]=%1;
     [unroll] for(int y=-1;y<=1;++y) [unroll] for(int x=-1;x<=1;++x){
-        float v=image.SampleLevel(smp,uv+float2(x,y)*sourceSize.zw,0).r;
+        float v=image.Load(int3(clamp(p+int2(x,y),int2(0,0),last),0)).r;
         lo=min(lo,v);hi=max(hi,v);blur+=v*weights[(y+1)*3+x+1]/%2;
     }
     float wide=blur;
@@ -200,7 +201,7 @@ float4 main(float2 uv:TEXCOORD0):SV_Target {
     float value=%4;
     pixel.r=clamp(value,lo,hi);return pixel;
 })").arg(mode=="crispen_edges"?"{0,1,0,1,4,1,0,1,0}":"{1,2,1,2,4,2,1,2,1}",mode=="crispen_edges"?"8.0":"16.0",
-            mode=="enhance_detail"?"wide=0;const float w[5]={1,4,6,4,1};[unroll] for(int y=-2;y<=2;++y) [unroll] for(int x=-2;x<=2;++x) wide+=image.SampleLevel(smp,uv+float2(x,y)*sourceSize.zw,0).r*w[x+2]*w[y+2]/256.0;":"",
+            mode=="enhance_detail"?"wide=0;const float w[5]={1,4,6,4,1};[unroll] for(int y=-2;y<=2;++y) [unroll] for(int x=-2;x<=2;++x) wide+=image.Load(int3(clamp(p+int2(x,y),int2(0,0),last),0)).r*w[x+2]*w[y+2]/256.0;":"",
             mode=="sharpen_edges"?QString("abs(center-blur)>%1 ? center+(center-blur)*%2 : center").arg(threshold*256/65535,0,'g',17).arg(strength,0,'g',17):QString("center+(center-blur%1)*%2").arg(mode=="enhance_detail"?"+(blur-wide)*0.5":"").arg(strength,0,'g',17));
         QString error;if(!compile(pass,source.toUtf8(),true,error))return {{},error};
         for(const auto &text:QStringList{pass.hook,pass.save,pass.width,pass.height,pass.when})put(stream,text.toUtf8());stream<<quint32(pass.bindings.size());for(const auto &binding:pass.bindings)put(stream,binding.toUtf8());put(stream,pass.bytecode);

@@ -1,6 +1,11 @@
 #include "backend/FrameTimeline.h"
+#include "graph/VpyScriptBuilder.h"
+#include "graph/FilterGraph.h"
+#include <QRegularExpression>
 #include "backend/StartupWarmup.h"
 #include <QFile>
+#include <QCoreApplication>
+#include <QDir>
 #include <QTimer>
 #include <QTemporaryDir>
 #include "backend/ThreeFpApi.h"
@@ -20,6 +25,26 @@ class TestFrameBridge final : public QObject {
     Q_OBJECT
 
 private slots:
+    void openNguGlslExportFrame(){
+        const auto path=QDir(QCoreApplication::applicationDirPath()).filePath("shaders/OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl");if(!QFileInfo::exists(path))QSKIP("OpenNGU private shader package is supplied separately");
+        VapourSynthFrameServer server;QTRY_VERIFY_WITH_TIMEOUT(!server.initializing(),15000);QVERIFY(server.available());
+        QSignalSpy loaded(&server,&VapourSynthFrameServer::scriptLoaded),frames(&server,&VapourSynthFrameServer::frameReady),errors(&server,&VapourSynthFrameServer::errorOccurred);
+        const auto buildScript=[&](const QString &shaderPath){
+            FilterGraph graph;const int index=graph.add("anime4k");graph.at(index)->parameters["shader"]=shaderPath;
+            auto built=VpyScriptBuilder::build("fixture.mkv",SourceFilter::Ffms2,graph);if(!built.errors.isEmpty())return QString();
+            const auto pattern=QString("src=core.std.StackHorizontal([core.std.BlankClip(width=8,height=48,format=vs.YUV444P16,length=1,color=[v,32768,32768]) for v in [4096,56000,14000,48000,7000,60000,22000,40000]])\nsrc=core.std.SetFrameProps(src,_Matrix=1,_Primaries=1,_Transfer=1,_ColorRange=1)");
+            built.script.replace(QRegularExpression("(?m)^src = core\\.ffms2\\.Source[^\n]*"),pattern);return built.script;
+        };
+        const auto script=buildScript(path);QVERIFY(!script.isEmpty());
+        server.loadScript(script,"openngu-export-frame.vpy");QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !errors.isEmpty(),15000);QVERIFY2(errors.isEmpty(),errors.isEmpty()?"":qPrintable(errors.first().first().toString()));
+        server.requestFrame(0);QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty() || !errors.isEmpty(),15000);QVERIFY2(errors.isEmpty(),errors.isEmpty()?"":qPrintable(errors.first().first().toString()));
+        const auto frame=qvariant_cast<VapourSynthFrame>(frames.first().first());QCOMPARE(frame.width,128);QCOMPARE(frame.height,96);
+        QTemporaryDir directory;QFile identity(directory.filePath("identity.glsl"));QVERIFY(identity.open(QIODevice::WriteOnly));identity.write("//!HOOK MAIN\n//!BIND HOOKED\nvec4 hook(){return HOOKED_tex(HOOKED_pos); }\n");identity.close();
+        loaded.clear();frames.clear();errors.clear();server.loadScript(buildScript(identity.fileName()),"openngu-identity-baseline.vpy");
+        QTRY_VERIFY_WITH_TIMEOUT(!loaded.isEmpty() || !errors.isEmpty(),15000);QVERIFY(errors.isEmpty());server.requestFrame(0);QTRY_VERIFY_WITH_TIMEOUT(!frames.isEmpty() || !errors.isEmpty(),15000);QVERIFY(errors.isEmpty());
+        const auto baseline=qvariant_cast<VapourSynthFrame>(frames.first().first());QCOMPARE(baseline.width,frame.width);QCOMPARE(baseline.height,frame.height);QVERIFY2(baseline.planes[0]!=frame.planes[0],"OpenNGU must change exported edge pixels, not just resize after disabling its hook");
+
+    }
     void startupWarmsDecodeAndBothRenderers()
     {
         CompareView view;

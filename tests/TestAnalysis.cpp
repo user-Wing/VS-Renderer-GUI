@@ -25,6 +25,7 @@
 #include "ui/ParameterEditor.h"
 #include "ui/PageTheme.h"
 #include <QScopeGuard>
+#include <QStackedWidget>
 #include "graph/FilterCatalog.h"
 #include <QCheckBox>
 #include <QFont>
@@ -51,7 +52,6 @@
 #include <QDir>
 #include <QProcess>
 #include <QPushButton>
-#include <QProgressBar>
 #include <QSlider>
 #include <QTemporaryDir>
 #include <QRegularExpression>
@@ -60,6 +60,10 @@
 #include <QFileInfo>
 #include <QTest>
 #include <QToolButton>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QUrlQuery>
+#include <QCryptographicHash>
 #include <windows.h>
 
 using namespace vsr;
@@ -77,6 +81,46 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void projectExitDialog_data(){
+        QTest::addColumn<QString>("language");QTest::addColumn<int>("choice");
+        for(const auto &language:QStringList{"zh_CN","en_US"})for(int choice:{int(QMessageBox::Save),int(QMessageBox::Discard),int(QMessageBox::Cancel)})QTest::newRow(qPrintable(language+QString::number(choice)))<<language<<choice;
+    }
+    void projectExitDialog(){
+        const auto oldOrganization=QCoreApplication::organizationName(),oldApplication=QCoreApplication::applicationName();
+        const auto restoreNames=qScopeGuard([&]{QCoreApplication::setOrganizationName(oldOrganization);QCoreApplication::setApplicationName(oldApplication);});
+        QCoreApplication::setOrganizationName("VSRendererTests");QCoreApplication::setApplicationName("renderer-project-exit-test");
+        QFETCH(QString,language);QFETCH(int,choice);QSettings settings;const auto old=settings.value("appearance/language");
+        const auto restore=qScopeGuard([&]{if(old.isValid())settings.setValue("appearance/language",old);else settings.remove("appearance/language");});settings.setValue("appearance/language",language);
+        QTemporaryDir directory;MainWindow window;window.projectPath_=directory.filePath("saved.vsr.json");window.graph_.add("resize");window.checkpointProject();QVERIFY(window.isWindowModified());bool checked=false;
+        QTimer::singleShot(0,&window,[&]{auto *box=qobject_cast<QMessageBox *>(QApplication::activeModalWidget());if(!box)return;const auto cancel=qScopeGuard([&]{if(!checked)box->done(QMessageBox::Cancel);});
+            const bool english=language=="en_US";
+            QCOMPARE(box->button(QMessageBox::Save)->text().remove('&'),english?QString("Save"):QStringLiteral("保存"));
+            QCOMPARE(box->button(QMessageBox::Discard)->text().remove('&'),english?QString("Don't Save"):QStringLiteral("不保存"));
+            QCOMPARE(box->button(QMessageBox::Cancel)->text().remove('&'),english?QString("Cancel"):QStringLiteral("取消"));
+            QCOMPARE(box->windowTitle(),english?QString("Unsaved Project"):QStringLiteral("项目尚未保存"));checked=true;box->button(QMessageBox::StandardButton(choice))->click();});
+        QCOMPARE(window.confirmProjectReplacement(),choice!=QMessageBox::Cancel);QVERIFY(checked);
+        if(choice==QMessageBox::Save){QVERIFY(!window.isWindowModified());QVERIFY(QFileInfo::exists(window.projectPath_));}else QVERIFY(window.isWindowModified());
+    }
+    void startupTheme(){
+        const auto path=QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini");QFile original(path);const bool existed=original.exists();QByteArray bytes;if(original.open(QIODevice::ReadOnly))bytes=original.readAll();original.close();
+        const auto restore=qScopeGuard([&]{if(existed){QFile file(path);if(file.open(QIODevice::WriteOnly))file.write(bytes);}else QFile::remove(path);});
+        QSettings skin(path,QSettings::IniFormat);skin.clear();skin.setValue("VSR-Main/color","#0fe621");skin.sync();
+        MainWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));QTest::qWait(100);
+        auto *stack=window.findChild<QStackedWidget *>();QVERIFY(stack);auto *page=stack->currentWidget();
+        auto *theme=page->findChild<QWidget *>("pageTheme",Qt::FindDirectChildrenOnly);QVERIFY(theme);QVERIFY(theme->isVisible());QCOMPARE(theme->grab().toImage().pixelColor(4,4),QColor("#0fe621"));
+        auto *hint=window.findChild<QLabel *>("rendererFrameBoundaryHint");QVERIFY(hint);QCOMPARE(hint->text(),QStringLiteral("精确帧通过源帧号实现"));QVERIFY(!hint->wordWrap());
+        const auto visible=page->grab().toImage();visible.save(QDir(QCoreApplication::applicationDirPath()).filePath("startup-renderer-background.png"));
+        QCOMPARE(visible.pixelColor(hint->mapTo(page,QPoint(hint->width()-3,hint->height()/2))*visible.devicePixelRatio()),QColor("#0fe621"));
+    }
+    void projectRecoveryAndFrameInputs(){
+        QTemporaryDir temp;const auto old=qgetenv("VSR_RECOVERY_ROOT");qputenv("VSR_RECOVERY_ROOT",temp.path().toUtf8());const auto restore=qScopeGuard([&]{qputenv("VSR_RECOVERY_ROOT",old);});
+        MainWindow window;window.sourceFpsNumerator_=24000;window.sourceFpsDenominator_=1001;window.sourceTotalFrames_=240;
+        window.replaceTimeGroups({{"A",0,{},QString(),0},{"B",0,{},QString(),12}});window.refreshTimeGroups(1);
+        auto *frames=window.findChild<QSpinBox*>("rendererTimeGroupFrame");QVERIFY(frames);QVERIFY(frames->isEnabled());frames->setValue(13);QCOMPARE(window.currentTimeGroups()[1].startFrame,qint64(13));window.checkpointProject();QVERIFY(window.isWindowModified());QVERIFY(QFileInfo::exists(window.recoveryPath_));
+        const auto path=temp.filePath("project.vsr.json");QVERIFY(window.saveProjectTo(path));QVERIFY(!window.isWindowModified());window.graph_.add("resize");window.checkpointProject();QVERIFY(window.isWindowModified());window.stepProjectHistory(-1);QVERIFY(window.graph_.nodes().isEmpty());window.stepProjectHistory(1);QCOMPARE(window.graph_.nodes().size(),1);QVERIFY(window.saveProjectTo(path));QVERIFY(QFileInfo::exists(path+".bak"));
+        QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));const auto data=QJsonDocument::fromJson(file.readAll()).object();QVERIFY(window.applyProjectSnapshot(data));QCOMPARE(window.currentTimeGroups()[0].startFrame,qint64(0));
+    }
+
     void additionalRouteFallsBackToCompleteScript(){
         ThreeFpApi api;PreviewPane pane("route","VS");pane.resize(640,400);pane.show();RenderRoute route(api,&pane,nullptr);QTemporaryDir dir;
         const QString prefix="import vapoursynth as vs\nclip=vs.core.std.BlankClip(format=vs.YUV420P8,length=24,width=";
@@ -350,13 +394,37 @@ private slots:
         QCOMPARE(restored[2].script,result[2].script);QCOMPARE(restored[1].startSeconds,12);
     }
     void communityExampleDownload(){
+        QTcpServer server;QVERIFY(server.listen(QHostAddress::LocalHost));
+        const auto filename="regression-"+QUuid::createUuid().toString(QUuid::WithoutBraces)+".vpy";
+        const auto payload=PresetStore::create(FilterGraph{},SourceFilter::Ffms2,{},"HTTP regression fixture").toUtf8();
+        connect(&server,&QTcpServer::newConnection,&server,[&]{
+            auto *socket=server.nextPendingConnection();auto request=std::make_shared<QByteArray>();
+            connect(socket,&QTcpSocket::readyRead,&server,[&,socket,request]{
+                *request+=socket->readAll();if(!request->contains("\r\n\r\n"))return;
+                const auto url=QUrl::fromEncoded(request->split(' ').value(1));QByteArray body=payload;
+                if(url.path().endsWith("/tree")){
+                    const auto root=QUrlQuery(url).queryItemValue("Root");QJsonObject entry;
+                    if(root=="fixture")entry={{"Name","Builtin"},{"Type","tree"},{"Path","fixture/Builtin"}};
+                    else entry={{"Name",filename},{"Type","blob"},{"Path","fixture/Builtin/"+filename},{"Size",payload.size()},{"Sha256",QString::fromLatin1(QCryptographicHash::hash(payload,QCryptographicHash::Sha256).toHex())}};
+                    body=QJsonDocument(QJsonObject{{"Data",QJsonObject{{"Files",QJsonArray{entry}},{"TotalCount",1}}}}).toJson(QJsonDocument::Compact);
+                }
+                socket->write("HTTP/1.1 200 OK\r\nContent-Length: "+QByteArray::number(body.size())+"\r\nConnection: close\r\n\r\n"+body);socket->disconnectFromHost();
+            });connect(socket,&QTcpSocket::disconnected,socket,&QObject::deleteLater);
+        });
+        const auto previous=QSettings().value("community/sourceUrl");QSettings().setValue("community/sourceUrl",QString("http://127.0.0.1:%1/repo/tree?Root=fixture&Revision=master").arg(server.serverPort()));
+        const auto restore=qScopeGuard([&]{if(previous.isValid())QSettings().setValue("community/sourceUrl",previous);else QSettings().remove("community/sourceUrl");QFile::remove(QDir(PresetStore::directory()).filePath("Community/Builtin/"+filename));});
         QString imported;bool current=false;
         PresetCommunityDialog dialog([&](const QString &path,bool group){imported=path;current=group;});dialog.show();auto *files=dialog.findChild<QTreeWidget*>("communityFiles");QVERIFY(files);
-        QTRY_VERIFY_WITH_TIMEOUT(files->topLevelItemCount()>0 && files->topLevelItem(0)->childCount()>0,45000);
+        QTRY_VERIFY_WITH_TIMEOUT(files->topLevelItemCount()>0 && files->topLevelItem(0)->childCount()>0,5000);
+        QPushButton *refresh=nullptr,*download=nullptr;
+        for(auto *button:dialog.findChildren<QPushButton *>()){if(button->text()==QStringLiteral("刷新资源"))refresh=button;if(button->text()==QStringLiteral("下载选中"))download=button;}
+        QVERIFY(refresh&&download);QTRY_VERIFY_WITH_TIMEOUT(refresh->isEnabled(),5000);
         auto *folder=files->topLevelItem(0);QCOMPARE(folder->text(0),QString("Builtin"));QVERIFY(!folder->isExpanded());folder->setExpanded(true);
-        auto *row=folder->child(0);files->setCurrentItem(row);
-        for(auto *button:dialog.findChildren<QPushButton*>())if(button->text()==QStringLiteral("下载选中"))button->click();
-        QTRY_COMPARE_WITH_TIMEOUT(row->text(2),QStringLiteral("已安装"),45000);
+        QTreeWidgetItem *row=nullptr;for(int n=0;n<folder->childCount();++n)if(folder->child(n)->text(0).endsWith(".vpy",Qt::CaseInsensitive)){row=folder->child(n);break;}
+        QVERIFY2(row,"Community fixture must select a VPY, not a JSON example that opens a modal viewer");files->setCurrentItem(row);
+        QVERIFY(!row->data(0,Qt::UserRole).toJsonObject().isEmpty());QCOMPARE(files->currentItem(),row);QVERIFY(download->isEnabled());download->click();
+        QVERIFY(row->text(2)!=QStringLiteral("未下载"));
+        QTRY_COMPARE_WITH_TIMEOUT(row->text(2),QStringLiteral("已安装"),5000);
         for(auto *button:dialog.findChildren<QPushButton*>())if(button->text()==QStringLiteral("导入当前时间组"))button->click();
         QVERIFY(current);QVERIFY(imported.contains("/Community/Builtin/"));QVERIFY(!PresetStore::metadata(PresetStore::load(imported).script).isEmpty());
         dialog.grab().save("build/audit-20261017/preset-community.png");
@@ -817,7 +885,7 @@ private slots:
         ExportWindow *window=nullptr;
         for(auto *widget:QApplication::topLevelWidgets()) if(auto *candidate=qobject_cast<ExportWindow *>(widget)) window=candidate;
         QVERIFY(window);
-        const QString output=dir.filePath("canvas.mkv");
+        QString output=dir.filePath("canvas.mkv");
         QString overwriteError;
         QVERIFY(!window->addJob("ffmpeg -y -i <输入文件> -c:v ffv1 <输出文件>",paths[2],paths[0],script.script,1,&overwriteError));
         QVERIFY(overwriteError.contains(QStringLiteral("覆盖")));
@@ -828,6 +896,9 @@ private slots:
         window->findChild<QPlainTextEdit *>("exportCommand")->setPlainText("ffmpeg -y -i <输入文件> -map 0:v -c:v ffv1 <输出文件>");
         window->findChild<QLineEdit *>("singleOutput")->setText(output);
         QTest::mouseClick(window->findChild<QPushButton *>("exportSingle"),Qt::LeftButton);
+        output=dir.filePath(QStringLiteral("canvas_路1.mkv"));
+        QCOMPARE(window->jobsStatus().size(),1);
+        QCOMPARE(window->jobsStatus().first().toObject().value("output").toString(),output);
         QTRY_VERIFY_WITH_TIMEOUT(!page.exportBusy() && QFileInfo(output).size()>1000,30000);
         auto *table=window->findChild<QTreeWidget *>();QCOMPARE(table->topLevelItem(0)->text(2),QStringLiteral("100%"));
         QProcess decode;decode.start(ffmpeg,{"-v","error","-i",output,"-frames:v","1","-pix_fmt","rgb24","-f","rawvideo","pipe:1"});
@@ -1025,7 +1096,6 @@ private slots:
             {"-v","error","-f","lavfi","-i","testsrc2=size=320x180:rate=24:duration=4","-c:v","libx264","-preset","ultrafast","-y",input});
         QVERIFY(encode.waitForFinished(15000));QCOMPARE(encode.exitCode(),0);
         MainWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
-        QTRY_VERIFY_WITH_TIMEOUT(window.findChild<QProgressBar *>()->isHidden(),15000);
         QMimeData mime;mime.setUrls({QUrl::fromLocalFile(input)});
         QDragEnterEvent enter(QPoint(400,300),Qt::CopyAction,&mime,Qt::LeftButton,Qt::NoModifier);
         QApplication::sendEvent(&window,&enter);QVERIFY(enter.isAccepted());
@@ -1049,7 +1119,9 @@ private slots:
         for(const auto &entry:frames) if(qvariant_cast<VapourSynthFrame>(entry.first()).frameIndex%2==1)++intermediate;
         qInfo()<<"RIFE preview submitted frames"<<frames.size()<<"intermediate frames"<<intermediate;
         QVERIFY(frames.size()>8);QVERIFY(intermediate>2);
+        QTimer::singleShot(0,&window,[]{if(auto *box=qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))box->done(QMessageBox::Discard);});
         window.close();
+        QVERIFY(!window.isVisible());
     }
     void navigation()
     {
@@ -1064,22 +1136,19 @@ private slots:
         toggle->trigger();
         QCOMPARE(rail->width(), 180);
         const auto buttons = rail->findChildren<QToolButton *>();
-        QCOMPARE(buttons.size(), 3);
+        QCOMPARE(buttons.size(), 5);
+        for(auto *button:buttons){QCOMPARE(button->size(),buttons.first()->size());QCOMPARE(button->iconSize(),QSize(22,22));}
         QVERIFY(!window.findChild<QComboBox *>("sourceFilter")->isVisible());
-        bool settingsShown=false;
-        QTimer::singleShot(0,&window,[&settingsShown] {
-            auto *dialog=qobject_cast<QDialog *>(QApplication::activeModalWidget());
-            if(dialog) { settingsShown=dialog->windowTitle()==QStringLiteral("设置") && dialog->findChild<QComboBox *>()->count()==2; dialog->reject(); }
-        });
         window.findChild<QToolButton *>("applicationSettings")->click();
-        QVERIFY(settingsShown);
+        auto *settingsSource=window.findChild<QComboBox *>("rendererSettingsSource");
+        QVERIFY(settingsSource && settingsSource->isVisible());
+        QCOMPARE(settingsSource->count(),2);
         buttons[1]->click();
         QVERIFY(window.findChild<AnalysisPage *>()->isVisible());
         buttons[0]->click();
         QVERIFY(!window.findChild<AnalysisPage *>()->isVisible());
         toggle->trigger();
         QCOMPARE(rail->width(), 44);
-        QTRY_VERIFY_WITH_TIMEOUT(window.findChild<QProgressBar *>()->isHidden(),15000);
         buttons[1]->click();
         toggle->trigger();
         QTest::qWait(150);

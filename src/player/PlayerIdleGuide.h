@@ -16,7 +16,8 @@ class PlayerIdleGuide final : public QWidget {
 public:
     PlayerIdleGuide(QWidget *parent,QWidget *controls,QWidget *timeline,const QString &path)
         :QWidget(parent),controls_(controls),timeline_(timeline),path_(path) {
-        setObjectName("playerIdleGuide");setAttribute(Qt::WA_TransparentForMouseEvents);
+        setObjectName("playerIdleGuide");setAttribute(Qt::WA_TransparentForMouseEvents);hide();
+        setStyleSheet(QStringLiteral("background:transparent;"));
         QFile defaults(":/filters/player-guide.json");if(defaults.open(QIODevice::ReadOnly))config_=QJsonDocument::fromJson(defaults.readAll()).object();
         reload(true);
         watcher_=new QFileSystemWatcher(this);watcher_->addPath(QFileInfo(path_).absolutePath());

@@ -38,6 +38,14 @@ VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处�
 
 **视频处理**：在 Renderer 打开视频 → 添加滤镜或加载预设 → 选中处理路并点击“渲染预览” → 比较画面 → 保存预设或加入导出队列。按段使用不同滤镜、社区预设和多路对比见 [Renderer 指南](docs/renderer.md)。
 
+**Agent 智能体**：从 Renderer 侧栏进入，发送按钮旁选择来源、模型与匹配的思考强度；执行过程默认折叠，正文集中呈现判断和结果。支持 Markdown 预览、运行中补充输入、`/` 命令、`@` 引用与 AI 自动协调子智能体，以及 Token / 上下文整理、Skills / 全局 AGENTS.md、MCP 和导入导出，见 [Agent 指南](docs/agent.md)。页面背景可独立设置。
+
+可在“软件内操作”和“环境完全访问”之间切换；完整访问下，Agent 能读取、搜索和编辑本地文件、应用补丁、运行命令及管理长进程，视觉来源还可读取本地图像。
+
+视觉模型支持按秒数或帧号直接读取 VS 原片/处理后画面及局部裁剪，先汇报抽样发现的瑕疵，再建议滤镜；用法见 [视频画质初检](docs/agent.md#视频画质初检)。
+
+![Renderer Agent 工作区](assets/agent-preview.png)
+
 **媒体播放**：拖入媒体，`Space` 播放/暂停，`Enter` 或 `F11` 切换全屏，`Esc` 退出全屏，`Tab` 查看实际输出与运行信息。音轨、字幕、预设和设置在右键菜单；详细操作见 [Player 指南](docs/player.md)。
 
 **截图与图片**：在 VSCap 中设置截图/贴图热键，框选后调整选区并标注；“✓”复制到剪贴板，保存按钮选择格式与路径。播放器的图片工具栏可打开 PhotoCraft 或格式转换，见 [截图与图片指南](docs/capture-images.md)。
@@ -55,8 +63,16 @@ VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处�
 
 页面背景支持即时应用、主题库及 ZIP/7z 导入、ZIP 导出，分发包不预装背景；三／四路预览可用同位置滑块比较。图片导出支持比例尺寸和内置HLSL重新采样，Full另可选内置GLSL；单文件版直接使用FFmpeg且不提供质量搜索。设置中的便携Pareto图入口和功耗显示要求见 [Player 指南](docs/player.md)。
 
+## 数据与安全
+
+Agent 来源密钥、MCP 环境变量与请求头保存在当前 Windows 用户的本地加密配置中；对话、技能、全局指令和子任务记录保存在应用数据目录，发送时会交给所选端点。MCP 通过用户连接的外部服务扩展能力，查询子任务与允许修改的子任务分别调度；来源及凭证导出范围见 [Agent 数据说明](docs/agent.md#数据与兼容边界)。
+
+OpenNGU 本地模型支持 BT.709 SDR 上采样，主直通优先 OpenNGU，第二上采样默认 Jinc；使用方法见 [Player](docs/player.md) 与 [Renderer](docs/renderer.md)。模型参数由用户另行提供。
+
 ## 开发与反馈
 
-[项目地图](project.md) 说明架构和改动入口，[构建指南](docs/dependencies.md) 说明开发环境，[性能排查](docs/performance-debugging.md) 说明如何复测。反馈问题请提供软件/包版本、Full 或单文件播放器、实际解码与输出模式、素材元数据、复现步骤和日志。
+独立工具：[超分算法 Pareto 图模板](tools/sr-pareto/README.md)，编辑 JSON 即可在本地 HTML 中比较算法质量与算力；Preview 模型可隐藏，且不计入前沿。
+
+[项目地图](project.md) 说明架构和改动入口，[界面文案索引](docs/ui-text-map.md) 列出 VSR/VSP 文字的源码行号，[构建指南](docs/dependencies.md) 说明开发环境，[性能排查](docs/performance-debugging.md) 说明如何复测。反馈问题请提供软件/包版本、Full 或单文件播放器、实际解码与输出模式、素材元数据、复现步骤和日志。
 
 源码采用 [MIT License](LICENSE)，第三方组件按各自许可证分发，见 [第三方声明](THIRD_PARTY_NOTICES.md)。

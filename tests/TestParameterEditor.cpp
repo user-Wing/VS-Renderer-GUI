@@ -6,6 +6,7 @@
 #include <QTemporaryDir>
 #include <QScrollArea>
 #include <QVBoxLayout>
+#include <QGridLayout>
 #include <QImage>
 #include "graph/FilterCatalog.h"
 #include "graph/FilterGraph.h"
@@ -15,12 +16,27 @@
 #include <QLabel>
 #include <QSignalSpy>
 #include <QSpinBox>
+#include "graph/HlslPreview.h"
 #include <QTest>
 #include <QAbstractItemView>
 using namespace vsr;
 class TestParameterEditor final : public QObject {
     Q_OBJECT
 private slots:
+    void openNguFirstShaderAndExport(){
+        const auto *definition=FilterCatalog::find("anime4k");QVERIFY(definition);
+        QStringList choices;for(const auto &p:definition->parameters)if(p.id=="mode")choices=p.choices;
+        QCOMPARE(choices.first(),QString("OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl"));QCOMPARE(FilterCatalog::shaderCategory(choices.first()),QString("超分"));
+        FilterGraph graph;const int index=graph.add("anime4k");graph.at(index)->parameters["mode"]=choices.first();
+        const auto plan=hlslPreviewPlan(graph);QVERIFY(plan.shaderPath.endsWith(QFileInfo(QDir(QCoreApplication::applicationDirPath()).filePath("shaders/OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl")).exists()?".hlsl":".glsl"));QCOMPARE(hlslOutputSize(plan.parameters,QSize(128,72)),QSize(256,144));
+        QVERIFY(plan.graph.nodes().isEmpty());
+    }
+    void shaderPreviewExportHint(){
+        FilterGraph graph;const int index=graph.add("anime4k");ParameterEditor editor;editor.setNode(FilterCatalog::find("anime4k"),graph.at(index));
+        auto *hint=editor.findChild<QLabel *>("shaderPreviewExportHint");QVERIFY(hint);QCOMPARE(hint->text(),QStringLiteral("勾选预览使用HLSL加速，导出仍然使用GLSL"));
+        auto *layout=qobject_cast<QGridLayout *>(editor.layout());QVERIFY(layout);QCOMPARE(layout->itemAt(layout->count()-1)->widget(),hint);
+        const int other=graph.add("resize");editor.setNode(FilterCatalog::find("resize"),graph.at(other));QVERIFY(!editor.findChild<QLabel *>("shaderPreviewExportHint"));
+    }
     void folderFileNamesWrapWithoutElision(){
         QWidget host;WrappedFileCombo combo(&host);combo.resize(180,30);const auto name=QString("Long.Animation.Movie.")+QString(250,'X')+".2160p48.AV1.SC_TC_JP_EN.mkv";combo.addItem(name);host.show();combo.showPopup();QTest::qWait(80);auto *view=qobject_cast<QListView*>(combo.view());QVERIFY(view);QVERIFY(view->sizeHintForRow(0)>combo.fontMetrics().height()*2);QCOMPARE(view->horizontalScrollBar()->maximum(),0);QCOMPARE(combo.currentText(),name);view->window()->grab().save(QDir(QCoreApplication::applicationDirPath()).filePath("wrapped-folder-filename.png"));combo.hidePopup();
     }

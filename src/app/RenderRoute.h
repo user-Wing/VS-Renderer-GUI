@@ -24,6 +24,7 @@ public:
     void setScalingAlgorithms(ThreeFpScalingAlgorithm upscale,ThreeFpScalingAlgorithm downscale){player_->setScalingAlgorithms(upscale,downscale);}
     void setView(float zoom,float x,float y){pane_->adoptView(zoom,x,y);player_->setView(zoom,x,y);}
     ThreeFpSnapshot snapshot() const {return player_->snapshot();}
+    bool hasFrame() const {return ready_ && last_>=0;}
     void reset(const QString &hint){script_.clear();ready_=pending_=false;last_=requested_=-1;server_->unloadScript();player_->stop();pane_->setSurfaceActive(false);pane_->setPlaceholderText(hint);pane_->setBadge(QStringLiteral("VS · 待渲染"));}
     void load(const QString &script,const QString &path,const QString &shader={},const QVariantMap &parameters={},const QString &fallback={}){fallback_=fallback;script_=script;path_=path;shader_=shader;shaderParameters_=parameters;ready_=pending_=false;last_=-1;if(!visible_)return;player_->setCustomShader({});player_->resetVideoOutput();player_->setMuted(true);pane_->setSurfaceActive(false);pane_->setPlaceholderText(QStringLiteral("正在加载该路处理链…"));if(server_->available())server_->loadScript(script,path);else server_->initialize();}
     void setVisible(bool visible){if(visible_==visible)return;visible_=visible;if(!visible){ready_=pending_=false;server_->unloadScript();player_->stop();pane_->setSurfaceActive(false);}else if(!script_.isEmpty())load(script_,path_,shader_,shaderParameters_,fallback_);}

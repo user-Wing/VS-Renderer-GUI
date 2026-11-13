@@ -59,12 +59,13 @@ void MainWindow::renderAdditionalRoute(int index){
     if(!result.errors.isEmpty()){setStatus(result.errors.join('\n'),true);return;}
     const auto directory=QStandardPaths::writableLocation(QStandardPaths::CacheLocation);QDir().mkpath(directory);
     const auto path=QDir(directory).filePath(QString("preview-route-%1.vpy").arg(index+1));QSaveFile file(path);if(!file.open(QIODevice::WriteOnly) || file.write(result.script.toUtf8())<0 || !file.commit()){setStatus(QStringLiteral("该路脚本写入失败。"),true);return;}
+    routes_[index].previewScript=currentScript().script;
     additionalRoutes_[index-1]->load(result.script,path,shader,parameters,fallback);additionalRoutes_[index-1]->setVisible(routes_[index].visible);
 }
 void MainWindow::scanWorkingFolder(const QString &input){
     const auto folder=input.isEmpty()?QFileDialog::getExistingDirectory(this,QStringLiteral("打开工作文件夹")):input;if(folder.isEmpty())return;
-    const int depth=std::clamp(QSettings().value("source/scanDepth",3).toInt(),0,16);auto *watcher=new QFutureWatcher<QStringList>(this);setStatus(QStringLiteral("正在扫描工作文件夹…"));
-    connect(watcher,&QFutureWatcher<QStringList>::finished,this,[this,watcher]{const auto files=watcher->result();watcher->deleteLater();const QSignalBlocker blocker(sourceChoice_);sourceChoice_->clear();for(const auto &file:files)sourceChoice_->addItem(QFileInfo(file).fileName(),file);if(!files.isEmpty())loadSource(files.first());else setStatus(QStringLiteral("工作文件夹中未找到视频。"));});
+    const auto scan=++folderScanGeneration_;const int depth=std::clamp(QSettings().value("source/scanDepth",3).toInt(),0,16);auto *watcher=new QFutureWatcher<QStringList>(this);setStatus(QStringLiteral("正在扫描工作文件夹…"));
+    connect(watcher,&QFutureWatcher<QStringList>::finished,this,[this,watcher,scan]{const auto files=watcher->result();watcher->deleteLater();if(scan!=folderScanGeneration_)return;const QSignalBlocker blocker(sourceChoice_);sourceChoice_->clear();for(const auto &file:files)sourceChoice_->addItem(QFileInfo(file).fileName(),file);if(!files.isEmpty())loadSource(files.first());else setStatus(QStringLiteral("工作文件夹中未找到视频。"));});
     watcher->setFuture(QtConcurrent::run([folder,depth]{QStringList files;const QStringList suffixes{"mkv","mp4","mov","avi","webm","ts","m2ts","wmv","flv","m4v","mpg","mpeg","vob"};std::function<void(const QString&,int)> scan=[&](const QString &path,int level){for(const auto &entry:QDir(path).entryInfoList(QDir::Files|QDir::Dirs|QDir::NoDotAndDotDot|QDir::NoSymLinks,QDir::DirsFirst|QDir::Name)){if(entry.isDir()){if(level<depth)scan(entry.absoluteFilePath(),level+1);}else if(suffixes.contains(entry.suffix().toLower()))files<<entry.absoluteFilePath();}};scan(folder,0);return files;}));
 }
 }

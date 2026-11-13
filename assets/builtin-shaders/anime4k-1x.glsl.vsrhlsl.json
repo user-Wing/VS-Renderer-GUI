@@ -1,0 +1,7 @@
+{
+  "semantics": "luma-main-prekernel-params-v8",
+  "sha256": "cf3e54533ac61f1cc61ffe24a793c645afca808090f726c6fb6685dbdf0cab8c",
+  "optimization": "anime4k-1x-clamped-load-v1",
+  "originalSourceSha256": "c9e323af492aab4de88997ebbaa15700815a4713d634cf04bb4814bc6ffca2ad",
+  "packageSha256": "32177199f76f4a78c0a34bde2086d612615de2e9f6428d478c47bca60440ce3b"
+}

@@ -40,6 +40,7 @@ void MainWindow::loadPreset(const QString &path, bool currentGroup)
     const auto result = PresetStore::load(path);
     if (!result.errors.isEmpty()) { setStatus(result.errors.join('\n'), true); return; }
     const auto data = PresetStore::metadata(result.script);
+    const auto compatibility=PresetStore::compatibilityError(data);if(!compatibility.isEmpty()){setStatus(compatibility,true);return;}
     QFile original(path);FilterGraph verifiedGraph;SourceFilter verifiedFilter=SourceFilter::Ffms2;
     const bool generated=original.open(QIODevice::ReadOnly) && PresetStore::verifiedGraph(QString::fromUtf8(original.readAll()),&verifiedGraph,&verifiedFilter);
     auto groups=PresetStore::timeGroups(data);

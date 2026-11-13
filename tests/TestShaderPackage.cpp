@@ -28,6 +28,29 @@ float4 main(float2 uv:TEXCOORD0):SV_Target{return image.Sample(sampleState,uv);}
 class TestShaderPackage final : public QObject {
     Q_OBJECT
 private slots:
+    void openNguLocalPackage(){
+        const auto folder=qEnvironmentVariable("VSR_OPENNGU_DIRECTORY");if(folder.isEmpty())QSKIP("Set VSR_OPENNGU_DIRECTORY to the locally supplied private package");
+        const auto hlsl=ShaderPackage::prepare(QDir(folder).filePath("OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl"));
+        const auto glsl=ShaderPackage::prepare(QDir(folder).filePath("OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl"));
+        QVERIFY2(hlsl.error.isEmpty(),qPrintable(hlsl.error));QVERIFY2(glsl.error.isEmpty(),qPrintable(glsl.error));
+        Microsoft::WRL::ComPtr<ID3D11Device> device;Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
+        QVERIFY(SUCCEEDED(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&context)));
+        const QSize inputSize(48,32);QVector<qfloat16> pixels(48*32*4);
+        for(int y=0;y<32;++y)for(int x=0;x<48;++x)for(int c=0;c<4;++c)pixels[(y*48+x)*4+c]=qfloat16(c==3?1.f:float((x*13+y*7+c*41)%251)/250.f);
+        for(const auto size:{QSize(48,32),QSize(24,16),QSize(72,48),QSize(96,64),QSize(144,96)}){
+            QVector<float> values[2];int n=0;
+            for(const auto &package:{hlsl.packagePath,glsl.packagePath}){
+                shader::Pipeline pipeline;QVERIFY(pipeline.load(package.toUtf8().constData(),0,0,device.Get()));auto *input=pipeline.input(device.Get(),48,32);QVERIFY(input);
+                Microsoft::WRL::ComPtr<ID3D11Resource> resource;input->GetResource(&resource);context->UpdateSubresource(resource.Get(),0,nullptr,pixels.constData(),48*8,0);
+                QVERIFY2(pipeline.process(context.Get(),size.width(),size.height()),pipeline.error().c_str());
+                const auto expected=size.width()>48?size:inputSize;QCOMPARE(pipeline.width(),unsigned(expected.width()));QCOMPARE(pipeline.height(),unsigned(expected.height()));
+                pipeline.output()->GetResource(resource.ReleaseAndGetAddressOf());D3D11_TEXTURE2D_DESC desc{};desc.Width=pipeline.width();desc.Height=pipeline.height();desc.MipLevels=desc.ArraySize=1;desc.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+                Microsoft::WRL::ComPtr<ID3D11Texture2D> readback;QVERIFY(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&readback)));context->CopyResource(readback.Get(),resource.Get());D3D11_MAPPED_SUBRESOURCE mapped{};QVERIFY(SUCCEEDED(context->Map(readback.Get(),0,D3D11_MAP_READ,0,&mapped)));
+                for(unsigned y=0;y<desc.Height;++y){const auto *row=reinterpret_cast<const qfloat16*>(static_cast<const char*>(mapped.pData)+y*mapped.RowPitch);for(unsigned x=0;x<desc.Width*4;++x)values[n].append(float(row[x]));}context->Unmap(readback.Get(),0);++n;
+            }
+            QCOMPARE(values[0].size(),values[1].size());float maximum=0;for(int i=0;i<values[0].size();++i)maximum=std::max(maximum,std::abs(values[0][i]-values[1][i]));qInfo()<<"OpenNGU GPU"<<size<<"HLSL/GLSL max RGBA"<<maximum;QVERIFY(maximum<=1.f/512);
+        }
+    }
     void moesrIntegerLoadEquivalence(){
         const auto original=qEnvironmentVariable("VSR_MOESR_ORIGINAL"),optimized=qEnvironmentVariable("VSR_MOESR_OPTIMIZED");if(original.isEmpty() || optimized.isEmpty())QSKIP("Set both MoeSR shader paths");
         const auto cache=QDir::current().filePath("moesr-test-cache");const auto a=ShaderPackage::prepare(original,cache),b=ShaderPackage::prepare(optimized,cache);QVERIFY2(a.error.isEmpty(),qPrintable(a.error));QVERIFY2(b.error.isEmpty(),qPrintable(b.error));

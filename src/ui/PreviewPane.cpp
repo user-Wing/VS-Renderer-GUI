@@ -6,6 +6,7 @@
 #include <QLabel>
 #include <QMouseEvent>
 #include <QResizeEvent>
+#include <QShowEvent>
 #include <QStackedLayout>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -30,6 +31,7 @@ public:
     QList<QThread *> builders;
     quint64 imageGeneration = 0;
     float zoom = 1, panX = 0, panY = 0;
+    bool clearPending = true;
     explicit NativeVideoSurface(QWidget *parent) : QWidget(parent)
     {
         setAttribute(Qt::WA_NativeWindow);
@@ -59,8 +61,19 @@ public:
     }
     QPaintEngine *paintEngine() const override { return image.isNull() ? nullptr : QWidget::paintEngine(); }
 protected:
+    void showEvent(QShowEvent *event) override {
+        clearPending = true;
+        QWidget::showEvent(event);
+        if(image.isNull()){
+            const auto window=reinterpret_cast<HWND>(winId());RECT area;GetClientRect(window,&area);const auto dc=GetDC(window);
+            if(dc){FillRect(dc,&area,static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));ReleaseDC(window,dc);}
+        }
+    }
     void paintEvent(QPaintEvent *) override {
-        if(image.isNull())return;
+        if(image.isNull()){
+            if(clearPending){clearPending=false;const auto window=reinterpret_cast<HWND>(winId());RECT area;GetClientRect(window,&area);const auto dc=GetDC(window);if(dc){FillRect(dc,&area,static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));ReleaseDC(window,dc);}}
+            return;
+        }
         QPainter painter(this);painter.fillRect(rect(),QColor("#101010"));
         const QRectF bounds=imageTransform.mapRect(QRectF(QPointF(),image.size()));
         const QSizeF fitted=bounds.size().scaled(size(),Qt::KeepAspectRatio)*zoom;
@@ -232,6 +245,7 @@ bool PreviewPane::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched != surface_)
         return QWidget::eventFilter(watched, event);
+    if(event->type()==QEvent::Paint && static_cast<NativeVideoSurface *>(surface_)->clearPending)scheduleRedraw();
     if (event->type() == QEvent::Wheel) {
         auto *wheel = static_cast<QWheelEvent *>(event);
         applyWheel(wheel, wheel->position());

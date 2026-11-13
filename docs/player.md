@@ -1,5 +1,31 @@
 # Player 操作
 
+OpenNGU 本地接入：在“图像处理 → 上采样滤镜 → 常规直通模式”中第一项为 OpenNGU，后接 Jinc、D3D11；第二上采样第三项为 OpenNGU，默认仍为 Jinc。BT.709 SDR 使用运行目录 `shaders/OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl` 及其相邻缓存；不可用时回退并在 Tab 说明。第二级只在已有处理结果仍需放大时执行，保留原滤镜。私有参数由用户本地提供，不包含在公开源码补丁中。
+
+## 轨道记忆、缩略图与链路信息（2026-11-10）
+
+“记住播放位置”同时保存当前文件的音轨、两路字幕选择/关闭状态、字幕显示开关及外挂文件。打开后等轨道信息就绪再恢复；失效轨道/不存在外挂回退到默认选择，不改用户原文件。BD导航显式传入的轨道优先于历史记录。
+
+进度条悬停缩略图通过随包FFmpeg单线程独立解一帧，不跳动主播放器。220ms防抖、过期请求取消、32张缓存和10秒超时；仅本地普通媒体，网络/BD MPLS/音频/图片模式不生成。设置可关闭。缩略图是导航预览，不用于HDR色准判断；安装目录需包含ffmpeg.exe。
+
+Tab显示当前帧率、实时缺口、音视频与色彩状态，界面说明统一使用英文括号。底部处理路径详情暂时隐藏，并移除系统首个GPU说明；输出交换链位深不等于显示面板位深。
+
+## 音频输出（2026-11-10 源码修复）
+
+渲染设置的“视频渲染器”下一行是“音频渲染器”，全新配置默认 **3FP (WASAPI)**。下一行选择 Windows 默认端点或实际枚举的设备，随后是独占开关。设置保存在 `audio/renderer`、`audio/endpoint`、`audio/exclusive`，导入/导出 INI 同步保留。旧版明确选择 LAV 的配置迁移为 DirectShow，不覆盖已有用户选择；Lite 固定为 3FP。
+
+3FP 设备与独占复用已有 C ABI，异步打开完成后、Play 前提交独占设置。共享模式遵守 Windows 混音格式；配套内核补丁使独占优先协商源采样率，不支持才尝试混音率和常用率。切换音轨、外挂音频或解码后发现采样率变化会重新协商。Tab 信息显示内核返回的实际输出率、共享/独占、独占回退与重采样，而不是用保存值冒充硬件结果。
+
+Full 的 DirectShow 选项连接既有 LAV Audio + 系统渲染图，与解码页 LAV 选择联动。3FP 设备/独占选项不作用于 DirectShow；网络、MPLS、倍速等原有原生回退约束仍保留。madVR 使用 3FP 音频时，回到 1 倍速不再错误地静音原生音频。
+
+**3FP 仍为 PCM 输出，没有新增 Dolby/DTS/TrueHD IEC61937 码流直通。**独占不等于 bit-perfect；音量、EQ、声道变换及倍速仍可能改动 PCM。DirectShow 的码流能力取决于 LAV 配置、系统渲染器与接收设备，本轮未做 AVR 直通验收。
+
+## UNC 文件
+
+配套内核允许用户明确打开的 `\\server\share\file.mkv`、`//server/share/file.mkv`、`file://server/share/file.mkv`（GUI 转换后）与扩展 UNC 文件路径。Unicode、空格和长路径保留。Windows 当前账号必须已有 SMB 权限，本程序不绕过认证、不保存 NAS 密码。
+
+仍拒绝设备命名空间、GLOBALROOT、命名管道、IPC$、DOS 设备名、备用数据流、目录和 reparse/junction。UNC 媒体内部再引用其他文件/URL 会被阻断；DFS、共享根重定向、网络播放列表、NAS 实机 VS 索引不在已验收范围。
+
 ## 打开与播放
 
 空置时显示按钮教程和虚线指引，打开媒体或进入极简模式后隐藏。内容保存在滤镜说明JSON的`playerGuide`字段：Full为程序目录下`vpy/preset-descriptions.json`，单文件版为EXE旁的`preset-descriptions.json`。首次补入默认教程会保留已有滤镜说明，编辑保存后即时刷新。

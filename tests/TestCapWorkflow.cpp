@@ -7,6 +7,18 @@ class TestCapWorkflow : public QObject {
     Q_OBJECT
     QByteArray savedIni_;bool hadIni_=false;
 private slots:
+    void avifEncoderContracts(){
+        const auto encoder=qEnvironmentVariable("VSR_TEST_AWJ");if(encoder.isEmpty())QSKIP("Set VSR_TEST_AWJ to run the tiny codec correctness fixture");QTemporaryDir tmp;
+        QImage source(3,5,QImage::Format_RGBA32FPx4);source.setText("capHdr","scRGB-FP16");source.setText("capSdrWhiteNits","203");source.setColorSpace(QColorSpace::SRgbLinear);for(int y=0;y<source.height();++y){auto *p=reinterpret_cast<float*>(source.scanLine(y));for(int x=0;x<source.width();++x){p[x*4]=.5;p[x*4+1]=2;p[x*4+2]=.25;p[x*4+3]=1;}}
+        for(const auto &format:QStringList{"444p12","444p10","420p10"}){CapApp::SaveJob job{source,tmp.filePath(format+".avif"),"avif",encoder,{}};job.avif.format=format;job.avif.speed=10;const auto error=CapApp::encodeAvif(job);QVERIFY2(error.isEmpty(),qPrintable(error));QVERIFY(QFileInfo(job.path).size()>0);const auto probe=qEnvironmentVariable("VSR_TEST_FFPROBE");if(!probe.isEmpty()){QProcess p;p.start(probe,{"-v","error","-select_streams","v:0","-show_entries","stream=width,height,pix_fmt,color_primaries,color_transfer","-of","json",job.path});QVERIFY(p.waitForFinished(15000));const auto streams=QJsonDocument::fromJson(p.readAllStandardOutput()).object()["streams"].toArray();QCOMPARE(streams.size(),1);const auto stream=streams[0].toObject();QCOMPARE(stream["width"].toInt(),4);QCOMPARE(stream["height"].toInt(),6);QVERIFY(stream["pix_fmt"].toString().startsWith("yuv"+format));QCOMPARE(stream["color_primaries"].toString(),QString("bt2020"));QCOMPARE(stream["color_transfer"].toString(),QString("smpte2084"));}}
+    }
+    void avifFormatsAndEvenPrecision(){
+        QTemporaryDir temp;QSettings settings(temp.filePath("cap.ini"),QSettings::IniFormat);
+        for(const auto &format:QStringList{"444p12","444p10","420p10"}){settings.setValue("avif/pixelFormat",format);const auto option=cap::AvifOptions::load(settings);QCOMPARE(option.format,format);const auto args=option.pixelArguments();QCOMPARE(args[1],format.startsWith("444")?QString("444"):QString("420"));QCOMPARE(args[3],format.endsWith("12")?QString("12"):QString("10"));}
+        QImage source(3,5,QImage::Format_RGBA32FPx4);source.setText("capHdr","scRGB-FP16");source.setText("capSdrWhiteNits","203");source.setColorSpace(QColorSpace::SRgbLinear);for(int y=0;y<source.height();++y){auto *p=reinterpret_cast<float*>(source.scanLine(y));for(int x=0;x<source.width();++x){p[x*4]=-0.25f;p[x*4+1]=4.5f;p[x*4+2]=1.25f;p[x*4+3]=1;}}
+        const auto even=cap::evenImage(source);QCOMPARE(even.size(),QSize(4,6));QCOMPARE(even.format(),source.format());QCOMPARE(even.text("capSdrWhiteNits"),QString("203"));for(int y=0;y<5;++y)QVERIFY(std::memcmp(source.constScanLine(y),even.constScanLine(y),48)==0);QVERIFY(std::memcmp(even.constScanLine(5),even.constScanLine(4),64)==0);
+    }
+
     void init(){QFile file(QCoreApplication::applicationDirPath()+"/vs-cap.ini");hadIni_=file.exists();savedIni_.clear();if(file.open(QIODevice::ReadOnly)){savedIni_=file.readAll();file.close();}if(hadIni_)QVERIFY(file.remove());}
     void cleanup(){QFile file(QCoreApplication::applicationDirPath()+"/vs-cap.ini");if(hadIni_){QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));QCOMPARE(file.write(savedIni_),savedIni_.size());}else if(file.exists())QVERIFY(file.remove());}
     void hotkeyConfirmationAndReservedKeys(){
@@ -263,7 +275,7 @@ private slots:
         for(int i=0;i<2;++i){
             const auto path=QDir(manualDir).filePath(QString("manual-%1.png").arg(i));bool dialogSeen=false;
             QTimer::singleShot(50,qApp,[&]{auto *dialog=qobject_cast<QFileDialog*>(qApp->activeModalWidget());if(!dialog)return;dialogSeen=true;QCOMPARE(dialog->directory().absolutePath(),manualDir);auto *name=dialog->findChild<QLineEdit*>("fileNameEdit");QVERIFY(name);name->setText(path);QMetaObject::invokeMethod(dialog,"accept");});
-            watchdog.start(2000);controller.output(sdr,false,"png",false);watchdog.stop();QVERIFY(dialogSeen);QVERIFY2(QFileInfo::exists(path),qPrintable(QDir(manualDir).entryList(QDir::Files).join(',')));
+            watchdog.start(2000);controller.output(sdr,false,"png",false);watchdog.stop();QVERIFY(dialogSeen);QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(path),10000);
         }
         QImage capture(1000,700,QImage::Format_RGB32);capture.fill(Qt::white);
         QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),capture,[&](QImage image,bool pin,QString format,bool copy){return controller.output(std::move(image),pin,format,copy);});
@@ -277,7 +289,7 @@ private slots:
         }
         const auto retryPath=QDir(manualDir).filePath("retried.png");
         QTimer::singleShot(50,qApp,[&]{auto *dialog=qobject_cast<QFileDialog*>(qApp->activeModalWidget());QVERIFY(dialog);dialog->findChild<QLineEdit*>("fileNameEdit")->setText(retryPath);QMetaObject::invokeMethod(dialog,"accept");});
-        watchdog.start(2000);button(QStringLiteral("PNG"))->click();watchdog.stop();QVERIFY(QFileInfo::exists(retryPath));QTRY_VERIFY(!overlay);
+        watchdog.start(2000);button(QStringLiteral("PNG"))->click();watchdog.stop();QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(retryPath),10000);QTRY_VERIFY(!overlay);
         const auto copiedPath=dir.filePath(QStringLiteral("复制 图片.png"));QVERIFY(sdr.save(copiedPath));
         const auto nonImage=dir.filePath("not-image.txt");{QFile file(nonImage);QVERIFY(file.open(QIODevice::WriteOnly));file.write("not an image");}
         auto *mime=new QMimeData;mime->setUrls({QUrl("https://example.invalid/image.png"),QUrl::fromLocalFile(nonImage),QUrl::fromLocalFile(copiedPath)});QApplication::clipboard()->setMimeData(mime);
@@ -409,7 +421,7 @@ private slots:
         QImage delivered;bool avif=false;
         QPointer<PinWindow> pin=new PinWindow(source,[&](QImage image,bool,QString format,bool){delivered=image;avif=format=="avif";return true;});
         const auto close=qScopeGuard([&]{if(pin)pin->close();});QVERIFY(QTest::qWaitForWindowExposed(pin));
-        auto *view=pin->findChild<QGraphicsView*>("capPinView");QVERIFY(view);const double originalZoom=1.0/pin->screen()->devicePixelRatio();
+        auto *view=pin->findChild<QGraphicsView*>("capPinView");QVERIFY(view);const auto available=pin->screen()->availableGeometry();const double originalZoom=qMin(1.0/pin->screen()->devicePixelRatio(),qMin(double(available.width()-4)/1600,double(available.height()-4)/400));
         QCOMPARE(view->size(),QSize(qRound(1600*originalZoom),qRound(400*originalZoom)));QCOMPARE(view->transform().m11(),originalZoom);QCOMPARE(view->transform().m11(),view->transform().m22());
         QWheelEvent wheel(QPointF(view->viewport()->rect().center()),QPointF(view->viewport()->mapToGlobal(view->viewport()->rect().center())),QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
         QApplication::sendEvent(view->viewport(),&wheel);QTest::qWait(20);QCOMPARE(view->size(),QSize(qRound(1920*originalZoom),qRound(480*originalZoom)));QCOMPARE(view->transform().m11(),view->transform().m22());

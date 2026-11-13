@@ -1,7 +1,33 @@
 # VS Renderer / VS Player：项目开发地图
 
-核对日期：2026-11-08。源码版本 **1.1.1（含未发布的内置 HLSL 与播放控制修复）**。Native 固定上游 main `72af915f8bf2567155c1f87851a6fa263f73b14f`，使用 `patches/3fp-vsp-1.1.0.patch` 与 `patches/3fp-vsp-1.1.0-network-proxy.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
+2026-11-13 上游/OpenNGU：Native 当前固定 `248cb9b`，可复现补丁与脚本见 [Native 构建](docs/native-api20-build.md)。API20 / snapshot23（608字节）镜像在 `backend/ThreeFpApi.h`。VSP 主上采样顺序 OpenNGU→Jinc→D3D11，第二上采样顺序 Jinc→D3D11→OpenNGU；默认第二上采样仍为 Jinc。路由在 `PlayerProfiles.cpp`，菜单在 `PlayerMenus.cpp`；VSR 在 `FilterCatalog.cpp` 的 shader 首项及 `HlslPreview.h` 接入，导出仍走 GLSL。用户提供的私有参数仅置于忽略目录 `.deps/openngu`，`stage-shaders.ps1` 在本地存在时复制到运行目录；缺失时播放器回退 Jinc。验收见 [本轮记录](development/upstream-openngu-20261113.md)。
 
+界面文字手改入口见 [文案位置索引](docs/ui-text-map.md)。导航图标在 `ui/NavigationIcons.h`，统一尺寸与展开绘制在 `app/MainWindow.cpp::NavigationButton`；标准弹窗按钮翻译在 `player/PlayerLanguage.cpp`。Player 首帧过渡由 `PlayerIdleGuide.h` 默认隐藏、`PlayerWindow.cpp` 打开时隐藏与 `PreviewPane.cpp` 首次原生绘制清底协作。
+
+2026-11-13 UI验收续修：Renderer构造完成后通过 `selectPage` 应用当前主页背景；Player空闲引导 `PlayerIdleGuide.h` 使用透明底色，避免遮挡已加载主题。精确帧说明在 `MainWindowTimeGroups.cpp`，GLSL预览/导出提示位于 `ParameterEditor.cpp` 参数底部；Tab括号由 `PlayerInfo.cpp` 与语言包统一。首次显示、参数位置和Tab定向测试见本轮验收报告。
+
+Full 发行策略（2026-11-13）：`tools/stage-ffmpeg.ps1` 使用 `tools/ffmpeg-source.json` 固定的 full09 / dav1d 构建；`package-portable.ps1` 排除 LAV、madVR 和扩展 shader，保留在线组件接口并剥离发行程序符号。`stage-shaders.ps1` 默认只部署完整 Anime4K，MoeSR由内置资源提供；`package-optional-shaders.ps1` 生成完整扩展库，不自动上传；上传到 `ARXChem/Software-List` 的 `mpv-shaders/2026.11.13/VS-GUI-mpv-shaders-optional.7z`，组件页按版本目录发现、校验、安装到 `shaders` 并重启。可选资源不要从源码目录删除，也不要让后续构建重新填满默认包。
+
+2026-11-13 合并另一设备源码：以 `39b07df` 三方合并并保留本机 Agent；重生成可叠加的音频/UNC补丁，本机完整重建 Native。`src/app/AgentVideoFrames.*` 为视觉 Agent 提供隔离 VS 按帧/秒读取、无损PNG与局部裁剪，不依赖屏幕截图；`MainWindowAgentFeatures.cpp` 约束先汇报缺陷再建议滤镜，`tests/TestAgentVideoFrames.cpp` 验证真实VS及模型图像往返。性能仅对照1080p48→2160p48，记录见 [合并验收](development/merge-20261113.md)。
+
+2026-11-11 HLSL续作：MoeSR末11 pass FP32访问/累加重排、1X整数读取包、`ShaderPackage::enhance`受控同尺寸邻域Load已落地；五轮GPU分别约节时5%/9%，共享A+增强整链安装环境三轮约4.37%。Full/Lite共用1X路由并保留原生回退，Fast/noCNN其余候选未通过严格检查而保留原执行器。固定SHA生成器为`tools/optimize-moesr-tail.py`、`tools/package-anime4k-1x.py`，实际十档播放回归为`tests/HlslOptimizationAcceptance.inc`。Full安装EXE已备份更新，Native源码/DLL与用户INI不变，完整Native SDK仍未齐备。数值误差、基准自比较差异、部署和恢复证据见`docs/hlsl-chain-performance-20261111.md`与`development/evidence/hlsl-chain-20261111/`。
+
+2026-11-11 780M实测：本轮用户已授权性能测试，覆盖此前临时禁测要求。旗舰A使用FP32重建/像素重排融合，GPU约15%节时；D3D12/SM6/FP16未胜出，不迁移。见`docs/780m-hlsl-performance-20261111.md`；生成器`tools/optimize-anime4k-mode-a.py`、回归`tests/TestAnime4KFusion.cpp`。Full安装EXE已备份更新，Native/设置不变，用户FFmpeg已恢复。
+
+2026-11-10 晚间工作流改进：`app/ProjectProtection.inc`负责项目状态/恢复/Undo；`backend/DetachedExport.h`与`export-worker.cpp`负责独立持久编码队列，UI仅提交清单和控制命令、轮询状态（本机文件消息，不是网络RPC）。`FilterTimeGroup::startFrame`增加0基源帧边界，schema3。`cap/CaptureEncoding.h`定义AVIF格式/偶数边缘补齐；`TimelineThumbnail.h`独立单帧导航解码。Tab使用VS帧属性追踪，不改Native。D3D12仅研究见docs/d3d12-research.md。3FP上游色彩/性能及当前补丁本轮原样保留，禁止在NuxBox压制时跑性能基准。
+
+2026-11-10 本地音频/UNC修复：`PlayerSettings` 在视频渲染器下一行加入默认3FP音频输出；`ThreeFpApi/ThreeFpPlayer` 复用端点/独占 ABI；`AudioEndpoints.h` 枚举稳定端点ID。`3fp-vsp-audio-unc.patch` 在原两层补丁后应用，源率策略和路径策略分别位于 `AudioFormatPolicy.h` / `LocalMediaPath.h`。测试及未完成的完整Native DLL/AVR/NAS验收见 `development/validation.md`，本轮交付源码而非已部署发行包。
+
+
+2026-11-08 D3D12/8K48 AV1 可行性见[实测分析](development/d3d12-av1-feasibility-20261108.md)：纯硬解D3D11VA/D3D12VA约109/108 fps，软件路径仍未满足52 fps余量；未迁移实现，8K48软件逐帧实时问题保持未关闭。
+
+色彩审计后续结论与实施边界见 [两轮讨论报告](development/color-audit-followup-20261107.md)：显示端元数据改列策略边界，VS桥实际影响仍待闭环，DV按用户要求强制回退，PQ原色结论限定为已测输入；目前未实施修复。
+
+2026-11-07 色彩审计见 [覆盖报告](development/color-audit-20261107.md)：当前 DLL 已复现线性整数RGB、P3→SDR和PQ显式原色处理缺口，尚未修复。官方最新main已独立拉取并核实仍为`72af915`；`.deps/fff-vsp110`的本地整合提交`c8feda7`已包含它，另有未提交修改。七组关键色彩代码与最新上游一致；产物核验以报告中的DLL哈希为准。
+
+核对日期：2026-11-13。源码版本 **1.1.2（本地构建，尚未正式发布）**。Native 固定上游 main `248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c`，使用 `patches/3fp-vsp-upstream-20261113.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
+
+1.1.1 本地预览入口：`build/preview-1.1.1/launch-preview.cmd`；持久验证证据：`development/evidence/player-1.1.1/`。本次聊天工作文件已迁入 `build/session-20261107/`（本机归档，不参与发行）。
 
 高 DPI 全屏底边控制栏定位于 `PlayerPlaylist.cpp::updateChrome`；Qt 全局坐标在 300% 缩放下可能把物理最后一像素舍入到逻辑边界外，仅全屏容许右/下各一个逻辑像素。Full/Lite 的 `fullscreenPhysicalBottomEdge` 使用 Win32 真实屏幕坐标覆盖左右端和中点；48F 专项入口为 `remote48FrameCadence`，由环境变量指定设备素材，不内置媒体路径。NuxBox 的 Tab 24F 报告未复现，用户复测已恢复。Full/Lite 内置 MoeSR 与 Anime4K 由 `PlayerProfiles.cpp::nativeBuiltinCompatible` 按内置档位识别，统一走原生 HLSL，不执行旧 VPY 正文，也不依赖其中的绝对路径或自定义 VPY 开关。需要执行编辑后的 Python 时，应另存到用户自定义预设。
 
@@ -44,6 +70,7 @@ HLSL 播放控制修复：所有内置 Anime4K/MoeSR 档位独立于自定义 VP
 | 决策 | 原因与适用范围 | 不采用的方案 / 重估条件 |
 | --- | --- | --- |
 | Qt Widgets + C++20 | 适配 Windows 控件、HWND 和 D3D11 | 不引入 QML；跨平台或场景图需求改变再评估 |
+| Agent Qt 核心 + 独立 MCP Node 桥 | Chat Completions/SSE、按需Skills、摘要投影、子会话；Qt异步本地文件/命令/图像；MCP用官方client v2 | 不引入.NET/LakeUI或网页壳；环境工具由模式及父权限统一拦截，原生非兼容模型协议需单独适配 |
 | MinGW GUI → Native 动态 C ABI | 隔离 MinGW/MSVC C++ ABI | 不跨工具链传 C++ 对象；升级必须核对结构版本和 DLL |
 | FilterGraph → VPY → VSScript → 3FP | 脚本可审查，预览与导出共用处理描述 | 不以离线 vspipe/Y4M 管道充当实时帧桥 |
 | 直通与 VS 路径分开 | 普通播放不等待 VS 索引 | 不无条件初始化全部增强依赖 |
@@ -67,6 +94,8 @@ HLSL 播放控制修复：所有内置 Anime4K/MoeSR 档位独立于自定义 VP
 | 目录 | 职责与关键入口 |
 | --- | --- |
 | `src/app/` | Renderer：`MainWindow.cpp`、`MainWindowTimeGroups.cpp`、`MainWindowPresets.cpp` |
+| `src/agent/` | `AgentSession` 管工具循环、权限与待接收输入，`AgentContext` 管用量与摘要；`AgentLocalFiles`/`AgentLocalProcess`/`AgentLocalImages` 管本机能力，`AgentImageMessages` 管图像校验/投影；`AgentProvider`/`AgentModelCapabilities` 管来源/模型；`AgentInput` 路由命令/引用；`AgentInstructions` 管指令/Skills；`AgentMcp`/`AgentNodeRuntime` 管MCP进程；`AgentTaskQueue` 管子会话，`AgentToolLibrary` 管组合 |
+| `tools/agent-runtime/` | 官方 MCP client 锁文件与 Node JSONL 桥；测试服务器只供开发，`tools/stage-agent-runtime.ps1` 安装便携生产运行时与许可 |
 | `src/graph/` | 滤镜定义/图/预设：`FilterCatalog.cpp`、`VpyScriptBuilder.cpp`、`PresetStore.cpp` |
 | `src/backend/` | `VapourSynthFrameServer`、`ThreeFpPlayer`、`ThreeFpApi`、`FrameTimeline.h`、导出与进程 |
 | `src/ui/` | `PreviewPane`、`CompareView`、`AnalysisPage`、参数、预设社区及导出窗口 |
@@ -78,6 +107,7 @@ HLSL 播放控制修复：所有内置 Anime4K/MoeSR 档位独立于自定义 VP
 | `src/update/` | `PortableUpdater`、`ComponentDownloads` |
 | `assets/`、`third_party/` | 图标/语言/滤镜资源与第三方来源、运行时说明和许可 |
 | `patches/`、`tools/` | 固定上游补丁；构建、部署、打包和测量脚本 |
+| `tools/sr-pareto/` | 独立超分算法 Pareto HTML 模板；JSON 的 `preview: true` 点不计入前沿、可隐藏，使用见目录内 README |
 | `tests/` | 可执行回归测试源码与小型 fixtures，保留按模块划分 |
 | `docs/` | 按任务组织的现行操作指南，不放逐版本测试/发布流水 |
 | `development/` | 源码工作区测试台账、合并历史原文与证据；不随运行包复制 |
@@ -92,6 +122,7 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 | 入口与导航 | 文件 |
 | --- | --- |
 | Renderer：导入 → 时间组/处理链 → 参数/脚本 → 源与输出预览 → 预设/导出 | `src/app/MainWindow*.cpp`、`src/ui/ParameterEditor.cpp`、`CompareView.cpp` |
+| Agent：发送键旁来源/模型/思考 → 对话；功能 → Skills/AGENTS、MCP/npm；自动队列 → 子会话；Token → 上下文整理 | `AgentPage.*`/`AgentPageDialogs.cpp`组装页面；`AgentComposer`管输入预览/补全，`AgentChoicePopup`管三类圆角选择浮层，`AgentMarkdownView`管消息排版与轮次过程折叠；`MainWindowAgent.cpp`注册工具，`MainWindowAgentFeatures.cpp`连接服务，`MainWindowAgentInteractions.cpp`路由命令/引用/能力；索引4，背景键`VSR-Agent` |
 | 图像分析比对：多源 → 偏移/布局 → 同坐标 RGB/原始 YUV → 对比画布导出 | `src/ui/AnalysisPage.cpp`、`MultiCompareView.cpp`、`AnalysisExport.cpp`；Native 扩展见 `patches/3fp-api20-analysis-probe.patch` |
 | BD Remux：节目识别 → 轨道/输出 → 队列 | `src/bluray/BlurayWidget.cpp` |
 | Player：打开媒体 → 底栏/列表 → 右键音频/字幕/设置 → 图片工具 | `src/player/PlayerWindow.cpp`、`PlayerMenus.cpp`、`PlayerSettings.cpp` |
@@ -104,6 +135,7 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 | 依赖 | 固定版本 / 准备与调用 | 缺失行为 |
 | --- | --- | --- |
 | Qt | 6.8+；本地记录 6.10.2，MinGW；CMake 查找 | 编译或 GUI 启动失败 |
+| Agent Node/npm/MCP | Node 24.19.0、npm 11.17.0、MCP client/core 2.4.0；`stage-agent-runtime.ps1`固定生产包到`runtime/agent`，JSONL桥提供stdio/Streamable HTTP | 缺少组件时MCP设置可安装/修复；模型对话与内置软件工具独立，许可与完整性见运行时`components.json` |
 | VapourSynth / Python | VS API4 / R81；构建和 stage 脚本，`update-vapoursynth-runtime.py` 锁定哈希 | VS 链不可用；直通路径独立 |
 | VS 插件 | BM3D 11.0、BM3Dvk2 1.0、BestSource 22；其余随运行时保留 | 对应滤镜不可用；不能用 API3 DLL 替代 |
 | FFF.Native | API20 / main `72af915`；标准脚本应用 1.1.0 汇总补丁并复制本库头文件；配置 112 字节、snapshot v22 / 592 字节，动态 C ABI | 原生播放/呈现不可用；缺少可选扩展的旧库不能提供原始 YUV 或自定义 shader |
@@ -127,6 +159,10 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 | Player 配置 | `player.ini` / `PlayerSettings` | 保留用户显式选择；单文件放启动器旁 |
 | 自定义 shader | 配置旁 `shaders/custom` 或 `render/shaderDirectory`，所选源为 `render/customShader`；子目录 `cache` 存 `.vsrhlsl` | 格式 1、语义版本 v8（参数默认值与 gather；兼容已验证的 v7 字节码）；源内容、扩展名、转换器及 D3DCompiler 标识参与缓存键，结构损坏重建；导入失败保持旧选择 |
 | Renderer / 社区设置 | QSettings；`community/sourceUrl`、`appearance/dark`、`appearance/language` | 源/主题/语言在同一滚动页；主题即时生效 |
+| Agent 来源/会话/工具组合 | `QStandardPaths::AppDataLocation/agent/` 中的`providers.json`、`conversations/`、`tools.json`；选择与禁用工具用QSettings | JSON schemaVersion=1；来源密钥DPAPI加密，导出来源省略密钥；会话导入检查工具配对 |
+| Agent 指令/插件/队列 | 同目录`AGENTS.md`、`skills/`、`skills.json`、`mcp.json`、`tasks.json` | 技能先索引后读取；MCP凭证DPAPI、导入默认断开；队列导入/重启后手动恢复；摘要只改变发送投影，不删除原始消息 |
+| Agent 待接收输入/模型能力 | 会话JSON中的`pendingMessages`保留原文/资料与来源，导入暂停；能力仅内存缓存 | API投影过滤本地显示字段；工具配对完成后接收输入/图像；能力绑定端点+模型，仅决定思考字段与视觉许可，不能覆盖模型或消息 |
+| Agent 环境权限/图像 | QSettings `agent/accessMode`、`agent/workingDirectory`；图像保留在会话`content`规范块中 | 默认software，full由用户选择；导入会话/队列不提升权限或恢复进程；图像来源需能力声明，摘要剥离编码数据、请求保留近期图像 |
 | 说明 / 命令 / AI | `vpy/preset-descriptions.json`；QSettings `export/commandHistory`；`player.ini` 的 `ai/package` | 说明只补空键；命令历史最多 50 条；模型路径指向外置清单 |
 | 临时脚本/索引 | QStandardPaths、媒体索引缓存 | 可再生；导出冻结脚本、源和参数，不删除用户 VPY |
 | 分发元数据 | `release.json`、资源/组件清单 | 版本、根目录和文件哈希须对应实际产物 |
@@ -137,6 +173,8 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 
 2026-10-17 抽样：`MainWindow.cpp` 1193 行 / 60 KB，`src/cap/main.cpp` 888 行 / 59 KB，`PlayerWindow.cpp` 645 行 / 62 KB，旧 `ImageEditorWindow.cpp` 377 行 / 97 KB。行数与字节数只是职责审查信号；确需拆分时按交互状态、媒体操作、持久化和独立算法划分，不按行数机械拆分。
 
+2026-11-08 Agent：Session约610行，LocalFiles约310行、LocalProcess约390行；权限派发仍属于Session，本地I/O与图片协议已独立。继续扩展时优先保持API/工具/I/O方向，不向主窗按钮填入文件或进程实现。
+
 高风险包括 DLL/FFmpeg ABI、HDR 白位/色域/位深、seek 时钟和交接线程生命周期、超大图内存/ICC/Alpha、更新目录交换。涉及这些内容时需要实际媒体/GPU 像素或交互验证，编译成功与离屏布局不能代替实机结果。
 
 ## 9. 更新、测试与发布
@@ -144,12 +182,14 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 1. 明确变更范围，复现问题；修改相关模块，构建并运行对应测试。测试选择与结果写入 [版本测试台账](development/validation.md)，步骤见 [构建](docs/dependencies.md) / [测量](docs/performance-debugging.md)。
 2. Native 用 API20 固定脚本和补丁；历史 API14/18 脚本只用于对应基线。GUI 使用 CMake preset。
 3. 本轮直接覆盖现有 `dist/VS-GUI-Full` 和 `dist/VS-Player.exe`，保留用户预设与色彩文件；仅按任务修改主题及Pareto配置，不创建新的发行目录。精简播放器暂存在`build/vsp110-playerlite-runtime`，不再生成PlayerLite发行目录。`tools/deploy-local-runtime.py`增量部署并核对INI/VPY/ICC/LUT哈希；它会修改运行目录，文档整理时不运行。
-4. 打包前明确Full、历史Lite或当前PlayerLite；`package-portable.ps1 -Edition Lite`是历史Full删减版，不能充当当前PlayerLite。单文件从构建暂存用`package-playerlite-single.ps1`生成tar.gz level 1负载，启动后临时解包、退出清理；Full/Single均排除themes目录及用户主题INI。Full压缩包为`dist/1.1.0.7z`；只创建Release草稿，附件由维护者上传。完整流程见 [便携更新](docs/portable-updates.md)。
+4. 打包前明确Full、历史Lite或当前PlayerLite；`package-portable.ps1 -Edition Lite`是历史Full删减版，不能充当当前PlayerLite。单文件从当前版本暂存（本轮`build/playerlite-runtime-1.1.2`）用`package-playerlite-single.ps1`生成tar.gz level 1负载，启动后临时解包、退出清理；Full/Single均排除themes目录及用户主题INI。Full压缩包按当前CMake版本生成（本轮`dist/1.1.2.7z`）；只创建Release草稿，附件由维护者上传。完整流程见 [便携更新](docs/portable-updates.md)。
 5. 解压、依赖、启动、配置和清单验证后才可报告包完成；源码推送、草稿、附件上传、正式发布分别记录，需要相应任务授权。
 
 文档纪律：结构/决策变化当天更新本地图；操作变化只改对应 docs 指南；用户可见变化写 changelog；测试按版本与轮次更新同一台账，不新建 `docs/update-版本.md`、`validation-版本.md`。原始日志留 `build/`，必要证据放 `development/evidence/`；不携带用户媒体。README、本地测试数据和开发记录不得混入上游 PR。
 
 ## 10. 当前状态
+
+2026-11-08：Agent 第五轮加入软件内操作/环境完全访问、工作目录、异步文件搜索编辑/补丁、命令与后台进程、真实图像消息；蓝色用户消息采用真实圆角绘制。子会话继承模式、目录和父禁用工具，只读任务禁止命令/写入；降权或离开会话清理进程。此前Markdown、能力匹配、过程折叠、运行中追加、`/`/`@`及自动协作保留。16组专项均取得通过结果，真实DeepSeek完成本地文件→Node校验→只读子会话复核；初次HTTP/2断连和原二进制重测均留证。Full隔离PATH下文件/进程/图像/界面已验证。模型协议仍限Chat Completions，视觉需端点明确声明；使用与边界见[指南](docs/agent.md)，验证及本地部署见[台账](development/validation.md)。
 
 下一轮按用户要求将Lite配置封装进入压缩包；本轮只补齐Full菜单说明并覆盖本地Full，未实施该打包变化。
 

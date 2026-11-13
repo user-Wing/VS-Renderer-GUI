@@ -31,6 +31,42 @@ void payload(const QString &root){for(const auto &name:QStringList{"VSRenderer.e
 class TestUpdates : public QObject {
     Q_OBJECT
 private slots:
+    void shaderComponentDiscovery(){
+        const QString path="mpv-shaders/2026.11.13/VS-GUI-mpv-shaders-optional.7z";
+        const QJsonArray files{QJsonObject{{"Path",path},{"Type","blob"},{"Size",77082446},{"Sha256",QString(64,'a')}},
+            QJsonObject{{"Path",path+".sha256"},{"Type","blob"},{"Size",100},{"Sha256",QString(64,'b')}},
+            QJsonObject{{"Path","mpv-shaders/VS-GUI-mpv-shaders-optional.7z"},{"Type","blob"},{"Size",100},{"Sha256",QString(64,'c')}}};
+        const auto found=ComponentDownloads::releases("mpv-shaders",files);
+        QCOMPARE(found.size(),1);QCOMPARE(found.first().version,QString("2026.11.13"));
+        QCOMPARE(found.first().url.path(),QString("/datasets/ARXChem/Software-List/resolve/master/")+path);
+        QCOMPARE(ComponentDownloads::destination("mpv-shaders"),QString("shaders"));
+    }
+    void shaderComponentPayload(){
+        QTemporaryDir temp;const auto source=temp.filePath("wrapper/shaders");
+        write(source+"/mpv-shaders.7z","archive");
+        QVERIFY(ComponentDownloads::payloadDirectory("mpv-shaders",temp.path()).isEmpty());
+        write(source+"/mpv-shaders/manifest.json","{\"files\":[{\"path\":\"example/test.glsl\"}]}");
+        QCOMPARE(ComponentDownloads::payloadDirectory("mpv-shaders",temp.path()),source);
+        write(temp.filePath("duplicate/mpv-shaders.7z"),"archive");
+        write(temp.filePath("duplicate/mpv-shaders/manifest.json"),"{\"files\":[{}]}");
+        QVERIFY(ComponentDownloads::payloadDirectory("mpv-shaders",temp.path()).isEmpty());
+    }
+    void shaderComponentInstall(){
+        QTemporaryDir temp;const auto target=temp.filePath("portable with space"),cache=temp.filePath("cache"),source=cache+"/staging/shaders";
+        write(target+"/vs-player.exe","player");write(target+"/player.ini","user settings");
+        write(target+"/shaders/custom/user.glsl","custom");write(target+"/shaders/moesr-50k.hlsl","builtin");
+        write(source+"/mpv-shaders.7z","new shader archive");
+        write(source+"/mpv-shaders/manifest.json","{\"files\":[{\"path\":\"example/test.glsl\"}]}");
+        const auto plan=cache+"/plan.json";write(plan,QJsonDocument(QJsonArray{QJsonObject{{"id","mpv-shaders"},{"version","2026.11.13"},{"source",source}}}).toJson());
+        QProcess helper;helper.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-components.ps1"),"-ParentPid","0","-Plan",plan,"-Target",target,"-NoLaunch"});
+        QVERIFY(helper.waitForFinished(20000));QVERIFY2(helper.exitCode()==0,helper.readAllStandardError().constData());
+        for(const auto &item:QList<QPair<QString,QByteArray>>{{"shaders/mpv-shaders.7z","new shader archive"},{"shaders/custom/user.glsl","custom"},{"shaders/moesr-50k.hlsl","builtin"},{"player.ini","user settings"}}){QFile file(target+"/"+item.first);QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),item.second);}
+        QVERIFY(QFileInfo::exists(target+"/shaders/mpv-shaders/manifest.json"));QVERIFY(!QFileInfo::exists(target+"/shaders/shaders"));
+        QFile receipt(target+"/components.json");QVERIFY(receipt.open(QIODevice::ReadOnly));QCOMPARE(QJsonDocument::fromJson(receipt.readAll()).object().value("mpv-shaders").toString(),QString("2026.11.13"));receipt.close();
+        QVERIFY(QFile::remove(source+"/mpv-shaders/manifest.json"));
+        helper.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-components.ps1"),"-ParentPid","0","-Plan",plan,"-Target",target,"-NoLaunch"});
+        QVERIFY(helper.waitForFinished(20000));QCOMPARE(helper.exitCode(),1);
+    }
     void sameVolumeUpdateReusesPreparedFiles(){
         QTemporaryDir dir;const auto target=dir.filePath("portable"),source=dir.filePath("payload");payload(source);write(target+"/vs-player.exe","old");write(target+"/player.ini","user");
         const auto identity=[](const QString &path){auto handle=CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()),FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,0,nullptr);BY_HANDLE_FILE_INFORMATION info{};const bool ok=handle!=INVALID_HANDLE_VALUE && GetFileInformationByHandle(handle,&info);if(handle!=INVALID_HANDLE_VALUE)CloseHandle(handle);return ok?(quint64(info.nFileIndexHigh)<<32)|info.nFileIndexLow:quint64(0);};

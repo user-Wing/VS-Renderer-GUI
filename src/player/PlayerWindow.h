@@ -116,8 +116,10 @@ private:
     bool openMedia();
     bool networkSource() const;
     void savePosition();
+    void restoreRememberedTracks(const QJsonArray &streams);
     void suspendQualityCheck();
     void applyScaling();
+    bool openNguActive_=false;
     void setDirectMode(bool enabled);
     void ensureProfiles();
     bool nativeBuiltinCompatible() const;

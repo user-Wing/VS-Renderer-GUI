@@ -2,11 +2,13 @@ param(
     [string]$ProgramDirectory = 'dist/VS-Renderer-GUI-windows-x64',
     [string]$SevenZip = 'C:/PortableSoft/7-Zip-Zstandard/7z.exe',
     [string]$BuiltinDirectory = '',
-    [ValidateSet('Full', 'Lite')][string]$Edition = 'Full'
+    [ValidateSet('Full', 'Lite')][string]$Edition = 'Full',
+    [string]$Strip = 'C:/Private/Soft/QT/Tools/mingw1310_64/bin/strip.exe'
 )
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $program = (Resolve-Path -LiteralPath $ProgramDirectory).Path
+if (-not (Test-Path -LiteralPath (Join-Path $program 'vs-export-worker.exe'))) { throw 'Deploy vs-export-worker.exe with VSRenderer before packaging' }
 $editor = Join-Path $program 'runtime/photocraft'
 if (-not (Test-Path -LiteralPath (Join-Path $editor 'photocraft.exe'))) { throw 'Build and deploy the pinned PhotoCraft runtime before packaging' }
 $builtinSource = if ($BuiltinDirectory) { (Resolve-Path -LiteralPath $BuiltinDirectory).Path } else { Join-Path $program 'vpy/builtin' }
@@ -26,11 +28,25 @@ $excludedDirectories = @('cache', (Join-Path $program 'data'), 'PhotoCraftData',
 $excludedDirectories += (Join-Path $program 'docs')
 $excludedDirectories += (Join-Path $program 'themes')
 $excludedDirectories += (Join-Path $program 'shaders/custom')
+$excludedDirectories += (Join-Path $program 'runtime/ffmpeg/build-info')
+$excludedDirectories += @((Join-Path $program 'LAVFilters64'), (Join-Path $program 'madVR09217'), (Join-Path $program 'shaders/mpv-shaders'))
 if ($Edition -eq 'Lite') {
-    $excludedDirectories += @((Join-Path $program 'LAVFilters64'), (Join-Path $program 'madVR09217'), (Join-Path $program 'runtime/mkvtoolnix'))
+    $excludedDirectories += (Join-Path $program 'runtime/mkvtoolnix')
 }
-& robocopy.exe $program $payload /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XD $excludedDirectories /XF '*.ini' '*.lwi' '*.ffindex' '*.pyc' '*.pdb' '*test*.exe' Qt6Test.dll '*.log' '*.before-*' '*.tmp' '*.autosave' '.awj-update-security-state*' settings.bin resource-manifest.json local-resource-sha256.json | Out-Null
+& robocopy.exe $program $payload /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XD $excludedDirectories /XF '*.ini' '*.lwi' '*.ffindex' '*.pyc' '*.pdb' '*test*.exe' Qt6Test.dll '*.log' '*.before-*' '*.tmp' '*.autosave' '.awj-update-security-state*' settings.bin resource-manifest.json local-resource-sha256.json mpv-shaders.7z | Out-Null
 if ($LASTEXITCODE -ge 8) { throw 'Clean payload copy failed' }
+$ffInfo = Join-Path $payload 'runtime/ffmpeg/build-info'
+New-Item -ItemType Directory -Path $ffInfo -Force | Out-Null
+foreach ($name in @('manifest.json','config.mak','build-full09.sh')) {
+    $source = Join-Path $program "runtime/ffmpeg/build-info/$name"
+    if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $ffInfo -Force }
+}
+& (Join-Path $PSScriptRoot 'stage-shaders.ps1') -OutputDirectory (Join-Path $payload 'shaders') -SevenZip $SevenZip
+if (!(Test-Path -LiteralPath $Strip)) { throw 'MinGW strip.exe is required for release packaging' }
+foreach ($name in @('VSRenderer.exe','vs-player.exe','vs-cap.exe','vs-export-worker.exe')) {
+    & $Strip --strip-unneeded (Join-Path $payload $name)
+    if ($LASTEXITCODE -ne 0) { throw "Release symbol stripping failed: $name" }
+}
 $editor = Join-Path $payload 'runtime/photocraft'
 $editorSize = (Get-ChildItem -LiteralPath $editor -File | Measure-Object Length -Sum).Sum
 $editorLimit = (Get-Content -LiteralPath (Join-Path $root 'tools/photocraft-source.json') -Raw | ConvertFrom-Json).maximumComponentBytes
@@ -47,12 +63,11 @@ Copy-Item -LiteralPath (Join-Path $root 'third_party/image-zlib/LICENSE') -Desti
 foreach ($name in @('zh_CN.json', 'en_US.json')) {
     Copy-Item -LiteralPath (Join-Path $root "assets/languages/$name") -Destination (Join-Path $payload "languages/$name") -Force
 }
-if ($Edition -eq 'Lite') {
-    $componentsPath = Join-Path $payload 'components.json'
-    $components = Get-Content -LiteralPath $componentsPath -Raw | ConvertFrom-Json
-    foreach ($name in @('mkvtoolnix', 'MadVR', 'LAV-Filters')) { $components.PSObject.Properties.Remove($name) }
-    $components | ConvertTo-Json | Set-Content -LiteralPath $componentsPath -Encoding UTF8
-}
+$componentsPath = Join-Path $payload 'components.json'
+$components = Get-Content -LiteralPath $componentsPath -Raw | ConvertFrom-Json
+foreach ($name in @('MadVR', 'LAV-Filters', 'mpv-shaders')) { $components.PSObject.Properties.Remove($name) }
+if ($Edition -eq 'Lite') { $components.PSObject.Properties.Remove('mkvtoolnix') }
+$components | ConvertTo-Json | Set-Content -LiteralPath $componentsPath -Encoding UTF8
 $builtin = Join-Path $payload 'vpy/builtin'
 New-Item -ItemType Directory -Path $builtin -Force | Out-Null
 foreach ($name in @('Anime.vpy','Realistic.vpy','Anime-0-CNN-Enhanced.vpy','Anime-1-CNN.vpy','Anime-2-No-CNN-Enhanced.vpy','Anime-3-No-CNN.vpy','Anime-4-Jinc.vpy','Anime-5-D3D11.vpy','Anime-6-1X-Jinc.vpy','Anime-7-1X-D3D11.vpy','Anime-8-A-CNN-Enhanced.vpy','Anime-9-A-CNN.vpy','MoeSR-50K.vpy','Super-0-A4K-RIFE-A4K.vpy','Super-1-A4K-RIFE-Jinc.vpy','Super-2-A4K-RIFE-D3D11.vpy','Super-3-RIFE-A4K.vpy','Interpolation-0-RIFE.vpy','Interpolation-1-RIFE-Half.vpy','Interpolation-2-MVTools-HQ.vpy','Interpolation-3-MVTools.vpy')) {
@@ -62,12 +77,6 @@ foreach ($name in @('Anime.vpy','Realistic.vpy','Anime-0-CNN-Enhanced.vpy','Anim
         $variantSource = Join-Path $builtinSource $variant
         Copy-Item -LiteralPath $(if (Test-Path -LiteralPath $variantSource) { $variantSource } else { Join-Path $builtinSource $name }) -Destination (Join-Path $builtin $variant) -Force
     }
-}
-# These scripts register/reset the third-party renderer globally; portable COM loading does not use them.
-$madvr = Join-Path $payload 'madVR09217'
-foreach ($name in @('activate debug mode.bat','install.bat','uninstall.bat','restore default settings.bat','enable nvidia 3d.reg')) {
-    $path = Join-Path $madvr $name
-    if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path }
 }
 @{schema=1;version=$version;platform='windows-x64';edition=$Edition} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'release.json') -Encoding UTF8
 $files = Get-ChildItem -LiteralPath $payload -Recurse -File -Force | Where-Object { $_.Name -ne 'local-resource-sha256.json' }

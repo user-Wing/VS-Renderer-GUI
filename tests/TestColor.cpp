@@ -20,6 +20,17 @@ class TestColor final : public QObject {
     }
     static VsrColorSettings advanced() {auto c=VsrColorDefaultSettings();c.engine=1;c.output=1;c.icc=0;c.peakDetect=0;return c;}
 private slots:
+    void upstreamPassthroughSeamAndSnapshot(){
+        QWidget surface;surface.resize(160,90);surface.show();ThreeFpApi api;QVERIFY(api.available());
+        ThreeFpConfiguration config{};config.size=sizeof(config);config.version=api.apiVersion();config.outputWindow=reinterpret_cast<void*>(surface.winId());config.sdrPeakNits=100;config.sdrPaperWhiteNits=203;
+        void *handle=nullptr;QCOMPARE(api.create(&config,&handle),ThreeFpResult::Success);QVERIFY(handle);const auto destroy=qScopeGuard([&]{api.destroy(handle);});
+        ThreeFpSnapshot snapshot{};snapshot.size=sizeof(snapshot);QCOMPARE(api.snapshot(handle,&snapshot),ThreeFpResult::Success);QCOMPARE(snapshot.version,23u);QCOMPARE(snapshot.size,608u);QCOMPARE(snapshot.audioPassthroughActive,0u);
+        QLibrary native(api.libraryPath());QVERIFY(native.load());using Mode=ThreeFpResult(*)(void*,unsigned);using State=ThreeFpResult(*)(void*,unsigned*,unsigned*,unsigned*,char*,unsigned,quint64*);
+        const auto mode=reinterpret_cast<Mode>(native.resolve("FFF3FP_SetAudioPassthroughMode"));const auto state=reinterpret_cast<State>(native.resolve("FFF3FP_GetAudioPassthroughState"));QVERIFY(mode && state);
+        QCOMPARE(mode(handle,3),ThreeFpResult::InvalidArgument);QCOMPARE(mode(handle,2),ThreeFpResult::Success);
+        unsigned active=99,preference=99,codec=99;quint64 bursts=99;char name[128]{};QCOMPARE(state(handle,&active,&preference,&codec,name,sizeof(name),&bursts),ThreeFpResult::Success);QCOMPARE(active,0u);QCOMPARE(preference,2u);QCOMPARE(codec,0u);QCOMPARE(bursts,quint64(0));
+        QCOMPARE(mode(handle,0),ThreeFpResult::Success);
+    }
     void nativeUploadTelemetry() {
         QWidget surface;surface.resize(320,240);surface.show();QVERIFY(QTest::qWaitForWindowExposed(&surface));
         ThreeFpApi api;QVERIFY2(api.available(),qPrintable(api.errorString()));ThreeFpPlayer player(api,&surface);
@@ -27,7 +38,7 @@ private slots:
         QVERIFY2(player.submitFrame(frame),qPrintable(player.lastError()));
         QTRY_VERIFY(player.snapshot().swapChainPresents>0);
         const auto first=player.snapshot();
-        QCOMPARE(first.size,std::uint32_t(sizeof(ThreeFpSnapshot)));QCOMPARE(first.version,20u);
+        QCOMPARE(first.size,std::uint32_t(sizeof(ThreeFpSnapshot)));QCOMPARE(first.version,23u);
         QCOMPARE(first.uploadPath,2u);QCOMPARE(first.uploadCount,std::uint64_t(1));
         QCOMPARE(first.uploadCopyBytes,std::uint64_t(64*48*3));
         QVERIFY(first.videoUpload100ns>=first.uploadCopy100ns);

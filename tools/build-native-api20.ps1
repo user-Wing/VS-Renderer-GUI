@@ -12,30 +12,21 @@ $LibiamfRoot=(Resolve-Path -LiteralPath $LibiamfRoot).Path
 $checkout=(& git -C $NativeRoot rev-parse --show-toplevel).Trim()
 if($LASTEXITCODE -ne 0 -or (Resolve-Path -LiteralPath $checkout).Path -ne $NativeRoot){throw 'NativeRoot must be a separate FFF_Project Git checkout.'}
 $commit=(& git -C $NativeRoot rev-parse HEAD).Trim()
-if($commit -ne '72af915f8bf2567155c1f87851a6fa263f73b14f'){throw 'Checkout the pinned upstream commit 72af915f8bf2567155c1f87851a6fa263f73b14f first.'}
-$patch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches/3fp-vsp-1.1.0.patch'
+if($commit -ne '248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c'){throw 'Checkout the pinned upstream commit 248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c first.'}
+$patch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches/3fp-vsp-upstream-20261113.patch'
 $ErrorActionPreference='Continue'
 & git -C $NativeRoot apply --reverse --check $patch 2>$null
 $applied=$LASTEXITCODE -eq 0
 $ErrorActionPreference='Stop'
 if(!$applied){
     & git -C $NativeRoot apply --check $patch
-    if($LASTEXITCODE -ne 0){throw 'VSP 1.1.0 patch conflicts with the native checkout.'}
+    if($LASTEXITCODE -ne 0){throw 'VSP upstream integration patch conflicts with the native checkout.'}
     & git -C $NativeRoot apply $patch
-    if($LASTEXITCODE -ne 0){throw 'VSP 1.1.0 patch failed.'}
-}
-$networkPatch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches/3fp-vsp-1.1.0-network-proxy.patch'
-$ErrorActionPreference='Continue'
-& git -C $NativeRoot apply --reverse --check $networkPatch 2>$null
-$networkApplied=$LASTEXITCODE -eq 0
-$ErrorActionPreference='Stop'
-if(!$networkApplied){
-    & git -C $NativeRoot apply --check $networkPatch
-    if($LASTEXITCODE -ne 0){throw 'Loopback proxy patch conflicts with the native checkout.'}
-    & git -C $NativeRoot apply $networkPatch
-    if($LASTEXITCODE -ne 0){throw 'Loopback proxy patch failed.'}
+    if($LASTEXITCODE -ne 0){throw 'VSP upstream integration patch failed.'}
 }
 $projectRoot=Split-Path $PSScriptRoot -Parent
+Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/LocalMediaPath.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/LocalMediaPath.h') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/AudioFormatPolicy.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Audio/AudioFormatPolicy.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/SourcePixelProbe.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/SourcePixelProbe.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/color/ColorBridge.h'), (Join-Path $projectRoot 'src/color/NativeColorEngine.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Render') -Force
 New-Item -ItemType Directory -Path (Join-Path $NativeRoot 'third_party') -Force | Out-Null
@@ -53,4 +44,8 @@ if(!$MSBuild){
     $MSBuild=(& $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1)
 }
 if(!$MSBuild -or !(Test-Path -LiteralPath $MSBuild)){throw 'MSBuild with the v145 C++ toolset is required.'}
+& python (Join-Path $NativeRoot 'tools/generate_shader_bytecode.py')
+if($LASTEXITCODE -ne 0){throw 'Native shader bytecode generation failed.'}
+& python (Join-Path $NativeRoot 'tools/generate_shader_bytecode.py') --sdr-specializations
+if($LASTEXITCODE -ne 0){throw 'Native SDR shader bytecode generation failed.'}
 & (Join-Path $PSScriptRoot 'build-native-anime4k-fast.ps1') -NativeRoot $NativeRoot -LibiamfRoot $LibiamfRoot -OutputDirectory $OutputDirectory -MSBuild $MSBuild

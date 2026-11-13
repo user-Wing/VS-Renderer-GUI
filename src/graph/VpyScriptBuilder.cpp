@@ -122,6 +122,8 @@ QString emitNode(const FilterNode &node, bool gpu = true)
                        "        _shader_text = _shader_process.check_output([_shader_tool, 'x', '-so', '-bd', '-bsp0', '-spd', _shader_archive, _shader_member], creationflags=0x08000000).decode('utf-8').lstrip('\\ufeff')\n"
                        "        _shader_sys._vsr_last_shader = (_shader_key, _shader_text)\n"
                        "    else: _shader_text = _shader_cached[1]\n"
+                       "if os.path.basename(_shader_path).lower().startswith('openngu-'):\n"
+                       "    _shader_text = '//!HOOK'.join(b.replace('//!BIND HOOKED\\n', '').replace('HOOKED', 'MAIN') if b.startswith(' MAIN\\n') and '//!BIND MAIN\\n' in b and '//!BIND HOOKED\\n' in b else b for b in _shader_text.split('//!HOOK'))\n"
                        "clip = getattr(core, 'vsrplacebo', core.placebo).Shader(clip, shader_s=_shader_text, %2)")
             .arg((p.value("mode").toString() == QStringLiteral("自定义 GLSL") || !p.value("shader").toString().isEmpty()
                  ? VpyScriptBuilder::pythonString(p.value("shader").toString())
@@ -398,11 +400,14 @@ def _vsr_rife(c, model, factor, gpu, threads, scene, scale):
             continue;
         }
         body << QString() << QString("# %1. %2").arg(++emitted).arg(definition->name) << line;
+        if(node.definitionId!="sharpen_edges"&&node.definitionId!="crispen_edges"&&node.definitionId!="enhance_detail")body << QString("_vsr_trace.append(%1 + ' → ' + str(clip.width) + 'x' + str(clip.height) + ' · ' + clip.format.name + ' · ' + str(clip.fps_num) + '/' + str(clip.fps_den) + ' fps')").arg(pythonString(definition->name));
     }
 
+    body << QStringLiteral("_vsr_trace.append('VS最终输出 → ' + str(clip.width) + 'x' + str(clip.height) + ' · ' + clip.format.name)\nclip = core.std.SetFrameProp(clip, prop='_VsrTrace', data='\\n'.join(_vsr_trace))");
     body << QString() << QStringLiteral("src.set_output(1)") << QStringLiteral("clip.set_output(0)");
     result.requiredNamespaces = namespaces.values();
     result.requiredNamespaces.sort(Qt::CaseInsensitive);
+    body.insert(1, QStringLiteral("_vsr_trace = []"));
     body.insert(1, QString("# Required namespaces: %1").arg(result.requiredNamespaces.join(", ")));
     result.script = body.join('\n') + '\n';
     if(result.script.contains("clip = _vsr_sharpen(")) {QFile helper(":/filters/gpu-sharpen.py");if(helper.open(QIODevice::ReadOnly))result.script.prepend(QString::fromUtf8(helper.readAll())+'\n');}
@@ -413,18 +418,18 @@ def _vsr_rife(c, model, factor, gpu, threads, scene, scale):
 
 ScriptBuildResult VpyScriptBuilder::buildGroups(const QString &sourcePath, SourceFilter sourceFilter,
                                                const QList<FilterTimeGroup> &groups) {
-    if(groups.size()==1 && groups.first().startSeconds==0 && groups.first().script.isEmpty())return build(sourcePath,sourceFilter,groups.first().graph);
+    if(groups.size()==1 && groups.first().startSeconds==0 && groups.first().startFrame<=0 && groups.first().script.isEmpty())return build(sourcePath,sourceFilter,groups.first().graph);
     ScriptBuildResult result=build(sourcePath,sourceFilter,FilterGraph());
     if(!result.errors.isEmpty())return result;
-    if(groups.isEmpty() || groups.first().startSeconds!=0){result.errors<<QStringLiteral("第一个时间组必须从 0 秒开始。");return result;}
+    if(groups.isEmpty() || (groups.first().startFrame>=0?groups.first().startFrame!=0:groups.first().startSeconds!=0)){result.errors<<QStringLiteral("第一个时间组必须从 0 秒开始。");return result;}
     result.script.remove("src.set_output(1)\n");result.script.remove("clip.set_output(0)\n");
     if(std::any_of(groups.begin(),groups.end(),[](const FilterTimeGroup &group){return !group.script.isEmpty();}))
         result.script.prepend("_vsr_directory = globals().get('_vsr_directory', "+pythonString(QCoreApplication::applicationDirPath())+")\n");
     result.script+="\n_vsr_parts = []\n";
     for(int i=0;i<groups.size();++i){
-        if(groups[i].startSeconds<0 || (i && groups[i].startSeconds<=groups[i-1].startSeconds)){
-            result.errors<<QStringLiteral("时间组起点必须按秒递增，不能重叠。");return result;
-        }
+        if(groups[i].startSeconds<0 || groups[i].startFrame < -1){result.errors<<QStringLiteral("时间组起点无效。");return result;}
+        if(i && groups[i].startFrame>=0 && groups[i-1].startFrame>=0 && groups[i].startFrame<=groups[i-1].startFrame){result.errors<<QStringLiteral("时间组起点必须按帧递增。");return result;}
+        if(i && groups[i].startFrame<0 && groups[i-1].startFrame<0 && groups[i].startSeconds<=groups[i-1].startSeconds){result.errors<<QStringLiteral("时间组起点必须递增。");return result;}
         auto part=build(sourcePath,sourceFilter,groups[i].graph);
         if(!groups[i].script.isEmpty())part.script=groups[i].script;
         result.errors+=part.errors;
@@ -440,8 +445,10 @@ ScriptBuildResult VpyScriptBuilder::buildGroups(const QString &sourcePath, Sourc
             if(line=="clip.set_output(0)")line="return clip";
             result.script+="    "+line+'\n';
         }
-        const auto begin=QString("(%1 * src.fps_num + src.fps_den - 1) // src.fps_den").arg(groups[i].startSeconds);
-        const auto end=i+1<groups.size()?QString("min(src.num_frames, (%1 * src.fps_num + src.fps_den - 1) // src.fps_den)").arg(groups[i+1].startSeconds):QString("src.num_frames");
+        const auto boundary=[](const FilterTimeGroup &g){return g.startFrame>=0?QString::number(g.startFrame):QString("(%1 * src.fps_num + src.fps_den - 1) // src.fps_den").arg(g.startSeconds);};
+        const auto begin=boundary(groups[i]);
+        const auto end=i+1<groups.size()?QString("min(src.num_frames, %1)").arg(boundary(groups[i+1])):QString("src.num_frames");
+        if(i+1<groups.size())result.script+=QString("if (%1) >= (%2): raise ValueError('Time groups overlap after CFR frame conversion')\n").arg(begin,boundary(groups[i+1]));
         result.script+=QString("_vsr_begin, _vsr_end = %1, %2\nif _vsr_begin < _vsr_end:\n    _vsr_parts.append(_vsr_group_%3(src[_vsr_begin:_vsr_end]))\n").arg(begin,end).arg(i);
     }
     result.script+=QStringLiteral(

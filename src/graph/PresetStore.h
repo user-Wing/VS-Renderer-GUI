@@ -7,6 +7,7 @@ namespace vsr {
 class PresetStore final {
 public:
     static QString directory();
+    static QString compatibilityError(const QJsonObject &metadata);
     static QString description(const QString &path);
     static QJsonObject metadata(const FilterGraph &graph, SourceFilter filter, const QString &source, const QString &note);
     static QString create(const FilterGraph &graph, SourceFilter filter, const QString &source, const QString &note);

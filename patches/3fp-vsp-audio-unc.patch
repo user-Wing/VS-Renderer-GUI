@@ -1,0 +1,160 @@
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -1,4 +1,5 @@
+ #include "pch.h"
++#include "3FP/Core/LocalMediaPath.h"
+ #include "3FP/Core/PlaybackScheduling.h"
+ #include "3FP/Core/AvifIlocShim.h"
+ #include "3FP/Core/Fmp4FragmentScanner.h"
+@@ -2199,11 +2200,14 @@
+     return videoRenderer_.Set360View(enabled, yaw, pitch, fovY);
+ }
+ FFFResult PlayerSession::RecreateAudioRenderer(const std::wstring& endpointId,
+-    const bool exclusive, const bool paused, std::string& error) noexcept {
++    const bool exclusive, const bool paused, std::string& error, const std::uint32_t sourceRateOverride) noexcept {
+     try {
+         audioRenderer_.reset();
++        const auto *decoder=externalAudioDecoder_?externalAudioDecoder_:audioDecoder_;
++        const auto sourceRate=sourceRateOverride?sourceRateOverride:decoder && decoder->sample_rate>0?static_cast<std::uint32_t>(decoder->sample_rate):
++            (format_ && audioStream_>=0?static_cast<std::uint32_t>(std::max(0,format_->streams[audioStream_]->codecpar->sample_rate)):0u);
+         auto replacement = std::make_unique<PlayerWasapiRenderer>(endpointId, exclusive,
+-            &audioRuntimeState_, [this] { NotifyAudioRestart(); });
++            &audioRuntimeState_, [this] { NotifyAudioRestart(); }, sourceRate);
+         const auto result = replacement->Start();
+         if (result != FFFResult::Success) {
+             audioFailures_.fetch_add(1, std::memory_order_relaxed);
+@@ -3488,6 +3492,9 @@
+         return FFFResult::NativeFailure;
+     }
+     if(io)context->pb = io->Context();
++    if(!remote && (path.rfind("\\\\",0)==0 || path.rfind("//",0)==0)) {
++        context->io_open=[](AVFormatContext*,AVIOContext**,const char*,int,AVDictionary**)->int{return AVERROR(EACCES);};
++    }
+     context->interrupt_callback.callback = [](void* opaque) {
+         const auto* session = static_cast<PlayerSession*>(opaque);
+         const auto deadline = session->inputDeadlineTick_.load();
+@@ -3572,6 +3579,9 @@
+         return FFFResult::NativeFailure;
+     }
+     if(io)context->pb = io->Context();
++    if(!remote && (path.rfind("\\\\",0)==0 || path.rfind("//",0)==0)) {
++        context->io_open=[](AVFormatContext*,AVIOContext**,const char*,int,AVDictionary**)->int{return AVERROR(EACCES);};
++    }
+     if(io)context->flags |= AVFMT_FLAG_CUSTOM_IO;
+     // The read itself is a synchronous file read and cannot be cut short, but
+     // avformat's own probing loops do consult this, and the packet loop below
+@@ -7082,6 +7092,14 @@
+ 
+ void PlayerSession::QueueAudioFrame(AVFrame* frame, AVFormatContext* owner, const std::int32_t streamIndex) noexcept {
+     if (!audioRenderer_ || streamIndex < 0) return;
++    if(audioExclusive_ && frame->sample_rate>0 && audioRenderer_->SourceSampleRate()!=static_cast<std::uint32_t>(frame->sample_rate)) {
++        std::string rateError;
++        const auto current=ClockPosition();
++        const auto rateResult=RecreateAudioRenderer(audioEndpointId_,true,snapshot_.state!=FFF3FPState::Playing,rateError,static_cast<std::uint32_t>(frame->sample_rate));
++        if(rateResult!=FFFResult::Success){Fail(rateResult,std::move(rateError),"audio-source-rate");return;}
++        audioRenderer_->Reset(current);
++        RebuildMediaInfo();
++    }
+     if (frame->decode_error_flags || (frame->flags & AV_FRAME_FLAG_CORRUPT))
+         audioFailures_.fetch_add(1, std::memory_order_relaxed);
+     UpdateInputAudioPeakLevels(frame);
+@@ -8380,6 +8398,10 @@
+         << ",\"fileSize\":" << std::max<std::int64_t>(0, format_->pb ? avio_size(format_->pb) : 0)
+         << ",\"probeScore\":" << format_->probe_score
+         << ",\"staticImage\":" << (staticImage_ ? "true" : "false")
++        << ",\"audioOutputActive\":" << (audioRenderer_ ? "true" : "false")
++        << ",\"audioOutputExclusive\":" << (audioExclusive_ ? "true" : "false")
++        << ",\"audioOutputRate\":" << (audioRenderer_ ? audioRenderer_->OutputSampleRate() : 0)
++        << ",\"audioSourceRate\":" << (audioRenderer_ ? audioRenderer_->SourceSampleRate() : 0)
+         << ",\"videoDecoderThreads\":" << (videoDecoder_ ? videoDecoder_->thread_count : 0)
+         << ",\"videoDecoderDelayFrames\":" << (videoDecoder_ ? videoDecoder_->delay : 0)
+         << ",\"decodeBufferBytes\":" << configuredPoolBytes_
+@@ -8766,14 +8788,9 @@
+     try {
+         if(path && IsLoopbackProxy(path)){normalized=path;return true;}
+         auto wide = FromUtf8(path); if (wide.empty()) { error = "A non-empty UTF-8 local path is required."; return false; }
+-        if (wide.rfind(L"\\\\", 0) == 0 || wide.rfind(L"//", 0) == 0 || wide.find(L"://") != std::wstring::npos ||
+-            wide.rfind(L"\\\\.\\", 0) == 0 || wide.rfind(L"\\\\?\\GLOBALROOT", 0) == 0) { error = "Network, device and pipe paths are disabled."; return false; }
+-        std::vector<wchar_t> full(32768); const auto length = GetFullPathNameW(wide.c_str(), static_cast<DWORD>(full.size()), full.data(), nullptr);
+-        if (length == 0 || length >= full.size()) { error = "The local path is invalid."; return false; }
+-        const auto attributes = GetFileAttributesW(full.data());
+-        if (attributes == INVALID_FILE_ATTRIBUTES ||
+-            (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) { error = "The path must identify an existing regular local file."; return false; }
+-        normalized = ToUtf8(full.data()); return !normalized.empty();
++        std::wstring full;
++        if(!vsr_native::normalizeRegularMediaPath(wide,full,error))return false;
++        normalized=ToUtf8(full.c_str());return !normalized.empty();
+     } catch (...) { error = "The local path could not be normalized."; return false; }
+ }
+ 
+--- a/FFF.Native/3FP/Core/PlayerSession.h
++++ b/FFF.Native/3FP/Core/PlayerSession.h
+@@ -289,7 +289,7 @@
+     void DoLoadExternalAudio(std::string pathUtf8, std::int32_t streamIndex,
+         std::int64_t offset100ns) noexcept;
+     FFFResult RecreateAudioRenderer(const std::wstring& endpointId, bool exclusive,
+-        bool paused, std::string& error) noexcept;
++        bool paused, std::string& error, std::uint32_t sourceRateOverride = 0) noexcept;
+     void SuspendAudioRenderer(bool releaseExclusive) noexcept;
+     FFFResult ResumeAudioRenderer() noexcept;
+     bool RecoverAudioDevice() noexcept;
+--- a/FFF.Native/3FP/Audio/WasapiRenderer.cpp
++++ b/FFF.Native/3FP/Audio/WasapiRenderer.cpp
+@@ -1,4 +1,5 @@
+ #include "pch.h"
++#include "3FP/Audio/AudioFormatPolicy.h"
+ #include "3FP/Core/PlaybackScheduling.h"
+ #include "3FP/Audio/WasapiRenderer.h"
+ 
+@@ -168,8 +169,8 @@
+ }
+ 
+ PlayerWasapiRenderer::PlayerWasapiRenderer(std::wstring endpointId, const bool exclusive,
+-    PlayerAudioRuntimeState* const runtimeState, std::function<void()> restartCallback)
+-    : endpointId_(std::move(endpointId)), exclusive_(exclusive), runtimeState_(runtimeState),
++    PlayerAudioRuntimeState* const runtimeState, std::function<void()> restartCallback, const std::uint32_t sourceSampleRate)
++    : endpointId_(std::move(endpointId)), exclusive_(exclusive), sourceSampleRate_(sourceSampleRate), runtimeState_(runtimeState),
+       restartCallback_(std::move(restartCallback)),
+       stopEvent_(nullptr), sampleEvent_(nullptr), controlEvent_(nullptr),
+       initializationFinished_(false), initializationResult_(FFFResult::InvalidState), queuedBytes_(0),
+@@ -1075,7 +1076,7 @@
+             static_cast<REFERENCE_TIME>(300'000), static_cast<REFERENCE_TIME>(500'000));
+     }
+     if (exclusive_) {
+-        const bool nativeFormatSupported = SUCCEEDED(client->IsFormatSupported(
++        const bool nativeFormatSupported = (sourceSampleRate_==0 || sourceSampleRate_==activeFormat->nSamplesPerSec) && SUCCEEDED(client->IsFormatSupported(
+             AUDCLNT_SHAREMODE_EXCLUSIVE, activeFormat, nullptr)) &&
+             (activeFormat->wBitsPerSample == 16 || activeFormat->wBitsPerSample == 32);
+         if (!nativeFormatSupported) {
+@@ -1101,8 +1102,7 @@
+                 return SUCCEEDED(client->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE,
+                     &exclusiveCandidate.Format, nullptr));
+             };
+-            const std::uint32_t sampleRates[] = {format->nSamplesPerSec, 192'000, 176'400,
+-                96'000, 88'200, 48'000, 44'100};
++            const auto sampleRates = vsr_native::exclusiveSampleRates(sourceSampleRate_,format->nSamplesPerSec);
+             bool supported = false;
+             for (const auto sampleRate : sampleRates) {
+                 if (sampleRate == 0) continue;
+--- a/FFF.Native/3FP/Audio/WasapiRenderer.h
++++ b/FFF.Native/3FP/Audio/WasapiRenderer.h
+@@ -101,9 +101,10 @@
+ public:
+     explicit PlayerWasapiRenderer(std::wstring endpointId, bool exclusive = false,
+         PlayerAudioRuntimeState* runtimeState = nullptr,
+-        std::function<void()> restartCallback = {});
++        std::function<void()> restartCallback = {}, std::uint32_t sourceSampleRate = 0);
+     ~PlayerWasapiRenderer();
+ 
++    std::uint32_t SourceSampleRate() const noexcept { return sourceSampleRate_; }
+     FFFResult Start() noexcept;
+     void Stop() noexcept;
+     FFFResult Enqueue(const AVFrame* frame, std::int64_t position100ns,
+@@ -202,6 +203,7 @@
+ 
+     std::wstring endpointId_;
+     bool exclusive_;
++    std::uint32_t sourceSampleRate_ = 0;
+     PlayerAudioRuntimeState* runtimeState_;
+     std::function<void()> restartCallback_;
+     HANDLE stopEvent_;
