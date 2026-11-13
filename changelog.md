@@ -13,7 +13,7 @@
 ### 变更 Changed
 - 同步 3FP 上游内核的 CUDA 互操作、音频直通链和色彩元数据更新，并同步 Native 与 Qt 的 snapshot 接口。
 - 更新 Full 随附 FFmpeg 与 dav1d，保留现有编解码能力；版本及来源见依赖说明。
-- Full 默认仅携带完整 Anime4K 与 MoeSR，其他 mpv shader 整理为独立下载包，支持在组件页下载、应用并重启，以减少默认发行体积。
+- Full 默认携带完整 Anime4K、MoeSR 与本轮 OpenNGU，其他 mpv shader 整理为独立下载包，支持在组件页下载、应用并重启，以减少默认发行体积。
 - LAV 与 madVR 改为在线下载组件，保留解码与渲染接口；发行程序去除冗余符号。
 
 ### 修复 Fixed
