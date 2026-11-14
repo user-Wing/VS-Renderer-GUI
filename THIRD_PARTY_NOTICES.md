@@ -17,6 +17,8 @@
 
 发布包内同时保留 Qt、Python、VapourSynth 等组件随附的许可证文件。重新分发前请核对你所替换的 FFmpeg 和 VapourSynth 插件构建配置。
 
+Full发行打包会剥离无签名原生模块的非运行符号，并移除Agent依赖的类型声明与源码映射；不修改运行代码及导出接口，签名和托管程序不参与符号剥离。AWJ独立CLI与MKV工具使用7z归档按需展开；AWJ保留1.3.1对应源码与完整上游法律文件，移除旧版1.2.1源码残留。
+
 ## Agent 的 Node / npm / MCP 运行时
 
 `runtime/agent/` 使用独立进程提供 MCP stdio 与 Streamable HTTP 连接，不改变 Qt/C++ 模块的许可。Node.js v24.19.0 x64 来自本机既有 Node 安装（MIT，内含组件另见完整声明），npm 11.17.0 为 Artistic-2.0，官方 `@modelcontextprotocol/client` / `@modelcontextprotocol/core` 2.4.0 为 Apache-2.0。对应来源为 [Node.js](https://github.com/nodejs/node/tree/v24.19.0)、[npm CLI](https://github.com/npm/cli/tree/v11.17.0)、[MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)。

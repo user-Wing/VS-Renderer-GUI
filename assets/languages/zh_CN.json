@@ -828,5 +828,6 @@
   "VS模式: VPY 实时滤镜及原生 D3D11 呈现。\nVS模式默认放大/缩小采用 Jinc，同尺寸跳过缩放。\n抗振铃采用开放的局部范围约束。\nmadVR模式: 加载可选 madVR64.ax，处理设置交给 madVR; VS 预设不生效。\n1.1.2起，MadVR私有NGU Anti-Alias已使用原创OpenNGU接入，MadVR不再内置。": "VS模式: VPY 实时滤镜及原生 D3D11 呈现。\nVS模式默认放大/缩小采用 Jinc，同尺寸跳过缩放。\n抗振铃采用开放的局部范围约束。\nmadVR模式: 加载可选 madVR64.ax，处理设置交给 madVR; VS 预设不生效。\n1.1.2起，MadVR私有NGU Anti-Alias已使用原创OpenNGU接入，MadVR不再内置。",
   "不变调倍速使用 3FP / atempo; LAV 配置保留。": "不变调倍速使用 3FP / atempo; LAV 配置保留。",
   "所有设置自动保存在同目录 player.ini。\n可将全部设置导出为一个 INI，或载入已有配置。\nEnter / F11: 无边框全屏; Esc或者划出顶栏退出全屏。": "所有设置自动保存在同目录 player.ini。\n可将全部设置导出为一个 INI，或载入已有配置。\nEnter / F11: 无边框全屏; Esc或者划出顶栏退出全屏。",
-  "独立播放器支持内置 Anime4K / Jinc / D3D11; 自定义 VPY 请使用完整版。": "独立播放器支持内置 Anime4K / Jinc / D3D11; 自定义 VPY 请使用完整版。"
+  "独立播放器支持内置 Anime4K / Jinc / D3D11; 自定义 VPY 请使用完整版。": "独立播放器支持内置 Anime4K / Jinc / D3D11; 自定义 VPY 请使用完整版。",
+  "3FP 原生（色彩保留）": "3FP 原生（色彩保留）"
 }

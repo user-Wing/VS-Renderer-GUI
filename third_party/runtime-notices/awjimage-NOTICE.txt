@@ -1,19 +1,21 @@
-AWJimage 1.2.1 - unmodified standalone image-conversion backend
+AWJimage 1.3.1 - unmodified standalone image-conversion backend
 Copyright: AWJimage contributors (see NOTICE.txt and source).
 License: GNU Affero General Public License, version 3; see LICENSE.
-VS Player invokes AWJ.exe through command-line arguments; no AWJ source is linked into VS Player.
+VS Player invokes AWJ.com through command-line arguments; no AWJ source is linked into VS Player.
 
 Upstream: https://github.com/Dominic485649/AWJimage
-Release: https://github.com/Dominic485649/AWJimage/releases/tag/1.2.1
-Source revision: d755e8d
-Corresponding source is provided alongside these binaries as runtime/awj-source/AWJimage_1.2.1_Source.tar.gz.
+Release: https://github.com/Dominic485649/AWJimage/releases/tag/1.3.1
+Source revision: 32713a1249afaabe52b85959c57097cf17770e76
+Corresponding source is provided alongside these binaries as runtime/awj-source/AWJimage-1.3.1-source.zip.
 The upstream CMakePresets.json, vcpkg.json, vcpkg-overlays, scripts, licenses,
 README and THIRD_PARTY_NOTICES document building and obtaining pinned codec dependencies.
 AVX2 is required by this upstream Windows build. Image viewing does not require this backend.
 
 Native conversion: libavif/AOM, libwebp, libjxl, JPEGli, libpng.
 GPU acceleration applies to visual-quality metrics, not codec encoding/decoding.
-AWJ_Win.7z SHA256: 4b4431afc8f3b54a164a697fabe3589bf93bbb4388321a9459f0be0a40196fca
+AWJ_Win.7z SHA256: 5b4d2a16f7d6f7c74c84b23f88c088b77a9244671316a31dcd7826da8a74f865
 
-Only the independent AWJ.com CLI is shipped, compressed in runtime/awj.zip.
+Only the independent AWJ.com CLI is shipped, compressed in runtime/awj.7z.
 AWJ.exe GUI is not used or distributed. Upstream LICENSE and NOTICE.txt are preserved.
+
+Corresponding source archive SHA256: 82a33e3f54acaca830c37d03d3c671a0728473250e21b529030c44b4e4697124

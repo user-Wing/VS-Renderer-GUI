@@ -1,6 +1,119 @@
 # 版本测试台账
 
+2026-11-14 **1.1.3 发行准备**：收录两轮色彩修复、OpenNGU预览、VSCap偶数选区与Full精简，更新Full和单文件播放器。色彩58、帧桥11、脚本21、VSCap28、Renderer定向6、Full/Lite播放器各9项通过；更新器21通过/1跳过（在线下载），独立解压Full中的原生VS源/HDR/浮点/VPY验证16通过，684条语言检查通过。初轮ICC回退测试因立即读取异步呈现计数失败，改为有界等待后整套通过；部署脚本的历史3FUI路径已改为当前项目Release输出并重新构建插件。Full压缩包281519235字节、单文件42341925字节，版本/清单/Native及程序代码一致性、独立启动、单文件退出清理与配置保留通过。现有VSCap进程保持运行，下次启动使用新程序；Full目录和单文件已更新，Release只建草稿，附件由维护者手动上传。证据：[发行摘要](evidence/release-1.1.3/summary.json)；工作文件 `build/release-1.1.3/`。未进行物理HDR显示校准、全设备/格式或长视频验收。
+
+2026-11-14 两轮色彩审查修复：[记录](color-review-fix-20261114.md)，[上游草稿PR #60](https://github.com/Lake1059/FFF_Project/pull/60)。最终本地色彩58、帧桥11、脚本21项全部通过，0失败/0跳过；纯上游独立DLL真实文件对照由5通过/12失败变为17通过/0失败（10-bit SDR，容差1.5/1023）；HDR10+重复/倒退帧探针由1通过/2失败变为3通过。完整Native/IAMF及Qt构建通过。上游仅5个Native源码/字节码文件，VSP专属修复留本地；开发DLL已更新，未覆盖Full或用户安装目录，未做物理HDR显示与长视频验收。证据 `evidence/color-review-fix-20261114/`。
+
+2026-11-14 VSCap偶数选区修复：工作流全套28通过/0失败/0跳过（含init/cleanup），证据 `development/evidence/cap-even-20261114/`。先复现101×81选区与奇数AVIF额外模态确认，再验证2像素调整/移动、八向缩放、DPI映射、复制/标注/贴图与HDR保存。真实AWJ覆盖仅宽奇数、仅高奇数、宽高均奇数 × 444p12/444p10/420p10，并以ffprobe核对偶数尺寸、格式与PQ2020标记。未将“确认框受置顶层遮挡”的推断当作编码器本身死锁的证据。本地更新Full的vs-cap.exe，未改版本或发布。
+
+2026-11-14 色彩更新后审查：[报告](color-review-20261114.md)。确认3项P2：有限范围Gray强制格式转换回归、原生源预加载破坏VPY的future声明、CPU路径未拒绝未知YUV矩阵。现有色彩首轮44通过/1失败（ICC即时呈现计数），该用例单独复跑通过，整套第二轮45通过；帧桥11通过、图脚本21通过（计数含init/cleanup）。独立生产对象探针及旧DLL对照复现上述边界；未修复、部署或提交PR，日志见 `evidence/color-review-20261114/`。
+
+2026-11-14 Renderer 缩放入口续修：`analysisOpenNguScaling` 与 `chromaAndScalingRender` 共4通过/0失败/0跳过（含init/cleanup），日志 `development/evidence/renderer-ngu-20261114/analysis-ngu-tests.txt`。实际 FFV1 BT.709 SDR：主预览及比对页 OpenNGU 放大与 Jinc 输出不同，缩小与 D3D11 输出逐像素一致；检查选项提示、预选后加载与不支持的画布导出提示。仅定向测试，不代表 HDR 或全量回归。首次索引仅在实际加载新原生VS源的VPY时触发，普通原生播放及原生HLSL/转换GLSL不触发。
+
+2026-11-14 基础色彩与VS桥修复：[记录](color-fix-20261114.md)。最终色彩45通过/0失败/0跳过，原帧桥11通过，图脚本21通过；Full颜色定向9通过/9跳过/0失败（以上含init/cleanup）。覆盖CL、参考像素、浮点、HDR载荷及真实FFV1恒等链；不代表全格式、物理HDR显示或全量回归。新原生VS源有首开完整索引代价及明确格式边界。
+
+2026-11-14 色彩更新复核：[报告](color-audit-20261114.md)。上游db94021已修正HLG共同亮度因子；当前Full DLL独立色块探针仍复现线性整数RGB、P3与PQ原色三项，实际仅SDR。Qt色彩10通过/1失败（CL，含init/cleanup）；可选色彩桥元数据探针通过。未进行纯上游DLL或物理HDR显示验收。
+
+2026-11-13 上游/OpenNGU 更新见 [本轮验收](upstream-openngu-20261113.md)：Native main248cb9b / snapshot23，OpenNGU Full/Lite/VSR与CUDA功能通过，BT.2020 CL旧项仍失败，外置模块/AVR未验收。Full未压缩，用户手改PlayerSettings保留。
+
+## 2026-11-13 跨设备合并、视觉取帧与 Full 精简
+
+- 47个CTest组最终44通过、3未通过；色彩、Full播放长组和Lite提示问题未关闭，不能称全量通过。Full超时后补跑剩余入口；新取帧Agent14通过，Tab修复Full/Lite定向通过，对比35通过，截图23通过，另有明确跳过。旧版对照、数值差异与证据见[合并验收](merge-20261113.md)。
+- 性能只采用1080p48→2160p48首轮旧/新各一次：A/A+/MoeSR GPU耗时降低13.89%/14.25%/12.86%；MoeSR实播32.20→31.18fps，未确认整体收益，不追加性能轮次。
+- Full已更新full09 FFmpeg/dav1d，LAV/madVR改在线下载；默认保留完整Anime4K与MoeSR，其他shader另包，发行EXE剥离符号。用户要求不压缩Full并自行验收，已停止打包；原有压缩包保持旧版。未推送或发布。
+
+## 2026-11-11 MoeSR、1X与共享HLSL续作
+
+- 五轮同组GPU硬件timestamp：MoeSR 169.87488→161.40299ms（节时4.99%），1X 7.18164→6.52888ms（9.09%），均5/5更快。共享增强单pass节时约29%–38%；安装环境编译器A+增强整链三轮42.92304→41.04832ms（4.37%），均更快。均不是播放器FPS。
+- 容差提前固定，未放宽：MoeSR尾11 pass两套14组通过，峰值<=1/1024、MAE<=1e-6，实测最高约3.28e-7，alpha一致且无非有限值；1X两套14/14完整RGBA逐位一致、输入尺寸不变。43pass全重排和Fast/Fast+/noCNN/noCNN+广泛包转换被拒绝，失败记录保留。
+- 安装编译器实际增强组合21组18组逐位一致，A的小尺寸噪声/奇数/alpha三项整链零差检查失败；旧增强A对自身重复同样出现差异。固定同一份带负值FP16 CNN中间输出后，实际新旧增强三项逐位一致。三个原整链失败未改记通过，底层重复不稳定原因未解决，不称整个A位精确。
+- Full、Lite真实实片十档切换专项各3通过（一个实际用例+init/cleanup），包指纹、空间画面、暂停/继续/seek、1X最终缩放差异、损坏包回退与清包通过。初轮夹具相对预设路径错误，主动终止并恢复编码；修正路径后r2通过。
+- shader定向18通过，含16绑定GPU回读、增强空间内容、缓存/非法契约；原A五倍率回归7通过，但本轮有容差内非零差异。各计数独立，不合计为全量产品验收。
+- Full/Lite构建成功。最终Full安装EXE真实启动MoeSR与1X实片、匹配新内嵌包、可见窗口、正常退出；原EXE备份在`C:/PortableSoft/VS-GUI-Full/backups/hlsl-chain-20261111-161110/`。Native源码/DLL、既有A包和用户INI未改；完整Native SDK仍未齐备。最后清理未用Sampler声明后，安装编译器生成的增强DXBC逐字节不变。
+- 编码仅独立邮箱管理。原41592多次恢复后观察其退出；同一3FUI启动下一队列21808并重新核验身份，多次恢复均有CPU增长。最终身份/CPU/输出增长见本机交付result与编码日志；不拿新PID冒充原进程。
+- 证据`development/evidence/hlsl-chain-20261111/`，报告`docs/hlsl-chain-performance-20261111.md`。D盘源码包使用既有工具生成，CRC、逐文件manifest哈希、隐私排除和整包SHA核验见外部交付记录及同名sha256文件。
+
+## 2026-11-11 780M HLSL性能与融合
+
+用户授权暂停压制实测。最终RGBA候选三轮GPU46.24/46.55/47.79→39.42/39.41/40.32ms（约15%节时）；此前低负载同组约40→34ms，不跨组挑最好值。D12同算法/SM6/FP16未胜出。
+- 原始49pass→46pass；原始GLSL、Native上游未改。Full/Lite链接；FullEXE备份更新、NativeDLL/用户设置hash不变。
+- shader专项16通过；新融合回归7通过（含init/cleanup，AMD，完整RGBA 1×/1.5×/2×奇数/2.5×/4×字节一致）；真实帧600s仅1个alpha ULP差，不夸大全画面位精确。
+- 中间失败保留：初compare只比RGB，漏alpha=c2，已修；Qt未ClearState/预热时原版自比较也失败，修测试后严格容差未放宽。
+- 实片完整Player改善但波动/丢帧，最终短对照20.91vs18.63fps，不承诺稳定24。最终alpha修正版实测GPU+生产EXE烟测。
+- FFmpeg PID41592两段可逆挂起均恢复，最终12:43:17恢复且CPU增长，原StartTime保留。证据`development/evidence/780m-hlsl-20261111`；详细`docs/780m-hlsl-performance-20261111.md`。
+
+## 2026-11-10 晚间工作流/体验（源码交付，非性能轮）
+
+- Full/Lite/VSR/Cap与独立worker完整链接；单并发BelowNormal，不操作现有FFmpeg压制。Renderer本机缺VS venv，使用VSR_STAGE_VS_RUNTIME=OFF跳过暂存，不代表完整运行发行包。
+- 定向Qt回归：graph20、项目3、队列3、Cap编码4、Cap编辑7、Lite轨道5、缩略图3，通过计数均含init/cleanup，各0失败0跳过；不同轮不相加当全量。
+- 实际AWJ小图三格式编码经ffprobe核对偶数尺寸、位深和PQ2020；轨道用16x16/2秒双音轨双字幕素材重开；缩略图单帧FFmpeg；CFR BlankClip 40帧边界12/25并有trace属性。
+- 独立worker四个进程生命周期夹具通过，另从真实Qt ExportWindow提交后强杀GUI，worker仍输出完整30720字节。不是多小时真实媒体压制验收，不做编码断点续接。
+- 中间失败保留：项目Redo当前组丢失已修；无字体设置导致文字测试失败，指定系统字体后通过；贴图测试原预期未计小屏fit，修测试后通过；媒体测试缺延迟依赖0xc06d007e，复制完整依赖至隔离目录后通过。BlankClip存在可选vsrplacebo加载警告，不计GLSL路径验收。
+- Native82文件及patches/src/color/src/render前后完全一致。禁止本轮性能测试；无色准/GPU吞吐/长时播放结论。现有安装目录、运行用户压制不替换。
+- Tab按阶段显示实际可得信息，内核未提供的逐pass尺寸/适配器/具体解码器名仍明确未知；不以配置猜测、不修改上游ABI。
+- 证据：development/evidence/suite-20261110；D3D12资料研究docs/d3d12-research.md，未迁移/实测。
+
+## 2026-11-10 音频输出与UNC（本地源码交付，未发布）
+
+- Full VSPlayer、Lite VSPlayerLite 及两套QtTest已完整构建/链接。GUI专项每套3通过（1个实际用例+init/cleanup），0失败0跳过；验证渲染器row=1、默认3FP、设备与独占INI保存。离屏窗口测试不是实际媒体播放验收。
+- 路径与采样率策略28项通过，包括Unicode/空格/长路径、设备/管道/ADS/目录/符号链接拒绝，以及既有Share共享的真实localhost SMB文件访问；临时文件已删除。
+- MSVC检查WasapiRenderer.cpp和PlayerSession.cpp通过。实际链接修改后的WasapiRenderer和AsrAudioTap探针，在本机AMD HDMI端点独占协商：44100→44100、48000→48000，均24有效位；96000→48000为设备回退，非测试失败或96k支持证明。
+- 原生补丁在固定基线+原两补丁上forward check、当前树reverse check均通过。标准构建脚本PowerShell语法检查无错误。
+- 完整FFF.Native.dll尚未重建，未部署覆盖原播放器；缺齐套MSVC IAMF/libass/FFmpeg SDK。不声称完整播放器UNC/独占联调、远端NAS/VS索引、AVR码流、长期seek稳定性已经通过。3FP仍无压缩码流直通。
+- 证据：`development/evidence/audio-unc-20261110/`；源码包由`tools/package-audio-unc-source.py`生成，包含GUI、补丁、已改Native核心快照、许可、测试与清单，不含用户媒体/配置/凭据。
+
+
+## 2026-11-08 Renderer Agent 本地环境与圆角消息（第五轮，本地）
+
+- 新增“软件内操作 / 环境完全访问”及独立工作目录入口，模式和目录持久化；完整访问使用当前Windows账户权限，可操作工作目录之外的路径。文件、命令和MCP在实际派发处校验模式及父工具禁用状态，原始勾选偏好不被改写；导入历史/队列不提升权限。子会话拥有独立工具实例，查询子任务可读文件、搜索和看图，禁止命令及写入；MCP重连后的父禁用回归见[记录](evidence/agent-v5-20261108/mcp-parent-permission.txt)。
+- 补齐异步本地文件读取、分页、目录/内容搜索、精确替换、Codex格式补丁及文件整理；保留编码和行尾，搜索/输出有预算及截断提示。修复补丁通过junction别名重复修改同一真实目标的问题，拒绝阶段不改文件，保留[修复前](evidence/agent-v5-20261108/patch-alias-before.txt)和[最终文件测试](evidence/agent-v5-20261108/local-files.txt)。
+- 命令支持PowerShell或可执行文件参数、工作目录/环境变量、标准输入、继续查询、退出码、超时、后台运行及终止。Windows JobObject绑定真实进程树，各会话隔离，取消前台与显式后台分别处理，降权/切换会话/关闭清理所属进程。宿主PATH先于配套运行时，带目录的相对可执行文件以工作目录解析；保留[路径修复前](evidence/agent-v5-20261108/path-before.txt)与[最终14项测试](evidence/agent-v5-20261108/local-process.txt)。
+- 本地图像经真实解码、缩放和编码，在工具组完整返回后作为图像消息发送；明确视觉元数据才开放，模型名称不作为能力凭据。图像历史/导入导出、上下文估算和摘要均有专门投影与校验；图像读取8项、消息12项通过。此链路用本地HTTP模型夹具验证真实图像块，未将当前DeepSeek文本来源写成视觉验收。
+- 用户蓝色消息改为viewport绘制的真实圆角气泡，保留Markdown、选区与滚动；深浅色、自定义背景、缩放和角落像素断言通过。[圆角截图](evidence/agent-v5-20261108/transcript-rounded-dark.png)、[消息排版12项](evidence/agent-v5-20261108/transcript.txt)及[完整访问界面](evidence/agent-v5-20261108/ui-full-access-directory.png)。
+- 最终16组Agent专项中15组首轮通过，集成组首次发生HTTP/2连接关闭（HTTP 0 / Qt网络代码399），随后等待子任务的测试触发全局超时；保留[初轮CTest](evidence/agent-v5-20261108/ctest-initial.txt)和[初轮集成](evidence/agent-v5-20261108/integration-initial.txt)。同一未改二进制单独本地流程重测3项通过，再重跑完整集成组为 **11 passed、0 failed、0 skipped**，16组均取得通过结果；[最终集成](evidence/agent-v5-20261108/integration.txt)。仅能确定暂态连接关闭，不确定归因于远端、代理或Qt，不通过重放已完成的软件操作掩盖错误。
+- 使用当前3FUI的DeepSeek来源实际完成软件操作、Skills/MCP/摘要、运行中补充与自动子会话交流；新增验收实际glob/grep/read读取临时文件和另一授权目录、write/edit修改结果、Node执行校验，再由AI创建一个只读子任务读取结果复核。主/子真实调用见[本地环境记录](evidence/agent-v5-20261108/deepseek-local-environment.json)，密钥未写入证据；测试只改新临时目录。
+- 已同步本地Full；隔离PATH仅保留Windows系统目录时，对话框9项、软件集成7项、进程13项和图像8项均通过，无跳过。部署前后46个Full配置/预设/自定义资源及4个当前Agent文件哈希与文件集合保持不变，运行时3077文件未改变，临时探针已清除；[部署和证据摘要](evidence/agent-v5-20261108/summary.json)。仍为本地1.1.1，无公开发布，不替代全项目色彩/Player验收。
+
+## 2026-11-08 Renderer Agent 控件与执行过程（第四轮，本地）
+
+- 按用户截图复现标题约3px与Token上箭头失效：入口使用13px字体，旧标题把无效点字号加3；QLineEdit覆盖了原生横排上箭头中心。来源窗口现在按实际像素放大标题，为原生加减按钮划出独立区域。真实QWindow鼠标点击、childAt命中、0→1024→0、上下文上下限与Apply保存回读均通过，另有高缩放专项；[修复前记录](evidence/agent-v4-20261108/before-spin-hits.json)与[对话框回归](evidence/agent-v4-20261108/dialogs.txt)。
+- 子任务表改为可拖动列宽，首次数据到达自动适配；刷新、空队列先拖动再接收任务均保留手工宽度，长值提供完整提示。空队列用简洁提示，不再显示主Agent欢迎页。
+- 输入区横向使用可用空间，来源移动到模型左侧，来源设置进入上方工具行；空闲隐藏停止按钮，执行时仍可真实取消。来源/模型/思考使用带标题、说明、右侧勾选的圆角浮层，局部使用常规UI字体；验证鼠标、键盘、单次选择、屏幕边界、1120及宽屏实际可用宽度、深浅色和背景。
+- 每轮工具调用、中间进度与子任务通知默认归入一行“执行过程”，保留最后正文答复；概要显示调用/错误数与处理中状态，参数/结果/通知分别展开，不修改历史或API数据。覆盖追加时展开状态、选区、阅读位置、代码框边界和换会话重置；[折叠专项](evidence/agent-v4-20261108/transcript.txt)。
+- 最终11组Agent专项中10组首轮通过，软件集成首轮两项遇到HTTP 0 / Qt网络错误2的远端断连；相同产物重测两项均通过，随后CTest重跑完整集成组为 **9 passed、0 failed、0 skipped**，11组均取得通过结果。保留[初轮CTest](evidence/agent-v4-20261108/ctest-initial.txt)、[重测](evidence/agent-v4-20261108/transport-recheck.txt)与[最终集成](evidence/agent-v4-20261108/integration.txt)，不将初次网络失败隐去。真实DeepSeek工具操作、MCP/Skills/摘要、自动子会话两轮协作及运行中补充均验证；主窗口实测确认过程默认折叠。
+- 本地Full与隔离PATH下的控件、软件操作/MCP检查见[证据摘要](evidence/agent-v4-20261108/summary.json)；来源、历史、主题及用户资源保留。仅本地1.1.1更新，无公开发布，不替代全项目色彩/Player回归。
+
+## 2026-11-08 Renderer Agent 交互与自动协作（第三轮，本地）
+
+- 页面与子窗口按钮增加明确边框；用户消息位于右侧、AI 使用正文 Markdown，扩大行段距并支持表格、代码块和工具折叠。输入支持实时预览、Enter发送、Ctrl+Enter换行及IME保护；模型与思考按钮位于发送键左侧，1120逻辑宽度、深浅色和`VSR-Agent`背景已检查。
+- 模型列表与思考选项按API元数据/官方端点规则匹配，未知端点仅自动；当前DeepSeek实际返回low/high/max、默认high，关闭思考使用独立参数。发送只接受匹配当前端点/模型的思考字段，不允许能力数据覆盖消息、工具或模型。仅支持Responses工具的模型会明确提示当前Chat协议限制。
+- 运行中补充通过待接收队列在完整工具组后进入上下文，不中断当前请求；停止保留并暂停队列，导入不自动执行。新增`/`命令、技能调用与`@`资料引用；引用失败保留输入，代码示例不隐式读取文件，显示原文与API资料上下文分开。
+- 子任务由AI自动spawn，支持同一子会话多轮发信、父子/已有任务交流及去重完成通知，移除手工创建表单。保持两路只读并行/修改独占、父禁用权限和导入手动恢复；长汇报明确标为节选，完整结果保留。取消重入、导入旧记录误通知与通信权限补回归。
+- 最终构建后Agent CTest **9/9组通过**，已启用真实npm安装和三个DeepSeek用例；软件集成**9 passed、0 failed、0 skipped**，Node桥**3/3通过**。真实界面`/agent`+新建`@file`引用创建一个子任务，实际调用spawn/send/wait，完成两轮交流并接收运行中补充；另验证resize/项目/VPY操作及Skills→MCP→子任务→摘要。日志与脱敏记录见[证据摘要](evidence/agent-v3-20261108/summary.json)、[CTest](evidence/agent-v3-20261108/ctest.txt)、[集成明细](evidence/agent-v3-20261108/integration.txt)。
+- 本轮仅更新本地1.1.1 Full，未公开发布；模型协议仍为Chat Completions，`@file`限文本，MCP现有兼容边界及全项目色彩/Player未关闭项保持独立。部署与隔离PATH验证记录见[本地部署](evidence/agent-v3-20261108/deployment.json)。
+
+## 2026-11-08 Renderer Agent 界面、上下文与扩展（第二轮，本地）
+
+- Agent 页面参照用户所给 Codex 截图改为会话侧栏、中央回复与底部圆角输入区；来源/模型位于输入框下方，来源设置直接打开左列表右编辑的独立窗口，支持“确定 / 取消 / 应用”。工具参数/结果折叠，`VSR-Agent` 背景继续可用。独立 UI 烟测 **12 项通过**，来源、底栏、背景截图已检查；末轮去除会话横向滚动及灰色分隔柱后另测界面通过。
+- 新增 Token 实际累计、缓存/推理、最近用量、可编辑上下文/输出预算，以及估算占用和手动/85%自动摘要。摘要只替换发送投影，原始消息完整保留；取消及失败保留原记录与旧摘要。Skills 采用元数据索引加 `read_skill` 按需正文；应用独立 `AGENTS.md` 可编辑，不修改 Codex 配置。设计参考 DSH `fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159`。
+- 子智能体使用独立会话，最多两个查询任务并行，修改任务独占，支持取消、手动恢复、队列导入导出；继承父禁用工具，父作用域工作流不委派。MCP 使用官方 client/core 2.4.0，stdio / Streamable HTTP 均实际测试，调用异步且取消绑定真实发起会话；Windows JobObject 和启动握手保证关闭时清理外部进程树，包括拒绝EOF的服务器及孙进程。
+- 主构建后的 Agent CTest **6/6 组通过**，已开启真实 npm 安装及 DeepSeek 用例，没有把跳过当通过；Node 桥 **3/3** 通过。随后针对重启后异步发现 MCP 工具的禁用设置补上回归，**4 passed、0 failed**（含界面与 init/cleanup）。证据见 [摘要](evidence/agent-v2-20261108/summary.json)、[CTest](evidence/agent-v2-20261108/ctest.txt)、[MCP 偏好](evidence/agent-v2-20261108/mcp-preferences.txt)。
+- 当前 3FUI 的 DeepSeek 实测完成 Skill 读取→真实 MCP `19+23=42`→创建/等待只读子任务→实际摘要；子任务 `completed`，主会话原始 **18 条**消息保留、摘要覆盖前 **14 条**，`compactions=1`。本轮主会话端点累计输入22017、输出2340、缓存子集16256 tokens，父子用量分别记录；当前密钥未出现在导出或源码。实际会话与任务记录同目录保留。
+- 便携运行时实际安装到 `runtime/agent`：Node24.19.0、npm11.17.0及13个生产依赖，含npm依赖共157个包实例，全部法律文件有记录；独立复跑组件清单哈希一致。部署后的 Full 在 **PATH 仅 Windows 系统目录**环境下通过真实预览/96×54编码、界面背景、DeepSeek Skill/MCP/子任务/摘要，**5 passed、0 failed、0 skipped**（含init/cleanup），见[发行目录验证](evidence/agent-v2-20261108/deployed-runtime.txt)。
+- 未修改原 3FUI 设置、Codex 指令、现有来源与自定义主题；部署前后46个Full配置/预设/自定义资源及应用Agent来源文件哈希一致。原程序与清单保存在 `build/agent-v2-deploy-backup-20261108/`。当前模型协议仍限定兼容Chat Completions，MCP无OAuth登录UI、旧SSE不保证，组合用于同步软件工具；全项目回归和既有色彩/Player问题不因本轮通过而改变。仍为本地1.1.1，不更新旧压缩包或远端附件。
+
+## 2026-11-08 Renderer Agent（本地，未发布）
+
+- 新增独立 Agent 页面与 22 个软件工具，支持多 OpenAI 兼容来源、模型切换、SSE、工具循环、本地会话、3FUI 配置导入、工具组合导入导出及 `VSR-Agent` 背景。交互及协议参考 3FUI `787fb527b2a1e4cd247899e3f295b6b2a4e836cc`，沿用 Qt Network，未引入 .NET/LakeUI。
+- 最终构建后的 CTest **3/3 组通过**：协议 **13 passed**、工具组合 **8 passed**、软件集成 **5 passed**（均含 init/cleanup）。覆盖碎片流、多工具往返、参数拒绝、取消和中断恢复、来源切换、历史配对、DPAPI、工作流校验及实际界面操作。完整日志与摘要见 [Agent 证据](evidence/agent-20261108/summary.json)。
+- 读取本机 3FUI 明文来源进行两轮付费端点实测：`https://api.deepseek.com/v1/chat/completions` / `deepseek-flash` / high。第一轮 **8 次真实工具调用、0 工具错误**，完成读取状态、查询滤镜、打开合成媒体、添加 96×54 resize、导出项目和 VPY、再读取结果；第二轮切换来源配置后保留上下文并再次调用工具。密钥未写入源码、日志或会话导出；原 3FUI 文件未修改。
+- 本地集成实际载入 VS 预览并通过现有队列编码，ffprobe 验证输出 **96×54**；同时验证项目/预设往返、无效参数不改变图、旧预览不误报当前图、普通空格输入及背景像素变化。多来源与会话恢复的额外实窗检查留在 `build/agent-ui-smoke/`。
+- `dist/VS-GUI-Full` 已同步 EXE 与指南，**46 个**现有 INI/VPY/主题及自定义资源文件哈希保持不变；原 EXE 和文档留在 `build/agent-deploy-backup-20261108/`。随后直接在 Full 目录、使用其自带运行时执行预览/编码/主题/界面专项，**4 passed、0 failed**（含 init/cleanup），见 [部署验证](evidence/agent-20261108/deployed-runtime.txt)。本机来源保存为当前 Windows 用户的 DPAPI 配置，不随包分发。
+- 当前是 Renderer 的 OpenAI Chat Completions/function tools 接入；自定义组合编排已注册软件工具，未接入原生 Anthropic、通用 MCP 或任意 Shell 执行。异步请求与完成状态分开，编码结果通过 `get_state.exports` 查询。未重跑全项目回归，也不将 DeepSeek 结果推广为其他服务商兼容保证；既有 Player 与色彩限制保持原结论。源码版本仍为 1.1.1，本轮不更新旧压缩包或远端附件。
+
 ## 2026-11-08 内置模型仅 HLSL 路径修复（本地，未发布）
+
+后续重新打包：`dist/1.1.1.7z` 已包含修复后 Full，内部根目录为 `VS-GUI-Full`，不含 themes/custom 或个人 INI。7z 完整性校验通过，包内播放器哈希与修复构建一致；归档 469,984,723 字节，SHA-256 `3815bdaf04e34e9a0bb6b87d6c963e0f3b6b133d692e1c038be4084974a57b43`。单文件未改，用户自行上传两份产物；核验记录见 `build/repack-1.1.1-hlsl/verification.json`。以下“原归档未更新”为此前修复轮次的历史状态。
 
 - 修复前复现：Full 右键选择 Anime4K A+CNN+额外增强，旧便携 VPY 的正文/路径校验导致实际退到 D3D11；旧档位还受自定义 VPY 的 HLSL 开关影响，可进入 GLSL。`full-before.txt` 留存失败。
 - 修复后使用用户提供的 720p24 MP4：Full 专项 **19 通过、0 失败**，Lite **15 通过、0 失败**（均含 init/cleanup）。逐项点击 MoeSR 与八个 Anime4K 菜单，验证选中档位、原生 HLSL 路由、旧档位算法、持续出帧及画面回读；同时覆盖关闭 HLSL 开关、旧 VPY、真实配置、拖入自动播放、暂停/恢复/跳转、不兼容色彩、自定义 VPY 和极简模式。
@@ -9,7 +122,11 @@
 - 本轮是路径与播放控制专项，不是全量回归、性能测试或物理 HDR 色准验收。历史色彩问题仍未关闭。日志、构建、封装及保护清单位于 `build/builtin-hlsl-only/`。
 
 
-核对日期：2026-11-07。历史轮次整理自仓库已留存报告；本轮 1.1.0 单独列出。当前源码为 1.1.1（Release 草稿待发布）；旧版本、旧 DLL、不同设备、电源状态或不同输出尺寸的结果不自动继承到当前产物。
+同日最新上游复核：从官方仓库独立克隆并用`ls-remote`核实main仍为`72af915`；本地整合提交`c8feda7`已包含它。七组关键色彩源码与上游逐段一致，原审计问题没有因更新基线而消失；VS帧桥/可选ICC缓存属于VSP集成。未构建纯上游DLL或把此前GPU测试转记为上游测试，详见下方审计报告。
+
+2026-11-07 色彩覆盖审计：[详细报告](color-audit-20261107.md)。当前 Full DLL 与测试 DLL 哈希一致；原色彩套件9通过/1失败（已知CL，含init/cleanup），可选色彩桥元数据测试通过。新增隔离探针20次GPU读回均实际为SDR，三项独立检查复现线性RGB、P3转换、PQ原色覆盖问题；未修复，未进行物理HDR显示或mpv端到端色准验收。
+
+核对日期：2026-11-07。历史轮次整理自仓库已留存报告；1.1.0 与 1.1.1 分轮列出。当前源码为 1.1.1（本地开发，未发布）；旧版本、旧 DLL、不同设备、电源状态或不同输出尺寸的结果不自动继承到当前产物。
 
 ## 如何读结论
 
@@ -34,6 +151,20 @@
 MoeSR 分类移至 Anime4K 前，Full/Lite 共用菜单和内嵌模型资源，原悬停说明保持不变。Full 专项 4 passed，Lite 专项 6 passed，Shader 全组 21 passed，更新包目录专项 4 passed（均含 init/cleanup，无跳过）；Lite 实片覆盖 A、A+增强和 MoeSR，均有正常空间图像。此前 MoeSR 48fps 未达标结论不变，本轮未重跑性能测试或全量回归。
 
 单文件实际启动完成解包、图片导入、退出清理；内嵌版本、Native/Player 哈希、三个模型悬停说明已核对。发行打包排除配置、自定义背景和 custom shader，50 个原运行目录保护文件哈希保持不变。Full 内层目录固定为 `VS-GUI-Full`；单文件仍需外置 FFmpeg shared。构建与专项日志保存在本机 `build/release-1.1.1/`，Release 保持草稿，附件由维护者上传。
+
+## 1.1.1 模型、HLSL 增强与 Tab 专项（2026-11-07）
+
+本轮后续已按用户要求同步至 `dist/VS-GUI-Full`：17 个程序/模型/文档文件与来源哈希一致，21 个配置与自定义文件哈希保持不变；更新版本及资源哈希清单，隔离 PATH 启动图片导入通过。备份和同步清单位于 `build/dist-before-1.1.1-*`、`build/dist-sync-1.1.1.json`。`dist/VS-Player.exe` 单文件仍保留原版，本轮未制作单文件或压缩包。
+
+新增 MoeSR-50K 和完整 Anime4K A 两个档位；默认自动降档为 8→0→6→4→5，MoeSR 默认不选。Full/Lite 菜单、迁移、VPY HLSL/回退和未来 `VS-GUI-Full` 内层目录均有专项覆盖。原始 MoeSR 文件保留；优化版只改卷积纹理读取，三个尺寸（32×18、257×145、1920×1080）的 GPU FP16 读回与原版最大/平均误差均为零。
+
+用户在第二项 A 测试观察到纯色画面。修复后置亮度提取/合成着色器的纹理坐标输入签名后，实片从 A 切换至 A+增强均保留正常空间画面；中央采样灰度范围分别 43..237 / 41..237。修复前异常帧率计数不作为性能结论；性能用例增加时间线、计数器及窗口尺寸稳定性断言。
+
+训练进程结束后，在 RTX 4070 Laptop 上测试用户指定的 K-ON 47.9521fps 视频，seek 60s，处理目标 3840×2160、呈现窗口 2561×1601，每项测量 20s。A 为 **47.9384fps / 0 dropped**，A+增强为 **47.9908fps / 0 dropped**。MoeSR 原版两次 31.1647 / 31.0413fps，优化版两次 33.4475 / 33.762fps，均值提升 **8.04%**；仍有 286～345 dropped，四项性能门槛均未通过，不能称为 48fps 流畅。未实测 RTX 3060，也不外推长时间播放或其他分辨率。
+
+功能专项（含 init/cleanup，不相加）：Shader 21 passed、Graph 19 passed、实际 VPY HLSL/回退 4 passed、Lite 新菜单 3 passed、Lite 设置迁移 3 passed、更新目录 4 passed、实片 A 画面 3 passed；语言 671 条通过。Full/Lite/Renderer、测试和 Native 构建通过。Tab 移除全局置顶且失焦不主动提升层级；独立进程窗口遮挡连续五次中三次通过、两次未取得前台窗口而未完成验收，不把该前置条件失败算作通过。同进程 Qt Tool 窗口层级探针失败记录保留，跨应用结论依据独立进程检查。
+
+本轮是专项验证，未重跑全量回归，历史 1.1.0 失败不会自动关闭。未提交、未推送、未创建压缩包、未修改 Release draft。独立本地预览位于 `build/preview-1.1.1/VS-GUI-Full`，EXE/Native 哈希匹配最终构建；隔离 PATH 图片导入启动通过。验证记录已同步至 [本地验证报告](evidence/player-1.1.1/1.1.1-local-validation.txt)、[性能数据](evidence/player-1.1.1/1.1.1-performance.json) 和 [原始日志及截图](evidence/player-1.1.1/logs/)。启动入口为 `build/preview-1.1.1/launch-preview.cmd`。本次聊天的全部工作文件与历史交付保存在 `build/session-20261107/`，迁移清单逐文件记录 SHA256；原 1.1.0 产物保持原状。
 
 ## 1.1.0 发版前代码审查修复（2026-11-07）
 
@@ -522,3 +653,11 @@ Y412最终使用24工作线程/24帧上下文，对照旧32/32，60秒窗口私�
 仅为本机MoeSR 52-pass模型增加原生HLSL的HOOK分段读取，普通单pass导入保持兼容。ShaderPackage专项QtTest为14通过、0失败；加入多pass用例后先观察到旧路径资源重定义失败，再修复为逐段编译。测试日志、真实52-pass文件导入及三种D3D11数值用例保存在本机`EnhanceModel-Test-New/GLSL-Student/Production-3d-20261101/acceptance-20261106`，入口为该目录的ImportProbe.cpp和HlslProbe.cpp。
 
 真实1920×1080→3840×2160输出相对同权重PyTorch AMP的最大RGB绝对误差0.00146484、平均0.00013364；GPU执行计时约47.29ms，排除解码、显示和回读，不能当作播放器实测帧率。VSPlayerLite构建成功，另存`dist/VS-Player-MoeSR.exe`；原`dist/VS-Player.exe`SHA256保持`4609364236946011ce13d3857784ad222580f6ee73774534c4c7fc471f263015`。未执行播放器菜单/视频播放验收或整套回归，未改版本、提交、发布。
+
+## 2026-11-11：NGU原创HLSL本机验收
+
+用户单独授权NGU HLSL与VSPlayer实片性能工作。新增显式环境变量启用的`nguHlslPlaybackAcceptance`，从已有自定义shader导入入口运行，不更换安装版EXE/Native DLL，不改全局色彩、音频或UNC逻辑。仅新增LAV renderer借用诊断入口及Lite空实现，测试中通过公开madVR COM设置接口导出备份、读回、自动恢复。全部真实权重、影片和生成包位于邻接研究项目私有目录。
+
+Standard/Sharp Medium分组版16pass与纵向图集版10pass均在动画及自然内容1920×1080→3840×2160真实播放，通过图片空间范围、实际尺寸和暂停后shader开关输出变化检查。每轮QtTest为3通过、0失败、0跳过（包含init/cleanup），不等于3个独立画质用例。内置Anime4K完整Mode A普通档stage9同输入和目标测试完成。数值探针另验证两家族四种小图的FP16/FP32全层输出。未执行整个VSPlayer回归套件，未发布。
+
+隔离测试目录：`../madVR-NGU-Reconstruction/evidence/private/vsplayer-runtime`。构建日志：`build/ngu-acceptance-build.log`。详细时间、样本、外部负载、原版信息接口缺失和无效尝试排除记录在[研究性能报告](../../madVR-NGU-Reconstruction/research/HLSL-PERFORMANCE.md)。不能用这轮数字替换本文件其它版本的性能结论。

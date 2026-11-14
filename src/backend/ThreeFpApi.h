@@ -1,5 +1,6 @@
 #pragma once
 #include "backend/SourcePixelProbe.h"
+#include "backend/FrameColorMetadata.h"
 #include "color/ColorBridge.h"
 
 #include <QLibrary>
@@ -212,7 +213,9 @@ enum class ThreeFpExternalPixelFormat : std::uint32_t {
     GbrP8 = 40,
     GbrP10 = 41,
     GbrP12 = 42,
-    GbrP16 = 43
+    GbrP16 = 43,
+    GrayF16 = 3, GrayF32 = 4,
+    GbrPF16 = 44, GbrPF32 = 45
 };
 
 struct ThreeFpExternalVideoFrame {
@@ -231,7 +234,11 @@ struct ThreeFpExternalVideoFrame {
     std::int64_t frameIndex;
     std::int64_t duration100ns;
     std::int64_t totalFrames;
+    VsrFrameColorMetadata colorMetadata;
 };
+
+static_assert(offsetof(ThreeFpExternalVideoFrame, colorMetadata) == 112);
+static_assert(sizeof(ThreeFpExternalVideoFrame) == 240);
 
 class ThreeFpApi final {
 public:

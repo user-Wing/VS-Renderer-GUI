@@ -78,6 +78,10 @@ foreach ($name in @('Anime.vpy','Realistic.vpy','Anime-0-CNN-Enhanced.vpy','Anim
         Copy-Item -LiteralPath $(if (Test-Path -LiteralPath $variantSource) { $variantSource } else { Join-Path $builtinSource $name }) -Destination (Join-Path $builtin $variant) -Force
     }
 }
+if ($Edition -eq 'Full') {
+    & python (Join-Path $root 'tools/trim-full-runtime.py') --directory $payload --strip $Strip --sevenzip $SevenZip --report (Join-Path $stage 'runtime-trim.json')
+    if ($LASTEXITCODE -ne 0) { throw 'Full runtime trim failed' }
+}
 @{schema=1;version=$version;platform='windows-x64';edition=$Edition} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'release.json') -Encoding UTF8
 $files = Get-ChildItem -LiteralPath $payload -Recurse -File -Force | Where-Object { $_.Name -ne 'local-resource-sha256.json' }
 $manifest = @{}

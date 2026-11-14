@@ -7,10 +7,49 @@ class TestCapWorkflow : public QObject {
     Q_OBJECT
     QByteArray savedIni_;bool hadIni_=false;
 private slots:
+    void oddAvifSaveHasNoConfirmation(){
+        QTemporaryDir temp;CapApp controller;controller.saveBusy_=true;
+        QImage source(101,80,QImage::Format_RGB32);source.fill(Qt::white);
+        const bool nativeDisabled=qApp->testAttribute(Qt::AA_DontUseNativeDialogs);qApp->setAttribute(Qt::AA_DontUseNativeDialogs);
+        const auto restore=qScopeGuard([&]{qApp->setAttribute(Qt::AA_DontUseNativeDialogs,nativeDisabled);});
+        bool confirmation=false,chosen=false;QTimer watchdog;watchdog.setInterval(20);
+        connect(&watchdog,&QTimer::timeout,this,[&]{
+            if(auto *dialog=qobject_cast<QFileDialog*>(qApp->activeModalWidget())){if(!chosen){chosen=true;dialog->selectFile(temp.filePath("odd.avif"));QMetaObject::invokeMethod(dialog,"accept");}}
+            if(auto *box=qobject_cast<QMessageBox*>(qApp->activeModalWidget())){confirmation=true;box->done(QMessageBox::No);}
+        });
+        watchdog.start();controller.output(source,false,"avif",false);watchdog.stop();
+        QVERIFY(chosen);QVERIFY2(!confirmation,"Odd dimensions must not open an extra modal confirmation behind the capture overlay");
+    }
+    void selectionEvenPixels(){
+        QImage source(801,601,QImage::Format_RGB32);for(int y=0;y<source.height();++y)for(int x=0;x<source.width();++x)source.setPixelColor(x,y,QColor(x%256,y%256,80));QImage delivered;
+        QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,QString,bool){delivered=image;return false;});
+        const auto close=qScopeGuard([&]{if(overlay)overlay->close();});overlay->resize(source.size());QVERIFY(QTest::qWaitForWindowExposed(overlay));
+        QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{20,20});QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{120,100});
+        overlay->exportImage(false,"avif");QCOMPARE(delivered.size(),QSize(100,80));
+        QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{119,60});QTest::mouseMove(overlay,{120,60});
+        overlay->exportImage(false,"avif");QCOMPARE(delivered,source.copy(20,20,100,80));
+        QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{122,60});
+        overlay->exportImage(false,"avif");QCOMPARE(delivered,source.copy(20,20,102,80));
+        QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,{60,60});QTest::mouseMove(overlay,{61,61});
+        overlay->exportImage(false,"avif");QCOMPARE(delivered,source.copy(20,20,102,80));
+        QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,{63,63});
+        overlay->exportImage(false,"avif");QCOMPARE(delivered,source.copy(22,22,102,80));
+        for(const QSize size:{QSize(640,480),QSize(534,400)}){
+            QPointer<CaptureOverlay> scaled=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,QString,bool){delivered=image;return false;});
+            const auto closeScaled=qScopeGuard([&]{if(scaled)scaled->close();});scaled->resize(size);QVERIFY(QTest::qWaitForWindowExposed(scaled));
+            QTest::mousePress(scaled,Qt::LeftButton,Qt::NoModifier,{21,23});QTest::mouseRelease(scaled,Qt::LeftButton,Qt::NoModifier,{122,104});
+            scaled->exportImage(false,"avif");QVERIFY(!delivered.isNull());QCOMPARE(delivered.width()%2,0);QCOMPARE(delivered.height()%2,0);
+        }
+    }
+    void avifEncoderContracts_data(){
+        QTest::addColumn<QSize>("size");
+        QTest::newRow("odd-width")<<QSize(3,4);QTest::newRow("odd-height")<<QSize(4,5);QTest::newRow("both-odd")<<QSize(3,5);
+    }
     void avifEncoderContracts(){
+        QFETCH(QSize,size);
         const auto encoder=qEnvironmentVariable("VSR_TEST_AWJ");if(encoder.isEmpty())QSKIP("Set VSR_TEST_AWJ to run the tiny codec correctness fixture");QTemporaryDir tmp;
-        QImage source(3,5,QImage::Format_RGBA32FPx4);source.setText("capHdr","scRGB-FP16");source.setText("capSdrWhiteNits","203");source.setColorSpace(QColorSpace::SRgbLinear);for(int y=0;y<source.height();++y){auto *p=reinterpret_cast<float*>(source.scanLine(y));for(int x=0;x<source.width();++x){p[x*4]=.5;p[x*4+1]=2;p[x*4+2]=.25;p[x*4+3]=1;}}
-        for(const auto &format:QStringList{"444p12","444p10","420p10"}){CapApp::SaveJob job{source,tmp.filePath(format+".avif"),"avif",encoder,{}};job.avif.format=format;job.avif.speed=10;const auto error=CapApp::encodeAvif(job);QVERIFY2(error.isEmpty(),qPrintable(error));QVERIFY(QFileInfo(job.path).size()>0);const auto probe=qEnvironmentVariable("VSR_TEST_FFPROBE");if(!probe.isEmpty()){QProcess p;p.start(probe,{"-v","error","-select_streams","v:0","-show_entries","stream=width,height,pix_fmt,color_primaries,color_transfer","-of","json",job.path});QVERIFY(p.waitForFinished(15000));const auto streams=QJsonDocument::fromJson(p.readAllStandardOutput()).object()["streams"].toArray();QCOMPARE(streams.size(),1);const auto stream=streams[0].toObject();QCOMPARE(stream["width"].toInt(),4);QCOMPARE(stream["height"].toInt(),6);QVERIFY(stream["pix_fmt"].toString().startsWith("yuv"+format));QCOMPARE(stream["color_primaries"].toString(),QString("bt2020"));QCOMPARE(stream["color_transfer"].toString(),QString("smpte2084"));}}
+        QImage source(size,QImage::Format_RGBA32FPx4);source.setText("capHdr","scRGB-FP16");source.setText("capSdrWhiteNits","203");source.setColorSpace(QColorSpace::SRgbLinear);for(int y=0;y<source.height();++y){auto *p=reinterpret_cast<float*>(source.scanLine(y));for(int x=0;x<source.width();++x){p[x*4]=.5;p[x*4+1]=2;p[x*4+2]=.25;p[x*4+3]=1;}}
+        for(const auto &format:QStringList{"444p12","444p10","420p10"}){CapApp::SaveJob job{source,tmp.filePath(format+".avif"),"avif",encoder,{}};job.avif.format=format;job.avif.speed=10;const auto error=CapApp::encodeAvif(job);QVERIFY2(error.isEmpty(),qPrintable(error));QVERIFY(QFileInfo(job.path).size()>0);const auto probe=qEnvironmentVariable("VSR_TEST_FFPROBE");if(!probe.isEmpty()){QProcess p;p.start(probe,{"-v","error","-select_streams","v:0","-show_entries","stream=width,height,pix_fmt,color_primaries,color_transfer","-of","json",job.path});QVERIFY(p.waitForFinished(15000));const auto streams=QJsonDocument::fromJson(p.readAllStandardOutput()).object()["streams"].toArray();QCOMPARE(streams.size(),1);const auto stream=streams[0].toObject();QCOMPARE(stream["width"].toInt(),cap::evenSize(size).width());QCOMPARE(stream["height"].toInt(),cap::evenSize(size).height());QVERIFY(stream["pix_fmt"].toString().startsWith("yuv"+format));QCOMPARE(stream["color_primaries"].toString(),QString("bt2020"));QCOMPARE(stream["color_transfer"].toString(),QString("smpte2084"));}}
     }
     void avifFormatsAndEvenPrecision(){
         QTemporaryDir temp;QSettings settings(temp.filePath("cap.ini"),QSettings::IniFormat);
@@ -220,7 +259,7 @@ private slots:
         QImage source(800,600,QImage::Format_RGB32);
         for(int y=0;y<source.height();++y)for(int x=0;x<source.width();++x)source.setPixelColor(x,y,QColor(x%256,y%256,80));
         struct Resize {QPoint from,to;QRect crop;};
-        for(const auto &resize:QList<Resize>{{{100,100},{80,80},{80,80,321,221}},{{250,100},{250,80},{100,80,301,221}},{{400,100},{420,80},{100,80,321,221}},{{400,200},{420,200},{100,100,321,201}},{{400,300},{420,320},{100,100,321,221}},{{250,300},{250,320},{100,100,301,221}},{{100,300},{80,320},{80,100,321,221}},{{100,200},{80,200},{80,100,321,201}}}){
+        for(const auto &resize:QList<Resize>{{{100,100},{80,80},{80,80,320,220}},{{250,100},{250,80},{100,80,300,220}},{{400,100},{420,80},{100,80,320,220}},{{400,200},{420,200},{100,100,320,200}},{{400,300},{420,320},{100,100,320,220}},{{250,300},{250,320},{100,100,300,220}},{{100,300},{80,320},{80,100,320,220}},{{100,200},{80,200},{80,100,320,200}}}){
             QImage delivered;QPointer<CaptureOverlay> overlay=new CaptureOverlay(qApp->primaryScreen(),source,[&](QImage image,bool,QString,bool){delivered=image;return true;});
             const auto close=qScopeGuard([&]{if(overlay)overlay->close();});overlay->resize(source.size());QVERIFY(QTest::qWaitForWindowExposed(overlay));
             QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(100,100));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(400,300));
@@ -239,7 +278,7 @@ private slots:
         auto *box=static_cast<CaptureTextBox*>(overlay->findChild<QWidget*>("capTextBox"));QVERIFY(box);QTest::keyClicks(box->editor,"Outside");const auto textPosition=box->pos();
         button(QStringLiteral("选区"))->click();QTest::mousePress(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(250,200));QTest::mouseMove(overlay,QPoint(570,200));QTest::mouseRelease(overlay,Qt::LeftButton,Qt::NoModifier,QPoint(570,200));
         QCOMPARE(box->pos(),textPosition);QCOMPARE(box->editor->toPlainText(),QString("Outside"));
-        overlay->exportImage(false,"png",true);QCOMPARE(delivered.size(),QSize(301,201));
+        overlay->exportImage(false,"png",true);QCOMPARE(delivered.size(),QSize(300,200));
         QCOMPARE(delivered.pixelColor(100,50),QColor(Qt::red));QCOMPARE(delivered.pixelColor(100,160),QColor(Qt::red));QCOMPARE(delivered.pixelColor(250,50),QColor(Qt::white));
         bool textInk=false;for(int y=106;y<145;++y)for(int x=16;x<120;++x)textInk|=delivered.pixelColor(x,y).green()<100;QVERIFY(textInk);
     }
@@ -363,7 +402,7 @@ private slots:
         button(QStringLiteral("撤销"))->click();QCOMPARE(box->toPlainText(),QString("Undo me"));
         QTest::keyClick(box,Qt::Key_Z,Qt::ControlModifier);QCOMPARE(box->toPlainText(),QString());
         QTest::keyClick(box,Qt::Key_Z,Qt::ControlModifier);QTRY_VERIFY(overlay->findChildren<QTextEdit*>("capTextEditor").isEmpty());
-        QVERIFY(!button(QStringLiteral("撤销"))->isEnabled());button(QStringLiteral("PNG"))->click();QCOMPARE(delivered,source.copy(QRect(QPoint(20,20),QPoint(700,400))));
+        QVERIFY(!button(QStringLiteral("撤销"))->isEnabled());button(QStringLiteral("PNG"))->click();QCOMPARE(delivered,source.copy(QRect(20,20,680,380)));
     }
     void toolbarShapesAndTextFrames() {
         QImage source(1000,700,QImage::Format_RGBA8888);source.fill(QColor(70,80,90));

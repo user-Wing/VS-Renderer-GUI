@@ -50,13 +50,13 @@
     },
     {
       "name": "Jinc(Anti-Aliasing)",
-      "compute": 6,
+      "compute": 7,
       "quality": 17,
       "group": "传统插值"
     },
     {
-      "name": "NGU(Anti-Alias)",
-      "compute": 10,
+      "name": "OpenNGU(Anti-Aliasing)",
+      "compute": 28,
       "quality": 21,
       "group": "传统插值"
     },
@@ -79,7 +79,7 @@
       "group": "实时着色器"
     },
     {
-      "name": "Anime4K-A-CNN+(GLSL)",
+      "name": "Anime4K-A-CNN+(HLSL)",
       "compute": 42,
       "quality": 52,
       "group": "实时着色器"

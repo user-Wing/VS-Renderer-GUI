@@ -1,0 +1,28 @@
+********* Start testing of TestUpdates *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestUpdates::initTestCase()
+PASS   : TestUpdates::shaderComponentDiscovery()
+PASS   : TestUpdates::shaderComponentPayload()
+PASS   : TestUpdates::shaderComponentInstall()
+QINFO  : TestUpdates::sameVolumeUpdateReusesPreparedFiles() prepared-directory update ms 592
+PASS   : TestUpdates::sameVolumeUpdateReusesPreparedFiles()
+PASS   : TestUpdates::componentVersionsAndLayouts()
+PASS   : TestUpdates::componentInstallPreservesPaths()
+SKIP   : TestUpdates::liveComponentDownload() Set VSR_COMPONENT_LIVE for real ModelScope GUI download
+C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/tests/TestUpdates.cpp(82) : failure location
+PASS   : TestUpdates::versionsAndDiscovery()
+PASS   : TestUpdates::archivePaths()
+PASS   : TestUpdates::releasedPackageCompatibility()
+PASS   : TestUpdates::payloadLayouts()
+PASS   : TestUpdates::downloadVerifyAndCancel(flat)
+PASS   : TestUpdates::downloadVerifyAndCancel(arbitrary-wrapper)
+PASS   : TestUpdates::fullDirectoryReplacement()
+PASS   : TestUpdates::packedMkvUpdateStaysPacked(zip)
+PASS   : TestUpdates::packedMkvUpdateStaysPacked(7z)
+PASS   : TestUpdates::lazyOptionalRuntime(zip)
+PASS   : TestUpdates::lazyOptionalRuntime(7z)
+PASS   : TestUpdates::stopsLocalTrayCleansAndRestartsVisible()
+PASS   : TestUpdates::blockedInstallKeepsOldDirectory()
+PASS   : TestUpdates::cleanupTestCase()
+Totals: 21 passed, 0 failed, 1 skipped, 0 blacklisted, 9667ms
+********* Finished testing of TestUpdates *********

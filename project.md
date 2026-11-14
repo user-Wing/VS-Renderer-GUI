@@ -1,5 +1,19 @@
 # VS Renderer / VS Player：项目开发地图
 
+2026-11-14 两轮色彩审查修复见 [实施与上游草稿记录](development/color-review-fix-20261114.md)：修复Gray强制转换范围、VPY future声明、未知矩阵CPU入口及旧Native metadata降级，补齐ABI断言和HDR10+帧序重置。FFmpeg SDK通过`VSR_FFMPEG_ROOT`明确选择；此前审查段落保留当时状态，以此记录为后续进展。
+
+2026-11-14 VSCap偶数选区：`src/cap/main.cpp` 的 `selectionPixels_` 保存实际像素选区，界面坐标仅用于显示和命中；框选/调整/移动以2像素为步长，AVIF去掉额外确认框，编码入口保留偶数补边。回归入口 `TestCapWorkflow::selectionEvenPixels`、`oddAvifSaveHasNoConfirmation`，行为见[截图指南](docs/capture-images.md)。
+
+2026-11-14 色彩更新后审查见 [审查报告](development/color-review-20261114.md)：确认有限范围Gray强制转换、用户VPY future声明及CPU路径未知矩阵检查3项P2问题；本轮仅审查，尚未修复。上游db94021相对固定248cb9b无Native差异；现有色彩套件第二轮45项通过不覆盖新增复现边界。
+
+2026-11-14 缩放入口续修：工作台 `MainWindow::applyPreviewScaling` 和比对页 `AnalysisPage::applyScaling` 均加载 OpenNGU HLSL；新增处理路继承当前选择。只用于 BT.709 SDR 放大，缩小默认 D3D11，缺失资源或不兼容色彩回退 Jinc；测试范围见台账。
+
+2026-11-14 色彩修复见 [记录](development/color-fix-20261114.md)：更新Native汇总补丁修正基础转换；`FrameColorMetadata.h`定义外部帧v2尾部，`NativeVsSource.cpp`生成`vsr-source.dll`，`VapourSynthFrameServer`验证元数据来源。旧v1前缀保留，浮点/HDR新能力需配套Native；原生源首开索引与支持边界见记录，历史审计失败数字不代表本轮产物。
+
+2026-11-14 Full精简入口：`tools/trim-full-runtime.py` 在打包暂存内处理工具7z归档、旧AWJ源码、无运行入口的模型和开发辅助文件，剥离前后核对PE接口与代码；不裁剪VS指令集变体或现有功能。兼容旧ZIP与组件更新，见 [打包指南](docs/portable-updates.md)。
+
+2026-11-14 色彩复核见 [更新报告](development/color-audit-20261114.md)：官方最新main为`db94021`，HLG OOTF已修正；当前Full DLL复测线性整数RGB、P3→SDR、PQ显式709及CL仍未关闭。本轮仅审计，未更新固定构建基线或部署。
+
 2026-11-13 上游/OpenNGU：Native 当前固定 `248cb9b`，可复现补丁与脚本见 [Native 构建](docs/native-api20-build.md)。API20 / snapshot23（608字节）镜像在 `backend/ThreeFpApi.h`。VSP 主上采样顺序 OpenNGU→Jinc→D3D11，第二上采样顺序 Jinc→D3D11→OpenNGU；默认第二上采样仍为 Jinc。路由在 `PlayerProfiles.cpp`，菜单在 `PlayerMenus.cpp`；VSR 在 `FilterCatalog.cpp` 的 shader 首项及 `HlslPreview.h` 接入，导出仍走 GLSL。用户提供的私有参数仅置于忽略目录 `.deps/openngu`，`stage-shaders.ps1` 在本地存在时复制到运行目录；缺失时播放器回退 Jinc。验收见 [本轮记录](development/upstream-openngu-20261113.md)。
 
 界面文字手改入口见 [文案位置索引](docs/ui-text-map.md)。导航图标在 `ui/NavigationIcons.h`，统一尺寸与展开绘制在 `app/MainWindow.cpp::NavigationButton`；标准弹窗按钮翻译在 `player/PlayerLanguage.cpp`。Player 首帧过渡由 `PlayerIdleGuide.h` 默认隐藏、`PlayerWindow.cpp` 打开时隐藏与 `PreviewPane.cpp` 首次原生绘制清底协作。
@@ -25,7 +39,7 @@ Full 发行策略（2026-11-13）：`tools/stage-ffmpeg.ps1` 使用 `tools/ffmpe
 
 2026-11-07 色彩审计见 [覆盖报告](development/color-audit-20261107.md)：当前 DLL 已复现线性整数RGB、P3→SDR和PQ显式原色处理缺口，尚未修复。官方最新main已独立拉取并核实仍为`72af915`；`.deps/fff-vsp110`的本地整合提交`c8feda7`已包含它，另有未提交修改。七组关键色彩代码与最新上游一致；产物核验以报告中的DLL哈希为准。
 
-核对日期：2026-11-13。源码版本 **1.1.2（本地构建，尚未正式发布）**。Native 固定上游 main `248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c`，使用 `patches/3fp-vsp-upstream-20261113.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
+核对日期：2026-11-14。源码版本 **1.1.3（Release 草稿，附件由维护者上传）**。Native 固定上游 main `248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c`，使用 `patches/3fp-vsp-upstream-20261113.patch` 保留 VSP 扩展。使用步骤见 [docs](docs/README.md)，历史变化见 [changelog](changelog.md)，当前失败和验收边界见 [台账](development/validation.md)。
 
 1.1.1 本地预览入口：`build/preview-1.1.1/launch-preview.cmd`；持久验证证据：`development/evidence/player-1.1.1/`。本次聊天工作文件已迁入 `build/session-20261107/`（本机归档，不参与发行）。
 
@@ -123,7 +137,7 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 | --- | --- |
 | Renderer：导入 → 时间组/处理链 → 参数/脚本 → 源与输出预览 → 预设/导出 | `src/app/MainWindow*.cpp`、`src/ui/ParameterEditor.cpp`、`CompareView.cpp` |
 | Agent：发送键旁来源/模型/思考 → 对话；功能 → Skills/AGENTS、MCP/npm；自动队列 → 子会话；Token → 上下文整理 | `AgentPage.*`/`AgentPageDialogs.cpp`组装页面；`AgentComposer`管输入预览/补全，`AgentChoicePopup`管三类圆角选择浮层，`AgentMarkdownView`管消息排版与轮次过程折叠；`MainWindowAgent.cpp`注册工具，`MainWindowAgentFeatures.cpp`连接服务，`MainWindowAgentInteractions.cpp`路由命令/引用/能力；索引4，背景键`VSR-Agent` |
-| 图像分析比对：多源 → 偏移/布局 → 同坐标 RGB/原始 YUV → 对比画布导出 | `src/ui/AnalysisPage.cpp`、`MultiCompareView.cpp`、`AnalysisExport.cpp`；Native 扩展见 `patches/3fp-api20-analysis-probe.patch` |
+| 图像分析比对：多源 → 偏移/布局 → 同坐标 RGB/原始 YUV → 对比画布导出 | `src/ui/AnalysisPage.cpp`、`MultiCompareView.cpp`、`AnalysisExport.cpp`；OpenNGU 经 `ShaderPackage` 加载，缩小默认 D3D11；该核暂不支持一致的 VS 画布导出；Native 扩展见 `patches/3fp-api20-analysis-probe.patch` |
 | BD Remux：节目识别 → 轨道/输出 → 队列 | `src/bluray/BlurayWidget.cpp` |
 | Player：打开媒体 → 底栏/列表 → 右键音频/字幕/设置 → 图片工具 | `src/player/PlayerWindow.cpp`、`PlayerMenus.cpp`、`PlayerSettings.cpp` |
 | Player色彩：解码设置 → 3FP默认 / 手动libplacebo对照；旧自动档迁回原生 | `src/player/PlayerColor.cpp`、`PlayerWindow.cpp` |
@@ -138,8 +152,8 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 | Agent Node/npm/MCP | Node 24.19.0、npm 11.17.0、MCP client/core 2.4.0；`stage-agent-runtime.ps1`固定生产包到`runtime/agent`，JSONL桥提供stdio/Streamable HTTP | 缺少组件时MCP设置可安装/修复；模型对话与内置软件工具独立，许可与完整性见运行时`components.json` |
 | VapourSynth / Python | VS API4 / R81；构建和 stage 脚本，`update-vapoursynth-runtime.py` 锁定哈希 | VS 链不可用；直通路径独立 |
 | VS 插件 | BM3D 11.0、BM3Dvk2 1.0、BestSource 22；其余随运行时保留 | 对应滤镜不可用；不能用 API3 DLL 替代 |
-| FFF.Native | API20 / main `72af915`；标准脚本应用 1.1.0 汇总补丁并复制本库头文件；配置 112 字节、snapshot v22 / 592 字节，动态 C ABI | 原生播放/呈现不可用；缺少可选扩展的旧库不能提供原始 YUV 或自定义 shader |
-| FFmpeg | 07-full-shared（2026-11-07），AVX2；shared ABI：63/63/61/7/10/12，来源哈希见 `tools/ffmpeg-source.json` | 相应解码/导出失败，单文件启动器先检查组件 |
+| FFF.Native | API20 / 固定 `248cb9b`；标准脚本应用 `3fp-vsp-upstream-20261113.patch` 并复制本库头文件；snapshot v23 / 608 字节、外部帧v2 / 240字节，动态 C ABI | 原生播放/呈现不可用；旧内核无法保留新增帧信息时明确返回不支持 |
+| FFmpeg | full09（2026-11-13），AVX2；shared ABI：63/63/61/7/10/12，来源哈希见 `tools/ffmpeg-source.json`；编译原生VS源需设置 `VSR_FFMPEG_ROOT` | 相应解码/导出失败，单文件启动器先检查组件；SDK缺失时CMake明确失败 |
 | GLSL / RIFE | 随包 shader 与 NCNN 模型，`stage-shaders.ps1` / `install-analysis-plugins.ps1` | 相应增强不可用；RIFE 需要 Vulkan |
 | GLSL 转换组件 | `runtime/shader-tools/` 中的 glslc、SPIRV-Cross 及配套依赖，由 `tools/stage-shader-tools.py` 整理；HLSL 用 D3DCompiler 编译 | 缺失时不能导入 GLSL；原生 HLSL 不调用 GLSL 转换工具，逐帧播放仅执行已编译字节码 |
 | libVLC / LAV / madVR | Full 可选后端，stage 脚本及各自许可 | 对应后端不可用，PlayerLite 不包含 |
@@ -181,13 +195,15 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 
 1. 明确变更范围，复现问题；修改相关模块，构建并运行对应测试。测试选择与结果写入 [版本测试台账](development/validation.md)，步骤见 [构建](docs/dependencies.md) / [测量](docs/performance-debugging.md)。
 2. Native 用 API20 固定脚本和补丁；历史 API14/18 脚本只用于对应基线。GUI 使用 CMake preset。
-3. 本轮直接覆盖现有 `dist/VS-GUI-Full` 和 `dist/VS-Player.exe`，保留用户预设与色彩文件；仅按任务修改主题及Pareto配置，不创建新的发行目录。精简播放器暂存在`build/vsp110-playerlite-runtime`，不再生成PlayerLite发行目录。`tools/deploy-local-runtime.py`增量部署并核对INI/VPY/ICC/LUT哈希；它会修改运行目录，文档整理时不运行。
-4. 打包前明确Full、历史Lite或当前PlayerLite；`package-portable.ps1 -Edition Lite`是历史Full删减版，不能充当当前PlayerLite。单文件从当前版本暂存（本轮`build/playerlite-runtime-1.1.2`）用`package-playerlite-single.ps1`生成tar.gz level 1负载，启动后临时解包、退出清理；Full/Single均排除themes目录及用户主题INI。Full压缩包按当前CMake版本生成（本轮`dist/1.1.2.7z`）；只创建Release草稿，附件由维护者上传。完整流程见 [便携更新](docs/portable-updates.md)。
+3. 本轮更新现有 `dist/VS-GUI-Full` 和 `dist/VS-Player.exe`，保留用户预设与色彩文件；不创建新的发行目录。精简播放器暂存在`build/playerlite-runtime-1.1.3`，不再生成PlayerLite发行目录。`tools/deploy-local-runtime.py`增量部署并核对INI/VPY/ICC/LUT哈希；它会修改运行目录，文档整理时不运行。
+4. 打包前明确Full、历史Lite或当前PlayerLite；`package-portable.ps1 -Edition Lite`是历史Full删减版，不能充当当前PlayerLite。单文件从当前版本暂存（本轮`build/playerlite-runtime-1.1.3`）用`package-playerlite-single.ps1`生成tar.gz level 1负载，启动后临时解包、退出清理；Full/Single均排除themes目录及用户主题INI。Full压缩包按当前CMake版本生成（本轮`dist/1.1.3.7z`）；只创建Release草稿，附件由维护者上传。完整流程见 [便携更新](docs/portable-updates.md)。
 5. 解压、依赖、启动、配置和清单验证后才可报告包完成；源码推送、草稿、附件上传、正式发布分别记录，需要相应任务授权。
 
 文档纪律：结构/决策变化当天更新本地图；操作变化只改对应 docs 指南；用户可见变化写 changelog；测试按版本与轮次更新同一台账，不新建 `docs/update-版本.md`、`validation-版本.md`。原始日志留 `build/`，必要证据放 `development/evidence/`；不携带用户媒体。README、本地测试数据和开发记录不得混入上游 PR。
 
 ## 10. 当前状态
+
+1.1.3 汇总两轮色彩审查修复、原生VS源、OpenNGU预览入口、VSCap偶数选区与Full精简。Full和单文件需配套新Native；发行包为`dist/1.1.3.7z`与`dist/VS-Player.exe`。本轮只准备Release草稿，维护者手动上传附件；验收见台账。
 
 2026-11-08：Agent 第五轮加入软件内操作/环境完全访问、工作目录、异步文件搜索编辑/补丁、命令与后台进程、真实图像消息；蓝色用户消息采用真实圆角绘制。子会话继承模式、目录和父禁用工具，只读任务禁止命令/写入；降权或离开会话清理进程。此前Markdown、能力匹配、过程折叠、运行中追加、`/`/`@`及自动协作保留。16组专项均取得通过结果，真实DeepSeek完成本地文件→Node校验→只读子会话复核；初次HTTP/2断连和原二进制重测均留证。Full隔离PATH下文件/进程/图像/界面已验证。模型协议仍限Chat Completions，视觉需端点明确声明；使用与边界见[指南](docs/agent.md)，验证及本地部署见[台账](development/validation.md)。
 

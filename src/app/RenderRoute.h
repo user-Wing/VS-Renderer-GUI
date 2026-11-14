@@ -22,6 +22,7 @@ public:
         connect(server_.get(),&VapourSynthFrameServer::errorOccurred,this,[this](const QString &error){ready_=pending_=false;pane_->setSurfaceActive(false);pane_->setPlaceholderText(error);});
     }
     void setScalingAlgorithms(ThreeFpScalingAlgorithm upscale,ThreeFpScalingAlgorithm downscale){player_->setScalingAlgorithms(upscale,downscale);}
+    bool setUpscaleShader(const QString &path){return player_->setUpscaleShader(path);}
     void setView(float zoom,float x,float y){pane_->adoptView(zoom,x,y);player_->setView(zoom,x,y);}
     ThreeFpSnapshot snapshot() const {return player_->snapshot();}
     bool hasFrame() const {return ready_ && last_>=0;}

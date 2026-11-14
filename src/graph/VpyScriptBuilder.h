@@ -9,8 +9,9 @@ namespace vsr {
 class FilterGraph;
 
 enum class SourceFilter {
-    Lsmas,
-    Ffms2
+    Lsmas = 0,
+    Ffms2 = 1,
+    Native = 2
 };
 
 struct ScriptBuildResult {

@@ -13,6 +13,7 @@
 #include <QTimer>
 
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <future>
 #include <vector>
@@ -63,6 +64,13 @@ QString describeScriptError(const QString &detail)
 
 ThreeFpExternalPixelFormat mapFormat(const VSVideoFormat &format, bool *ok)
 {
+    if (format.sampleType == stFloat) {
+        *ok = (format.bitsPerSample == 16 || format.bitsPerSample == 32) &&
+            (format.colorFamily == cfGray || format.colorFamily == cfRGB);
+        if (format.colorFamily == cfGray)
+            return format.bitsPerSample == 16 ? ThreeFpExternalPixelFormat::GrayF16 : ThreeFpExternalPixelFormat::GrayF32;
+        return format.bitsPerSample == 16 ? ThreeFpExternalPixelFormat::GbrPF16 : ThreeFpExternalPixelFormat::GbrPF32;
+    }
     *ok = format.sampleType == stInteger;
     if (!*ok)
         return ThreeFpExternalPixelFormat::Yuv420P8;
@@ -288,9 +296,17 @@ void VapourSynthFrameServer::loadScript(const QString &source, const QString &sc
     }
     const auto scriptGeneration=++scriptGeneration_;
     desiredFrame_.store(-1);
+    QByteArray pluginScript;
+    QString plugin = qEnvironmentVariable("VSR_NATIVE_VS_SOURCE_DLL");
+    if (plugin.isEmpty()) plugin = QDir(QCoreApplication::applicationDirPath()).filePath("vsr-source.dll");
+    if (QFileInfo::exists(plugin)) {
+        QString escaped = QDir::fromNativeSeparators(plugin);
+        escaped.replace("'", "\\'");
+        pluginScript = QString("import vapoursynth as _vsr_vs\nif not hasattr(_vsr_vs.core, 'vsrsource'):\n    _vsr_vs.core.std.LoadPlugin(path='%1')\n").arg(escaped).toUtf8();
+    }
     const QByteArray scriptUtf8 = source.toUtf8();
     const QByteArray pathUtf8 = scriptPath.toUtf8();
-    QMetaObject::invokeMethod(worker_, [this, scriptUtf8, pathUtf8,scriptGeneration] {
+    QMetaObject::invokeMethod(worker_, [this, scriptUtf8, pathUtf8, pluginScript,scriptGeneration] {
         if(scriptGeneration!=scriptGeneration_.load())return;
         impl_->clearScript();
         impl_->script = impl_->scriptApi->createScript(nullptr);
@@ -298,7 +314,9 @@ void VapourSynthFrameServer::loadScript(const QString &source, const QString &sc
             QMetaObject::invokeMethod(this, [this,scriptGeneration] { if(scriptGeneration==scriptGeneration_.load())emit errorOccurred(QStringLiteral("无法创建 VapourSynth 脚本环境。")); });
             return;
         }
-        if (impl_->scriptApi->evaluateBuffer(impl_->script, scriptUtf8.constData(), pathUtf8.constData()) != 0) {
+        const bool preloadFailed = !pluginScript.isEmpty() &&
+            impl_->scriptApi->evaluateBuffer(impl_->script, pluginScript.constData(), "vsr-source-init.vpy") != 0;
+        if (preloadFailed || impl_->scriptApi->evaluateBuffer(impl_->script, scriptUtf8.constData(), pathUtf8.constData()) != 0) {
             const char *detail = impl_->scriptApi->getError(impl_->script);
             const QString message = describeScriptError(
                 QString::fromUtf8(detail ? detail : "unknown error"));
@@ -403,7 +421,7 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames, bo
             impl_->vsApi->getVideoFormatName(format, nameBuffer);
             impl_->vsApi->freeFrame(source);
             const bool current = desiredFrame_.load() == frameIndex;
-            const QString message = QStringLiteral("3FP 外部帧接口暂不支持 VS 格式 %1；请先转换为 8/10/12/16-bit Gray/YUV/RGB。")
+            const QString message = QStringLiteral("3FP 外部帧接口暂不支持 VS 格式 %1；支持整数 Gray/YUV/RGB 及 16/32-bit 浮点 Gray/RGB。")
                 .arg(QString::fromLatin1(nameBuffer));
             finish();
             if (current)
@@ -436,6 +454,43 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames, bo
         const auto chroma = impl_->vsApi->mapGetInt(properties, "_ChromaLocation", 0, &chromaError);
         frame.chromaLocation = chromaError == peSuccess && chroma >= 0 ? static_cast<std::uint32_t>(chroma + 1) : 0u;
 
+        const auto number = [&](const char* key, int index, double& value) {
+            int error = peSuccess;
+            const double v = impl_->vsApi->mapGetFloat(properties, key, index, &error);
+            if (error != peSuccess || !std::isfinite(v)) return false;
+            value = v; return true;
+        };
+        auto& color = frame.colorMetadata;
+        color.fieldBased = frameProperty(impl_->vsApi, properties, "_FieldBased", 0);
+        color.streamHdr10Plus = frameProperty(impl_->vsApi, properties, "_VsrStreamHDR10Plus", 0);
+        color.sarNumerator = static_cast<int32_t>(frameProperty(impl_->vsApi, properties, "_SARNum", 0));
+        color.sarDenominator = static_cast<int32_t>(frameProperty(impl_->vsApi, properties, "_SARDen", 0));
+        double absoluteTime = 0;
+        if (number("_AbsoluteTime", 0, absoluteTime) && absoluteTime >= 0 && absoluteTime < 1e10)
+            color.presentationTime100ns = static_cast<int64_t>(std::llround(absoluteTime * 10000000.0));
+        bool primaries = true;
+        for (int i = 0; i < 3; ++i) {
+            primaries &= number("MasteringDisplayPrimariesX", i, color.primaryX[i]);
+            primaries &= number("MasteringDisplayPrimariesY", i, color.primaryY[i]);
+        }
+        primaries &= number("MasteringDisplayWhitePointX", 0, color.whiteX);
+        primaries &= number("MasteringDisplayWhitePointY", 0, color.whiteY);
+        if (primaries) color.flags |= 1;
+        if (number("MasteringDisplayMinLuminance", 0, color.minLuminance) &&
+            number("MasteringDisplayMaxLuminance", 0, color.maxLuminance)) color.flags |= 2;
+        const auto cll = frameProperty(impl_->vsApi, properties, "ContentLightLevelMax", UINT32_MAX);
+        const auto fall = frameProperty(impl_->vsApi, properties, "ContentLightLevelAverage", UINT32_MAX);
+        if (cll != UINT32_MAX && fall != UINT32_MAX) {
+            color.flags |= 4; color.maxCll = cll; color.maxFall = fall;
+        }
+        int sideError = peSuccess;
+        const auto* side = impl_->vsApi->mapGetData(properties, "_VsrFrameSideData", 0, &sideError);
+        if (sideError == peSuccess) {
+            const auto size = impl_->vsApi->mapGetDataSize(properties, "_VsrFrameSideData", 0, &sideError);
+            if (sideError == peSuccess && size > 0 && size <= 65536)
+                frame.colorSideData = QByteArray(side, size);
+        }
+
         for (int plane = 0; plane < format->numPlanes; ++plane) {
             if (desiredFrame_.load() != frameIndex) {
                 impl_->vsApi->freeFrame(source);
@@ -457,6 +512,35 @@ void VapourSynthFrameServer::requestFrame(int frameIndex, int prefetchFrames, bo
             frame.strides[plane] = static_cast<std::int32_t>(stride);
             frame.planes[plane] = QByteArray(reinterpret_cast<const char *>(impl_->vsApi->getReadPtr(source, plane)),
                                              static_cast<int>(byteCount));
+        }
+        // A VS filter may keep source properties while changing the pixels or
+        // their encoding. Do not mistake inherited HDR curves for new metadata.
+        int digestError = peSuccess;
+        const char* digest = impl_->vsApi->mapGetData(properties, "_VsrSourcePixelDigest", 0, &digestError);
+        if (digestError == peSuccess && frameProperty(impl_->vsApi, properties, "_VsrColorMetadataValid", 0) != 1) {
+            quint64 actual = 14695981039346656037ull, original = 0;
+            const auto digestSize = impl_->vsApi->mapGetDataSize(properties, "_VsrSourcePixelDigest", 0, &digestError);
+            if (digestSize == 8) std::memcpy(&original, digest, 8);
+            for (int p = 0; p < format->numPlanes; ++p) {
+                const int bytes = impl_->vsApi->getFrameWidth(source, p) * format->bytesPerSample;
+                const int height = impl_->vsApi->getFrameHeight(source, p);
+                for (int y = 0; y < height; ++y) {
+                    const auto* row = reinterpret_cast<const unsigned char*>(frame.planes[p].constData()) + y * frame.strides[p];
+                    for (int x = 0; x < bytes; ++x) { actual ^= row[x]; actual *= 1099511628211ull; }
+                }
+            }
+            bool sameEncoding = true;
+            const char* keys[] = {"_Matrix", "_Primaries", "_Transfer", "_ColorRange", "_ChromaLocation"};
+            for (int i = 0; i < 5; ++i) {
+                int oldError = peSuccess, newError = peSuccess;
+                const auto oldValue = impl_->vsApi->mapGetInt(properties, "_VsrSourceCICP", i, &oldError);
+                const auto newValue = impl_->vsApi->mapGetInt(properties, keys[i], 0, &newError);
+                sameEncoding &= oldError == peSuccess && oldValue == (newError == peSuccess ? newValue : -1);
+            }
+            if (digestSize != 8 || actual != original || !sameEncoding) {
+                frame.colorSideData.clear(); color.streamHdr10Plus = 0;
+            }
+            if (!sameEncoding) frame.colorMetadata.flags = 0;
         }
         impl_->vsApi->freeFrame(source);
         const bool current = desiredFrame_.load() == frameIndex;

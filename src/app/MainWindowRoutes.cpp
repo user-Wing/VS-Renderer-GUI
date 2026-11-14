@@ -29,6 +29,7 @@ void MainWindow::updateRouteChoices(){
 void MainWindow::createAdditionalRoute(){
     auto *pane=compareView_->addProcessedPane();additionalRoutes_.push_back(std::make_unique<RenderRoute>(api_,pane,this));auto *changedRoute=additionalRoutes_.back().get();connect(pane,&PreviewPane::viewChanged,this,[this,changedRoute](float zoom,float x,float y){if(!syncView_->isChecked())return;sourcePane_->adoptView(zoom,x,y);sourcePlayer_->setView(zoom,x,y);processedPane_->adoptView(zoom,x,y);processedPlayer_->setView(zoom,x,y);for(auto &route:additionalRoutes_)if(route.get()!=changedRoute)route->setView(zoom,x,y);});
     if(syncView_->isChecked())additionalRoutes_.back()->setView(sourcePane_->zoom(),sourcePane_->pan().x(),sourcePane_->pan().y());
+    applyPreviewScaling();
 }
 bool MainWindow::addRoute(){
     if(routes_.size()>=3)return false;

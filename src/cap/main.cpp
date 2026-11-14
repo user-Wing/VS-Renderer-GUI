@@ -121,6 +121,8 @@ class CaptureOverlay final : public QWidget {
     bool displayDirty_ = true, embedded_ = false, constrainShape_ = false;
     std::function<void()> positionExternalBar_;
     QRect selection_, hoveredWindow_, pressedWindow_;
+    // Capture pixels are authoritative; widget coordinates vary with Windows DPI.
+    QRect selectionPixels_;
     QList<QRect> windows_;
     QPoint origin_, last_;
     bool selecting_ = true, dragging_ = false;
@@ -164,7 +166,7 @@ public:
         setAttribute(Qt::WA_OpaquePaintEvent);
         setMouseTracking(true);
         setCursor(Qt::CrossCursor);
-        if(embedded_){resize(canvas_.size());selecting_=false;selection_=rect();tool_=Pen;}
+        if(embedded_){resize(canvas_.size());selecting_=false;selection_=rect();selectionPixels_=canvas_.rect();tool_=Pen;}
         else {
             setGeometry(screen->geometry());
             MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);
@@ -353,7 +355,7 @@ private:
                 box->editor->document()->documentLayout()->draw(&painter,context);painter.restore();
             }
         }
-        const QImage crop = composite.copy(pixelRect(selection_.intersected(rect())));
+        const QImage crop = composite.copy(selectionPixels_);
         if(copy) copyImage(crop);
         const bool accepted=embedded_ && copy?true:output_(crop,pin,format,copy);
         if(!embedded_ && accepted)close();
@@ -379,6 +381,16 @@ protected:
         const double sx=double(canvas_.width())/width(),sy=double(canvas_.height())/height();
         return QRect(qRound(area.x()*sx),qRound(area.y()*sy),qRound(area.width()*sx),qRound(area.height()*sy));
     }
+    QPoint pixelPoint(const QPoint &point) const {
+        return {qRound(double(point.x())*canvas_.width()/width()),qRound(double(point.y())*canvas_.height()/height())};
+    }
+    void setSelectionPixels(QRect pixels) {
+        pixels=pixels.intersected(canvas_.rect());
+        pixels.setSize(QSize(pixels.width()&~1,pixels.height()&~1));
+        selectionPixels_=pixels;
+        selection_=QRect(QPoint(qRound(double(pixels.x())*width()/canvas_.width()),qRound(double(pixels.y())*height()/canvas_.height())),
+                         QSize(qRound(double(pixels.width())*width()/canvas_.width()),qRound(double(pixels.height())*height()/canvas_.height())));
+    }
     QColor annotationInk(QColor ink) const {
         if(canvas_.text("capHdr")=="scRGB-FP16") {
             const auto linear=[](float c){return c<=.04045f?c/12.92f:std::pow((c+.055f)/1.055f,2.4f);};
@@ -402,16 +414,18 @@ protected:
         return edges;
     }
     void adjustSelection(const QPoint &point) {
+        const auto delta=pixelPoint(point)-pixelPoint(origin_);
+        const auto step=[](int value,int minimum,int maximum){return qBound((minimum/2)*2,(value/2)*2,(maximum/2)*2);};
+        auto pixels=startSelection_;
         if(movingSelection_){
-            const auto delta=point-origin_;
-            selection_=startSelection_.translated(qBound(-startSelection_.left(),delta.x(),width()-1-startSelection_.right()),qBound(-startSelection_.top(),delta.y(),height()-1-startSelection_.bottom()));
+            pixels.translate(step(delta.x(),-pixels.left(),canvas_.width()-1-pixels.right()),step(delta.y(),-pixels.top(),canvas_.height()-1-pixels.bottom()));
         }else{
-            selection_=startSelection_;
-            if(resizeEdges_&1)selection_.setLeft(qBound(0,point.x(),startSelection_.right()-3));
-            if(resizeEdges_&2)selection_.setRight(qBound(startSelection_.left()+3,point.x(),width()-1));
-            if(resizeEdges_&4)selection_.setTop(qBound(0,point.y(),startSelection_.bottom()-3));
-            if(resizeEdges_&8)selection_.setBottom(qBound(startSelection_.top()+3,point.y(),height()-1));
+            if(resizeEdges_&1)pixels.setLeft(pixels.left()+step(delta.x(),-pixels.left(),pixels.width()-4));
+            if(resizeEdges_&2)pixels.setRight(pixels.right()+step(delta.x(),4-pixels.width(),canvas_.width()-1-pixels.right()));
+            if(resizeEdges_&4)pixels.setTop(pixels.top()+step(delta.y(),-pixels.top(),pixels.height()-4));
+            if(resizeEdges_&8)pixels.setBottom(pixels.bottom()+step(delta.y(),4-pixels.height(),canvas_.height()-1-pixels.bottom()));
         }
+        setSelectionPixels(pixels);
         positionBar();update();
     }
     void paintEvent(QPaintEvent *) override {
@@ -424,11 +438,11 @@ protected:
             p.setPen(QPen(QColor(110,190,255),2));p.setBrush(Qt::NoBrush);p.drawRect(hoveredWindow_.adjusted(1,1,-1,-1));
         }
         if (!embedded_ && !selection_.isEmpty()) {
-            p.drawImage(selection_, display_, pixelRect(selection_));
+            p.drawImage(selection_, display_, selectionPixels_);
             p.setPen(QPen(Qt::white,1,Qt::DashLine));
             p.drawRect(selection_);
-            QSettings prefs(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);const auto rawSize=pixelRect(selection_).size();const auto finalSize=prefs.value("save/format")=="avif"?cap::evenSize(rawSize):rawSize;
-            p.fillRect(QRect(selection_.left(),qMax(0,selection_.top()-24),300,22),QColor(20,22,25,220));p.drawText(QPoint(selection_.left()+5,qMax(17,selection_.top()-7)),QString("输出 %1 × %2%3").arg(finalSize.width()).arg(finalSize.height()).arg(finalSize!=rawSize?QStringLiteral("（AVIF补齐偶数边缘）"):QString()));
+            const auto finalSize=selectionPixels_.size();
+            p.fillRect(QRect(selection_.left(),qMax(0,selection_.top()-24),300,22),QColor(20,22,25,220));p.drawText(QPoint(selection_.left()+5,qMax(17,selection_.top()-7)),QString("输出 %1 × %2").arg(finalSize.width()).arg(finalSize.height()));
             p.setPen(QColor(70,135,200));p.setBrush(Qt::white);
             for(const auto point:{selection_.topLeft(),QPoint(selection_.center().x(),selection_.top()),selection_.topRight(),QPoint(selection_.right(),selection_.center().y()),selection_.bottomRight(),QPoint(selection_.center().x(),selection_.bottom()),selection_.bottomLeft(),QPoint(selection_.left(),selection_.center().y())})p.drawRect(QRect(point-QPoint(3,3),QSize(7,7)));
             p.setBrush(Qt::NoBrush);
@@ -447,10 +461,10 @@ protected:
         if(e->button()!=Qt::LeftButton) return;
         origin_=last_=e->pos();pressedWindow_=hoveredWindow_;constrainShape_=e->modifiers().testFlag(Qt::ControlModifier);
         resizeEdges_=selectionEdges(e->pos());movingSelection_=!selecting_ && tool_==Selection && selection_.contains(e->pos()) && !resizeEdges_;
-        if(resizeEdges_ || movingSelection_){startSelection_=selection_;dragging_=true;return;}
+        if(resizeEdges_ || movingSelection_){startSelection_=selectionPixels_;dragging_=true;return;}
         if(!selecting_ && tool_==Selection)return;
         dragging_=true;
-        if(selecting_) {selection_=QRect(origin_,QSize(1,1));bar_->hide();}
+        if(selecting_) {setSelectionPixels(QRect(pixelPoint(origin_),QSize(1,1)));bar_->hide();}
         else if(tool_==Text) {
             dragging_=false;
             addText(e->pos());
@@ -467,7 +481,7 @@ protected:
         }
         last_=e->pos();constrainShape_=e->modifiers().testFlag(Qt::ControlModifier);
         if(resizeEdges_ || movingSelection_){adjustSelection(last_);return;}
-        if(selecting_) selection_=QRect(origin_,last_).normalized();
+        if(selecting_) setSelectionPixels(QRect(pixelPoint(origin_),pixelPoint(last_)).normalized());
         else if(tool_==Pen){
             QPainter p(&canvas_);annotationPainter(p);
             p.drawLine(origin_,last_);origin_=last_;displayDirty_=true;
@@ -479,9 +493,9 @@ protected:
         dragging_=false;last_=e->pos();constrainShape_=e->modifiers().testFlag(Qt::ControlModifier);
         if(resizeEdges_ || movingSelection_){adjustSelection(last_);resizeEdges_=0;movingSelection_=false;return;}
         if(selecting_){
-            selection_=QRect(origin_,last_).normalized().intersected(rect());
-            if(selection_.width()<4 || selection_.height()<4){
-                selection_=pressedWindow_;if(selection_.isEmpty()){update();return;}
+            setSelectionPixels(QRect(pixelPoint(origin_),pixelPoint(last_)).normalized());
+            if(selectionPixels_.width()<4 || selectionPixels_.height()<4){
+                setSelectionPixels(pixelRect(pressedWindow_));if(selectionPixels_.isEmpty()){update();return;}
             }
             selecting_=false; positionBar();bar_->show();bar_->raise();
         }else if(tool_==Rect || tool_==Ellipse || tool_==Line){
@@ -742,7 +756,6 @@ private:
                          QString("%1 (*.%2)").arg(format.toUpper(),format));
         if(path.isEmpty())return false;
         storeDir(path);
-        if(format=="avif"&&cap::evenSize(image.size())!=image.size()){const auto size=cap::evenSize(image.size());if(QMessageBox::question(QApplication::activeModalWidget(),QStringLiteral("AVIF偶数尺寸"),QStringLiteral("最终输出 %1×%2，右/下边缘补齐；不缩放、不裁掉选区。继续？").arg(size.width()).arg(size.height()))!=QMessageBox::Yes)return false;}
         return enqueueSave(image,path,format);
     }
     void capture() {

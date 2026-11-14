@@ -25,7 +25,8 @@ for file in package.iterdir():
     if file.suffix in ('.pyd', '.dll'):
         shutil.copy2(file, a.output / file.name)
 models = a.source / 'models/Param-Bin'
-shutil.copytree(models, a.output / 'models', dirs_exist_ok=True)
+shutil.copytree(models, a.output / 'models', dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns('EfficientNet-SceneDetect'))
 records = []
 for param in sorted(models.rglob('*.param')):
     name = param.parent.name

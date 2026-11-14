@@ -28,6 +28,7 @@ $projectRoot=Split-Path $PSScriptRoot -Parent
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/LocalMediaPath.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/LocalMediaPath.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/AudioFormatPolicy.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Audio/AudioFormatPolicy.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/SourcePixelProbe.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/SourcePixelProbe.h') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/FrameColorMetadata.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/FrameColorMetadata.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/color/ColorBridge.h'), (Join-Path $projectRoot 'src/color/NativeColorEngine.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Render') -Force
 New-Item -ItemType Directory -Path (Join-Path $NativeRoot 'third_party') -Force | Out-Null
 foreach($name in @('ffmpeg','vcpkg_installed')){

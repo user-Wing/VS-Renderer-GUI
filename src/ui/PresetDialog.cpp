@@ -77,7 +77,7 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
         QStringList summary;
         if (data.isEmpty()) summary << QStringLiteral("外部 VPY：直接运行脚本，不重建处理链。");
         else {
-            summary << QStringLiteral("源滤镜：%1").arg(data.value("sourceFilter").toInt() == 0 ? "L-SMASH Works" : "FFMS2") << QStringLiteral("备注：%1").arg(data.value("note").toString()) << "";
+            summary << QStringLiteral("源滤镜：%1").arg(data.value("sourceFilter").toInt() == 0 ? "L-SMASH Works" : data.value("sourceFilter").toInt() == 2 ? "3FP 原生（色彩保留）" : "FFMS2") << QStringLiteral("备注：%1").arg(data.value("note").toString()) << "";
             for(const auto &group:PresetStore::timeGroups(data)){
             summary<<QStringLiteral("时间组：%1 · %2 秒开始").arg(group.name).arg(group.startSeconds);
             for (const auto &node : group.graph.nodes()) {

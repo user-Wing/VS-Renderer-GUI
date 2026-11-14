@@ -34,6 +34,8 @@ struct VapourSynthFrame {
     std::uint32_t colorTransfer = 0;
     std::uint32_t colorMatrix = 0;
     std::uint32_t chromaLocation = 0;
+    VsrFrameColorMetadata colorMetadata;
+    QByteArray colorSideData;
     std::int64_t frameIndex = 0;
     std::int64_t duration100ns = 0;
     std::int64_t totalFrames = 0;

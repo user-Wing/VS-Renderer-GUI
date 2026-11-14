@@ -148,7 +148,21 @@ ThreeFpResult ThreeFpApi::readSourcePixel(void *h, VsrSourcePixelProbe *p) const
     const auto call=reinterpret_cast<Fn>(library_.resolve("VSR3FP_ReadSourcePixel"));
     return call?call(h,p):ThreeFpResult::NotSupported;
 }
-ThreeFpResult ThreeFpApi::submitExternalVideoFrame(void *h, const ThreeFpExternalVideoFrame *f) const { return available() ? submitExternalVideoFrame_(h, f) : ThreeFpResult::NativeFailure; }
+ThreeFpResult ThreeFpApi::submitExternalVideoFrame(void *h, const ThreeFpExternalVideoFrame *f) const {
+    if (!available()) return ThreeFpResult::NativeFailure;
+    using VersionFn = std::uint32_t (*)();
+    const auto version = reinterpret_cast<VersionFn>(library_.resolve("VSR3FP_GetExternalFrameVersion"));
+    if (version && version() >= 2) return submitExternalVideoFrame_(h, f);
+    if (f->colorMetadata.flags || f->colorMetadata.sideDataBytes ||
+        f->colorMetadata.presentationTime100ns != -1 || f->colorMetadata.sarNumerator ||
+        f->colorMetadata.sarDenominator || f->colorMetadata.fieldBased || f->colorMetadata.streamHdr10Plus ||
+        f->format == ThreeFpExternalPixelFormat::GbrPF16 || f->format == ThreeFpExternalPixelFormat::GbrPF32 ||
+        f->format == ThreeFpExternalPixelFormat::GrayF16 || f->format == ThreeFpExternalPixelFormat::GrayF32)
+        return ThreeFpResult::NotSupported;
+    auto legacy = *f; legacy.version = 1;
+    legacy.size = offsetof(ThreeFpExternalVideoFrame, colorMetadata);
+    return submitExternalVideoFrame_(h, &legacy);
+}
 ThreeFpResult ThreeFpApi::setExternalOutputFormat(void *h, const char *f) const { return setExternalOutputFormat_ ? setExternalOutputFormat_(h,f) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setSubtitleLayer(void *h, const TimedTextLayer *layer) const {
     if(!h || !layer || (layer->count && !layer->commands))return ThreeFpResult::InvalidArgument;

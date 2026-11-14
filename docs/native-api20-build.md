@@ -1,5 +1,9 @@
 # API 20 原生内核构建
 
+Qt构建新原生VS源时，用 `cmake -S . -B build/mingw-release -DVSR_FFMPEG_ROOT=<DependenciesRoot/ffmpeg>` 指定与Native一致的shared SDK；默认仍兼容本机既有路径。配置会检查头文件及63/63/61导入库，缺失时明确失败，不再静默省略默认源。两轮色彩审查修复及上游草稿范围见 [记录](../development/color-review-fix-20261114.md)。
+
+2026-11-14 色彩续修沿用固定248cb9b及更新的汇总补丁，标准脚本额外复制`FrameColorMetadata.h`；通用/SDR字节码必须完整重生成。外部帧v2为240字节，v1的112字节前缀保留，通过可选查询协商版本。GUI同时构建`vsr-source.dll`，Full部署不可遗漏；验证与限制见 [色彩修复](../development/color-fix-20261114.md)。
+
 ## 当前基线：2026-11-13 上游合并
 
 固定 `248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c`（上游 PR #57，已含 #55 CUDA 主优化及互操作续修）。`tools/build-native-api20.ps1` 仅应用 `patches/3fp-vsp-upstream-20261113.patch`，然后复制本库头文件并重新生成通用/SDR HLSL 字节码；不要叠加下文历史三层补丁。API 仍为 20，snapshot 为 **v23 / 608 字节**，Qt 根据新可选导出识别版本，旧字段偏移保持不变。

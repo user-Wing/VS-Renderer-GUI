@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.1.2 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.1.3 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,6 +10,27 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent)
+
+# Source frames and HDR side data use the same FFmpeg ABI as Native.
+set(VSR_FFMPEG_ROOT "${CMAKE_SOURCE_DIR}/.deps/fff-player/third_party/ffmpeg" CACHE PATH
+    "FFmpeg shared SDK matching the Native runtime")
+if(WIN32)
+    foreach(required include/libavformat/avformat.h include/libavcodec/avcodec.h include/libavutil/frame.h
+            lib/x64/avformat-63.lib lib/x64/avcodec-63.lib lib/x64/avutil-61.lib)
+        if(NOT EXISTS "${VSR_FFMPEG_ROOT}/${required}")
+            message(FATAL_ERROR "Missing FFmpeg SDK file: ${VSR_FFMPEG_ROOT}/${required}. Set VSR_FFMPEG_ROOT to the SDK used by Native.")
+        endif()
+    endforeach()
+    add_library(vsr_native_source SHARED src/backend/NativeVsSource.cpp)
+    set_target_properties(vsr_native_source PROPERTIES PREFIX "" OUTPUT_NAME "vsr-source"
+        AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+    target_include_directories(vsr_native_source PRIVATE third_party/vapoursynth/include
+        "${VSR_FFMPEG_ROOT}/include")
+    target_link_libraries(vsr_native_source PRIVATE
+        "${VSR_FFMPEG_ROOT}/lib/x64/avformat-63.lib"
+        "${VSR_FFMPEG_ROOT}/lib/x64/avcodec-63.lib"
+        "${VSR_FFMPEG_ROOT}/lib/x64/avutil-61.lib")
+endif()
 qt_add_library(vsr_agent STATIC src/agent/AgentSession.cpp src/agent/AgentSession.h
     src/agent/AgentInput.cpp src/agent/AgentInput.h
     src/agent/AgentModelCapabilities.cpp src/agent/AgentModelCapabilities.h
@@ -223,6 +244,10 @@ foreach(program VSRenderer VSPlayer)
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_SOURCE_DIR}/tools/apply-components.ps1" "$<TARGET_FILE_DIR:${program}>/runtime/tools"
         VERBATIM)
 endforeach()
+if(TARGET vsr_native_source)
+    add_dependencies(VSRenderer vsr_native_source)
+    add_dependencies(VSPlayer vsr_native_source)
+endif()
 if(TARGET vsr_color)
     add_dependencies(VSRenderer vsr_color)
     add_dependencies(VSPlayer vsr_color)
@@ -374,9 +399,14 @@ if(BUILD_TESTING)
     qt_add_executable(vsr_color_tests tests/TestColor.cpp assets/startup.qrc src/backend/ThreeFpApi.cpp
         src/backend/ThreeFpPlayer.cpp src/backend/VapourSynthFrameServer.cpp)
     target_include_directories(vsr_color_tests PRIVATE src third_party/vapoursynth/include)
-    target_link_libraries(vsr_color_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+    target_include_directories(vsr_color_tests PRIVATE "${VSR_FFMPEG_ROOT}/include")
+    target_link_libraries(vsr_color_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test
+        "${VSR_FFMPEG_ROOT}/lib/x64/avutil-61.lib")
     if(TARGET vsr_color)
         add_dependencies(vsr_color_tests vsr_color)
+    endif()
+    if(TARGET vsr_native_source)
+        add_dependencies(vsr_color_tests vsr_native_source)
     endif()
     add_test(NAME d3d11-color-management COMMAND vsr_color_tests -o color-test-results.txt,txt)
 

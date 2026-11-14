@@ -1,0 +1,20 @@
+********* Start testing of TestColor *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestColor::initTestCase()
+PASS   : TestColor::futureImportRemainsAtScriptStart()
+PASS   : TestColor::nativeVsSourceIdentity(420p10-sdr)
+PASS   : TestColor::nativeVsSourceIdentity(av1-420p10-sdr)
+PASS   : TestColor::nativeVsSourceIdentity(444p16-pq)
+PASS   : TestColor::nativeVsSourceIdentity(444p16-hlg)
+PASS   : TestColor::nativeVsSourceHdrMetadata()
+PASS   : TestColor::vsFloatExchange(RGBH8)
+PASS   : TestColor::vsFloatExchange(RGBH13)
+PASS   : TestColor::vsFloatExchange(RGBS8)
+PASS   : TestColor::vsFloatExchange(RGBS13)
+PASS   : TestColor::vsFloatExchange(GRAYH8)
+PASS   : TestColor::vsFloatExchange(GRAYH13)
+PASS   : TestColor::vsFloatExchange(GRAYS8)
+PASS   : TestColor::vsFloatExchange(GRAYS13)
+PASS   : TestColor::cleanupTestCase()
+Totals: 16 passed, 0 failed, 0 skipped, 0 blacklisted, 8534ms
+********* Finished testing of TestColor *********

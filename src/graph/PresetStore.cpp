@@ -12,6 +12,7 @@
 namespace vsr {
 QString PresetStore::compatibilityError(const QJsonObject &data){
     if(data.value("schemaVersion").toInt(1)>3 || data.value("schema").toInt(1)>3)return QStringLiteral("此项目/预设版本较新，请通过组件更新使用最新版 VS Renderer。为保护原项目，已停止加载。");
+    if(data.contains("sourceFilter") && (data.value("sourceFilter").toInt(-1)<0 || data.value("sourceFilter").toInt(-1)>static_cast<int>(SourceFilter::Native)))return QStringLiteral("无法识别此项目/预设的源滤镜，请更新到支持该源的版本。");
     for(const auto &value:data.value("nodes").toArray()){const auto id=value.toObject().value("id").toString();if(!FilterCatalog::find(id))return QStringLiteral("无法识别滤镜 %1，请更新到最新版 VS Renderer；原项目未更改。").arg(id);}
     for(const auto *key:{"timeGroups","routes"})for(const auto &value:data.value(key).toArray()){const auto e=compatibilityError(value.toObject());if(!e.isEmpty())return e;}
     if(data.value("routes").toArray().size()>3)return QStringLiteral("此项目包含更多处理路，请更新到支持该项目的版本。");
@@ -87,7 +88,7 @@ bool PresetStore::verifiedGraph(const QString &script,FilterGraph *output,Source
     const auto nodes=data.value("schema").toInt()>=2?data.value("timeGroups").toArray().first().toObject().value("nodes").toArray():data.value("nodes").toArray();
     if(nodes.size()!=graph.nodes().size())return false;
     const auto sourceFilter=static_cast<SourceFilter>(data.value("sourceFilter").toInt());
-    if(sourceFilter!=SourceFilter::Ffms2 && sourceFilter!=SourceFilter::Lsmas)return false;
+    if(sourceFilter!=SourceFilter::Ffms2 && sourceFilter!=SourceFilter::Lsmas && sourceFilter!=SourceFilter::Native)return false;
     auto expected=data.value("schema").toInt()>=2?create(groups,sourceFilter,data.value("sourcePath").toString(),data.value("note").toString()):create(graph,sourceFilter,data.value("sourcePath").toString(),data.value("note").toString());
     const auto body=[](QString text){text.replace("\r\n","\n");if(!text.startsWith("# VSR_PRESET "))return QString();return text.mid(text.indexOf('\n')+1).trimmed();};
     const auto actual=body(script),current=body(expected);

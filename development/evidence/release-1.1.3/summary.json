@@ -1,0 +1,139 @@
+{
+  "version": "1.1.3",
+  "date": "2026-11-14",
+  "sourceBase": "bcab02fd2dbf95910c25986fff183ca17e242b0e",
+  "packages": {
+    "full": {
+      "version": "1.1.3",
+      "manifestFiles": 3379,
+      "manifestVerified": true,
+      "noUserConfiguration": true,
+      "nativeRuntimeMatches": true,
+      "programRuntimeMatches": true,
+      "nativeSha256": "a62c25a6b3bb41d61744c31c12dcd05f6ed2ae9a167f0894e2ba3e6d4c8d3220",
+      "file": "dist\\1.1.3.7z",
+      "bytes": 281519235,
+      "sha256": "3617bb732aa366f8d64a7a7ced43cb6e2dc41b8875e0acd3f53ca5cc10f5704d"
+    },
+    "single": {
+      "version": "1.1.3",
+      "manifestFiles": 118,
+      "manifestVerified": true,
+      "noUserConfiguration": true,
+      "nativeRuntimeMatches": true,
+      "programRuntimeMatches": true,
+      "nativeSha256": "a62c25a6b3bb41d61744c31c12dcd05f6ed2ae9a167f0894e2ba3e6d4c8d3220",
+      "file": "dist\\VS-Player.exe",
+      "bytes": 42341925,
+      "sha256": "44f5a87853baed5c31d59c66e7dc044f5de7f2dfb3630d34c659656b92673523"
+    }
+  },
+  "tests": [
+    {
+      "suite": "color",
+      "passed": 58,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "seconds": 24.19
+    },
+    {
+      "suite": "bridge",
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "seconds": 16.83
+    },
+    {
+      "suite": "script",
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "seconds": 0.28
+    },
+    {
+      "suite": "renderer",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "seconds": 24.38
+    },
+    {
+      "suite": "full-player",
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "seconds": 10.27
+    },
+    {
+      "suite": "lite-player",
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "seconds": 8.58
+    },
+    {
+      "suite": "cap",
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "suite": "updater",
+      "passed": 21,
+      "failed": 0,
+      "skipped": 1
+    },
+    {
+      "suite": "packaged-vs-source",
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "languageStrings": 684,
+  "configurationPreserved": true,
+  "fullLaunch": [
+    {
+      "program": "VSRenderer.exe",
+      "launchedFromIndependentExtraction": true,
+      "title": "VS Renderer — VapourSynth 实时滤镜工作台",
+      "exitCode": 0,
+      "systemOnlyPath": true
+    },
+    {
+      "program": "vs-player.exe",
+      "launchedFromIndependentExtraction": true,
+      "title": "VS Player — hevc444p10.mkv",
+      "exitCode": 0,
+      "systemOnlyPath": true
+    }
+  ],
+  "singleLaunch": {
+    "launcherVersion": "1.1.3",
+    "actualSingleExeLaunched": true,
+    "childTitle": "VS Player — hevc444p10.mkv",
+    "externalFFmpegFiles": 41,
+    "externalDirectoryContainsQtOrNative": false,
+    "exitCode": 0,
+    "configurationPreserved": true,
+    "temporaryRuntimeRemoved": true
+  },
+  "artifactUpload": "manual by maintainer",
+  "releaseState": "draft",
+  "initialIssues": [
+    "Deployment referenced a removed historical 3FUI plugin build directory; rebuilt from tracked project and corrected the deployment path.",
+    "ICC fallback test read presentation count before asynchronous presentation; replaced immediate assertion with bounded wait, then reran the full color suite.",
+    "Initial cap suite omitted AWJ fixture path; rerun with the packaged encoder passed all 28 cases."
+  ],
+  "limitations": [
+    "No live ModelScope download test.",
+    "No physical HDR calibration, exhaustive format/device or long-duration playback validation.",
+    "Existing VSCap process retained; new executable applies on its next start."
+  ]
+}

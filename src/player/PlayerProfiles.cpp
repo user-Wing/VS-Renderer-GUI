@@ -153,7 +153,7 @@ void PlayerWindow::ensureProfiles() {
         const int rife=graph.add("rife");graph.setParameter(rife,"threads",1);
         if(stage==3)graph.setParameter(rife,"inference_scale","2 - 半宽半高");
         if(stage==0 || stage==3)anime();
-        auto script=PresetStore::create(graph,SourceFilter::Ffms2,{},{});
+        auto script=PresetStore::create(graph,SourceFilter::Native,{},{});
         if(stage==3)script.replace("shader_s=_shader_text, ","shader_s=_shader_text, **({'subsampling': 1} if hasattr(core, 'vsrplacebo') else {}), ");
         PresetStore::write(path,"# VSR_PLAYER_SUPER_INTERPOLATION\n"+script);
     }
@@ -163,7 +163,7 @@ void PlayerWindow::ensureProfiles() {
         FilterGraph graph;const int node=graph.add(stage<2?"rife":"mvtools");
         if(stage<2){graph.setParameter(node,"threads",4);graph.setParameter(node,"inference_scale",stage==0?"1 - 原始":"2 - 半宽半高");}
         else if(stage==2){graph.setParameter(node,"block","8");graph.setParameter(node,"pel","2");graph.setParameter(node,"overlap",true);graph.setParameter(node,"chroma",true);}
-        auto script=PresetStore::create(graph,SourceFilter::Ffms2,{},interpolationNames().at(stage));
+        auto script=PresetStore::create(graph,SourceFilter::Native,{},interpolationNames().at(stage));
         script.replace("clip = src","clip = core.resize.Point(src, format=vs.YUV444P16, **({'matrix': _vsr_matrix(src)} if src.format.color_family == vs.RGB else {}))");
         PresetStore::write(path,script);
     }
@@ -183,7 +183,7 @@ void PlayerWindow::ensureProfiles() {
                 }
             }
         }
-        QString script="# VSR_PLAYER_PROFILE "+mode+'\n'+PresetStore::create(FilterGraph(),SourceFilter::Ffms2,{},mode);
+        QString script="# VSR_PLAYER_PROFILE "+mode+'\n'+PresetStore::create(FilterGraph(),SourceFilter::Native,{},mode);
         QFile helper(":/filters/gpu-sharpen.py");if(mode=="Anime" && helper.open(QIODevice::ReadOnly))script.replace("clip = src",QString::fromUtf8(helper.readAll())+"\nclip = src");
         script.replace("clip.set_output(0)",QStringLiteral(
             "# Editable profile. Player supplies the viewport target and quality stage.\n"
@@ -233,7 +233,7 @@ void PlayerWindow::ensureProfiles() {
     }
     for(int stage:{6,7}) {
         const auto path=builtin.filePath(stage==6?"Anime-6-1X-Jinc.vpy":"Anime-7-1X-D3D11.vpy");
-        auto script=PresetStore::create(FilterGraph(),SourceFilter::Ffms2,{},{});
+        auto script=PresetStore::create(FilterGraph(),SourceFilter::Native,{},{});
         script.prepend(QString("# VSR_PLAYER_PROFILE Anime\n# VSR_PLAYER_FIXED_STAGE %1\n").arg(stage));
         script.replace("clip.set_output(0)",QStringLiteral(
             "if clip.format.bits_per_sample != 16: clip = core.resize.Point(clip, format=clip.format.replace(bits_per_sample=16))\n"
@@ -246,7 +246,7 @@ void PlayerWindow::ensureProfiles() {
         const auto name=builtinAnimeFiles().at(stage),path=builtin.filePath(name);
         FilterGraph graph;const int shader=graph.add("anime4k");graph.setParameter(shader,"shader",shaders.filePath(stage==10?"moesr-50k.hlsl":"anime4k-mode-a.glsl"));
         if(stage==8)for(const auto &mode:QStringList{"sharpen_edges","enhance_detail"}){const int n=graph.add(mode);graph.setParameter(n,"strength",0.3);}
-        const auto script=PresetStore::create(graph,SourceFilter::Ffms2,{},qualityNames().at(stage));builtinScripts_.insert(name,script);
+        const auto script=PresetStore::create(graph,SourceFilter::Native,{},qualityNames().at(stage));builtinScripts_.insert(name,script);
         if(!QFileInfo::exists(path))PresetStore::write(path,script);
     }
     const auto descriptions=QDir(PresetStore::directory()).filePath("preset-descriptions.json");

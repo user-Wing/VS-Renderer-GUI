@@ -105,7 +105,7 @@ void PlayerWindow::updateInfo() {
           << tr("CPU：%1 · GPU：%2 · 内存：%3 MiB").arg(usage_.processCpu>=0?QString::number(usage_.processCpu,'f',1)+"%":tr("采样中"),usage_.gpu>=0?QString::number(usage_.gpu,'f',1)+"%":tr("未提供")).arg(usage_.memoryMiB)
           << tr("功耗：CPU %1 · GPU(NVIDIA) %2").arg(usage_.cpuWatts>=0?QString::number(usage_.cpuWatts,'f',1)+" W":cpuPowerStatus,usage_.gpuWatts>=0?QString::number(usage_.gpuWatts,'f',1)+" W":QString("N/A"))
           << ""
-          << tr("视频解码器：%1 · VS 源：%2").arg(decoder, direct_ ? tr("原生直通") : preset_.isEmpty() ? "FFMS2" : tr("VPY 定义"))
+          << tr("视频解码器：%1 · VS 源：%2").arg(decoder, direct_ ? tr("原生直通") : preset_.isEmpty() ? tr("3FP 原生（色彩保留）") : tr("VPY 定义"))
           << tr("输入：%1 · %2×%3 · %4-%5 · 帧率：%6 · 位率：%7")
              .arg(video.value("codec").toString()).arg(video.value("width").toInt()).arg(video.value("height").toInt())
              .arg(video.value("pixelFormat").toString(),video.value("profile").toString()).arg(sourceFps,0,'f',3).arg(formatRate(videoRate))

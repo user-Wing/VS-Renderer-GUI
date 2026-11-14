@@ -327,7 +327,7 @@ bool ThreeFpPlayer::submitFrame(const VapourSynthFrame &frame)
 
     ThreeFpExternalVideoFrame native{};
     native.size = sizeof(native);
-    native.version = 1;
+    native.version = 2;
     native.width = static_cast<std::uint32_t>(frame.width);
     native.height = static_cast<std::uint32_t>(frame.height);
     native.format = frame.format;
@@ -339,11 +339,16 @@ bool ThreeFpPlayer::submitFrame(const VapourSynthFrame &frame)
     native.frameIndex = frame.frameIndex;
     native.duration100ns = frame.duration100ns;
     native.totalFrames = frame.totalFrames;
+    native.colorMetadata = frame.colorMetadata;
+    native.colorMetadata.sideData = frame.colorSideData.constData();
+    native.colorMetadata.sideDataBytes = static_cast<std::uint32_t>(frame.colorSideData.size());
 
     const bool rgb = frame.format == ThreeFpExternalPixelFormat::GbrP8 ||
         frame.format == ThreeFpExternalPixelFormat::GbrP10 ||
         frame.format == ThreeFpExternalPixelFormat::GbrP12 ||
-        frame.format == ThreeFpExternalPixelFormat::GbrP16;
+        frame.format == ThreeFpExternalPixelFormat::GbrP16 ||
+        frame.format == ThreeFpExternalPixelFormat::GbrPF16 ||
+        frame.format == ThreeFpExternalPixelFormat::GbrPF32;
     const int order[4] = {rgb ? 1 : 0, rgb ? 2 : 1, rgb ? 0 : 2, 3};
     for (int plane = 0; plane < 4; ++plane) {
         const int source = order[plane];

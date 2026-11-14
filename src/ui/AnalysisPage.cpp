@@ -1,10 +1,13 @@
 #include "ui/AnalysisPage.h"
 #include "ui/ExportWindow.h"
 #include "backend/ThreeFpPlayer.h"
+#include "render/ShaderPackage.h"
 #include "ui/MultiCompareView.h"
 #include "ui/PreviewPane.h"
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
+#include <QDir>
 #include <QAbstractItemView>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -140,8 +143,13 @@ AnalysisPage::AnalysisPage(ThreeFpApi &api, QWidget *parent) : QWidget(parent), 
     controls->addWidget(scaler_);
     scaler_->addItem(QStringLiteral("放大：Lanczos 4"));
     scaler_->addItem(QStringLiteral("缩放：D3D11 原生直通"));scaler_->setCurrentIndex(8);
+    scaler_->addItem(QStringLiteral("放大：OpenNGU"));
+    scaler_->setItemData(9,QStringLiteral("OpenNGU 仅用于 BT.709 SDR 放大；缩小默认回退 D3D11 原生直通。不兼容色彩或缺失资源时回退 Jinc。"),Qt::ToolTipRole);
     scaler_->setToolTip(QStringLiteral("D3D11 使用与播放器相同的原生直通；选择其他算法时使用高精度着色器，缩小为 Lanczos 3。"));
-    connect(scaler_,&QComboBox::currentIndexChanged,this,[this](int index){for(auto &p:players_)if(p)p->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(index==8?7:index==7?8:index),static_cast<ThreeFpScalingAlgorithm>(index==8?7:3));});
+    connect(scaler_,&QComboBox::currentIndexChanged,this,[this]{
+        scaler_->setToolTip(scaler_->currentIndex()==9?scaler_->itemData(9,Qt::ToolTipRole).toString():QStringLiteral("D3D11 使用与播放器相同的原生直通；选择其他算法时使用高精度着色器，缩小为 Lanczos 3。"));
+        for(int i=0;i<videoCount_;++i)if(players_[i])applyScaling(i);
+    });
     layout->addWidget(controls_);
     controls_->hide(); mode_->hide();
     status_=new QLabel(QStringLiteral("导入最多 9 个视频；每个视频独立保存对齐偏移。"),this); status_->setWordWrap(true); layout->addWidget(status_);
@@ -182,9 +190,8 @@ void AnalysisPage::configurePlayer(int i)
     players_[i]->setChromaAlgorithm(chromaAlgorithm_);
     players_[i]->setMuted(audio_->currentData().toInt()!=i);
     players_[i]->setVrrPresent(vrr_->isChecked()); players_[i]->setVrrPacing(pacing_->isChecked());
-    const int scaler=scaler_->currentIndex();
-    players_[i]->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(scaler==8?7:scaler==7?8:scaler),static_cast<ThreeFpScalingAlgorithm>(scaler==8?7:3));
     connect(players_[i].get(),&ThreeFpPlayer::errorOccurred,this,[this](const QString &error){status_->setText(error);});
+    applyScaling(i);
     connect(panes_[i],&PreviewPane::redrawRequested,players_[i].get(),&ThreeFpPlayer::redraw);
     connect(panes_[i],&PreviewPane::viewChanged,this,[this,pane=panes_[i]](float z,float x,float y){
         const int i = int(std::find(panes_.begin(), panes_.end(), pane) - panes_.begin());
@@ -195,6 +202,21 @@ void AnalysisPage::configurePlayer(int i)
         hoverPane_=pane;hoverPosition_={x,y};
         if(!pixelTimer_->isActive())pixelTimer_->start();
     });
+}
+
+void AnalysisPage::applyScaling(int i)
+{
+    const int scaler=scaler_->currentIndex();
+    int upscale=scaler==9?15:scaler==8?7:scaler==7?8:scaler;
+    if(scaler==9){
+        const auto shader=ShaderPackage::prepare(QDir(QCoreApplication::applicationDirPath()).filePath("shaders/OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl"));
+        if(!shader.error.isEmpty() || !players_[i]->setUpscaleShader(shader.packagePath)){
+            upscale=4;
+            status_->setText(QStringLiteral("OpenNGU → Jinc: %1").arg(shader.error.isEmpty()?players_[i]->lastError():shader.error));
+            players_[i]->setUpscaleShader({});
+        }
+    }else players_[i]->setUpscaleShader({});
+    players_[i]->setScalingAlgorithms(static_cast<ThreeFpScalingAlgorithm>(upscale),static_cast<ThreeFpScalingAlgorithm>(scaler>=8?7:3));
 }
 
 void AnalysisPage::updatePixelReadouts()

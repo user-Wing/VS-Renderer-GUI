@@ -482,7 +482,7 @@ void PlayerWindow::refreshScript() {
     output_->resetVideoOutput(); output_->setMuted(true);
     const auto vsSource=mediaInput_;
     const auto activePreset=mode=="Anime" && qualityStage_>=6?QDir(PresetStore::directory()).filePath(qualityStage_==6?"builtin/Anime-6-1X-Jinc.vpy":"builtin/Anime-7-1X-D3D11.vpy"):preset_;
-    auto result = activePreset.isEmpty() ? VpyScriptBuilder::build(vsSource, SourceFilter::Ffms2, FilterGraph()) : PresetStore::load(activePreset, vsSource);
+    auto result = activePreset.isEmpty() ? VpyScriptBuilder::build(vsSource, SourceFilter::Native, FilterGraph()) : PresetStore::load(activePreset, vsSource);
     customShaderPackage_.clear();hlslParameters_.clear();output_->setCustomShader({});
     if(settings_->value("render/hlsl",true).toBool() && !hlslFailed_ && mode.isEmpty() && !activePreset.isEmpty()){
         QFile presetFile(activePreset);FilterGraph graph;SourceFilter filter=SourceFilter::Ffms2;

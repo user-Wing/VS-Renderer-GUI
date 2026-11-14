@@ -74,6 +74,7 @@ private:
     QWidget *buildSettingsPage();
     QWidget *buildWorkspace();
     QWidget *buildTransport();
+    void applyPreviewScaling();
     QWidget *buildTimeGroups();
     void refreshTimeGroups(int selected);
     QList<FilterTimeGroup> currentTimeGroups() const;

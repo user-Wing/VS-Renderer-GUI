@@ -14,6 +14,7 @@ class QPushButton;
 class QCheckBox;
 class QComboBox;
 class QTimer;
+class TestAnalysis;
 
 namespace vsr {
 class ExportWindow;
@@ -53,12 +54,14 @@ protected:
     void dropEvent(QDropEvent *event) override;
 
 private:
+    friend class ::TestAnalysis;
     void exportComparison();
     QSize compositionSize() const;
     void poll();
     void resizeEvent(QResizeEvent *event) override;
     void adjustTrackWidths();
     void configurePlayer(int video);
+    void applyScaling(int video);
     void updatePixelReadouts();
     int masterVideo() const;
     bool activeVideo(int video) const;

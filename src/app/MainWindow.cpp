@@ -437,7 +437,8 @@ QWidget *MainWindow::buildSettingsPage()
     layout->addWidget(label);
     auto *source = new QComboBox(page);
     source->setObjectName(QStringLiteral("rendererSettingsSource"));
-    source->addItems({QStringLiteral("L-SMASH Works"), QStringLiteral("FFMS2")});
+    source->addItems({QStringLiteral("L-SMASH Works"), QStringLiteral("FFMS2"), QStringLiteral("3FP 原生（色彩保留）")});
+    source->setItemData(2, QStringLiteral("保留解码像素、浮点与HDR元数据；首次打开会完整解码建立索引，耗时取决于片长。不支持的格式会明确报错。"), Qt::ToolTipRole);
     source->setCurrentIndex(sourceFilter_->currentIndex());
     connect(sourceFilter_, &QComboBox::currentIndexChanged, source, &QComboBox::setCurrentIndex);
     layout->addWidget(source);
@@ -583,9 +584,11 @@ QWidget *MainWindow::buildSidebar()
     sourceFilter_->setObjectName(QStringLiteral("sourceFilter"));
     sourceFilter_->addItem(QStringLiteral("L-SMASH Works"), static_cast<int>(SourceFilter::Lsmas));
     sourceFilter_->addItem(QStringLiteral("FFMS2"), static_cast<int>(SourceFilter::Ffms2));
+    sourceFilter_->addItem(QStringLiteral("3FP 原生（色彩保留）"), static_cast<int>(SourceFilter::Native));
+    sourceFilter_->setItemData(2, QStringLiteral("保留解码像素、浮点与HDR元数据；首次打开会完整解码建立索引，耗时取决于片长。不支持的格式会明确报错。"), Qt::ToolTipRole);
     auto *browse = compactButton(QStringLiteral("浏览…"), input);
     browse->setObjectName(QStringLiteral("rendererBrowse"));
-    sourceFilter_->setCurrentIndex(QSettings().value(QStringLiteral("sourceFilter"),0).toInt());
+    sourceFilter_->setCurrentIndex(QSettings().value(QStringLiteral("sourceFilter"),static_cast<int>(SourceFilter::Native)).toInt());
     sourceInputStack_=new QStackedWidget(input);sourceInputStack_->setMinimumWidth(0);sourceInputStack_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);sourceInputStack_->addWidget(sourcePath_);
     sourceChoice_=new WrappedFileCombo(input);sourceChoice_->setObjectName("rendererSourceChoice");sourceChoice_->setMinimumContentsLength(6);sourceChoice_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);sourceInputStack_->addWidget(sourceChoice_);
     inputRow->addWidget(sourceInputStack_,1);
@@ -794,6 +797,7 @@ QWidget *MainWindow::buildTransport()
     playButton_ = compactButton(QStringLiteral("播放"), transport);
     auto *next = compactButton(QStringLiteral("帧 ▶"), transport);
     auto *scaler = new QComboBox(transport);
+    scaler->setObjectName(QStringLiteral("rendererScaling"));
     scaler->addItem(QStringLiteral("放大：Nearest"), static_cast<int>(ThreeFpScalingAlgorithm::Nearest));
     scaler->addItem(QStringLiteral("放大：Bilinear"), static_cast<int>(ThreeFpScalingAlgorithm::Bilinear));
     scaler->addItem(QStringLiteral("放大：Bicubic"), static_cast<int>(ThreeFpScalingAlgorithm::Bicubic));
@@ -804,6 +808,8 @@ QWidget *MainWindow::buildTransport()
     scaler->addItem(QStringLiteral("放大：Lanczos 4"), static_cast<int>(ThreeFpScalingAlgorithm::Lanczos4));
     scaler->addItem(QStringLiteral("缩放：D3D11 原生直通"),7);
     scaler->setCurrentIndex(scaler->count()-1);
+    scaler->addItem(QStringLiteral("放大：OpenNGU"),15);
+    scaler->setItemData(scaler->count()-1,QStringLiteral("OpenNGU 仅用于 BT.709 SDR 放大；缩小默认回退 D3D11 原生直通。不兼容色彩或缺失资源时回退 Jinc。"),Qt::ToolTipRole);
     scaler->setToolTip(QStringLiteral("D3D11 使用与播放器相同的原生直通；其他算法的缩小使用 Lanczos 3。"));
     auto *frameControls = new QWidget(transport);
     frameControls->setObjectName(QStringLiteral("rendererFrameControls"));
@@ -852,17 +858,26 @@ QWidget *MainWindow::buildTransport()
         if (sourcePlayer_) sourcePlayer_->stepFrame(1);
         playing_ = false;
     });
-    connect(scaler, &QComboBox::currentIndexChanged, this, [this, scaler] {
-        const auto upscale = static_cast<ThreeFpScalingAlgorithm>(scaler->currentData().toInt());
-        const auto downscale = scaler->currentData().toInt()==7 ? upscale : ThreeFpScalingAlgorithm::Lanczos3;
-        const bool left = sourcePlayer_->setScalingAlgorithms(upscale, downscale);
-        const bool right = processedPlayer_->setScalingAlgorithms(upscale, downscale);
-        for(auto &route:additionalRoutes_)route->setScalingAlgorithms(upscale,downscale);
-        setStatus(left && right
-            ? QStringLiteral("缩放算法：%1").arg(scaler->currentText().section(QStringLiteral("："), 1))
-            : QStringLiteral("3FP 缩放算法切换失败。"), !(left && right));
-    });
+    connect(scaler, &QComboBox::currentIndexChanged, this, &MainWindow::applyPreviewScaling);
     return transport;
+}
+
+void MainWindow::applyPreviewScaling()
+{
+    auto *scaler=findChild<QComboBox*>(QStringLiteral("rendererScaling"));
+    const bool ngu=scaler->currentData().toInt()==15;
+    scaler->setToolTip(ngu?scaler->currentData(Qt::ToolTipRole).toString():QStringLiteral("D3D11 使用与播放器相同的原生直通；其他算法的缩小使用 Lanczos 3。"));
+    const auto shader=ngu?ShaderPackage::prepare(QDir(QCoreApplication::applicationDirPath()).filePath("shaders/OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl")):ShaderPackageResult{};
+    auto upscale=static_cast<ThreeFpScalingAlgorithm>(ngu && !shader.error.isEmpty()?4:scaler->currentData().toInt());
+    const auto downscale=ngu || upscale==ThreeFpScalingAlgorithm::D3D11Native?ThreeFpScalingAlgorithm::D3D11Native:ThreeFpScalingAlgorithm::Lanczos3;
+    bool ok=sourcePlayer_->setUpscaleShader(shader.packagePath);
+    ok=processedPlayer_->setUpscaleShader(shader.packagePath) && ok;
+    for(auto &route:additionalRoutes_)ok=route->setUpscaleShader(shader.packagePath) && ok;
+    if(!ok && ngu)upscale=ThreeFpScalingAlgorithm::Jinc2;
+    ok=sourcePlayer_->setScalingAlgorithms(upscale,downscale) && ok;
+    ok=processedPlayer_->setScalingAlgorithms(upscale,downscale) && ok;
+    for(auto &route:additionalRoutes_)route->setScalingAlgorithms(upscale,downscale);
+    setStatus(!shader.error.isEmpty()?QStringLiteral("OpenNGU → Jinc: %1").arg(shader.error):ok?QStringLiteral("缩放算法：%1").arg(scaler->currentText().section(QStringLiteral("："),1)):QStringLiteral("3FP 缩放算法切换失败，OpenNGU 放大回退 Jinc。"),!ok || !shader.error.isEmpty());
 }
 
 void MainWindow::connectPlayback()

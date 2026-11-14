@@ -22,6 +22,7 @@ if ($initialStage) {
 foreach ($exe in @("VSRenderer.exe", "vs-player.exe", "FFF.Native.dll")) {
     Copy-Item -LiteralPath (Join-Path $buildRoot $exe) -Destination $output -Force
 }
+Copy-Item -LiteralPath (Join-Path $buildRoot 'vsr-source.dll') -Destination $output -Force
 Copy-Item -LiteralPath (Join-Path $buildRoot 'Qt6Concurrent.dll') -Destination $output -Force
 New-Item -ItemType Directory -Path (Join-Path $output 'tools') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'tools/download-bd.py') -Destination (Join-Path $output 'tools') -Force
@@ -39,8 +40,9 @@ foreach ($component in @('awj','mkvtoolnix','vlc')) {
         Move-Item -LiteralPath $oldRuntime -Destination (Join-Path $runtimeBackup $component)
     }
 }
-if (-not (Test-Path -LiteralPath (Join-Path $buildRoot 'runtime/awj.zip'))) { throw 'Missing AWJimage backend; build VSPlayer before staging.' }
-Copy-Item -LiteralPath (Join-Path $buildRoot 'runtime/awj.zip') -Destination (Join-Path $output 'runtime') -Force
+$awjArchive = @('awj.7z','awj.zip') | ForEach-Object { Join-Path $buildRoot "runtime/$_" } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (!$awjArchive) { throw 'Missing AWJimage backend; build VSPlayer before staging.' }
+Copy-Item -LiteralPath $awjArchive -Destination (Join-Path $output 'runtime') -Force
 Copy-Item -LiteralPath (Join-Path $buildRoot 'runtime/awj-source') -Destination (Join-Path $output 'runtime') -Recurse -Force
 & (Join-Path $PSScriptRoot 'stage-bd-menu.ps1') -SourceDirectory (Join-Path $buildRoot 'runtime/vlc') -OutputDirectory (Join-Path $output 'runtime/vlc')
 New-Item -ItemType Directory -Path (Join-Path $output "shaders"), (Join-Path $output "vpy") -Force | Out-Null

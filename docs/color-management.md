@@ -1,5 +1,11 @@
 # 色彩与 HDR 设置
 
+## VS 恒等链与源选择
+
+Renderer可选“3FP 原生（色彩保留）”源，Player新建VS模板也使用它。受支持的整数/浮点样本、CICP、静态HDR和HDR10+/Vivid载荷进入同一3FP显示链。旧VPY与L-SMASH/FFMS2选择保留，元数据完整性取决于其源插件。
+
+只有实际加载含 `vsrsource.Source` 的 VPY 时，该源才会首次完整解码建索引；正常原生播放、原生 HLSL，以及转换为 HLSL 后原生执行的 GLSL 都不会触发。通过 VapourSynth 执行 GLSL 时仍需加载源，是否建索引取决于所选源插件。该源长片首开/倒退可能较慢；Alpha、部分罕见格式及变格式流明确报错。滤镜输出标签应与实际像素一致，改变像素/编码后不会盲目恢复旧动态HDR曲线。验证与限制见 [修复记录](../development/color-fix-20261114.md)。
+
 ## 选择输出路径
 
 默认使用3FP原生色彩处理，包括HDR与HDR→SDR。Full 在“设置 → 解码设置 → 打开3FP 解码配置…”中可手动选择libplacebo，用于对照mpv；播放HDR素材不会自动启用它。

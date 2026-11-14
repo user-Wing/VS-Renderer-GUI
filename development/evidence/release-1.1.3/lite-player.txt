@@ -1,0 +1,14 @@
+********* Start testing of TestPlayer *********
+Config: Using QtTest library 6.10.2, Qt 6.10.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 11
+PASS   : TestPlayer::initTestCase()
+PASS   : TestPlayer::openNguMenu()
+PASS   : TestPlayer::openNguPlayback()
+PASS   : TestPlayer::startupTheme()
+QINFO  : TestPlayer::infoFpsTracksNativePlayback() Native state 3 UI playing false measured 24.3902 "源文件：C:/Users/ARXChem/AppData/Local/Temp/VSPlayerLiteTests-SgVJPS/fps.mkv\n预设：C:/Users/ARXChem/Documents/Open Source Projects/VS-Renderer-GUI/build/mingw-release/vpy/builtin/Anime-5-D3D11.vpy\n文件名：fps.mkv\n当前时间：13:06:32 · 时间轴：00:00:01.975 / 00:00:08.000 (24.7%) · #帧数：47 / 193\nCPU：0.6% · GPU：1.0% · 内存：233 MiB\n功耗：CPU N/A(PawnIO 需要管理员权限) · GPU(NVIDIA) 14.1 W\n\n视频解码器：3FP-SW · VS 源：原生直通\n输入：ffv1 · 128×72 · yuv420p- · 帧率：24.000 · 位率：572 kb/s\n输出：yuv420p · 128×72 · 目标帧率：24.000 · 显示：8 bit / SDR\n视频渲染器：VS Real-Time Video Renderer\n  当前帧率：24.39 fps · 已提交：48 · 丢帧：0(VS 跳过 0 / 原生丢弃 0 / 合并 0)\n  实时帧率缺口：0.00 fps · 视频落后时钟：17.7 ms\n  VS 处理：未启用 · 原生直通\n视频帧大小：源 128×72 → HLSL 输出 128×72 → 显示 1920×1080\n\n音频解码器：3FP / FFmpeg\n输入： · 0 Hz · 0 声道 ·  · 0 bit · 未知\n输出：3FP 输出未激活(暂停时可释放独占设备)\n渲染输入：3FP 输出未激活(暂停时可释放独占设备)\n音频渲染器：Built-in WASAPI Audio Renderer\n  缓冲时间：0.0 ms · 同步偏移：-1975.7 ms · 时间戳抖动帧：0\n\n倍速：1.00× · Anime-5-D3D11.vpy\n补帧：未启用\n上采样：D3D11 · 第二上采样：Jinc · 下采样：Jinc\n当前 VPY：6 · Anime-5-D3D11.vpy(内置预设)\n色彩引擎：3FP native · 3FP 原生"
+PASS   : TestPlayer::infoFpsTracksNativePlayback()
+PASS   : TestPlayer::threeStageScalingMenu()
+PASS   : TestPlayer::customShaderPixelsAndFailureRecovery()
+PASS   : TestPlayer::imageExportConvertsLinearColour()
+PASS   : TestPlayer::cleanupTestCase()
+Totals: 9 passed, 0 failed, 0 skipped, 0 blacklisted, 8421ms
+********* Finished testing of TestPlayer *********

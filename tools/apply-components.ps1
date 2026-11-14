@@ -41,14 +41,23 @@ try {
     if($busy.Count){Start-Sleep -Milliseconds 500}
     foreach($process in $busy){if(!$process.HasExited){Stop-Process -Id $process.Id -Force -ErrorAction Stop};if(!$process.WaitForExit(5000)){throw 'Could not stop installation process'}}
     foreach($entry in $entries){
-        if($entry.id -eq 'mkvtoolnix' -and (Test-Path -LiteralPath (Join-Path $installRoot 'runtime/mkvtoolnix.zip'))){
+        $solidMkv=Test-Path -LiteralPath (Join-Path $installRoot 'runtime/mkvtoolnix.7z')
+        if($entry.id -eq 'mkvtoolnix' -and ($solidMkv -or (Test-Path -LiteralPath (Join-Path $installRoot 'runtime/mkvtoolnix.zip')))){
             $packed=Join-Path $planRoot ('packed-'+[guid]::NewGuid().ToString('N'));$packedRoots+=,$packed
             $files=Join-Path $packed 'files';$ready=Join-Path $packed 'install'
             New-Item -ItemType Directory -Path $files,$ready -Force | Out-Null
             foreach($name in @('mkvmerge.exe','mkvextract.exe','mkvinfo.exe','mkvpropedit.exe')){Copy-Item -LiteralPath (Join-Path $entry.ResolvedSource $name) -Destination $files}
             New-Item -ItemType Directory -Path (Join-Path $files 'doc') -Force | Out-Null
             foreach($name in @('licenses','en')){Copy-Item -LiteralPath (Join-Path $entry.ResolvedSource "doc/$name") -Destination (Join-Path $files 'doc') -Recurse}
-            Compress-Archive -Path (Join-Path $files '*') -DestinationPath (Join-Path $ready 'mkvtoolnix.zip') -CompressionLevel Optimal
+            if($solidMkv){
+                Push-Location $files
+                try {
+                    & (Join-Path $installRoot 'runtime/tools/7z.exe') a -t7z (Join-Path $ready 'mkvtoolnix.7z') . -mx=9 -md=64m -ms=on -mmt=2 -bb0 | Out-Null
+                    if($LASTEXITCODE -ne 0){throw 'MKVToolNix archive compression failed'}
+                } finally { Pop-Location }
+            }else{
+                Compress-Archive -Path (Join-Path $files '*') -DestinationPath (Join-Path $ready 'mkvtoolnix.zip') -CompressionLevel Optimal
+            }
             [IO.File]::WriteAllText((Join-Path $ready 'mkvtoolnix.version'),$entry.version)
             $entry.ResolvedSource=$ready;$destinations['mkvtoolnix']='runtime'
         }

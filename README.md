@@ -1,6 +1,6 @@
 # VS Renderer / VS Player / VS Cap
 
-![源码版本 1.1.2](https://img.shields.io/badge/source-1.1.2-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
+![源码版本 1.1.3](https://img.shields.io/badge/source-1.1.3-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
 
 Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片，用 **VSCap** 截图与标注。
 
@@ -12,12 +12,16 @@ Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS
 | --- | --- |
 | VS Renderer | 可视化组织VapourSynth滤镜和分段时间组，保存 VPY 预设；源/输出预览、多路同步缩放与取色、按类型搜索滤镜、自定义 GLSL/HLSL 预览、批量编码导出及 BD Remux |
 | VS Player | 播放本地媒体、网络链接与图片；音轨/双字幕、章节、逐帧与续播、截图；Full 版本可选 VS 增强和补帧 |
-| VSCap | 框选、移动选区、绘图和可编辑文字；剪贴板复制、多贴图、JXL/AVIF/PNG 保存 |
+| VSCap | 偶数尺寸框选与2像素步长调整、绘图和可编辑文字；剪贴板复制、多贴图、JXL/AVIF/PNG 保存 |
 | PhotoCraft（Full） | 从播放器打开独立图片编辑器，编辑图层、文字与滤镜；关闭播放器后可继续保存工作 |
 
 VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处理视频。配置好的VPY脚本可以直接导入VS Player播放，要求Full版本。
 
 ## 安装与启动
+
+需要通过VapourSynth保留浮点与HDR信息时，可使用“3FP 原生（色彩保留）”源；首次建索引及格式限制见 [色彩指南](docs/color-management.md)。
+
+VS增强需使用配套Native内核；旧内核无法保留新增帧信息时会明确报不支持，避免静默丢失色彩或时间信息。
 
 1. 下载便携包并完整解压到独立目录；Full 建议使用纯英文安装路径，避免 RIFE 模型加载的已知路径问题。
 2. 运行 `VSRenderer.exe`、`vs-player.exe` 或 `vs-cap.exe`。**Full 随包提供 Qt、Python 和 VapourSynth，无需另行安装。**
@@ -67,7 +71,7 @@ VS Renderer不需要你写任何代码即可配置强大的VS滤镜用于预处�
 
 Agent 来源密钥、MCP 环境变量与请求头保存在当前 Windows 用户的本地加密配置中；对话、技能、全局指令和子任务记录保存在应用数据目录，发送时会交给所选端点。MCP 通过用户连接的外部服务扩展能力，查询子任务与允许修改的子任务分别调度；来源及凭证导出范围见 [Agent 数据说明](docs/agent.md#数据与兼容边界)。
 
-OpenNGU 本地模型支持 BT.709 SDR 上采样，主直通优先 OpenNGU，第二上采样默认 Jinc；使用方法见 [Player](docs/player.md) 与 [Renderer](docs/renderer.md)。模型参数由用户另行提供。
+OpenNGU 本地模型支持 BT.709 SDR 上采样，主直通优先 OpenNGU，第二上采样默认 Jinc；Renderer 主预览与图像分析比对页也可选择 OpenNGU 放大，缩小默认回退 D3D11 原生直通。使用方法见 [Player](docs/player.md) 与 [Renderer](docs/renderer.md)。模型参数由用户另行提供。
 
 ## 开发与反馈
 

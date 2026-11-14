@@ -81,6 +81,59 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void analysisOpenNguScaling()
+    {
+        const QDir runtime(QCoreApplication::applicationDirPath());
+        if(!runtime.exists("shaders/OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl"))QSKIP("OpenNGU shader supplied separately");
+        QTemporaryDir directory;
+        const auto recovery=qgetenv("VSR_RECOVERY_ROOT");qputenv("VSR_RECOVERY_ROOT",directory.filePath("recovery").toUtf8());
+        const auto restore=qScopeGuard([&]{if(recovery.isNull())qunsetenv("VSR_RECOVERY_ROOT");else qputenv("VSR_RECOVERY_ROOT",recovery);});
+        const auto source=directory.filePath("ngu.mkv");
+        QProcess encoder;encoder.start(runtime.filePath("ffmpeg.exe"),{"-v","error","-f","lavfi","-i","testsrc2=size=128x72:rate=24:duration=1","-c:v","ffv1","-pix_fmt","yuv444p10le","-colorspace","bt709","-color_primaries","bt709","-color_trc","bt709",source});
+        QVERIFY(encoder.waitForFinished(15000));QCOMPARE(encoder.exitCode(),0);
+        ThreeFpApi api;AnalysisPage page(api);page.resize(1200,750);page.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&page));
+        QComboBox *scaler=nullptr;
+        for(auto *combo:page.findChildren<QComboBox*>())if(combo->findText(QStringLiteral("放大：OpenNGU"))>=0)scaler=combo;
+        QVERIFY(scaler);scaler->setCurrentIndex(scaler->findText(QStringLiteral("放大：OpenNGU")));
+        QVERIFY(scaler->toolTip().contains(QStringLiteral("缩小默认回退 D3D11")));
+        page.openFiles({source,source});QCOMPARE(page.videoCount(),2);
+        QTRY_VERIFY_WITH_TIMEOUT(!page.busy() && page.snapshot(0).presentedVideoFrames>0,15000);page.pause();
+        auto *view=page.findChild<MultiCompareView*>();QVERIFY(view);
+        auto *surface=view->pane(0)->surface();surface->setFixedSize(256,144);
+        auto capture=[&]{page.players_[0]->redraw();QTest::qWait(250);return page.players_[0]->capture();};
+        const auto ngu=capture();QVERIFY(!ngu.isNull());
+        scaler->setCurrentIndex(4);const auto jinc=capture();QVERIFY(!jinc.isNull());
+        QVERIFY2(ngu!=jinc,"OpenNGU selection must change the actual comparison preview pixels");
+        surface->setFixedSize(64,36);scaler->setCurrentIndex(9);const auto nguDown=capture();
+        scaler->setCurrentIndex(8);const auto directDown=capture();
+        QVERIFY(!nguDown.isNull());QCOMPARE(nguDown,directDown);
+        scaler->setCurrentIndex(9);
+        auto *layout=page.findChild<QComboBox*>("analysisLayout");QVERIFY(layout);
+        layout->setCurrentIndex(layout->findData(MultiCompareView::Wipe));
+        QVERIFY(page.compositionScript().errors.join(';').contains("OpenNGU"));
+
+        page.hide();
+        MainWindow window;window.resize(1200,750);window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *previewScaler=window.findChild<QComboBox*>("rendererScaling");QVERIFY(previewScaler);
+        previewScaler->setCurrentIndex(previewScaler->findData(15));
+        QVERIFY(previewScaler->toolTip().contains(QStringLiteral("缩小默认回退 D3D11")));
+        QVERIFY(window.sourcePlayer_->openFile(source));
+        QVERIFY(window.processedPlayer_->openFile(source));
+        QTRY_VERIFY_WITH_TIMEOUT(window.sourcePlayer_->snapshot().state==ThreeFpState::Ready && window.processedPlayer_->snapshot().state==ThreeFpState::Ready,15000);
+        QVERIFY(window.sourcePlayer_->seekFrame(0));QVERIFY(window.processedPlayer_->seekFrame(0));
+        QTRY_VERIFY_WITH_TIMEOUT(window.sourcePlayer_->snapshot().presentedVideoFrames>0 && window.processedPlayer_->snapshot().presentedVideoFrames>0,15000);
+        window.sourcePlayer_->pause();window.processedPlayer_->pause();
+        window.sourcePane_->surface()->setFixedSize(256,144);
+        auto preview=[&]{window.sourcePlayer_->redraw();QTest::qWait(250);return window.sourcePlayer_->capture();};
+        const auto previewNgu=preview();QVERIFY(!previewNgu.isNull());
+        previewScaler->setCurrentIndex(previewScaler->findData(4));const auto previewJinc=preview();
+        QVERIFY2(previewNgu!=previewJinc,"OpenNGU must change the workbench preview pixels");
+        window.sourcePane_->surface()->setFixedSize(64,36);
+        previewScaler->setCurrentIndex(previewScaler->findData(15));const auto previewDown=preview();
+        previewScaler->setCurrentIndex(previewScaler->findData(7));QCOMPARE(previewDown,preview());
+    }
     void projectExitDialog_data(){
         QTest::addColumn<QString>("language");QTest::addColumn<int>("choice");
         for(const auto &language:QStringList{"zh_CN","en_US"})for(int choice:{int(QMessageBox::Save),int(QMessageBox::Discard),int(QMessageBox::Cancel)})QTest::newRow(qPrintable(language+QString::number(choice)))<<language<<choice;

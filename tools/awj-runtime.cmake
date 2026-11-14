@@ -22,7 +22,8 @@ if(NOT awj_source_hash STREQUAL "82a33e3f54acaca830c37d03d3c671a0728473250e21b52
 endif()
 add_custom_command(TARGET VSPlayer POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj-source"
-    COMMAND "${CMAKE_COMMAND}" -E tar cf "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj.zip" --format=zip AWJ.com LICENSE NOTICE.txt
+    COMMAND "${CMAKE_COMMAND}" -E tar cf "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj.7z" --format=7zip AWJ.com LICENSE NOTICE.txt
+    COMMAND "${CMAKE_COMMAND}" -E rm -f "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj.zip"
     COMMAND "${CMAKE_COMMAND}" -E copy "${awj_source}" "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj-source/"
     COMMAND "${CMAKE_COMMAND}" -E copy "${awj_directory}/bin/LICENSE" "${awj_directory}/bin/NOTICE.txt" "${CMAKE_SOURCE_DIR}/third_party/runtime-notices/awjimage-NOTICE.txt" "$<TARGET_FILE_DIR:VSPlayer>/runtime/awj-source/"
     WORKING_DIRECTORY "${awj_directory}/bin"

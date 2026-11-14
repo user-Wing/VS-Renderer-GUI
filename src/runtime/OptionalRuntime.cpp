@@ -16,7 +16,8 @@ QString optionalRuntimeExecutable(const QString &component, const QString &progr
     const QDir app(QCoreApplication::applicationDirPath());
     const auto loose=app.filePath("runtime/"+component+"/"+program);
     if(QFileInfo::exists(loose))return loose;
-    const auto archive=app.filePath("runtime/"+component+".zip");
+    const auto packed=app.filePath("runtime/"+component+".7z");
+    const auto archive=QFileInfo::exists(packed)?packed:app.filePath("runtime/"+component+".zip");
     QFile input(archive);if(!input.open(QIODevice::ReadOnly))return {};
     QCryptographicHash hash(QCryptographicHash::Sha256);if(!hash.addData(&input))return {};
     const auto parent=QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation)+"/VSRenderer/runtime/"+component;

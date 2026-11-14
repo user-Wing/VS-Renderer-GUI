@@ -35,8 +35,8 @@ ScriptBuildResult AnalysisPage::compositionScript() const
         result.errors << QStringLiteral("当前布局不支持导出。仅支持 AB 滑块、ABC 2+1 和 ABCD 2×2；输出分辨率保持最大源视频分辨率。");
         return result;
     }
-    if(scaler_->currentIndex()==4 || scaler_->currentIndex()==6 || scaler_->currentIndex()==8 || chromaAlgorithm_==4 || chromaAlgorithm_==6 || chromaAlgorithm_>=9) {
-        result.errors << QStringLiteral("当前 GPU Jinc/Super-XBR/双边核/D3D11 直通尚无一致的 VS 导出实现，请选用 Nearest/Bilinear/Bicubic/Lanczos/Spline36。导出不会静默替换算法。");return result;
+    if(scaler_->currentIndex()==4 || scaler_->currentIndex()==6 || scaler_->currentIndex()>=8 || chromaAlgorithm_==4 || chromaAlgorithm_==6 || chromaAlgorithm_>=9) {
+        result.errors << QStringLiteral("当前 GPU Jinc/Super-XBR/双边核/D3D11 直通/OpenNGU 尚无一致的 VS 导出实现，请选用 Nearest/Bilinear/Bicubic/Lanczos/Spline36。导出不会静默替换算法。");return result;
     }
     const QSize output=compositionSize();
     if(output.isEmpty()) {result.errors << QStringLiteral("尚未取得视频分辨率。");return result;}

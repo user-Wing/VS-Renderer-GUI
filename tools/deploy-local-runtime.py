@@ -51,6 +51,9 @@ def write_json(target, data):
 
 
 def main():
+    plugin = ROOT / 'plugins/3fui-export-bridge/bin/Release/net10.0-windows10.0.17763.0/VsrExportBridge.3fui.dll'
+    if not plugin.is_file():
+        raise RuntimeError('Build plugins/3fui-export-bridge/VsrExportBridge.vbproj in Release before deployment')
     backup = ROOT / 'build' / ('deployment-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
     report = {'upstream': '248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c', 'base': '72af915f8bf2567155c1f87851a6fa263f73b14f', 'startupPr': 48, 'integrationPr': 57, 'editions': {}}
     version = re.search(r'project\(VSRenderer VERSION ([0-9.]+)', (ROOT / 'CMakeLists.txt').read_text(encoding='utf-8')).group(1)
@@ -81,6 +84,7 @@ def main():
         for source in (ROOT / 'docs').glob('*.md'):
             sources[source.relative_to(ROOT).as_posix()] = source
         if folder == 'VS-GUI-Full':
+            sources['vsr-source.dll'] = BUILD / 'vsr-source.dll'
             for source in (ROOT / 'assets/ai-subtitles').iterdir():
                 if source.is_file():
                     sources['runtime/ai-subtitles/' + source.name] = source
@@ -91,13 +95,13 @@ def main():
             for source in (ROOT / 'third_party/vsr-placebo').iterdir():
                 if source.is_file():
                     sources['licenses/vsr-placebo-source/' + source.name] = source
-            sources['plugins/3FUI/VsrExportBridge.3fui.dll'] = ROOT / 'build/release-1.0.14/3fui-plugin/VsrExportBridge.3fui.dll'
+            sources['plugins/3FUI/VsrExportBridge.3fui.dll'] = plugin
             sources['plugins/3FUI/README.md'] = ROOT / 'plugins/3fui-export-bridge/README.md'
             sources['plugins/3fui-export-bridge/README.md'] = ROOT / 'plugins/3fui-export-bridge/README.md'
             sources['assets/ai-subtitles/README.md'] = ROOT / 'assets/ai-subtitles/README.md'
             for source in (BUILD / 'runtime/tools').glob('apply-*.ps1'):
                 sources['runtime/tools/' + source.name] = source
-            for source in [*(BUILD / 'runtime').glob('*.zip'), *(BUILD / 'runtime').glob('*.version')]:
+            for source in [*(BUILD / 'runtime').glob('*.zip'), *(BUILD / 'runtime').glob('*.7z'), *(BUILD / 'runtime').glob('*.version')]:
                 sources['runtime/' + source.name] = source
             for source in (BUILD / 'runtime/vlc').rglob('*'):
                 if source.is_file():
@@ -122,7 +126,7 @@ def main():
             protected = {'.ini', '.vpy', '.cube', '.icc', '.icm'}
             for component in ('awj', 'mkvtoolnix', 'vlc'):
                 directory = target / 'runtime' / component
-                if component != 'vlc' and not (BUILD / 'runtime' / (component + '.zip')).is_file():
+                if component != 'vlc' and not any((BUILD / 'runtime' / (component + ext)).is_file() for ext in ('.7z','.zip')):
                     continue
                 for file in directory.rglob('*'):
                     relative = file.relative_to(target).as_posix()
