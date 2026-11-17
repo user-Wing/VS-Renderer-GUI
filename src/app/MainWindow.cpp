@@ -1,4 +1,5 @@
 #include "app/MainWindow.h"
+#include "ui/AgentPage.h"
 #include "agent/AgentSession.h"
 #include "agent/AgentMcp.h"
 #include "agent/AgentInstructions.h"
@@ -341,9 +342,11 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    if (agentSession_) agentSession_->cancel();
-    if (agentQueue_) agentQueue_->cancelAll();
-    delete agentModels_; delete agentQueue_; delete agentMcp_; delete agentInstructions_;
+    if (agentPage_) agentPage_->shutdown();
+    for(auto *queue:findChildren<AgentTaskQueue*>())queue->cancelAll();
+    delete agentModels_;
+    for(auto *queue:findChildren<AgentTaskQueue*>())delete queue;
+    delete agentMcp_; delete agentInstructions_;
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
@@ -988,6 +991,7 @@ void MainWindow::openSource()
 
 bool MainWindow::loadSource(const QString &path)
 {
+    playerRangeIn_=playerRangeOut_=-1;
     ++folderScanGeneration_;
     const int folderIndex=sourceChoice_->findData(path);const QSignalBlocker sourceBlocker(sourceChoice_);sourceInputStack_->setCurrentIndex(folderIndex<0?0:1);if(folderIndex>=0)sourceChoice_->setCurrentIndex(folderIndex);
     if (QFileInfo(path).suffix().compare("vpy", Qt::CaseInsensitive) == 0) { loadPreset(path); return true; }
@@ -1141,8 +1145,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
     if(!confirmProjectReplacement()){event->ignore();return;}
     const bool busy=(exportWindow_&&exportWindow_->isBusy())||(analysisPage_&&analysisPage_->exportBusy());
     if(busy){QMessageBox box(QMessageBox::Question,QStringLiteral("编码仍在继续"),QStringLiteral("独立编码进程不依赖界面。关闭界面后可以继续，重新打开导出窗口可重连。"),QMessageBox::NoButton,this);auto *background=box.addButton(QStringLiteral("后台继续并关闭界面"),QMessageBox::AcceptRole);auto *stop=box.addButton(QStringLiteral("停止编码并退出"),QMessageBox::DestructiveRole);box.addButton(QMessageBox::Cancel);box.exec();if(box.clickedButton()==stop){if(exportWindow_)exportWindow_->stopAll();if(analysisPage_)analysisPage_->stopExport();}else if(box.clickedButton()!=background){event->ignore();return;}}
-    if (agentSession_) agentSession_->cancel();
-    if (agentQueue_) agentQueue_->cancelAll();
+    if (agentPage_) agentPage_->shutdown();
+    for(auto *queue:findChildren<AgentTaskQueue*>())queue->cancelAll();
     if(!recoveryPath_.isEmpty())QFile::remove(recoveryPath_);
     if(exportWindow_)exportWindow_->close();QMainWindow::closeEvent(event);
 }
@@ -1213,6 +1217,7 @@ void MainWindow::updatePlaybackState()
         return;
     const auto snap = sourcePlayer_->snapshot();
     if(sourceFpsNumerator_<=0 && snap.duration100ns>0){const auto media=QJsonDocument::fromJson(sourcePlayer_->mediaInfo().toUtf8()).object();for(const auto &value:media.value("streams").toArray()){const auto v=value.toObject();if(v.value("type")!="video")continue;sourceFpsNumerator_=v.value("averageFrameRateNumerator").toInteger();sourceFpsDenominator_=v.value("averageFrameRateDenominator").toInteger();if(sourceFpsNumerator_>0&&sourceFpsDenominator_>0){sourceTotalFrames_=int(frameAtPosition100ns(snap.duration100ns,INT_MAX,sourceFpsNumerator_,sourceFpsDenominator_)+1);refreshTimeGroups(timeGroupIndex_);}break;}}
+    if(snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)applyPlayerRange();
     if (sourcePrimePending_ && snap.state != ThreeFpState::Opening) {
         updateParameterInputSize();
         if (snap.decodedVideoFrames > 0) {

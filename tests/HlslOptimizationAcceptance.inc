@@ -31,7 +31,7 @@
         const auto restore=qScopeGuard([&]{if(previous.isNull())qunsetenv("VSR_PLAYER_CONFIG");else qputenv("VSR_PLAYER_CONFIG",previous);});
         PlayerWindow player;player.settings_->setValue("basic/autoplay",false);player.settings_->setValue("playback/remember",false);player.settings_->setValue("subtitle/visible",false);player.settings_->setValue("player/muted",true);player.settings_->setValue("render/shaderDirectory",directory.filePath("shaders"));
         player.resize(1280,800);player.show();const double dpi=player.pane_->devicePixelRatioF();player.pane_->surface()->setFixedSize(qRound(3840/dpi),qRound(2160/dpi));
-        const QStringList files{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy","Anime-8-A-CNN-Enhanced.vpy","Anime-9-A-CNN.vpy","MoeSR-50K.vpy"};
+        const auto files=builtinAnimeFiles();
         player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/"+files[stage]));QVERIFY(player.openFile(source));
         QTRY_VERIFY_WITH_TIMEOUT(player.positionRestored_&&player.snapshot().presentedVideoFrames>0,30000);
         QCOMPARE(player.snapshot().videoWidth,1920u);QCOMPARE(player.snapshot().videoHeight,1080u);
@@ -61,15 +61,15 @@
         player.resize(1280,800);player.show();player.loadPreset(builtin.filePath("Anime-5-D3D11.vpy"));
         QVERIFY2(player.openFile(source),qPrintable(player.message_->text()));
         QTRY_VERIFY_WITH_TIMEOUT(player.positionRestored_ && player.snapshot().presentedVideoFrames>0,30000);
-        const QStringList files{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy","Anime-8-A-CNN-Enhanced.vpy","Anime-9-A-CNN.vpy","MoeSR-50K.vpy"};
-        QImage oneXJinc;
-        for(int stage:{10,8,9,0,1,2,3,6,7,5}){
+        const auto files=builtinAnimeFiles();
+        QImage oneXEnhanced;
+        for(int stage:{10,8,9,0,1,6,7,5}){
             player.clock_->setView(stage==6 || stage==7?2.f:1.f,0,0);
             player.loadPreset(builtin.filePath(files[stage]));QCOMPARE(player.qualityStage_,stage);QVERIFY(player.direct_);
             const bool packaged=stage>=8 || stage==6 || stage==7;
             QCOMPARE(!player.customShaderPackage_.isEmpty(),packaged);
-            if(stage==6 || stage==7){QCOMPARE(player.scalingAlgorithm(),stage==6?4:7);QCOMPARE(player.settings_->value("render/secondUpscale").toInt(),-1);}
-            if(stage==10 || stage==6 || stage==7){
+            if(stage==6 || stage==7){QCOMPARE(player.scalingAlgorithm(),7);QCOMPARE(player.settings_->value("render/secondUpscale").toInt(),-1);}
+            if(stage==10 || stage==7){
                 QFile embedded(stage==10?":/filters/builtin-shaders/moesr-50k.hlsl.vsrhlsl":":/filters/builtin-shaders/anime4k-1x.glsl.vsrhlsl");
                 QFile materialized(player.customShaderPackage_);QVERIFY(embedded.open(QIODevice::ReadOnly));QVERIFY(materialized.open(QIODevice::ReadOnly));
                 QCOMPARE(materialized.readAll(),embedded.readAll());
@@ -77,8 +77,8 @@
             player.seekTime(30000000);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.position()>=29000000,30000);
             const auto image=player.clock_->capture();QVERIFY(!image.isNull());
             QVERIFY(!player.hlslFailed_);QVERIFY2(player.clock_->lastError().isEmpty(),qPrintable(player.clock_->lastError()));
-            if(stage==6)oneXJinc=image;
-            if(stage==7)QVERIFY2(image!=oneXJinc,"1X Jinc and D3D11 must retain distinct final upscaling");
+            if(stage==6)oneXEnhanced=image;
+            if(stage==7)QVERIFY2(image!=oneXEnhanced,"1X extra enhancement must change rendered pixels");
             int lo=255,hi=0;for(int y=image.height()/4;y<image.height()*3/4;y+=13)for(int x=image.width()/4;x<image.width()*3/4;x+=13){const int v=qGray(image.pixel(x,y));lo=std::min(lo,v);hi=std::max(hi,v);}
             QVERIFY2(hi-lo>32,"Rendered output must contain spatial picture detail");
             QVERIFY(image.save(QDir(evidence).filePath(QString("stage-%1.png").arg(stage))));
@@ -87,10 +87,10 @@
             player.togglePlayback();QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Paused,10000);
             qInfo()<<"HLSL acceptance"<<stage<<"algorithm"<<player.scalingAlgorithm()<<"picture-range"<<lo<<hi<<"package"<<player.customShaderPackage_;
         }
-        // An invalid 1X package must keep the original native 1X algorithm.
+        // An invalid enhanced 1X package must fall back explicitly to D3D11.
         player.loadPreset(builtin.filePath(files[6]));QVERIFY(!player.customShaderPackage_.isEmpty());
         player.customShaderPackage_=directory.filePath("missing.vsrhlsl");player.applyScaling();
-        QVERIFY(player.customShaderPackage_.isEmpty());QVERIFY(player.hlslFailed_);QCOMPARE(player.scalingAlgorithm(),13);
+        QVERIFY(player.customShaderPackage_.isEmpty());QVERIFY(player.hlslFailed_);QCOMPARE(player.scalingAlgorithm(),7);QCOMPARE(player.qualityStage_,5);
         player.loadPreset(builtin.filePath(files[7]));QVERIFY(!player.customShaderPackage_.isEmpty());QCOMPARE(player.scalingAlgorithm(),7);
         player.loadPreset(builtin.filePath(files[1]));QVERIFY(player.customShaderPackage_.isEmpty());QCOMPARE(player.scalingAlgorithm(),9);
     }

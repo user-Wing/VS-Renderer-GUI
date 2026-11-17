@@ -88,7 +88,7 @@ void MainWindow::initializeProjectProtection(){
     auto *saveAs=new QAction(QStringLiteral("项目另存为"),this);saveAs->setShortcut(QKeySequence::SaveAs);addAction(saveAs);connect(saveAs,&QAction::triggered,this,[this]{const auto p=QFileDialog::getSaveFileName(this,QStringLiteral("项目另存为"),projectPath_,"VS Renderer Project (*.vsr.json)");if(!p.isEmpty())saveProjectTo(p);});
     for(const auto &entry:QList<QPair<QKeySequence,int>>{{QKeySequence::Undo,-1},{QKeySequence::Redo,1}}){auto *a=new QAction(this);a->setShortcut(entry.first);addAction(a);connect(a,&QAction::triggered,this,[this,d=entry.second]{stepProjectHistory(d);});}
     QTimer::singleShot(0,this,[this,base]{
-        if(!isVisible())return;const auto files=QDir(base).entryList({"session-*.json"},QDir::Files,QDir::Time);
+        if(!isVisible() || QCoreApplication::instance()->property("playerHandoff").toBool())return;const auto files=QDir(base).entryList({"session-*.json"},QDir::Files,QDir::Time);
         for(const auto &name:files){const auto path=QDir(base).filePath(name);if(path==recoveryPath_)continue;QFile f(path);if(!f.open(QIODevice::ReadOnly))continue;const auto o=QJsonDocument::fromJson(f.readAll()).object();f.close();
 #ifdef Q_OS_WIN
             HANDLE process=OpenProcess(SYNCHRONIZE,FALSE,DWORD(o["pid"].toDouble()));if(process){const bool alive=WaitForSingleObject(process,0)==WAIT_TIMEOUT;CloseHandle(process);if(alive)continue;}

@@ -81,6 +81,23 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void playerRangeHandoff() {
+        QTemporaryDir directory;const auto recovery=qgetenv("VSR_RECOVERY_ROOT");qputenv("VSR_RECOVERY_ROOT",directory.filePath("recovery").toUtf8());
+        const auto restore=qScopeGuard([&]{if(recovery.isNull())qunsetenv("VSR_RECOVERY_ROOT");else qputenv("VSR_RECOVERY_ROOT",recovery);});
+        const auto source=directory.filePath("loop.mkv");QProcess ff;
+        ff.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),{"-v","error","-f","lavfi","-i","testsrc2=size=320x180:rate=24:duration=3","-c:v","ffv1","-y",source});
+        QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
+        MainWindow window;window.show();QVERIFY(window.openPlayerSource(source,5000000,12500000));
+        QTRY_COMPARE_WITH_TIMEOUT(window.timeGroups_.size(),3,10000);
+        QCOMPARE(window.timeGroupIndex_,1);QCOMPARE(window.timeGroups_[0].startFrame,qint64(0));QCOMPARE(window.timeGroups_[1].startFrame,qint64(12));QCOMPARE(window.timeGroups_[2].startFrame,qint64(30));
+        QVERIFY(window.timeGroups_[0].graph.nodes().isEmpty());QVERIFY(window.timeGroups_[2].graph.nodes().isEmpty());QVERIFY(window.isWindowModified());
+        QString error;QVERIFY2(window.saveProjectTo(directory.filePath("range.vsr.json"),&error),qPrintable(error));
+        MainWindow restored;QVERIFY2(restored.openProjectFrom(directory.filePath("range.vsr.json"),&error),qPrintable(error));
+        QCOMPARE(restored.timeGroupIndex_,1);QCOMPARE(restored.timeGroups_[1].startFrame,qint64(12));QCOMPARE(restored.timeGroups_[2].startFrame,qint64(30));
+        QVERIFY(!restored.openPlayerSource(source,10000000,5000000));QCOMPARE(restored.timeGroups_.size(),3);
+        MainWindow whole;QVERIFY(whole.openPlayerSource(source));QCOMPARE(whole.timeGroups_.size(),1);QCOMPARE(whole.playerRangeIn_,qint64(-1));
+        MainWindow zero;QVERIFY(zero.openPlayerSource(source,0,10000000));QTRY_COMPARE_WITH_TIMEOUT(zero.timeGroups_.size(),2,10000);QCOMPARE(zero.timeGroupIndex_,0);
+    }
     void analysisOpenNguScaling()
     {
         const QDir runtime(QCoreApplication::applicationDirPath());

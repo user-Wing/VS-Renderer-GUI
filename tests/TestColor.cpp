@@ -415,7 +415,7 @@ private slots:
         ThreeFpApi api;QVERIFY2(api.available(),qPrintable(api.errorString()));ThreeFpPlayer p(api,&surface);
         auto c=advanced();c.engine=2;QVERIFY(p.setColorSettings(c));
         auto frame=yuv(1,1,1,128,128,128);QVERIFY(p.submitFrame(frame));QTRY_VERIFY(p.snapshot().swapChainPresents>0);
-        QCOMPARE(p.colorStatus().requestedEngine,2u);QCOMPARE(p.colorStatus().activeEngine,0u);
+        QTRY_COMPARE(p.colorStatus().requestedEngine,2u);QCOMPARE(p.colorStatus().activeEngine,0u);
         ThreeFpPixelProbe sdr{};QVERIFY(p.samplePixel(160,120,sdr));QVERIFY(sdr.red>.45 && sdr.red<.60);
         for(const unsigned transfer:{16u,18u}) {
             frame=yuv(9,transfer,9,40000,32768,32768,16);QVERIFY(p.submitFrame(frame));

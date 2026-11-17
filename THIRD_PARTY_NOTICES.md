@@ -107,3 +107,5 @@ The Windows runtime uses the official VapourSynth R81 ABI3 wheel (LGPL-2.1-or-la
 ## PawnIO.Modules
 
 CPU 功耗读取使用 PawnIO.Modules 0.2.11 的原始签名模块（LGPL-2.1-or-later），来源、哈希、版权与完整源码获取入口见 [assets/pawnio/NOTICE.md](assets/pawnio/NOTICE.md)，许可见 [COPYING](assets/pawnio/COPYING)。运行包将说明和许可放在 `licenses/PawnIO-Modules/`；驱动和 PawnIOLib.dll 复用用户已有安装。NVIDIA 功耗接口动态读取已安装的 NVML，不随包重新分发驱动库。
+
+LibRaw 0.21.4: camera RAW development, dynamically loaded by FFF.Native.dll. Source: https://github.com/LibRaw/LibRaw/tree/0.21.4 . LGPL-2.1 / CDDL-1.0 dual license; bundled notices and source revision: `licenses/libraw/`.

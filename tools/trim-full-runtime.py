@@ -118,7 +118,7 @@ def main():
             folder.mkdir()
             subprocess.run([str(args.sevenzip), 'x', str(old), '-o' + str(folder), '-y', '-bb0'], check=True, capture_output=True)
             archive = work / (component + '.7z')
-            subprocess.run([str(args.sevenzip), 'a', '-t7z', str(archive), '.', '-mx=9', '-md=64m', '-ms=on', '-mmt=4', '-bb0'], cwd=folder, check=True, capture_output=True)
+            subprocess.run([str(args.sevenzip), 'a', '-t7z', str(archive), '.', '-mx=9', '-md=64m', '-ms=on', '-mmt=2', '-bb0'], cwd=folder, check=True, capture_output=True)
             before = old.stat().st_size
             shutil.copy2(archive, packed)
             old.unlink()

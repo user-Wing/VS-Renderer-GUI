@@ -4,9 +4,45 @@ Qt构建新原生VS源时，用 `cmake -S . -B build/mingw-release -DVSR_FFMPEG_
 
 2026-11-14 色彩续修沿用固定248cb9b及更新的汇总补丁，标准脚本额外复制`FrameColorMetadata.h`；通用/SDR字节码必须完整重生成。外部帧v2为240字节，v1的112字节前缀保留，通过可选查询协商版本。GUI同时构建`vsr-source.dll`，Full部署不可遗漏；验证与限制见 [色彩修复](../development/color-fix-20261114.md)。
 
-## 当前基线：2026-11-13 上游合并
+## 当前基线：2026-11-15 上游合并
 
-固定 `248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c`（上游 PR #57，已含 #55 CUDA 主优化及互操作续修）。`tools/build-native-api20.ps1` 仅应用 `patches/3fp-vsp-upstream-20261113.patch`，然后复制本库头文件并重新生成通用/SDR HLSL 字节码；不要叠加下文历史三层补丁。API 仍为 20，snapshot 为 **v23 / 608 字节**，Qt 根据新可选导出识别版本，旧字段偏移保持不变。
+固定 `85f514be34cdbcef17ba5c44b90cd9bbe4c2526d`（已合并 #58–#62）。标准脚本应用 `patches/3fp-vsp-upstream-20261115.patch`，保留 VSP 帧桥、缩放和 AVIF 预算扩展；不再叠加旧汇总补丁或单独 AVIF 预算补丁。DependenciesRoot 除 ffmpeg/vcpkg_installed 外须提供 `libraw/include/libraw`、`libraw/lib/x64/libraw.lib`、`libraw/bin/x64/libraw.dll`，本轮由 LibRaw 0.21.4 的 `Makefile.msvc bin\libraw.dll` 构建。运行目录须携带 libraw.dll 与许可。RAW 使用上游原生开发器，VSP 可选扩展 `VSR3FP_DecodeRawImage` 将完整尺寸 RGB48 复制到图片浏览器，避免显示截图和8位中间文件。
+
+## Native 安全与缓冲契约
+
+`20261115` 汇总补丁同时包含安全上游 `eee98da` 的生命周期、AVIF、预取、字幕二次 IO 和时间戳边界修复，以及 VSP 的 concat seek、丢帧恢复、音频 preroll、外部帧与图集修复。普通 UNC、受控 loopback、音效和帧桥仍由 VSP 适配层维护。`.deps/fff-vsp-20261115` 的合并候选与固定 `85f514b` 加补丁是两条入口；标准脚本的 HEAD 校验只适用于后一条。
+
+动态缓冲通过既有可选导出配置，`mediaInfo.decodeBufferPolicyVersion=2` 表示以下语义：
+
+| bytes / frames | 行为 |
+| --- | --- |
+| `0 / 0` | 撤销外部配置，恢复 Native 自适应默认值 |
+| `0 / 非零` | 停用可选预解码，保留解码器引用链和最小两帧按需工作路径 |
+| `非零 / 2..512` | 字节预算与帧数共同限制准入；预算不是预分配目标 |
+
+配置适用于普通 2160p 及以上 CPU 解码。GUI 保留普通 8 帧、尖峰 48 帧及用户 RAM 上限，仅在提交成功后记住配置；暂停、倍速、网络、最小模式等退出适用条件时撤销。缩容立即释放备用池并限制新帧准入，已有队列按顺序播放释放；暂停时已有驻留保留，恢复、seek 或关闭后释放，不能把设置成功解释为进程内存立即降到预算。
+
+`decodeBufferEffectiveBytes`、`decodeBufferEffectiveQueueFrames`、`decodeBufferResidentQueueBytes` 报告当前生效预算、主队列限帧与已保留队列内存；`decodeBufferPipelineFrames` 和 `decodeBufferMinimumWorkingFrames` 说明必要工作开销。驻留计费包含 frame buffer/side data/opaque_ref，保守重复计费共享引用；不是进程全部内存或解码器内部内存的硬上限。旧 DLL 无策略标识时，零预算请求使用其最小队列；缺少可选导出返回不支持，GUI 保持可重试。
+
+外部帧维持 v1 的 112 字节前缀、v2 的 240 字节布局及版本协商。尺寸、格式、平面跨度、512 MiB 拷贝预算、时间乘法和 side data 均在拷贝前校验；高位深格式不因预算不足而静默降精度。此接口只接受可信进程内调用方，调用方必须保证指针及按 stride 推导的平面字节可读；裸指针接口无法验证任意地址。HDR side data 仍要求精确匹配 FFmpeg avutil ABI。
+
+## 专项回归构建
+
+标准构建默认使用低优先级，`-BuildParallelism` 默认 2、最大 4，并强制全量重建及 `/p:SecurityRegressionTests=false`。发行前检查 RAW 和 DecodeBuffer 导出存在，`FFF3FP_RunSecurityRegression` 与 `FFF3FP_RejectNextDecodeBufferForTest` 不存在。完整构建之后，在独立输出目录使用 `/p:SecurityRegressionTests=true` 编译 Native，可运行归档于补丁的 `FFF.Native.Tests/SecurityRegression.cpp`：
+
+```powershell
+python tests/run-native-security.py --dll <测试版FFF.Native.dll> --runtime <FFmpeg配套运行时目录> --fixtures <隔离夹具目录>
+```
+
+夹具由 FFmpeg 生成，不需要用户媒体。测试导出只存在于显式启用的测试构建，生产 DLL 不带故障注入。GUI 专项为 `vsr_player_tests nativeConcatPreciseSeek nativeSoftwareDrainAndStep decodeBufferExitAndRetry`；最后一项需要测试版 Native，并测试真实配置失败重试、流切换及 ffprobe 取消/输出限制。其他适用回归包括 AVIF、音频路径、字幕 seek、输出格式、Lite 软件播放和 VS 帧桥。GPU/音频端点或 VS 运行时不足必须单独记未验证。
+
+使用独立 Native 源码目录时，CMake 设置 `-DVSR_NATIVE_SOURCE_ROOT=<已应用补丁的源码根目录>`，使 AVIF 专项编译同一份实际发行源码；不要求把整个上游目录提交到本项目。
+
+补丁维护须用新建固定基线目录检查正向应用、反向还原与再次应用，复制配套头并重新生成两类 shader 后比对候选输入，再完整编译链接。构建验证不等于安装部署；不能用单文件语法检查、源码等价或二进制哈希替代播放回归。
+
+## 历史基线：2026-11-13 上游合并
+
+固定 `248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c`（上游 PR #57，已含 #55 CUDA 主优化及互操作续修）。`tools/build-native-api20.ps1` 仅应用 `patches/3fp-vsp-upstream-20261113.patch` 和 `patches/3fp-avif-budget.patch`，然后复制本库头文件并重新生成通用/SDR HLSL 字节码；不要叠加下文历史三层补丁。API 仍为 20，snapshot 为 **v23 / 608 字节**，Qt 根据新可选导出识别版本，旧字段偏移保持不变。
 
 本机完整 MSVC/IAMF 构建产物来自 `.deps/fff-upstream-20261113`。OpenNGU 使用独立 `VSR3FP_SetUpscaleShader` 执行器，可位于原生直通或已有处理结果之后；旧自定义 shader 接口不变。源码补丁不包含用户提供的私有 OpenNGU 参数。 VS GLSL 导出会合并 MAIN hook 中重复的 MAIN/HOOKED 同义绑定，避免 libplacebo 重定义宏后静默禁用 hook。
 
@@ -38,7 +74,7 @@ AI字幕沿用1.0.14迁入的 #36/#37 Native 能力，来源为 #37 head `edf533
 
 ## Lite Anime4K Fast
 
-Lite和本地单文件的“图像处理 → 缩放滤镜”提供与Full同名的八档：CNN＋额外增强、CNN、no CNN＋额外增强、no CNN、Jinc、D3D11、1X·Jinc、1X·D3D11。设置的渲染页可指定默认档位，`player.ini` 的 `player/animeStage` 保存0～7；旧Fast布尔选择迁移为CNN档。底栏和Tab显示实际模式。源高度≥2160p保留原有内置增强禁用规则。
+Full、Lite 和本地单文件均提供六档 Anime4K：A CNN、AFast CNN、AFast 1X 各有普通与额外增强两档；MoeSR、Jinc 和 D3D11 单列。设置渲染页同步六档及悬停说明。`player/animeStage` 保留历史编号：8/9 为 A CNN 增强/普通，0/1 为 AFast CNN 增强/普通，6/7 为 AFast 1X 增强/普通；2/3 已停用。旧 no CNN 增强/普通迁移为 6/7，旧 1X·Jinc/D3D11 均迁移为普通 1X，第二上采样独立保存。源高度≥2160p 保留原有内置增强禁用规则。
 
 1.1.0 的 Full/Lite 使用同一内核。标准构建应用 1.1.0 汇总补丁；在固定基线的独立 checkout 上执行：
 
@@ -53,9 +89,9 @@ cmake --build build/mingw-release --target VSRenderer VSPlayer VSPlayerLite VSCa
 
 脚本用 `.deps/color/ucrt64/bin` 的glslc、spirv-cross及Windows SDK 10.0.26100.0的fxc转换 `anime4k-a-fast.glsl`、`anime4k-no-cnn.glsl` 和 `gpu-sharpen.py` 生成的两个原始LUMA shader，共45个pass，将字节码嵌入DLL。播放不需要构建工具、Python、VapourSynth或外部shader文件。分发保留Qt/Native各依赖的原许可，以及两个原shader的MIT/Unlicense声明。
 
-执行链为原生色彩转换（源尺寸）→ 可选亮度提取、两段额外增强及合回RGB → MAIN → PREKERNEL → 原生RGB缩放。亮度提取使用源矩阵与量程，增强仍为原有0.3强度/2阈值的sharpen_edges、enhance_detail；浮点16位中间纹理保留CNN负数。常规Anime档按视口调度WIDTH/HEIGHT/WHEN；1X档将OUTPUT固定为源尺寸，再交给现有Jinc或D3D11 shader缩放路径。算法号为CNN 9、CNN增强10、no CNN增强11、no CNN 12、1X·Jinc 13、1X·D3D11 14。该 `Anime4KFast` 执行器仅运行已转换的内置 shader；自定义导入使用下述独立执行器。
+AFast CNN 使用原生 `Anime4KFast` 执行器（算法 9/10）。A CNN 和 AFast 1X 使用内置 HLSL 包，增强档追加 sharpen_edges（0.3，阈值 2）与 enhance_detail（0.3）。1X 将 OUTPUT 固定为源尺寸，两档均交给第二上采样完成最终放大。旧 Native 算法 11～14 保留 ABI 兼容，播放器内置预设不再选择 no CNN；1X 包失败时明确提示并回退 D3D11。
 
-像素回归：用MSVC将 `tests/Anime4KFastProbe.cpp` 编译并链接d3d11/d3dcompiler，包含 `src` 和 `build/anime4k-native/shaders`，输出 `build/anime4k-native/probe.exe`；安装测试用moderngl/numpy后运行 `python tools/check-anime4k-fast.py`。六变体×八比例，共48组，独立编译原GLSL对照D3D11 shader输出；探针最后统一双线性适配，不声称整个Full/libplacebo色彩/缩放链逐像素一致。`vsr_player_lite_tests nativeAnimePresets` 验证八档菜单、实际像素、额外增强差异、两种1X最终缩放差异、播放/定位和重开持久化，可用 `VSR_ANIME4K_SOURCE` 指定片段。
+历史原生 shader 像素对照使用 `tests/Anime4KFastProbe.cpp` 和 `tools/check-anime4k-fast.py`。当前 `vsr_player_tests animeSixMigration animeSixPresets` 及对应 Lite 测试验证六档菜单、设置入口、旧配置迁移、1X 增强像素差异、1X 包输出尺寸及第二上采样的实际像素效果；`nativeAnimePresets` 另验证 Lite 播放/定位及重开持久化。测试片段通过不代表所有分辨率或设备达到实时。
 
 单文件先用 `stage-editions-1.0.9.py --edition Lite --player <本轮Lite EXE>` 整理 `build/playerlite-runtime`，再运行 `tools/package-playerlite-single.ps1 -SourceDirectory build/playerlite-runtime`。单文件封装以暂存内的 EXE 为准，自动排除用户 INI 和 FFmpeg 专用文件；体积按实际产物报告。本轮生成单文件 EXE 与 Full 运行目录，不另外创建发行压缩包。
 

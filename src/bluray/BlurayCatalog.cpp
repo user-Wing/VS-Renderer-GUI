@@ -92,7 +92,7 @@ bool BlurayCatalog::parse(const QByteArray &d, BlurayPlaylist *p, QString *error
     const auto fail=[&](const QString &s){if(error)*error=s;return false;};
     if(d.size()<58 || d.left(4)!="MPLS" || !QList<QByteArray>{"0100","0200","0300"}.contains(d.mid(4,4)))return fail(QStringLiteral("无效或未支持的 MPLS 版本"));
     const quint32 offset=u32(d,8),mark=u32(d,12);
-    if(offset>quint32(d.size()-10))return fail(QStringLiteral("MPLS 播放段越界"));
+    if(offset<40 || offset>quint32(d.size()-10))return fail(QStringLiteral("MPLS 播放段越界"));
     const quint32 length=u32(d,int(offset));
     if(length<6 || quint64(offset)+4+length>quint64(d.size()))return fail(QStringLiteral("MPLS 播放段截断"));
     const int end=int(offset+4+length),count=u16(d,int(offset)+6);
@@ -126,12 +126,12 @@ bool BlurayCatalog::parse(const QByteArray &d, BlurayPlaylist *p, QString *error
 }
 
 QByteArray BlurayCatalog::slice(const BlurayPlaylist &p, int first, int count) {
-    if(first<0 || count<1 || first+count>p.parts.size() || p.subpaths)return {};
+    if(p.header.size()<40 || first<0 || count<1 || first>p.parts.size() || count>p.parts.size()-first || p.subpaths)return {};
     QByteArray list(10,'\0');put16(list,6,quint16(count));
     for(int i=first;i<first+count;++i)list+=p.parts[i].data;
     put32(list,0,quint32(list.size()-4));
     QByteArray marks(6,'\0');int n=0;
-    for(const auto &mark:p.marks)if(mark.item>=first && mark.item<first+count){auto data=mark.data;put16(data,2,quint16(mark.item-first));marks+=data;++n;}
+    for(const auto &mark:p.marks)if(mark.item>=first && mark.item<first+count){auto data=mark.data;if(data.size()!=14)return {};put16(data,2,quint16(mark.item-first));marks+=data;++n;}
     put32(marks,0,quint32(marks.size()-4));put16(marks,4,quint16(n));
     auto header=p.header;put32(header,8,quint32(header.size()));put32(header,12,quint32(header.size()+list.size()));put32(header,16,0);
     return header+list+marks;

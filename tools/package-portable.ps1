@@ -3,28 +3,34 @@ param(
     [string]$SevenZip = 'C:/PortableSoft/7-Zip-Zstandard/7z.exe',
     [string]$BuiltinDirectory = '',
     [ValidateSet('Full', 'Lite')][string]$Edition = 'Full',
-    [string]$Strip = 'C:/Private/Soft/QT/Tools/mingw1310_64/bin/strip.exe'
+    [string]$Strip = 'C:/Private/Soft/QT/Tools/mingw1310_64/bin/strip.exe',
+    [string]$StageDirectory = '',
+    [string]$OutputFile = '',
+    [ValidateRange(1,2)][int]$CompressionThreads = 2
 )
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $program = (Resolve-Path -LiteralPath $ProgramDirectory).Path
 if (-not (Test-Path -LiteralPath (Join-Path $program 'vs-export-worker.exe'))) { throw 'Deploy vs-export-worker.exe with VSRenderer before packaging' }
+foreach ($name in @('vsr-thumbnail.dll', 'vsr-thumbnail-worker.exe')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $program $name))) { throw "Deploy thumbnail component before packaging: $name" }
+}
 $editor = Join-Path $program 'runtime/photocraft'
 if (-not (Test-Path -LiteralPath (Join-Path $editor 'photocraft.exe'))) { throw 'Build and deploy the pinned PhotoCraft runtime before packaging' }
 $builtinSource = if ($BuiltinDirectory) { (Resolve-Path -LiteralPath $BuiltinDirectory).Path } else { Join-Path $program 'vpy/builtin' }
 $version = [regex]::Match((Get-Content -LiteralPath (Join-Path $root 'CMakeLists.txt') -Raw), 'project\(VSRenderer VERSION ([0-9.]+)').Groups[1].Value
 if (-not $version) { throw 'Project version not found' }
 $suffix = if ($Edition -eq 'Lite') { '-Lite' } else { '' }
-$stage = Join-Path $root "build/release-stage-$version$suffix"
-# Stable directory name inside the versioned archive.
-$archiveRoot = if ($Edition -eq 'Full') { 'VS-GUI-Full' } else { 'VS-GUI-Lite' }
+$stage = if ($StageDirectory) { [IO.Path]::GetFullPath($StageDirectory) } else { Join-Path $root "build/release-stage-$version$suffix" }
+# Keep a single versioned root for older portable updaters.
+$archiveRoot = if ($Edition -eq 'Full') { "VS-GUI-Full-$version" } else { "VS-GUI-Lite-$version" }
 $payload = Join-Path $stage $archiveRoot
-$archive = Join-Path $root "dist/$version$suffix.7z"
+$archive = if ($OutputFile) { [IO.Path]::GetFullPath($OutputFile) } else { Join-Path $root "dist/$version$suffix.7z" }
 if (Test-Path -LiteralPath $payload) { throw 'Release staging directory already exists; inspect it before creating another package.' }
 if (Test-Path -LiteralPath $archive) { throw 'Archive already exists; do not silently update an existing archive.' }
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 # Construct a clean distribution, retaining the live installation's settings and user files.
-$excludedDirectories = @('cache', (Join-Path $program 'data'), 'PhotoCraftData', 'shader-cache', 'screenshots', 'vpy', '__pycache__', '.git', '.deps', 'temp', 'logs')
+$excludedDirectories = @((Join-Path $program 'cache'), (Join-Path $program 'data'), 'PhotoCraftData', 'shader-cache', 'screenshots', 'vpy', '__pycache__', '.git', '.deps', 'temp', 'logs')
 $excludedDirectories += (Join-Path $program 'docs')
 $excludedDirectories += (Join-Path $program 'themes')
 $excludedDirectories += (Join-Path $program 'shaders/custom')
@@ -37,11 +43,12 @@ if ($Edition -eq 'Lite') {
 if ($LASTEXITCODE -ge 8) { throw 'Clean payload copy failed' }
 $ffInfo = Join-Path $payload 'runtime/ffmpeg/build-info'
 New-Item -ItemType Directory -Path $ffInfo -Force | Out-Null
-foreach ($name in @('manifest.json','config.mak','build-full09.sh')) {
+foreach ($name in @('manifest.json','config.mak','build-full09.sh','build-full10.sh','resume-ffmpeg.sh','subsampling-initialization.patch','source-identity.json','package_release.py','result.json','release-size-and-pe.json')) {
     $source = Join-Path $program "runtime/ffmpeg/build-info/$name"
     if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $ffInfo -Force }
 }
-& (Join-Path $PSScriptRoot 'stage-shaders.ps1') -OutputDirectory (Join-Path $payload 'shaders') -SevenZip $SevenZip
+if (Get-ChildItem -LiteralPath $payload -Recurse -File | Where-Object { $_.Name -like 'OpenNGU-*' }) { throw 'Private OpenNGU assets must be removed from the input staging directory before public packaging.' }
+& (Join-Path $PSScriptRoot 'stage-shaders.ps1') -OutputDirectory (Join-Path $payload 'shaders') -SevenZip $SevenZip -ExcludePrivate
 if (!(Test-Path -LiteralPath $Strip)) { throw 'MinGW strip.exe is required for release packaging' }
 foreach ($name in @('VSRenderer.exe','vs-player.exe','vs-cap.exe','vs-export-worker.exe')) {
     & $Strip --strip-unneeded (Join-Path $payload $name)
@@ -70,7 +77,9 @@ if ($Edition -eq 'Lite') { $components.PSObject.Properties.Remove('mkvtoolnix') 
 $components | ConvertTo-Json | Set-Content -LiteralPath $componentsPath -Encoding UTF8
 $builtin = Join-Path $payload 'vpy/builtin'
 New-Item -ItemType Directory -Path $builtin -Force | Out-Null
-foreach ($name in @('Anime.vpy','Realistic.vpy','Anime-0-CNN-Enhanced.vpy','Anime-1-CNN.vpy','Anime-2-No-CNN-Enhanced.vpy','Anime-3-No-CNN.vpy','Anime-4-Jinc.vpy','Anime-5-D3D11.vpy','Anime-6-1X-Jinc.vpy','Anime-7-1X-D3D11.vpy','Anime-8-A-CNN-Enhanced.vpy','Anime-9-A-CNN.vpy','MoeSR-50K.vpy','Super-0-A4K-RIFE-A4K.vpy','Super-1-A4K-RIFE-Jinc.vpy','Super-2-A4K-RIFE-D3D11.vpy','Super-3-RIFE-A4K.vpy','Interpolation-0-RIFE.vpy','Interpolation-1-RIFE-Half.vpy','Interpolation-2-MVTools-HQ.vpy','Interpolation-3-MVTools.vpy')) {
+$descriptions = Join-Path $program 'vpy/preset-descriptions.json'
+if (Test-Path -LiteralPath $descriptions) { Copy-Item -LiteralPath $descriptions -Destination (Join-Path $payload 'vpy/preset-descriptions.json') -Force }
+foreach ($name in @('Anime.vpy','Realistic.vpy','Anime-0-CNN-Enhanced.vpy','Anime-1-CNN.vpy','Anime-4-Jinc.vpy','Anime-5-D3D11.vpy','Anime-6-AFast-1X-Enhanced.vpy','Anime-7-AFast-1X.vpy','Anime-8-A-CNN-Enhanced.vpy','Anime-9-A-CNN.vpy','MoeSR-50K.vpy','Super-0-A4K-RIFE-A4K.vpy','Super-1-A4K-RIFE-Jinc.vpy','Super-2-A4K-RIFE-D3D11.vpy','Super-3-RIFE-A4K.vpy','Interpolation-0-RIFE.vpy','Interpolation-1-RIFE-Half.vpy','Interpolation-2-MVTools-HQ.vpy','Interpolation-3-MVTools.vpy')) {
     Copy-Item -LiteralPath (Join-Path $builtinSource $name) -Destination $builtin -Force
     if ($name.StartsWith('Interpolation-')) {
         $variant = $name.Replace('.vpy', '-D3D11.vpy')
@@ -89,7 +98,7 @@ foreach ($file in $files) { $manifest[$file.FullName.Substring($payload.Length+1
 $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $payload 'local-resource-sha256.json') -Encoding UTF8
 Push-Location $stage
 try {
-    & $SevenZip a -t7z $archive $archiveRoot -m0=lzma2 -mx=9 -md=256m -mfb=273 -ms=on -mmt=8 -bb0
+    & $SevenZip a -t7z $archive $archiveRoot -m0=lzma2 -mx=9 -md=256m -mfb=273 -ms=on "-mmt=$CompressionThreads" -bb0
     if ($LASTEXITCODE -ne 0) { throw 'Compression failed' }
 } finally { Pop-Location }
 & $SevenZip t $archive

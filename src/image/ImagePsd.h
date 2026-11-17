@@ -6,7 +6,7 @@ namespace vsr {
 // Pixel layers are lazy, retaining a file-backed source until the document closes.
 class ImagePsd final {
 public:
-    static std::unique_ptr<ImageDocument> load(const QString &path, QString *error = nullptr, QStringList *warnings = nullptr);
+    static std::unique_ptr<ImageDocument> load(const QString &path, QString *error = nullptr, QStringList *warnings = nullptr, const std::function<bool()> &cancelled = {});
     static QString save(ImageDocument *document, const QString &path);
 };
 }

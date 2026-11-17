@@ -67,7 +67,7 @@ ExternalProject_Add(vsr_turbojpeg_build
         -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DENABLE_STATIC=ON
         -DWITH_TOOLS=OFF -DWITH_TESTS=OFF -DWITH_SIMD=ON -DWITH_JAVA=OFF
         -DCMAKE_ASM_NASM_COMPILER=${CMAKE_SOURCE_DIR}/.deps/image/nasm/nasm-2.16.03/nasm.exe
-    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target turbojpeg-static --parallel 4
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target turbojpeg-static --parallel 2
     INSTALL_COMMAND ""
     BUILD_BYPRODUCTS "${CMAKE_BINARY_DIR}/image-turbojpeg/libturbojpeg.a")
 add_library(vsr_turbojpeg STATIC IMPORTED GLOBAL)

@@ -13,6 +13,7 @@ struct AgentModelCapability {
     QStringList levels, models;
     QString endpoint, model, defaultLevel, source = QStringLiteral("unknown"), status = QStringLiteral("unknown"), label;
     QJsonObject optionsByLevel;
+    QJsonObject modelImageInputs;
     bool supportsOff = false, chatToolsSupported = true, chatToolsRequiresOff = false, imageInputSupported = false;
     QString imageInputSource = QStringLiteral("unknown");
     qint64 contextWindow = 0, maxOutputTokens = 0;

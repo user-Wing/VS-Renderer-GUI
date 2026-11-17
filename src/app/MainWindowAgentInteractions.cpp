@@ -35,7 +35,6 @@ void MainWindow::initializeAgentInteractions()
         if (!path.isEmpty()) agentPage_->insertInputText(AgentInput::mention("file", path)+" ");
     });
     connect(agentInstructions_, &AgentInstructions::changed, this, &MainWindow::refreshAgentCompletions);
-    connect(agentQueue_, &AgentTaskQueue::changed, this, &MainWindow::refreshAgentCompletions);
     connect(agentMcp_, &AgentMcpManager::toolsChanged, this, &MainWindow::refreshAgentCompletions);
     refreshAgentCompletions();
     const auto provider = agentSession_->provider();
@@ -67,8 +66,7 @@ void MainWindow::submitAgentInput(const QString &text)
     if (!input.command.isEmpty()) {
         const auto command = input.command.toLower();
         if (command == "new" || command == "clear") {
-            if (agentSession_->isBusy()) showError(QStringLiteral("当前轮次正在执行；请停止或等待完成后新建会话。"));
-            else agentPage_->startNewConversation();
+            agentPage_->startNewConversation();
             return;
         }
         if (command == "compact") {
@@ -125,6 +123,7 @@ void MainWindow::submitAgentInput(const QString &text)
     });
     if (!input.error.isEmpty()) { showError(input.error); return; }
     QString error; if (!agentSession_->provider().validate(&error)) { showError(error); return; }
+    if(!agentSession_->isBusy()&&agentSession_->provider().modelCapability.isEmpty()){showError(QStringLiteral("正在确认模型能力，请稍后发送；模型列表会标明是否支持图像。"));return;}
     agentSession_->sendWithContext(text.trimmed(), input.modelText);
 }
 }

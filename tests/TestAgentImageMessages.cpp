@@ -1,3 +1,4 @@
+#include "agent/AgentImageMessages.h"
 #include "agent/AgentSession.h"
 #include "agent/AgentContext.h"
 #include <QJsonDocument>
@@ -64,7 +65,7 @@ private slots:
     void groupLimitsAndInvalidAttachmentsDoNotConsumeSlots() {
         Endpoint endpoint;endpoint.reply=[](int turn){return turn==1?calls({"images"}):answer();};AgentSession session;configure(session,endpoint);QList<bool> results;
         session.registerTool("images","Queue images",{},[&](const QJsonObject &){
-            auto invalid=attachment();invalid["mime"]="image/jpeg";results.append(session.queueToolImageAttachment(invalid));invalid=attachment();invalid["width"]=0;results.append(session.queueToolImageAttachment(invalid));invalid=attachment();invalid["dataUrl"]="data:image/png;base64,"+QString(512*1024,'A');results.append(session.queueToolImageAttachment(invalid));
+            auto invalid=attachment();invalid["mime"]="image/jpeg";results.append(session.queueToolImageAttachment(invalid));invalid=attachment();invalid["width"]=0;results.append(session.queueToolImageAttachment(invalid));invalid=attachment();invalid["dataUrl"]="data:image/png;base64,"+QString(agent_images::maximumEncodedBytes,'A');results.append(session.queueToolImageAttachment(invalid));
             for(int i=0;i<5;++i)results.append(session.queueToolImageAttachment(attachment()));return QJsonObject{{"ok",true}};
         });QSignalSpy done(&session,&AgentSession::finished);session.send("Read images");QTRY_COMPARE(done.count(),1);QCOMPARE(results,QList<bool>({false,false,false,true,true,true,true,false}));const auto blocks=endpoint.requests[1].value("messages").toArray().last().toObject().value("content").toArray();QCOMPARE(blocks.size(),5);QVERIFY(!session.queueToolImageAttachment(attachment()));
     }
@@ -92,7 +93,7 @@ private slots:
 
     void importedImagesRoundTripAndRejectMalformedBlocks() {
         AgentSession session;const QJsonArray original{imageMessage()};QString error;QVERIFY2(session.importConversation({{"schemaVersion",1},{"messages",original}},&error),qPrintable(error));QCOMPARE(session.messages(),original);QCOMPARE(session.exportConversation().value("messages").toArray(),original);
-        const QStringList badUrls{"https://example.com/image.png","data:image/gif;base64,AA==","data:image/svg+xml;base64,AA==","data:image/png;base64,not base64","data:image/png;base64,AB==","data:image/png;base64,AA==\n","data:image/png;base64,"+QString(512*1024,'A')};
+        const QStringList badUrls{"https://example.com/image.png","data:image/gif;base64,AA==","data:image/svg+xml;base64,AA==","data:image/png;base64,not base64","data:image/png;base64,AB==","data:image/png;base64,AA==\n","data:image/png;base64,"+QString(agent_images::maximumEncodedBytes,'A')};
         for(const auto &url:badUrls){QVERIFY(!session.importConversation({{"schemaVersion",1},{"messages",QJsonArray{imageMessage("Bad",url)}}},&error));QCOMPARE(session.messages(),original);}
         for(const auto &role:{"assistant","tool","system","developer"}){auto message=imageMessage();message["role"]=role;QVERIFY(!session.importConversation({{"schemaVersion",1},{"messages",QJsonArray{message}}},&error));}
         auto message=imageMessage();auto blocks=message.value("content").toArray();for(int i=0;i<4;++i)blocks.append(imageBlock());message["content"]=blocks;QVERIFY(!session.importConversation({{"schemaVersion",1},{"messages",QJsonArray{message}}},&error));

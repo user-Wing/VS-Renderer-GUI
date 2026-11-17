@@ -1,4 +1,6 @@
 #include "player/PlayerImage.h"
+#include "image/RawFormats.h"
+#include <QLibrary>
 #include "player/PlayerPng.h"
 #include "image/ImagePsd.h"
 #include "image/ImageJxl.h"
@@ -32,7 +34,7 @@ PlayerImage::PlayerImage(QObject *parent) : QObject(parent), worker_(new QObject
 PlayerImage::~PlayerImage() { cancel(); thread_.quit(); thread_.wait(); }
 bool PlayerImage::supports(const QString &path) {
     const auto suffix=QFileInfo(path).suffix().toLower().toLatin1();
-    return QImageReader::supportedImageFormats().contains(suffix) ||
+    return playerRawExtensions().contains(QString::fromLatin1(suffix)) || QImageReader::supportedImageFormats().contains(suffix) ||
         QList<QByteArray>{"jpg","jpeg","jpe","jfif","png","webp","bmp","gif","tif","tiff","avif","heic","heif","jxl","jp2","j2k","j2c","jpf","jpm","jls","exr","tga","pcx","psd","psb","dds","qoi","hdr","wbmp","pbm","pgm","ppm","pnm"}.contains(suffix);
 }
 void PlayerImage::cancel() { ++generation_; }
@@ -50,6 +52,26 @@ void PlayerImage::open(const QString &path) {
         const auto suffix=QFileInfo(path).suffix().toLower();
         QImage image;
         QString decoderName;
+        if(playerRawExtensions().contains(suffix)) {
+            QLibrary native(QDir(runtime).filePath("FFF.Native.dll"));
+            using Decode = int (*)(const char*, void (*)(void*, const quint16*, int, int, int), void*);
+            const auto decode=reinterpret_cast<Decode>(native.resolve("VSR3FP_DecodeRawImage"));
+            if(!decode)error="Native LibRaw decoding is unavailable; update FFF.Native.dll and libraw.dll.";
+            else {
+                const int result=decode(path.toUtf8().constData(),[](void *opaque,const quint16 *pixels,int width,int height,int stride){
+                    auto &image=*static_cast<QImage *>(opaque);
+                    image=QImage(width,height,QImage::Format_RGBA64);
+                    if(image.isNull())return;
+                    for(int y=0;y<height;++y){
+                        const auto *src=reinterpret_cast<const quint16 *>(reinterpret_cast<const char *>(pixels)+qint64(y)*stride);
+                        auto *dst=reinterpret_cast<QRgba64 *>(image.scanLine(y));
+                        for(int x=0;x<width;++x)dst[x]=QRgba64::fromRgba64(src[x*3],src[x*3+1],src[x*3+2],65535);
+                    }
+                },&image);
+                if(result!=0 || image.isNull())error="LibRaw could not decode this RAW image (native result "+QString::number(result)+").";
+                else {image.setColorSpace(QColorSpace::SRgb);image.setText("sourceBitDepth","16");image.setText("sourcePixelFormat","RAW developed RGB48");decoderName="3FP / LibRaw / 16-bit RGB";}
+            }
+        }
         if(suffix=="jxl") {
             image=readJxl(path,&error);
             if(!image.isNull())decoderName="libjxl 0.12 / lossless HDR color";
@@ -87,7 +109,7 @@ void PlayerImage::open(const QString &path) {
             }
         }
         if(suffix=="psd" || suffix=="psb"){
-            auto document=ImagePsd::load(path,&error);if(document && generation==generation_){image=document->composite(QRect(QPoint(),document->size()));error=document->storageError();if(!image.isNull()){image.setText("sourceBitDepth",document->precision()==ImagePrecision::Float32?"32":document->precision()==ImagePrecision::UInt16?"16":"8");image.setText("sourcePixelFormat",QString("PSD RGB · %1 layers").arg(document->layers().size()));decoderName="Native layered PSD/PSB";}}
+            auto document=ImagePsd::load(path,&error,nullptr,[this,generation]{return generation!=generation_;});if(document && generation==generation_){image=document->composite(QRect(QPoint(),document->size()),[this,generation]{return generation!=generation_;});error=document->storageError();if(!image.isNull()){image.setText("sourceBitDepth",document->precision()==ImagePrecision::Float32?"32":document->precision()==ImagePrecision::UInt16?"16":"8");image.setText("sourcePixelFormat",QString("PSD RGB · %1 layers").arg(document->layers().size()));decoderName="Native layered PSD/PSB";}}
         }
         if(suffix=="avif") {
             QFile file(path);

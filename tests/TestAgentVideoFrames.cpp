@@ -57,6 +57,18 @@ QList<QImage> images(const Endpoint &endpoint) {
 class TestAgentVideoFrames final : public QObject {
     Q_OBJECT
 private slots:
+    void fullResolutionFrameReachesModel() {
+        Endpoint endpoint;endpoint.arguments={{"frame",0}};AgentSession session;session.setProvider(endpoint.provider());
+        AgentVideoFrames module(&session,[](bool,QString *) {
+            return QString("import vapoursynth as vs\nc=vs.core\na=c.std.BlankClip(width=1920,height=1080,format=vs.RGB48,length=1,color=[65535,0,0])\nb=c.std.BlankClip(a,color=[0,65535,0])\nd=c.std.BlankClip(a,color=[0,0,65535])\ne=c.std.BlankClip(a,color=[65535,65535,0])\nc.std.StackVertical([c.std.StackHorizontal([a,b]),c.std.StackHorizontal([d,e])]).set_output(0)\n");
+        });
+        QSignalSpy finished(&session,&AgentSession::finished);session.send("Inspect the complete original frame.");QTRY_COMPARE_WITH_TIMEOUT(finished.count(),1,20000);
+        const auto r=result(session);QVERIFY2(r.value("ok").toBool(),qPrintable(r.value("error").toString()));QCOMPARE(images(endpoint).size(),1);
+        const auto image=images(endpoint).first();QCOMPARE(image.size(),QSize(3840,2160));QVERIFY(!r.value("resized").toBool());
+        QCOMPARE(image.pixelColor(0,0).rgb(),QColor(Qt::red).rgb());QCOMPARE(image.pixelColor(3839,0).rgb(),QColor(Qt::green).rgb());
+        QCOMPARE(image.pixelColor(0,2159).rgb(),QColor(Qt::blue).rgb());QCOMPARE(image.pixelColor(3839,2159).rgb(),QColor(Qt::yellow).rgb());
+        AgentSession restored;QString error;QVERIFY2(restored.importConversation(session.exportConversation(),&error),qPrintable(error));
+    }
     void exactFrameAndSeconds_data() {
         QTest::addColumn<QJsonObject>("args"); QTest::addColumn<QColor>("color"); QTest::addColumn<QSize>("size"); QTest::addColumn<int>("frame");
         QTest::newRow("source-frame") << QJsonObject{{"frame",1}} << QColor(Qt::green) << QSize(128,72) << 1;

@@ -10,9 +10,9 @@
   "scaling/SuperXbr": "Super-XBR 采样。",
   "menu/processing": "配置上采样、下采样和补帧。",
   "menu/upsampling": "选择主要上采样滤镜，包括自动档、Anime4K 和常规直通。",
-  "menu/anime4k": "选择内置 Anime4K 档位。",
+  "menu/anime4k": "A CNN、AFast CNN、AFast 1X 各两档，可选择普通或额外增强；1X 的放大交给第二上采样。",
   "menu/passThrough": "选择常规直通的采样算法；各算法的说明与第二上采样、下采样共用。",
-  "menu/secondUpsampling": "选择主要滤镜之后的第二上采样算法。",
+  "menu/secondUpsampling": "选择主要滤镜处理后仍需放大时使用的算法；AFast 1X 保持原尺寸，由此处完成放大。",
   "menu/downsampling": "选择缩小画面时使用的采样算法。",
   "menu/interpolation": "选择补帧算法、输出模式或自动切换。",
   "menu/interpolationAuto": "按设置中的参与档位自动切换补帧算法。",
@@ -24,5 +24,11 @@
   "builtin/Anime-8-A-CNN-Enhanced.vpy": "Anime4K旗舰模型，HLSL大幅优化了性能。\n3060显卡以上性能即可流畅处理108048-216048。",
   "builtin/Anime-9-A-CNN.vpy": "Anime4K旗舰模型，HLSL大幅优化了性能。\n3060显卡以上性能即可流畅处理108048-216048。",
   "builtin/MoeSR-50K.vpy": "开发者自训练模型，来自MoeSR(RealHATGan)的蒸馏版本着色器。\n性能要求很高，推荐4070LP以上显卡使用。",
-  "scaling/OpenNGU": "OpenNGU AA Medium BestMatch，BT.709 SDR 放大优先；不可用时回退 Jinc、D3D11。第二上采样默认仍为 Jinc。"
+  "scaling/OpenNGU": "OpenNGU AA Medium BestMatch，BT.709 SDR 放大优先；不可用时回退 Jinc、D3D11。第二上采样默认仍为 Jinc。",
+  "anime/8": "Anime4K A CNN 完整模型：修复并放大画面，再叠加边缘锐化和细节增强；仍需放大时交给第二上采样。",
+  "anime/9": "Anime4K A CNN 完整模型：修复并放大画面，不附加额外增强；仍需放大时交给第二上采样。",
+  "anime/0": "Anime4K AFast CNN：使用较轻的修复与放大网络，并启用边缘锐化和细节增强；仍需放大时交给第二上采样。",
+  "anime/1": "Anime4K AFast CNN：使用较轻的修复与放大网络，不附加额外增强；仍需放大时交给第二上采样。",
+  "anime/6": "Anime4K AFast 1X：在原分辨率执行去振铃和修复 CNN，再叠加边缘锐化与细节增强。自身不放大，放大由第二上采样完成。",
+  "anime/7": "Anime4K AFast 1X：在原分辨率执行去振铃和修复 CNN，不附加额外增强。自身不放大，放大由第二上采样完成。"
 }

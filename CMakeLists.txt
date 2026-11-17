@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.1.3 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.1.4 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,6 +15,19 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent)
 set(VSR_FFMPEG_ROOT "${CMAKE_SOURCE_DIR}/.deps/fff-player/third_party/ffmpeg" CACHE PATH
     "FFmpeg shared SDK matching the Native runtime")
 if(WIN32)
+    add_library(vsr_thumbnail SHARED src/shell/ThumbnailProvider.cpp)
+    add_executable(vsr_thumbnail_worker src/shell/ThumbnailWorker.cpp)
+    set_target_properties(vsr_thumbnail_worker PROPERTIES OUTPUT_NAME "vsr-thumbnail-worker" AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+    target_include_directories(vsr_thumbnail_worker PRIVATE "${VSR_FFMPEG_ROOT}/include")
+    target_link_libraries(vsr_thumbnail_worker PRIVATE ole32 uuid gdi32 shlwapi)
+    add_dependencies(vsr_thumbnail vsr_thumbnail_worker)
+    set_target_properties(vsr_thumbnail PROPERTIES PREFIX "" OUTPUT_NAME "vsr-thumbnail" AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+    target_include_directories(vsr_thumbnail PRIVATE "${VSR_FFMPEG_ROOT}/include")
+    target_link_libraries(vsr_thumbnail PRIVATE ole32 uuid gdi32 shlwapi)
+    if(MINGW)
+        target_link_options(vsr_thumbnail PRIVATE -static)
+        target_link_options(vsr_thumbnail_worker PRIVATE -static -municode)
+    endif()
     foreach(required include/libavformat/avformat.h include/libavcodec/avcodec.h include/libavutil/frame.h
             lib/x64/avformat-63.lib lib/x64/avcodec-63.lib lib/x64/avutil-61.lib)
         if(NOT EXISTS "${VSR_FFMPEG_ROOT}/${required}")
@@ -211,7 +224,7 @@ qt_add_executable(VSPlayer WIN32
     src/player/PlayerDiscMenu.cpp src/player/PlayerDiscMenu.h
     src/player/PlayerSettings.cpp src/player/PlayerColor.cpp src/player/PlayerMenus.cpp src/player/PlayerPlaylist.cpp src/player/PlayerAudio.cpp src/player/PlayerMediaMatching.cpp
     src/player/PlayerNetworkInput.cpp src/player/PlayerNetworkInput.h
-    src/player/PlayerProfiles.cpp src/player/PlayerCache.cpp src/player/PlayerLanguage.cpp src/player/PlayerAssociations.cpp
+    src/player/PlayerProfiles.cpp src/player/PlayerCache.cpp src/player/PlayerLanguage.cpp src/player/PlayerAssociations.cpp src/player/PlayerLoop.cpp src/player/PlayerThumbnails.cpp
     src/player/PlayerAiSubtitles.cpp src/player/PlayerAiSubtitles.h
     src/player/PlayerResources.cpp src/player/PlayerResources.h src/player/PlayerDecodeBuffer.cpp
     src/player/PlayerSubtitles.cpp src/player/PlayerSubtitles.h
@@ -293,6 +306,13 @@ qt_add_executable(VSPlayerLite WIN32 ${VSR_PLAYER_LITE_SOURCES}
 set_target_properties(VSPlayerLite PROPERTIES
     OUTPUT_NAME "vs-player"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lite")
+foreach(program VSPlayer VSPlayerLite)
+    add_dependencies(${program} vsr_thumbnail)
+endforeach()
+add_custom_command(TARGET VSPlayerLite POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+    "$<TARGET_FILE:vsr_thumbnail>" "$<TARGET_FILE_DIR:VSPlayerLite>/vsr-thumbnail.dll")
+add_custom_command(TARGET VSPlayerLite POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+    "$<TARGET_FILE:vsr_thumbnail_worker>" "$<TARGET_FILE_DIR:VSPlayerLite>/vsr-thumbnail-worker.exe")
 target_include_directories(VSPlayerLite PRIVATE src third_party/vapoursynth/include)
 target_link_libraries(VSPlayerLite PRIVATE vsr_components avif vsr_image_decoder
     vsr_image_core vsr_bluray Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network
@@ -337,6 +357,14 @@ if(BUILD_TESTING)
     target_compile_definitions(vsr_cap_workflow_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     target_link_libraries(vsr_cap_workflow_tests PRIVATE vsr_optional_runtime Qt6::Widgets Qt6::Test Qt6::Concurrent d3d11 dxgi dwmapi advapi32 shell32 user32 vsr_jxl)
     add_test(NAME cap-workflow COMMAND vsr_cap_workflow_tests -o cap-workflow-results.txt,txt)
+    set(VSR_NATIVE_SOURCE_ROOT "${CMAKE_SOURCE_DIR}/.deps/fff-vsp-20261115" CACHE PATH
+        "Patched Native source tree used by native regression tests")
+    if(EXISTS "${VSR_NATIVE_SOURCE_ROOT}/FFF.Native/3FP/Core/AvifIlocShim.cpp")
+        qt_add_executable(vsr_avif_iloc_tests tests/TestAvifIloc.cpp)
+        target_include_directories(vsr_avif_iloc_tests PRIVATE "${VSR_NATIVE_SOURCE_ROOT}/FFF.Native")
+        target_link_libraries(vsr_avif_iloc_tests PRIVATE Qt6::Test)
+        add_test(NAME native-avif-budget COMMAND vsr_avif_iloc_tests)
+    endif()
     qt_add_executable(vsr_bluray_tests tests/TestBluray.cpp)
     set_target_properties(vsr_bluray_tests PROPERTIES OUTPUT_NAME "vsr-bluray-tests")
     target_link_libraries(vsr_bluray_tests PRIVATE vsr_bluray Qt6::Test)
@@ -553,7 +581,7 @@ if(BUILD_TESTING)
     add_test(NAME lite-native-playback COMMAND vsr_player_lite_tests -o player-lite-results.txt,txt)
     add_test(NAME player-language-packs COMMAND "${CMAKE_BINARY_DIR}/runtime/python/python.exe" "${CMAKE_SOURCE_DIR}/tools/check-player-languages.py")
 
-    qt_add_executable(vsr_update_tests tests/TestUpdates.cpp)
+    qt_add_executable(vsr_update_tests tests/TestUpdates.cpp src/app/Style.cpp)
     target_include_directories(vsr_update_tests PRIVATE src)
     target_link_libraries(vsr_update_tests PRIVATE Qt6::Core Qt6::Widgets Qt6::Network Qt6::Test)
     target_link_libraries(vsr_update_tests PRIVATE vsr_components vsr_optional_runtime)
@@ -577,6 +605,15 @@ add_dependencies(VSRenderer VSExportWorker)
 
 if(BUILD_TESTING)
     add_executable(vsr_audio_path_tests tests/TestAudioPathPolicy.cpp)
+    add_executable(vsr_shell_thumbnail_probe tests/ThumbnailProbe.cpp)
+    set_target_properties(vsr_shell_thumbnail_probe PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+    target_link_libraries(vsr_shell_thumbnail_probe PRIVATE ole32 shell32 shlwapi uuid gdi32)
+    if(MINGW)
+        target_link_options(vsr_shell_thumbnail_probe PRIVATE -static -municode)
+    endif()
+    add_dependencies(vsr_shell_thumbnail_probe vsr_thumbnail)
+    add_test(NAME shell-thumbnail-decoding COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/test-shell-thumbnails.py"
+        $<TARGET_FILE:vsr_shell_thumbnail_probe> $<TARGET_FILE:vsr_thumbnail> "${CMAKE_BINARY_DIR}/ffmpeg.exe")
     target_include_directories(vsr_audio_path_tests PRIVATE src)
     add_test(NAME audio-path-policy COMMAND vsr_audio_path_tests)
     add_executable(vsr_export_pipe_fixture tests/ExportPipeFixture.cpp)

@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/LibRaw/LibRaw",
+  "tag": "0.21.4",
+  "commit": "9646d776c7c61976080a8f2be67928df0750493e",
+  "build": "MSVC v145, Makefile.msvc bin\\libraw.dll; default flags; no optional RawSpeed/DNG SDK/JPEG/LCMS"
+}

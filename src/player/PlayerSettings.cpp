@@ -1,3 +1,5 @@
+#include "player/PlayerBluetooth.h"
+#include "player/PlayerThumbnails.h"
 #include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
 #include "player/PlayerShortcuts.h"
@@ -29,6 +31,9 @@
 #include <QSettings>
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QDir>
 #include <QDialog>
 #include <QListWidget>
@@ -198,6 +203,10 @@ void PlayerWindow::showSettings() {
     decode->addRow(lavConfig);decode->addRow(lavAudioConfig);
 #endif
     auto *decodeInfo=new QLabel(tr("VS 源解码仍由 VPY 定义；LAV 视频选项用于本地文件播放时钟图。音频可独立使用 LAVAudio.ax。网络固定 3FP；内置原生视频路径使用 3FP。倍速音频使用 3FP / atempo。madVR 视频固定 LAV。"),&dialog);decodeInfo->setWordWrap(true);decode->addRow(decodeInfo);
+    auto *bluetooth=new QCheckBox(tr("蓝牙音频延迟补偿"),&dialog);bluetooth->setObjectName("playerBluetoothLatency");bluetooth->setChecked(settings_->value("audio/bluetoothLowLatency",false).toBool());decode->addRow(bluetooth);
+    auto *bluetoothCodec=new QComboBox(&dialog);bluetoothCodec->setObjectName("playerBluetoothCodec");bluetoothCodec->addItems({tr("自动（按协议估计）"),"SBC","AAC","aptX","aptX HD","aptX LL","LDAC","LHDC/HWA","L2HC","LC3"});bluetoothCodec->setCurrentIndex(std::clamp(settings_->value("audio/bluetoothCodec",0).toInt(),0,9));decode->addRow(tr("蓝牙编码（手动指定）"),bluetoothCodec);
+    auto *bluetoothAdvance=new QSpinBox(&dialog);bluetoothAdvance->setObjectName("playerBluetoothAdvance");bluetoothAdvance->setRange(-100,100);bluetoothAdvance->setSuffix(" ms");bluetoothAdvance->setValue(settings_->value("audio/bluetoothAdvance",0).toInt());decode->addRow(tr("蓝牙额外提前量"),bluetoothAdvance);
+    const auto bluetoothInfo=detectBluetoothAudio();auto *bluetoothStatus=new QLabel(bluetoothInfo.protocol?tr("蓝牙端点：%1 · %2").arg(bluetoothInfo.name,QStringList{"","A2DP","HFP","LE Audio","Bluetooth"}.value(bluetoothInfo.protocol)):tr("当前默认输出未识别为蓝牙端点"),&dialog);bluetoothStatus->setWordWrap(true);bluetoothStatus->setToolTip(tr("根据蓝牙协议、手动编码、端点 PCM 格式与屏幕刷新率估计补偿；不是实测延迟，也不会改变蓝牙 codec。"));decode->addRow(bluetoothStatus);
     auto *render=page();auto *renderer=new QComboBox(&dialog);renderer->addItems({"VS","madVR"});renderer->setCurrentText(settings_->value("player/renderer","VS").toString());render->addRow(tr("视频渲染器"),renderer);
     auto *audioRenderer=new QComboBox(&dialog);audioRenderer->setObjectName("playerAudioRenderer");
     audioRenderer->addItem("3FP (WASAPI)","3FP");
@@ -226,8 +235,10 @@ void PlayerWindow::showSettings() {
     auto *hdrInfo=new QLabel(tr("RTX TrueHDR：按上游的 SDR→HDR 方案处理，仅在 D3D11 直通启用。源像素格式、NVIDIA 驱动和 Windows HDR 输出需满足内核条件。NV Video HDR 的中灰参数不适用于此接口。"),&dialog);hdrInfo->setObjectName("playerHdrMapping");hdrInfo->setWordWrap(true);render->addRow(tr("HDR 映射"),hdrInfo);
     auto *stableViewport=new QCheckBox(tr("划出播放列表/底部控制时不改变渲染分辨率"),&dialog);stableViewport->setObjectName("playerStableViewport");stableViewport->setChecked(settings_->value("render/stableViewport",true).toBool());stableViewport->setToolTip(tr("控制界面覆盖视频，保持视频视口和渲染分辨率，避免重新分配渲染资源及重建增强链。"));render->addRow(stableViewport);
     auto *animeStages=new QListWidget(&dialog);animeStages->setObjectName("playerAnimeStages");
+    QFile animeDescriptions(":/filters/player-menu-descriptions.json");QJsonObject animeNotes;
+    if(animeDescriptions.open(QIODevice::ReadOnly))animeNotes=QJsonDocument::fromJson(animeDescriptions.readAll()).object();
     const auto allowed=settings_->value("player/animeStages",defaultAnimeStages()).toStringList();
-    for(int stage:builtinAnimeOrder()){auto *item=new QListWidgetItem(qualityNames().at(stage),animeStages);item->setData(Qt::UserRole,stage);item->setCheckState(stage==5 || allowed.contains(QString::number(stage))?Qt::Checked:Qt::Unchecked);if(stage==5)item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);if(stage==settings_->value("player/animeStage",0).toInt())animeStages->setCurrentItem(item);}
+    for(int stage:builtinAnimeOrder()){auto *item=new QListWidgetItem(qualityNames().at(stage),animeStages);item->setData(Qt::UserRole,stage);item->setToolTip(animeNotes.value("anime/"+QString::number(stage)).toString());item->setCheckState(stage==5 || allowed.contains(QString::number(stage))?Qt::Checked:Qt::Unchecked);if(stage==5)item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);if(stage==settings_->value("player/animeStage",0).toInt())animeStages->setCurrentItem(item);}
     animeStages->ensurePolished();animeStages->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);animeStages->setFixedHeight(animeStages->count()*qMax(animeStages->sizeHintForRow(0),animeStages->fontMetrics().height()+12)+2*animeStages->frameWidth()+4);
     if(!settings_->contains("render/paretoImage"))settings_->setValue("render/paretoImage",QString());
     auto *pareto=new QPushButton(tr("查看超分算法Pareto图"),&dialog);pareto->setObjectName("playerParetoChart");
@@ -252,7 +263,7 @@ void PlayerWindow::showSettings() {
     interpolationHeading->hide();interpolationStages->hide();animeInfo->hide();
     resizeFirst->hide();resizeExplanation->hide();frames->hide();performance->labelForField(frames)->hide();
     limitInfo->setText(tr("原生解码器使用自身的有界缓冲队列。"));
-    renderInfo->setText(tr("内置 Anime4K CNN / no CNN、额外增强、1X · Jinc / D3D11；默认 D3D11 原生直通。"));
+    renderInfo->setText(tr("内置 Anime4K A CNN、AFast CNN、AFast 1X，各有普通和额外增强两档；1X 由第二上采样放大。"));
     delete categories->takeItem(9);
 #endif
     auto *cache=page();auto *cacheMode=new QComboBox(&dialog);cacheMode->setObjectName("playerCacheMode");cacheMode->addItem(tr("软件目录(默认)"),"default");cacheMode->addItem(tr("自定义目录"),"custom");cacheMode->setCurrentIndex(settings_->value("cache/path").toString().isEmpty()?0:1);cache->addRow(tr("索引缓存位置"),cacheMode);
@@ -266,6 +277,10 @@ void PlayerWindow::showSettings() {
     auto *choices=new QWidget(&dialog);auto *choiceRow=new QHBoxLayout(choices);choiceRow->setContentsMargins(0,0,0,0);const QStringList selections{tr("全选视频"),tr("全选音频"),tr("全选图片"),tr("全选所有"),tr("取消所有")};for(int n=0;n<5;++n){auto *button=new QPushButton(selections[n],&dialog);if(n==2)button->setObjectName("playerSelectImages");choiceRow->addWidget(button);connect(button,&QPushButton::clicked,&dialog,[=]{for(int row=0;row<associationFormats->count();++row){auto *item=associationFormats->item(row);const auto extension=item->data(Qt::UserRole).toString();item->setCheckState(n==3 || (n==0 && videoFormats.contains(extension)) || (n==1 && audioFormats.contains(extension)) || (n==2 && imageFormats.contains(extension))?Qt::Checked:Qt::Unchecked);}});}associations->addRow(choices);
     auto *registerButton=new QPushButton(tr("注册所选格式到当前用户"),&dialog);registerButton->setObjectName("playerRegisterAssociations");associations->addRow(registerButton);connect(registerButton,&QPushButton::clicked,&dialog,[&]{QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();if(registerPlayerAssociations(extensions,playerAssociationExecutable())){settings_->setValue("associations/extensions",extensions);setError(tr("格式已注册；请在 Windows 默认应用中选择 VS Player。"));}else setError(tr("文件关联注册失败。"));});
     auto *defaultsButton=new QPushButton(tr("打开 Windows 默认应用…"),&dialog);associations->addRow(defaultsButton);connect(defaultsButton,&QPushButton::clicked,&dialog,[]{QDesktopServices::openUrl(QUrl("ms-settings:defaultapps"));});
+    auto *thumbnailsInstall=new QPushButton(tr("安装所选格式的资源管理器缩略图"),&dialog);thumbnailsInstall->setObjectName("playerInstallThumbnails");associations->addRow(thumbnailsInstall);
+    connect(thumbnailsInstall,&QPushButton::clicked,&dialog,[&]{QStringList extensions;for(int n=0;n<associationFormats->count();++n){auto *item=associationFormats->item(n);const auto ext=item->data(Qt::UserRole).toString();if(item->checkState()==Qt::Checked&&thumbnailExtensions().contains(ext))extensions<<ext;}QString error;if(installPlayerThumbnails(extensions,&error))QMessageBox::information(&dialog,tr("资源管理器缩略图"),tr("已安装到当前用户。重新打开文件夹以查看缩略图；不会修改默认打开程序。"));else QMessageBox::warning(&dialog,tr("资源管理器缩略图"),error);});
+    auto *thumbnailsRemove=new QPushButton(tr("移除 VS Player 缩略图并恢复原处理器"),&dialog);thumbnailsRemove->setObjectName("playerRemoveThumbnails");associations->addRow(thumbnailsRemove);
+    connect(thumbnailsRemove,&QPushButton::clicked,&dialog,[&]{if(unregisterThumbnailProvider())QMessageBox::information(&dialog,tr("资源管理器缩略图"),tr("已恢复原缩略图处理器。"));else QMessageBox::warning(&dialog,tr("资源管理器缩略图"),tr("缩略图处理器注册失败。"));});
     auto *associationInfo=new QLabel(tr("注册到当前用户，无需管理员权限。Windows 最终默认程序由用户选择；取消选择会移除 VS Player 的打开方式入口，不改写其他程序的默认关联。"),&dialog);associationInfo->setWordWrap(true);associations->addRow(associationInfo);
     auto *subtitlePage=page();
     auto *srtStyle=new QPushButton(tr("SRT 字幕样式设置…"),&dialog);srtStyle->setObjectName("playerSrtStyle");subtitlePage->addRow(srtStyle);connect(srtStyle,&QPushButton::clicked,this,&PlayerWindow::showSubtitleStyle);
@@ -302,7 +317,7 @@ void PlayerWindow::showSettings() {
 #else
         renderer->currentText()
 #endif
-    );settings_->setValue("render/antiring",antiring->isChecked());settings_->setValue("render/stableViewport",stableViewport->isChecked());if(animeStages->currentItem())settings_->setValue("player/animeStage",animeStages->currentItem()->data(Qt::UserRole));QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();settings_->setValue("associations/extensions",extensions);};
+    );settings_->setValue("audio/bluetoothLowLatency",bluetooth->isChecked());settings_->setValue("audio/bluetoothCodec",bluetoothCodec->currentIndex());settings_->setValue("audio/bluetoothAdvance",bluetoothAdvance->value());settings_->setValue("render/antiring",antiring->isChecked());settings_->setValue("render/stableViewport",stableViewport->isChecked());if(animeStages->currentItem())settings_->setValue("player/animeStage",animeStages->currentItem()->data(Qt::UserRole));QStringList extensions;for(int n=0;n<associationFormats->count();++n)if(associationFormats->item(n)->checkState()==Qt::Checked)extensions<<associationFormats->item(n)->data(Qt::UserRole).toString();settings_->setValue("associations/extensions",extensions);};
     const auto storeStages=[&]{
         QStringList values;for(int row=0;row<animeStages->count();++row){const auto *item=animeStages->item(row);if(item->checkState()==Qt::Checked)values<<QString::number(item->data(Qt::UserRole).toInt());}settings_->setValue("player/animeStages",values);
 #ifndef VSR_LITE_PLAYER

@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QSettings>
 #include "player/PlayerAssociations.h"
+#include "player/PlayerThumbnails.h"
 #include "player/PlayerImage.h"
 #include "player/PlayerImageTools.h"
 #include <QTimer>
@@ -37,6 +38,11 @@ int main(int argc, char **argv) {
     if (GetEnvironmentVariableW(L"FFF_NO_PREFETCH",disabled,2)!=1 || disabled[0]!=L'1')
         if (argc<2 || QByteArray(argv[1])!="--photocraft-import") prefetch=std::jthread(prefetchPlaybackLibraries);
     QApplication app(argc, argv);
+    if(app.arguments().value(1)=="--install-thumbnails"){
+        auto extensions=app.arguments().mid(2);if(extensions.isEmpty())extensions=vsr::thumbnailExtensions();
+        QString error;const bool ok=vsr::installPlayerThumbnails(extensions,&error);if(!ok)qWarning().noquote()<<error;return ok?0:1;
+    }
+    if(app.arguments().value(1)=="--uninstall-thumbnails")return vsr::unregisterThumbnailProvider()?0:1;
     if(app.arguments().value(1)=="--photocraft-import" && app.arguments().size()==4){
         vsr::PlayerImage decoder;int result=1;
         QObject::connect(&decoder,&vsr::PlayerImage::loaded,&app,[&](const QImage &image){

@@ -1,8 +1,8 @@
 # VS Renderer / VS Player / VS Cap
 
-![源码版本 1.1.3](https://img.shields.io/badge/source-1.1.3-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
+![源码版本 1.1.4](https://img.shields.io/badge/source-1.1.4-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
 
-Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片，用 **VSCap** 截图与标注。
+Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片（含 LibRaw 相机 RAW），用 **VSCap** 截图与标注。
 
 [下载便携包](https://github.com/user-Wing/VS-Renderer-GUI/releases) · [ModelScope 下载源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) · [操作指南](docs/README.md) · [更新日志](changelog.md)
 
@@ -11,7 +11,7 @@ Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS
 | 程序 | 使用场景 |
 | --- | --- |
 | VS Renderer | 可视化组织VapourSynth滤镜和分段时间组，保存 VPY 预设；源/输出预览、多路同步缩放与取色、按类型搜索滤镜、自定义 GLSL/HLSL 预览、批量编码导出及 BD Remux |
-| VS Player | 播放本地媒体、网络链接与图片；音轨/双字幕、章节、逐帧与续播、截图；Full 版本可选 VS 增强和补帧 |
+| VS Player | 播放本地媒体、网络链接与图片；音轨/双字幕、章节、逐帧与续播、截图、A–B 循环；循环段可送入 Renderer 时间组，可安装[资源管理器缩略图](docs/player.md#资源管理器缩略图)；Full 版本可选 VS 增强和补帧 |
 | VSCap | 偶数尺寸框选与2像素步长调整、绘图和可编辑文字；剪贴板复制、多贴图、JXL/AVIF/PNG 保存 |
 | PhotoCraft（Full） | 从播放器打开独立图片编辑器，编辑图层、文字与滤镜；关闭播放器后可继续保存工作 |
 
@@ -29,14 +29,16 @@ VS增强需使用配套Native内核；旧内核无法保留新增帧信息时会
 
 系统要求：Windows 10 22H2+ x64、支持 Direct3D 11 的显卡与驱动。RIFE 需要 Vulkan；AWJ 图片转换需要 AVX2，增强 FFmpeg 需要匹配的 CPU 指令集。
 
+配套 FFmpeg 的固定来源、420 编码色彩修复及完整组件更新方式见[依赖说明](docs/dependencies.md)。单文件用户可从同版本 Full 包取得匹配的 `ffmpeg.exe`、`ffprobe.exe` 和根目录 shared DLL；[现有 FFmpeg 组件源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/ffmpeg)中的旧包不能替代本版依赖。
+
 | 分发形式 | 功能与运行要求 |
 | --- | --- |
 | Full | Renderer、Player、VSCap、VS 滤镜及完整编辑/可选后端；以所下载包的组件清单为准 |
-| 单文件 `VS-Player.exe` | 独立播放器，支持内置 MoeSR-50K、Anime4K A+CNN、CNN/no CNN、额外增强、1X、D3D11/Jinc、兼容 GLSL/HLSL 导入、音视频字幕及图片查看；运行时在程序旁展开，退出后清理，同目录保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
+| 单文件 `VS-Player.exe` | 独立播放器，支持内置 MoeSR-50K、Anime4K A CNN、AFast CNN、AFast 1X 及各自的额外增强档、D3D11/Jinc、兼容 GLSL/HLSL 导入、音视频字幕及图片查看；运行时在程序旁展开，退出后清理，同目录保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
 
 从 1.0.13 起仅提供 Full 目录与单文件播放器，不再生成 PlayerLite 发行目录。早期 Lite 包仍按其对应说明使用。
 
-单文件已接入与完整版一致的 MoeSR 和八档 Anime4K 预设，无需 VapourSynth，可在右键“图像处理 → 上采样滤镜”或设置中选择；构建和验收边界见 [Native 构建指南](docs/native-api20-build.md#lite-anime4k-fast)。已发布的旧附件不自动包含此功能。
+单文件已接入与完整版一致的 MoeSR 和六档 Anime4K 预设，无需 VapourSynth，可在右键“图像处理 → 上采样滤镜”或设置中选择；构建和验收边界见 [Native 构建指南](docs/native-api20-build.md#lite-anime4k-fast)。已发布的旧附件不自动包含此功能。
 
 ## 快速上手
 
@@ -44,9 +46,10 @@ VS增强需使用配套Native内核；旧内核无法保留新增帧信息时会
 
 **Agent 智能体**：从 Renderer 侧栏进入，发送按钮旁选择来源、模型与匹配的思考强度；执行过程默认折叠，正文集中呈现判断和结果。支持 Markdown 预览、运行中补充输入、`/` 命令、`@` 引用与 AI 自动协调子智能体，以及 Token / 上下文整理、Skills / 全局 AGENTS.md、MCP 和导入导出，见 [Agent 指南](docs/agent.md)。页面背景可独立设置。
 
-可在“软件内操作”和“环境完全访问”之间切换；完整访问下，Agent 能读取、搜索和编辑本地文件、应用补丁、运行命令及管理长进程，视觉来源还可读取本地图像。
+可在“软件内操作”和“环境完全访问”之间切换；完整访问下，Agent 能读取、搜索和编辑本地文件、应用补丁、运行命令及管理长进程，视觉来源还可读取本地图像，并以原分辨率查看完整视频帧。
 
 视觉模型支持按秒数或帧号直接读取 VS 原片/处理后画面及局部裁剪，先汇报抽样发现的瑕疵，再建议滤镜；用法见 [视频画质初检](docs/agent.md#视频画质初检)。
+模型选择列表标明图像输入能力；运行中的对话可留在后台继续处理，同时新建、切换或导入导出其他对话。左侧会话可右键重命名，自定义分组并折叠；点击新对话立即显示一条空白会话，连续点击复用该会话。
 
 ![Renderer Agent 工作区](assets/agent-preview.png)
 
@@ -62,7 +65,7 @@ VS增强需使用配套Native内核；旧内核无法保留新增帧信息时会
 - 原始高度 ≥2160p 时禁用内置 Anime4K；D3D11/Jinc 可用，自定义 VPY 需自行评估负载。
 - 默认使用3FP原生色彩处理；Full中的libplacebo仅供手动对照mpv，见 [色彩设置](docs/color-management.md)。
 - 当前开发内核已同步3FP的自适应调度、硬解回退和音频缓冲优化；AI 字幕通过独立 Qwen3-ASR 组件启用；本轮已准备上传包，远端下载仍等待维护者上传。适用范围与验证见[内核说明](docs/performance-debugging.md#上游内核优化)。
-- 图片使用 CPU 解码，动图当前显示首帧；复杂 PSD/RAW 支持以编辑器实际能力为准。
+- 图片使用 CPU 解码，动图当前显示首帧；过深或超出合成预算的 PSD 图层组会明确拒绝；复杂 PSD/RAW 支持以编辑器实际能力为准。
 - Player 配置保存在程序旁 `player.ini`；Renderer 使用独立设置。更新前保留自定义 VPY、项目、截图及配置，按 [更新说明](docs/portable-updates.md) 操作。
 
 页面背景支持即时应用、主题库及 ZIP/7z 导入、ZIP 导出，分发包不预装背景；三／四路预览可用同位置滑块比较。图片导出支持比例尺寸和内置HLSL重新采样，Full另可选内置GLSL；单文件版直接使用FFmpeg且不提供质量搜索。设置中的便携Pareto图入口和功耗显示要求见 [Player 指南](docs/player.md)。

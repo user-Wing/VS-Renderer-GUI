@@ -28,6 +28,16 @@ void write(const QString &path,const QByteArray &d){QFile f(path);QVERIFY(f.open
 class TestBluray:public QObject {
     Q_OBJECT
 private slots:
+    void shortHeaderRejected(){
+        QByteArray data(60,'\0');data.replace(0,8,"MPLS0200");put32(data,8,16);put32(data,16,40);
+        put16(data,22,1);put16(data,26,32);data.replace(28,5,"00001");data.replace(33,4,"M2TS");put32(data,44,45000);
+        BlurayPlaylist p;QString error;
+        QVERIFY(!BlurayCatalog::parse(data,&p,&error));
+        QVERIFY(BlurayCatalog::parse(fixture(),&p,&error));
+        p.header.resize(16);QVERIFY(BlurayCatalog::slice(p,0,1).isEmpty());
+        QVERIFY(BlurayCatalog::slice(p,INT_MAX,2).isEmpty());
+    }
+
     void menuPreservesAuthoredFirstPlay(){
         QTemporaryDir dir;QVERIFY(QDir().mkpath(dir.filePath("BDMV")));
         QByteArray index(100,'\0');index.replace(0,8,"INDX0200");put32(index,8,40);

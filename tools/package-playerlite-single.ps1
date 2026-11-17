@@ -1,6 +1,7 @@
 param(
     [string]$SourceDirectory = "",
-    [string]$OutputFile = ""
+    [string]$OutputFile = "",
+    [string]$WorkDirectory = ""
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -17,7 +18,7 @@ if (!(Test-Path -LiteralPath $built)) { throw "Rebuild VSPlayerLite first: $buil
 if (!(Test-Path -LiteralPath (Join-Path $SourceDirectory 'FFF.Native.dll'))) { throw "Missing FFF.Native.dll: $SourceDirectory" }
 $compiler = 'C:\Private\Soft\QT\Tools\mingw1310_64\bin\gcc.exe'
 if (!(Test-Path -LiteralPath $compiler)) { throw "Missing compiler: $compiler" }
-$work = Join-Path $root 'build\playerlite-single'
+$work = if ($WorkDirectory) { [IO.Path]::GetFullPath($WorkDirectory) } else { Join-Path $root 'build\playerlite-single' }
 $stage = Join-Path $work 'stage'
 $zip = Join-Path $work 'payload.tar.gz'
 $runner = Join-Path $work 'launcher.exe'

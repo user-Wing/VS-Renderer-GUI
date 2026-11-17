@@ -2,7 +2,8 @@ param(
     [string]$OutputDirectory,
     [string]$SevenZip,
     [string]$CompiledDirectory = "",
-    [switch]$IncludeOptional
+    [switch]$IncludeOptional,
+    [switch]$ExcludePrivate
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -12,7 +13,7 @@ if (Test-Path -LiteralPath (Join-Path $CompiledDirectory 'mpv-shaders')) { $Comp
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 if (-not $output.StartsWith($projectRoot.TrimEnd('\')+'\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Shader deployment escapes workspace' }
 $openNgu = Join-Path $projectRoot '.deps/openngu'
-if (Test-Path -LiteralPath $openNgu) {
+if (!$ExcludePrivate -and (Test-Path -LiteralPath $openNgu)) {
     New-Item -ItemType Directory -Path $output -Force | Out-Null
     Get-ChildItem -LiteralPath $openNgu -File | Where-Object { $_.Name -like 'OpenNGU-*' } | Copy-Item -Destination $output -Force
 }

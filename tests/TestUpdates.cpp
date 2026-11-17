@@ -15,6 +15,13 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QElapsedTimer>
+#include <QTimer>
+#include <QMessageBox>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QScrollArea>
+#include "ui/PageTheme.h"
+#include "app/Style.h"
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSignalSpy>
@@ -79,7 +86,50 @@ private slots:
     void componentInstallPreservesPaths(){QTemporaryDir temp;const auto target=temp.filePath("portable with space"),cache=temp.filePath("cache"),source=cache+"/staging/wrapper/actual";write(target+"/vs-player.exe","player");write(target+"/runtime/tools/7z.exe","keep-7z");write(target+"/runtime/mkvtoolnix/mkvtoolnix-gui.ini","user");write(source+"/mkvmerge.exe","new-tool");write(source+"/mkvtoolnix-gui.ini","default");const auto plan=cache+"/plan.json";write(plan,QJsonDocument(QJsonArray{QJsonObject{{"id","mkvtoolnix"},{"version","102.0"},{"source",source}}}).toJson());QProcess helper;helper.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-components.ps1"),"-ParentPid","0","-Plan",plan,"-Target",target,"-NoLaunch"});QVERIFY(helper.waitForFinished(20000));QVERIFY2(helper.exitCode()==0,helper.readAllStandardError().constData());QFile installed(target+"/runtime/mkvtoolnix/mkvmerge.exe");QVERIFY(installed.open(QIODevice::ReadOnly));QCOMPARE(installed.readAll(),QByteArray("new-tool"));QFile config(target+"/runtime/mkvtoolnix/mkvtoolnix-gui.ini");QVERIFY(config.open(QIODevice::ReadOnly));QCOMPARE(config.readAll(),QByteArray("user"));QVERIFY(QFileInfo(target+"/runtime/tools/7z.exe").exists());
         write(plan,QJsonDocument(QJsonArray{QJsonObject{{"id","VS-GUI"},{"version","0.1"},{"source",source}}}).toJson());helper.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-components.ps1"),"-ParentPid","0","-Plan",plan,"-Target",target,"-NoLaunch"});QVERIFY(helper.waitForFinished(20000));QCOMPARE(helper.exitCode(),1);
     }
-    void liveComponentDownload(){if(qEnvironmentVariable("VSR_COMPONENT_LIVE")!="1")QSKIP("Set VSR_COMPONENT_LIVE for real ModelScope GUI download");ComponentDownloads widget;widget.resize(980,650);widget.show();auto *tree=widget.findChild<QTreeWidget *>("componentVersions");QVERIFY(tree);QTreeWidgetItem *group=nullptr;for(int i=0;i<tree->topLevelItemCount();++i)if(tree->topLevelItem(i)->data(0,Qt::UserRole).toString()=="mkvtoolnix")group=tree->topLevelItem(i);QVERIFY(group);QTRY_VERIFY_WITH_TIMEOUT(group->childCount()>0,30000);group->setExpanded(true);tree->setCurrentItem(group->child(0));QSignalSpy ready(&widget,&ComponentDownloads::componentPrepared);widget.findChild<QPushButton *>("componentDownload")->click();QTRY_VERIFY_WITH_TIMEOUT(!ready.isEmpty() || widget.findChild<QLabel *>("componentStatus")->text().startsWith(QStringLiteral("组件下载失败")),180000);QVERIFY2(!ready.isEmpty(),qPrintable(widget.findChild<QLabel *>("componentStatus")->text()));const auto payload=ready.first().at(2).toString();QVERIFY(QFileInfo(payload+"/mkvmerge.exe").isFile());QProcess info;info.start(payload+"/mkvmerge.exe",{"--version"});QVERIFY(info.waitForFinished(10000));QCOMPARE(info.exitCode(),0);qInfo()<<info.readAllStandardOutput();const auto shot=qEnvironmentVariable("VSR_COMPONENT_SCREENSHOT");if(!shot.isEmpty())QVERIFY(widget.grab().save(shot));}
+    void componentListInteraction(){
+        if(qEnvironmentVariable("VSR_COMPONENT_LIVE")!="1")QSKIP("Set VSR_COMPONENT_LIVE for real component list interaction");
+        const auto originalStyle=qApp->styleSheet();const auto restoreStyle=qScopeGuard([&]{qApp->setStyleSheet(originalStyle);});qApp->setStyleSheet(applicationStyleSheet(true));
+        QDialog host;auto *layout=new QVBoxLayout(&host);auto *scroll=new QScrollArea(&host);scroll->setWidgetResizable(true);layout->addWidget(scroll);auto *page=new QWidget(scroll);auto *form=new QVBoxLayout(page);scroll->setWidget(page);
+        auto *heading=new QLabel("Settings",page);heading->setMinimumHeight(350);form->addWidget(heading);ComponentDownloads widget(page);widget.setMinimumHeight(360);form->addWidget(&widget);host.resize(880,620);
+        QTemporaryDir theme;QSettings settings(theme.filePath("themes.ini"),QSettings::IniFormat);settings.setValue("test/color","#222222");settings.sync();applyPageTheme(scroll,settings.fileName(),"test");
+        QElapsedTimer heartbeat;heartbeat.start();qint64 gap=0;QTimer timer;connect(&timer,&QTimer::timeout,&host,[&]{gap=std::max(gap,heartbeat.restart());});timer.start(20);
+        QTimer::singleShot(0,&host,[&]{const auto close=qScopeGuard([&]{host.reject();});
+            auto *tree=widget.findChild<QTreeWidget *>("componentVersions");QVERIFY(tree);
+            for(int n=0;n<tree->topLevelItemCount();++n){auto *group=tree->topLevelItem(n);if(group->data(0,Qt::UserRole).toString()!="LAV-Filters")continue;
+                QTRY_VERIFY_WITH_TIMEOUT(group->childCount()>0,30000);scroll->ensureWidgetVisible(&widget);tree->scrollToItem(group);QTest::qWait(100);
+                const auto rect=tree->visualItemRect(group);qInfo()<<"EXPAND_CLICK"<<rect;
+                QTest::mouseDClick(tree->viewport(),Qt::LeftButton,{},rect.center());QTest::qWait(100);
+                group->setExpanded(true);
+                const auto child=tree->visualItemRect(group->child(0));QTest::mouseClick(tree->viewport(),Qt::LeftButton,{},child.center());QTest::qWait(500);
+                gap=std::max(gap,heartbeat.elapsed());QVERIFY2(gap<1500,"Expanding/selecting a component blocked the GUI");qInfo()<<"EXPAND_HEARTBEAT"<<gap;
+            }
+        });host.exec();
+    }
+    void liveComponentDownload(){
+        if(qEnvironmentVariable("VSR_COMPONENT_LIVE")!="1")QSKIP("Set VSR_COMPONENT_LIVE for real ModelScope GUI download");
+        const auto id=qEnvironmentVariable("VSR_COMPONENT_ID","mkvtoolnix");
+        QDialog host;auto *layout=new QVBoxLayout(&host);ComponentDownloads widget(&host);layout->addWidget(&widget);host.resize(980,650);host.show();
+        QTimer dialogs;connect(&dialogs,&QTimer::timeout,&host,[]{for(auto *w:QApplication::topLevelWidgets())if(auto *box=qobject_cast<QMessageBox *>(w))box->accept();});dialogs.start(100);
+        QTimer::singleShot(0,&host,[&]{const auto close=qScopeGuard([&]{host.reject();});
+        auto *tree=widget.findChild<QTreeWidget *>("componentVersions");QVERIFY(tree);
+        QTreeWidgetItem *group=nullptr;for(int i=0;i<tree->topLevelItemCount();++i)if(tree->topLevelItem(i)->data(0,Qt::UserRole).toString()==id)group=tree->topLevelItem(i);QVERIFY(group);
+        QElapsedTimer listing;listing.start();while(group->childCount()==0 && listing.elapsed()<30000)QTest::qWait(10);
+        qInfo()<<"CATALOG_STATUS"<<id<<group->childCount()<<group->toolTip(0)<<widget.findChild<QLabel *>("componentStatus")->text();
+        if(id=="aria2-next"){QVERIFY(group->childCount()==0);QVERIFY(group->toolTip(0).contains(QStringLiteral("没有可用 Windows")));return;}
+        QVERIFY2(group->childCount()>0,qPrintable(group->toolTip(0)));group->setExpanded(true);tree->setCurrentItem(group->child(0));
+        QSignalSpy ready(&widget,&ComponentDownloads::componentPrepared);
+        QElapsedTimer heartbeat;heartbeat.start();qint64 maximumGap=0;int beats=0;QTimer timer;
+        connect(&timer,&QTimer::timeout,&widget,[&]{maximumGap=std::max(maximumGap,heartbeat.restart());++beats;});timer.start(20);
+        qInfo()<<"DOWNLOAD_CLICK"<<id<<group->child(0)->text(0);
+        widget.findChild<QPushButton *>("componentDownload")->click();
+        QTRY_VERIFY_WITH_TIMEOUT(!ready.isEmpty() || widget.findChild<QLabel *>("componentStatus")->text().startsWith(QStringLiteral("组件下载失败")) || (id=="VS-GUI" && widget.findChild<QLabel *>("componentStatus")->text().startsWith(QStringLiteral("下载验证完成"))),240000);
+        maximumGap=std::max(maximumGap,heartbeat.elapsed());
+        qInfo()<<"DOWNLOAD_RESULT"<<id<<"beats"<<beats<<"maxGapMs"<<maximumGap<<widget.findChild<QLabel *>("componentStatus")->text();
+        QVERIFY2(maximumGap<1500,"Component download blocked the GUI event loop");
+        if(id=="VS-GUI")QVERIFY(widget.findChild<QLabel *>("componentStatus")->text().startsWith(QStringLiteral("下载验证完成")));
+        else {QVERIFY2(!ready.isEmpty(),qPrintable(widget.findChild<QLabel *>("componentStatus")->text()));QVERIFY(QFileInfo(ready.first().at(2).toString()).isDir());}
+        });host.exec();
+    }
     void versionsAndDiscovery(){QVERIFY(PortableUpdater::newer("1.0.10","1.0.2"));QVERIFY(!PortableUpdater::newer("1.0.1","1.0.2"));QVERIFY(!PortableUpdater::newer("1.0.2.0","1.0.2"));QVERIFY(!PortableUpdater::newer("bad","1.0.2"));
         QJsonArray entries{QJsonObject{{"Path","VS-GUI/1.0.10.7z"},{"Type","blob"},{"Size",100},{"Revision","abc"},{"Sha256",QString(64,'a')}},QJsonObject{{"Path","else/9.9.9.7z"},{"Type","blob"}},QJsonObject{{"Path","VS-GUI/9.9.9.7z"},{"Type","tree"}},QJsonObject{{"Path","VS-GUI/a/9.9.9.7z"},{"Type","blob"}}};
         const auto found=PortableUpdater::releases(entries);QCOMPARE(found.size(),1);QCOMPARE(found.first().version,QString("1.0.10"));QVERIFY(found.first().url.path().contains("/resolve/abc/VS-GUI/"));}
@@ -93,7 +143,7 @@ private slots:
         const auto archive=qEnvironmentVariable("VSR_TEST_UPDATE_ARCHIVE");if(archive.isEmpty())QSKIP("Set VSR_TEST_UPDATE_ARCHIVE to audit a release package");
         QProcess listing;listing.start(tool("7z.exe"),{"l","-slt","-sccUTF-8",archive});QVERIFY(listing.waitForFinished(15000));QCOMPARE(listing.exitCode(),0);const auto text=QString::fromUtf8(listing.readAllStandardOutput());QVERIFY(PortableUpdater::safeArchiveListing(text));
         const auto entries=text.mid(text.indexOf("----------")).split('\n');int paths=0;
-        for(const auto &entry:entries)if(entry.startsWith("Path = ")){auto path=entry.mid(7).trimmed();path.replace('\\','/');QVERIFY2(QRegularExpression("^(VS-Renderer-GUI-[0-9.]+-windows-x64|VS-GUI-Full|VS-GUI-Lite)$").match(path.section('/',0,0)).hasMatch(),qPrintable(path));++paths;}
+        for(const auto &entry:entries)if(entry.startsWith("Path = ")){auto path=entry.mid(7).trimmed();path.replace('\\','/');QVERIFY2(QRegularExpression("^(VS-Renderer-GUI-[0-9.]+-windows-x64|VS-GUI-Full(-[0-9.]+)?|VS-GUI-Lite)$").match(path.section('/',0,0)).hasMatch(),qPrintable(path));++paths;}
         QVERIFY(paths>10);
     }
     void payloadLayouts(){

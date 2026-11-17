@@ -1,3 +1,4 @@
+#include "player/PlayerBluetooth.h"
 #include "player/PlayerWindow.h"
 #include "backend/ThreeFpPlayer.h"
 #include "backend/VapourSynthFrameServer.h"
@@ -72,7 +73,13 @@ void PlayerWindow::applyAudioEffects() {
     const bool normalize=settings_->value("audio/normalize",false).toBool();
     if(enabled || normalize || wave!=1 || audioDelay_!=0)useNativeAudio();
     clock_->setLoudnessNormalization(normalize);
-    clock_->setAudioEffects(enabled,gains.data(),wave,audioDelay_);
+    qint64 bluetoothDelay=0;
+    if(settings_->value("audio/bluetoothLowLatency",false).toBool()){
+        const auto audio=detectBluetoothAudio();
+        bluetoothDelay=bluetoothCompensation(audio,settings_->value("audio/bluetoothCodec",0).toInt(),screen()?screen()->refreshRate():60,settings_->value("audio/bluetoothAdvance",0).toInt());
+    }
+    if(bluetoothDelay)useNativeAudio();
+    clock_->setAudioEffects(enabled,gains.data(),wave,audioDelay_+bluetoothDelay);
 }
 void PlayerWindow::showEqualizer() {
     if(equalizerPopup_ && equalizerPopup_->isVisible()){equalizerPopup_->close();return;}

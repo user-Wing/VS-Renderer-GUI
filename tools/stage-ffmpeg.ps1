@@ -1,5 +1,5 @@
 param(
-    [string]$SourceDirectory = '.deps/ffmpeg-enhanced/09-full-shared-newdav1d',
+    [string]$SourceDirectory = '.deps/ffmpeg-enhanced/10-full-shared-svt420fix-20261115-release',
     [string[]]$OutputDirectory = @('build/mingw-release', 'dist/VS-GUI-Full')
 )
 $ErrorActionPreference = 'Stop'
@@ -31,7 +31,7 @@ foreach ($directory in $OutputDirectory) {
     New-Item -ItemType Directory -Path $runtime -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $source 'README.md') -Destination $runtime -Force
     New-Item -ItemType Directory -Path (Join-Path $runtime 'build-info') -Force | Out-Null
-    foreach ($name in @('manifest.json','config.mak','build-full09.sh')) {
+    foreach ($name in @('manifest.json','config.mak','build-full09.sh','build-full10.sh','resume-ffmpeg.sh','subsampling-initialization.patch','source-identity.json','package_release.py','result.json','release-size-and-pe.json')) {
         $info = Join-Path $source "build-info/$name"
         if (Test-Path -LiteralPath $info) { Copy-Item -LiteralPath $info -Destination (Join-Path $runtime 'build-info') -Force }
     }

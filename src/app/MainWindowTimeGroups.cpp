@@ -17,6 +17,28 @@
 #include "graph/PresetStore.h"
 
 namespace vsr {
+bool MainWindow::openPlayerSource(const QString &path,qint64 loopIn,qint64 loopOut) {
+    if((loopIn>=0 || loopOut>=0) && (loopIn<0 || loopOut<=loopIn))return false;
+    if(!confirmProjectReplacement() || !loadSource(path))return false;
+    replaceTimeGroups({{QStringLiteral("全片"),0,{}}});
+    playerRangeIn_=loopIn;playerRangeOut_=loopOut;
+    selectPage(0);return true;
+}
+void MainWindow::applyPlayerRange() {
+    if(playerRangeIn_<0 || sourceFpsNumerator_<=0 || sourceFpsDenominator_<=0)return;
+    const auto begin=playerRangeIn_,end=playerRangeOut_;playerRangeIn_=playerRangeOut_=-1;
+    const auto frame=[this](qint64 time){return qint64(std::llround(static_cast<long double>(time)*sourceFpsNumerator_/(10000000.L*sourceFpsDenominator_)));};
+    const auto a=frame(begin),b=frame(end);
+    if(b<=a || a>=sourceTotalFrames_ || end>sourcePlayer_->snapshot().duration100ns){setStatus(QStringLiteral("A–B 区间超出视频范围或不足一个源帧，未创建时间组。"),true);return;}
+    QList<FilterTimeGroup> groups;
+    if(a>0)groups.append({QStringLiteral("A 前"),0,{}, {},0});
+    const int selected=groups.size();
+    groups.append({QStringLiteral("A–B 循环段"),begin/10000000,{}, {},a});
+    if(end<sourcePlayer_->snapshot().duration100ns && b<sourceTotalFrames_)groups.append({QStringLiteral("B 后"),end/10000000,{}, {},b});
+    replaceTimeGroups(groups);refreshTimeGroups(selected);checkpointProject();
+    sourcePrimePending_=false;sourcePrimeStarted_=sourcePlayer_->seek(begin);
+    setStatus(QStringLiteral("已选中 A–B 时间组（源帧 %1 至 %2，不含出点），可直接添加滤镜。边界按 CFR 源帧对齐。").arg(a).arg(b));
+}
 qint64 MainWindow::groupFrameBoundary(const FilterTimeGroup &g) const {
     if(g.startFrame>=0)return g.startFrame;
     if(sourceFpsNumerator_<=0||sourceFpsDenominator_<=0)return 0;

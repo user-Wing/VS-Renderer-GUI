@@ -55,7 +55,7 @@ def main():
     if not plugin.is_file():
         raise RuntimeError('Build plugins/3fui-export-bridge/VsrExportBridge.vbproj in Release before deployment')
     backup = ROOT / 'build' / ('deployment-' + datetime.now().strftime('%Y%m%d-%H%M%S'))
-    report = {'upstream': '248cb9bb0cef91922ab8f88ea7f6ef38ec0e311c', 'base': '72af915f8bf2567155c1f87851a6fa263f73b14f', 'startupPr': 48, 'integrationPr': 57, 'editions': {}}
+    report = {'upstream': '85f514be34cdbcef17ba5c44b90cd9bbe4c2526d', 'base': '72af915f8bf2567155c1f87851a6fa263f73b14f', 'startupPr': 48, 'integrationPr': 62, 'editions': {}}
     version = re.search(r'project\(VSRenderer VERSION ([0-9.]+)', (ROOT / 'CMakeLists.txt').read_text(encoding='utf-8')).group(1)
     editions = {
         ROOT / 'dist/VS-GUI-Full': {'VSRenderer.exe': BUILD / 'VSRenderer.exe', 'vs-player.exe': BUILD / 'vs-player.exe', 'vs-cap.exe': BUILD / 'vs-cap.exe', 'vs-export-worker.exe': BUILD / 'vs-export-worker.exe'},
@@ -71,9 +71,13 @@ def main():
     for target, programs in editions.items():
         folder = target.name
         before = settings(target)
-        sources = {**programs, 'FFF.Native.dll': NATIVE, 'THIRD_PARTY_NOTICES.md': ROOT / 'THIRD_PARTY_NOTICES.md'}
+        sources = {**programs, 'FFF.Native.dll': NATIVE, 'libraw.dll': BUILD / 'libraw.dll', 'vsr-thumbnail.dll': BUILD / 'vsr-thumbnail.dll', 'THIRD_PARTY_NOTICES.md': ROOT / 'THIRD_PARTY_NOTICES.md'}
+        sources['vsr-thumbnail-worker.exe'] = BUILD / 'vsr-thumbnail-worker.exe'
         for language in ('zh_CN', 'en_US'):
             sources['languages/' + language + '.json'] = ROOT / 'assets/languages' / (language + '.json')
+        for source in (ROOT / 'third_party/libraw').iterdir():
+            if source.is_file():
+                sources['licenses/libraw/' + source.name] = source
         sources['licenses/jpeg-xl-LICENSE.txt'] = ROOT / 'assets/jpeg-xl-LICENSE.txt'
         for source in (ROOT / 'third_party/native-api20').iterdir():
             if source.is_file():

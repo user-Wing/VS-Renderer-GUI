@@ -154,6 +154,31 @@ private slots:
         QCOMPARE(resolved.last()[2].toJsonObject().value("reasoningLevels").toArray().size(), 1);
     }
 
+    void harnessInputModalitiesEnableFrameTools()
+    {
+        const QJsonObject metadata{{"id", "our-free-model/space-bunny-free"}, {"input", QJsonArray{"text", "image"}}};
+        const auto capability = AgentModelCapabilities::fromMetadata("http://127.0.0.1:8326/v1", metadata.value("id").toString(), metadata);
+        QVERIFY(capability.imageInputSupported);
+        QCOMPARE(capability.imageInputSource, QString("metadata"));
+        auto textOnly = metadata; textOnly.insert("input", QJsonArray{"text"});
+        QVERIFY(!AgentModelCapabilities::fromMetadata(capability.endpoint, capability.model, textOnly).imageInputSupported);
+        auto denied = metadata; denied.insert("vision", false);
+        QVERIFY(!AgentModelCapabilities::fromMetadata(capability.endpoint, capability.model, denied).imageInputSupported);
+    }
+
+    void listsVisionCapabilityForEveryModel()
+    {
+        MetadataEndpoint endpoint;endpoint.document={{"data",QJsonArray{
+            QJsonObject{{"id","vision"},{"input",QJsonArray{"text","image"}}},
+            QJsonObject{{"id","text"},{"input",QJsonArray{"text"}}},QJsonObject{{"id","unknown"}}}}};
+        AgentModelCapabilities resolver;QSignalSpy resolved(&resolver,&AgentModelCapabilities::resolved);
+        resolver.resolve(endpoint.url(),{},"vision");QTRY_COMPARE(resolved.count(),1);
+        const auto map=resolved.first()[2].toJsonObject().value("modelImageInputs").toObject();
+        QCOMPARE(map.value("vision").toString(),QString("supported"));
+        QCOMPARE(map.value("text").toString(),QString("unsupported"));
+        QCOMPARE(map.value("unknown").toString(),QString("unknown"));
+    }
+
     void ollamaShowDiscoversBooleanAndNamedThinkingWithoutGeneration()
     {
         MetadataEndpoint endpoint; endpoint.serverName = "Ollama";

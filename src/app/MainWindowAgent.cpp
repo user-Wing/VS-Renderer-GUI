@@ -19,6 +19,7 @@
 #include <QLineEdit>
 #include <QProcess>
 #include <QSettings>
+#include <QUuid>
 #include <QStackedWidget>
 #include <cmath>
 
@@ -45,8 +46,14 @@ bool writablePath(const QString &path, QString *error) {
 void MainWindow::initializeAgent()
 {
     agentSession_ = new AgentSession(this);
-    const auto add = [this](const QString &name, const QString &description, const QJsonObject &parameters, AgentSession::Handler handler) {
-        agentSession_->registerTool(name, description, parameters, std::move(handler));
+    auto id=QSettings().value("agent/lastConversation").toString();if(QUuid(id).isNull())id=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    agentSession_->setProperty("agentConversationId",id);
+    registerAgentWorkspace(agentSession_);initializeAgentFeatures();
+}
+void MainWindow::registerAgentWorkspace(AgentSession *session)
+{
+    const auto add = [session](const QString &name, const QString &description, const QJsonObject &parameters, AgentSession::Handler handler) {
+        session->registerTool(name, description, parameters, std::move(handler));
     };
     add("get_state", QStringLiteral("读取当前源、滤镜图、处理路、时间组、预览和编码状态。索引均从0开始。"), schema({}), [this](const QJsonObject &) {
         auto result = PresetStore::metadata(currentTimeGroups(), static_cast<SourceFilter>(sourceFilter_->currentData().toInt()), sourcePath_->text(), {});
@@ -208,11 +215,10 @@ void MainWindow::initializeAgent()
         for (const auto &entry : entries) { if (files.size() >= 200) break; files.append(QJsonObject{{"path", entry.absoluteFilePath()}, {"directory", entry.isDir()}, {"bytes", double(entry.size())}}); }
         return QJsonObject{{"ok", true}, {"entries", files}, {"truncated", entries.size() > 200}};
     });
-    new AgentVideoFrames(agentSession_, [this](bool processed, QString *error) {
+    new AgentVideoFrames(session, [this](bool processed, QString *error) {
         if (sourcePath_->text().isEmpty()) { *error = QStringLiteral("请先导入源媒体。"); return QString(); }
         const auto result = processed ? currentScript() : VpyScriptBuilder::build(sourcePath_->text(), static_cast<SourceFilter>(sourceFilter_->currentData().toInt()), FilterGraph{});
         *error = result.errors.join('\n'); return result.script;
     });
-    initializeAgentFeatures();
 }
 }

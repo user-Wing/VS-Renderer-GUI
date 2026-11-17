@@ -1,5 +1,6 @@
 #include "agent/AgentLocalImages.h"
 #include "agent/AgentSession.h"
+#include "agent/AgentImageMessages.h"
 #include <QBuffer>
 #include <QColorSpace>
 #include <QDir>
@@ -9,18 +10,20 @@
 #include <QImage>
 #include <QImageIOHandler>
 #include <QImageReader>
+#include <QImageWriter>
 #include <QtConcurrentRun>
 
 namespace vsr {
 namespace {
 using Cancel=std::shared_ptr<std::atomic_bool>;
 constexpr qint64 maxSourceBytes=32*1024*1024,maxPixels=64*1024*1024;
-constexpr int maxDataUrlBytes=512*1024,maxDimension=32768;
+constexpr int maxDataUrlBytes=agent_images::maximumEncodedBytes,maxDimension=32768;
 QJsonObject failure(const QString &error) { return {{"ok",false},{"error",error}}; }
 QJsonObject cancelled() { return {{"ok",false},{"cancelled",true},{"error","Image reading cancelled; no attachment was queued."}}; }
-QByteArray encode(const QImage &image,const char *format,int quality=-1)
+QByteArray encode(const QImage &image)
 {
-    QByteArray bytes;QBuffer buffer(&bytes);if(!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer,format,quality))return {};return bytes;
+    QByteArray bytes;QBuffer buffer(&bytes);if(!buffer.open(QIODevice::WriteOnly))return {};
+    QImageWriter writer(&buffer,"PNG");writer.setCompression(100);if(!writer.write(image))return {};return bytes;
 }
 bool fits(const QByteArray &bytes,const QByteArray &mime)
 {
@@ -34,18 +37,11 @@ QJsonObject prepareImage(const QString &path,const Cancel &stop)
     const auto original=reader.size();if(!original.isValid() || original.width()>maxDimension || original.height()>maxDimension || qint64(original.width())*original.height()>maxPixels)return failure("Image dimensions are unknown or exceed 32768 per edge / 64 Mi pixels.");
     auto oriented=original;if(reader.transformation() & QImageIOHandler::TransformationRotate90)oriented.transpose();
     const auto format=QString::fromLatin1(reader.format());const bool firstFrameOnly=reader.supportsAnimation();
-    if(original.width()>1024 || original.height()>1024){auto size=original.scaled(1024,1024,Qt::KeepAspectRatio);size.setWidth(qMax(1,size.width()));size.setHeight(qMax(1,size.height()));reader.setScaledSize(size);}
     auto image=reader.read();if(image.isNull())return failure("Image decoding failed: "+reader.errorString());if(stop->load())return cancelled();
-    if(image.width()>1024 || image.height()>1024){auto size=image.size().scaled(1024,1024,Qt::KeepAspectRatio);size.setWidth(qMax(1,size.width()));size.setHeight(qMax(1,size.height()));image=image.scaled(size,Qt::KeepAspectRatio,Qt::SmoothTransformation);}
     if(image.colorSpace().isValid())image.convertToColorSpace(QColorSpace::SRgb);
-    QByteArray encoded,mime;
-    for(int attempt=0;attempt<10;++attempt){
-        if(stop->load())return cancelled();encoded=encode(image,"PNG");mime="image/png";if(fits(encoded,mime))break;
-        if(!image.hasAlphaChannel())for(int quality:{90,80,65,50}){encoded=encode(image,"JPEG",quality);mime="image/jpeg";if(fits(encoded,mime))break;}
-        if(fits(encoded,mime))break;
-        image=image.scaled(qMax(1,image.width()*3/4),qMax(1,image.height()*3/4),Qt::KeepAspectRatio,Qt::SmoothTransformation);
-    }
-    if(!fits(encoded,mime))return failure("Unable to encode a valid image attachment within 512 KiB.");
+    if(stop->load())return cancelled();
+    const auto encoded=encode(image);const QByteArray mime="image/png";
+    if(!fits(encoded,mime))return failure("Original-resolution image exceeds the 64 MiB attachment limit; no resized image was sent.");
     const auto dataUrl=QByteArray("data:")+mime+";base64,"+encoded.toBase64();if(dataUrl.size()>maxDataUrlBytes)return failure("Encoded image exceeds the attachment size limit.");
     return {{"ok",true},{"path",path},{"mime",QString::fromLatin1(mime)},{"dataUrl",QString::fromLatin1(dataUrl)},
         {"width",image.width()},{"height",image.height()},{"original_width",oriented.width()},{"original_height",oriented.height()},
@@ -68,7 +64,7 @@ void AgentLocalImages::registerTools()
     if(!session_ || registered_)return;registered_=true;
     const QJsonObject schema{{"type","object"},{"properties",QJsonObject{{"path",QJsonObject{{"type","string"},{"description","Absolute local image path or path relative to this Session's cwd."}}},{"cwd",QJsonObject{{"type","string"},{"description","Optional local working directory for this operation."}}}}},{"required",QJsonArray{"path"}},{"additionalProperties",false}};
     for(const auto &name:{"read_image","view_image"}){
-        const QPointer<AgentLocalImages> self(this);session_->registerAsyncTool(name,"Decode a local image and queue a real visual attachment for the next model request. Success means queued, not yet analyzed. Requires explicit image-input capability; original remains unchanged. First frame only for animations; output fits 1024 pixels per edge and 512 KiB data URI.",schema,[self](const QJsonObject &args,AgentSession::Completion completion){
+        const QPointer<AgentLocalImages> self(this);session_->registerAsyncTool(name,"Decode a local image and queue a real visual attachment for the next model request. Success means queued, not yet analyzed. Requires explicit image-input capability; original remains unchanged. First frame only for animations. Sends the complete image at original resolution as lossless PNG, independent of any preview viewport. Exceeding the 64 MiB data URI limit fails explicitly; never silently resize or use lossy compression.",schema,[self](const QJsonObject &args,AgentSession::Completion completion){
             if(!self || !self->session_){completion(failure("Image module is unavailable."));return;}const auto provider=self->session_->provider();if(!imageRoute(provider)){completion(failure("Select a source whose current model explicitly declares image input support."));return;}
             const auto raw=args.value("path").toString();if(raw.trimmed().isEmpty()){completion(failure("path must be non-empty."));return;}
             const auto cwd=QDir(self->session_->workingDirectory()).absoluteFilePath(QDir::fromNativeSeparators(args.value("cwd").toString(".")));if(!QFileInfo(cwd).isDir()){completion(failure("cwd is not an existing local directory."));return;}

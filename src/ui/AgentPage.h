@@ -3,6 +3,9 @@
 #include "agent/AgentProvider.h"
 #include <QWidget>
 #include <memory>
+#include <functional>
+#include <QMap>
+#include <QPointer>
 
 class QLabel;
 class QListWidget;
@@ -34,6 +37,10 @@ public:
     void openModelMenu();
     void selectModel(const QString &model);
     void selectReasoning(const QString &level);
+    void setSessionFactory(std::function<AgentSession *(const QString &)> factory) { sessionFactory_ = std::move(factory); }
+    AgentSession *activeSession() const { return session_; }
+    QString conversationId() const { return conversationId_; }
+    void shutdown();
 signals:
     void skillsSettingsRequested();
     void mcpSettingsRequested();
@@ -43,6 +50,7 @@ signals:
     void commandSubmitted(const QString &text);
     void completionsRequested(const QString &prefix);
     void mentionActionRequested(const QString &action);
+    void activeSessionChanged(vsr::AgentSession *session);
 private:
     void refreshProviders(const QString &selected = {});
     void openProviderMenu();
@@ -61,8 +69,12 @@ private:
     bool saveProviders();
     void showTools();
     void refreshConversations();
-    void newConversation();
+    void newConversation(bool showDraft = true);
     void saveConversation();
+    void saveSession(AgentSession *session);
+    void watchSession(AgentSession *session);
+    void activateConversation(const QString &id, AgentSession *session);
+    AgentSession *createSession(const QString &id);
     void loadConversation(const QString &id);
     void importConversation();
     void exportConversation();
@@ -71,9 +83,12 @@ private:
     void send();
     void report(const QString &message, bool error = false);
     AgentSession *session_;
-    std::unique_ptr<AgentToolLibrary> toolLibrary_;
+    std::shared_ptr<AgentToolLibrary> toolLibrary_;
+    struct Conversation { QPointer<AgentSession> session; std::shared_ptr<AgentToolLibrary> tools; QString title, draft, pending, project; bool renamed = false; };
+    QMap<QString, Conversation> liveConversations_;
+    std::function<AgentSession *(const QString &)> sessionFactory_;
     QList<AgentProvider> providers_;
-    QString directory_, conversationId_, conversationTitle_, pendingText_;
+    QString directory_, conversationId_, conversationTitle_, pendingText_, draftConversationId_;
     QPushButton *provider_ = nullptr;
     int providerIndex_ = -1;
     QPushButton *modelButton_ = nullptr, *reasoning_ = nullptr, *pending_ = nullptr;

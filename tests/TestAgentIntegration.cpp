@@ -21,6 +21,7 @@
 #include <QListWidget>
 #include <QPlainTextEdit>
 #include <QProcess>
+#include <QPainter>
 #include <QPushButton>
 #include <QSettings>
 #include <QScopeGuard>
@@ -38,6 +39,7 @@ using namespace vsr;
 class TestAgentIntegration final : public QObject {
     Q_OBJECT
     QVariant savedAccessMode_, savedWorkingDirectory_;
+    QTemporaryDir recoveryRoot_;
     static QJsonObject call(MainWindow &window, const QString &tool, const QJsonObject &args = {}) {
         return window.agentSession_->executeTool(tool, args);
     }
@@ -82,6 +84,7 @@ private slots:
     }
     void initTestCase() {
         QStandardPaths::setTestModeEnabled(true);
+        qputenv("VSR_RECOVERY_ROOT",recoveryRoot_.path().toUtf8());
         QCoreApplication::setOrganizationName("VSRenderer-Agent-Tests");
         QCoreApplication::setApplicationName("AgentIntegration");
         QFont font(QStringLiteral("Comic Sans MS")); font.setPixelSize(13);
@@ -140,6 +143,50 @@ private slots:
         QVERIFY(composer && sidebar); QVERIFY(composer->width()>=page->width()-sidebar->width()-100);
         const auto artifacts = qEnvironmentVariable("VSR_AGENT_ARTIFACTS");
         if (!artifacts.isEmpty()) { QDir().mkpath(artifacts); QVERIFY(window.grab().save(QDir(artifacts).filePath("agent-background.png"))); }
+    }
+    void liveHarnessVideoFrames() {
+        const auto keyPath=qEnvironmentVariable("VSR_AGENT_HARNESS_KEY_FILE");
+        if(keyPath.isEmpty())QSKIP("Set VSR_AGENT_HARNESS_KEY_FILE to opt into the local Harness vision test.");
+        QFile key(keyPath);QVERIFY(key.open(QIODevice::ReadOnly));
+        AgentProvider provider;provider.baseUrl=qEnvironmentVariable("VSR_AGENT_HARNESS_URL","http://127.0.0.1:8326/v1");
+        provider.model=qEnvironmentVariable("VSR_AGENT_HARNESS_MODEL","our-free-model/space-bunny-free");provider.apiKey=QString::fromUtf8(key.readAll()).trimmed();provider.maxOutputTokens=4096;
+        AgentModelCapabilities resolver;QSignalSpy resolved(&resolver,&AgentModelCapabilities::resolved);
+        resolver.resolve(provider.baseUrl,provider.apiKey,provider.model,true);QTRY_COMPARE_WITH_TIMEOUT(resolved.size(),1,15000);
+        provider.modelCapability=resolved.first()[2].toJsonObject();QVERIFY(provider.modelCapability.value("imageInputSupported").toBool());
+        QTemporaryDir dir;QImage image(640,360,QImage::Format_RGB888);
+        for(int y=0;y<360;++y)for(int x=0;x<640;++x){const int v=32+(x/40)*12;image.setPixelColor(x,y,QColor(v,v,v));}
+        {QPainter painter(&image);painter.setPen(Qt::NoPen);painter.setBrush(Qt::red);painter.drawEllipse(30,120,120,120);painter.setBrush(Qt::blue);painter.drawRect(490,120,120,120);}
+        const auto realSource=qEnvironmentVariable("VSR_AGENT_FRAME_SOURCE");const auto png=dir.filePath("input.png"),source=realSource.isEmpty()?dir.filePath("source.mkv"):realSource;QVERIFY(image.save(png));
+        QProcess ff;if(realSource.isEmpty())ff.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),{"-v","error","-loop","1","-i",png,"-t","1","-r","24","-c:v","ffv1","-pix_fmt","yuv444p12le","-colorspace","bt709","-color_primaries","bt709","-color_trc","bt709",source});
+        if(realSource.isEmpty()){QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);}
+        auto textProvider=provider;textProvider.id="harness-vision-test";textProvider.name="Harness Vision Test";textProvider.model="our-free-model/amd/MiMo-V2.6-Flash";
+        QVERIFY(AgentProviderStore::save(QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("agent/providers.json"),{textProvider}));QSettings().setValue("agent/providerId",textProvider.id);
+        MainWindow window;window.show();
+        QTRY_VERIFY_WITH_TIMEOUT(!window.agentSession_->provider().modelCapability.isEmpty(),15000);QVERIFY(!window.agentSession_->toolAvailable("inspect_video_frame"));
+        window.agentPage_->selectModel(provider.model);QTRY_VERIFY_WITH_TIMEOUT(window.agentSession_->toolAvailable("inspect_video_frame"),15000);
+        window.agentPage_->startNewConversation();QVERIFY(window.agentSession_==window.agentPage_->activeSession());QVERIFY(window.agentSession_->toolAvailable("inspect_video_frame"));
+        QVERIFY(call(window,"open_source",{{"path",source}}).value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(call(window,"get_state").value("sourceWidth").toInt(),realSource.isEmpty()?640:3840,10000);
+        if(!realSource.isEmpty())window.sourceFilter_->setCurrentIndex(window.sourceFilter_->findData(int(SourceFilter::Lsmas)));
+        auto *session=window.agentSession_;session->setAccessMode(AgentAccessMode::SoftwareOnly);
+        const QStringList allowed{"get_state","inspect_video_frame","list_filters"};
+        for(const auto &entry:session->allTools()){const auto name=entry.toObject().value("function").toObject().value("name").toString();session->setToolEnabled(name,allowed.contains(name));}
+        QSignalSpy finished(session,&AgentSession::finished),errors(session,&AgentSession::errorOccurred),calls(session,&AgentSession::toolExecuted);
+        connect(session,&AgentSession::toolExecuted,session,[](const QString &name,const QJsonObject &,const QJsonObject &result){qInfo().noquote()<<"Harness tool:"<<name<<"ok:"<<result.value("ok").toBool();});
+        auto *input=window.agentPage_->findChild<QPlainTextEdit*>("agentInput");input->setPlainText(realSource.isEmpty()?QStringLiteral("这是实际看图验收。请调用inspect_video_frame读取原片第0帧完整画面，再读取同一帧crop x=240,y=40,width=160,height=280，必须两张都实际看。描述完整画面里两个彩色形状的颜色、形状和左右位置，检查局部背景是否有阶梯状色带。调用list_filters核对可用去色带滤镜，给出建议但不要添加或修改滤镜。不能根据文件名猜图；如果没有收到图片请明确说明。中文简短回答。") : QStringLiteral("请实际调用inspect_video_frame读取原片%1秒整帧，再读取同一时间crop x=1664,y=824,width=512,height=512的局部。先详细描述看到的人物、物体、颜色和布局，再说明有无色带或压缩痕迹及置信度。调用list_filters核对去色带滤镜，给出建议但不要修改处理链。必须看两张真实图，不凭片名猜测。中文回答。").arg(qEnvironmentVariable("VSR_AGENT_FRAME_SECONDS","4323.2")));
+        QTest::mouseClick(window.agentPage_->findChild<QPushButton*>("agentSend"),Qt::LeftButton);QVERIFY(session->isBusy());
+        window.agentPage_->startNewConversation();QVERIFY(session->isBusy());QVERIFY(window.agentSession_!=session);auto *foreground=window.agentSession_;window.hide();
+        QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(),360000);
+        QJsonArray trace;int frames=0;bool cropped=false;
+        for(const auto &event:calls){const auto name=event[0].toString();const auto args=event[1].toJsonObject(),r=event[2].toJsonObject();trace.append(QJsonObject{{"name",name},{"arguments",args},{"result",r}});if(name=="inspect_video_frame"&&r.value("attachment_queued").toBool()){++frames;cropped|=args.contains("crop");}}
+        QString answer;int attachments=0;for(const auto &entry:session->messages()){const auto m=entry.toObject();if(m.value("role")=="assistant"&&!m.contains("tool_calls"))answer=m.value("content").toString();for(const auto &b:m.value("content").toArray())if(b.toObject().value("type")=="image_url")++attachments;}
+        const auto artifacts=qEnvironmentVariable("VSR_AGENT_ARTIFACTS");if(!artifacts.isEmpty()){QDir().mkpath(artifacts);image.save(QDir(artifacts).filePath("fixture.png"));QFile evidence(QDir(artifacts).filePath("harness-video-frames.json"));QVERIFY(evidence.open(QIODevice::WriteOnly));const auto bytes=QJsonDocument(QJsonObject{{"model",provider.model},{"capability",provider.modelCapability},{"frames",frames},{"attachments",attachments},{"calls",trace},{"answer",answer},{"conversation",session->exportConversation()}}).toJson();QVERIFY(!bytes.contains(provider.apiKey.toUtf8()));evidence.write(bytes);}
+        QVERIFY(foreground->messages().isEmpty());
+        QVERIFY2(errors.isEmpty(),errors.isEmpty()?"":qPrintable(errors.first()[0].toString()));
+        QVERIFY2(frames>=2,qPrintable(QJsonDocument(trace).toJson()));QVERIFY(cropped);QVERIFY(attachments>=2);
+        bool fullFrame=false;for(const auto &event:calls)if(event[0].toString()=="inspect_video_frame"&&!event[1].toJsonObject().contains("crop")){const auto r=event[2].toJsonObject();if(!r.value("ok").toBool())continue;fullFrame=true;QCOMPARE(r.value("width").toInt(),realSource.isEmpty()?640:3840);QCOMPARE(r.value("height").toInt(),realSource.isEmpty()?360:2160);QVERIFY(!r.value("resized").toBool());}QVERIFY(fullFrame);
+        if(realSource.isEmpty())QVERIFY2(answer.contains(QStringLiteral("红"))&&answer.contains(QStringLiteral("蓝"))&&answer.contains(QStringLiteral("色带")),qPrintable(answer));else QVERIFY(answer.size()>80);
+        QCOMPARE(window.graph_.nodes().size(),0);
     }
     void liveDeepSeekTools() {
         const auto settings = qEnvironmentVariable("VSR_AGENT_3FUI_SETTINGS");

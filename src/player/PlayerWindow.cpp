@@ -151,6 +151,22 @@ PlayerWindow::PlayerWindow() {
         settings_->setValue("render/threeStage",true);
     }
     if(settings_->value("color/engine",0).toInt()==2)settings_->setValue("color/engine",0);
+    if(settings_->value("player/animePresetLayout",0).toInt()<2){
+        settings_->setValue("player/animeStage",legacyAnimeStage(settings_->value("player/animeStage",5).toInt()));
+        QStringList stages;
+        for(const auto &value:settings_->value("player/animeStages",defaultAnimeStages()).toStringList()){
+            const auto stage=QString::number(legacyAnimeStage(value.toInt()));
+            if(!stages.contains(stage))stages<<stage;
+        }
+        settings_->setValue("player/animeStages",stages);
+        const QFileInfo oldPreset(settings_->value("player/preset").toString());
+        const auto builtin=QDir(PresetStore::directory()).filePath("builtin");
+        const int stage=builtinAnimeStage(oldPreset.fileName());
+        if(oldPreset.absolutePath()==builtin && stage>=0)settings_->setValue("player/preset",QDir(builtin).filePath(builtinAnimeFiles()[stage]));
+        if(settings_->value("render/secondUpscale",4).toInt()<0)settings_->setValue("render/secondUpscale",4);
+        if(settings_->value("render/upscale",4).toInt()==11 || settings_->value("render/upscale",4).toInt()==12)settings_->setValue("render/upscale",4);
+        settings_->setValue("player/animePresetLayout",2);
+    }
 #ifdef VSR_LITE_PLAYER
     if (newConfiguration) {
         settings_->setValue("player/core","3FP");settings_->setValue("decode/video","3FP");settings_->setValue("decode/audio","3FP");
@@ -171,12 +187,11 @@ PlayerWindow::PlayerWindow() {
     settings_->setValue("player/preset",QDir(PresetStore::directory()).filePath("builtin/"+(settings_->value("player/animeAuto",false).toBool()?QString("Anime.vpy"):nativeAnimeFiles[std::clamp(settings_->value("player/animeStage",5).toInt(),0,10)])));
     settings_->sync();
 #endif
-    if(settings_->value("player/animeStages").toStringList()==QStringList{"0","1","2","3","6","7","4","5"})settings_->setValue("player/animeStages",defaultAnimeStages());
     preset_=settings_->value("player/preset").toString();
 #ifdef VSR_LITE_PLAYER
     qualityStage_=initialQualityStage();
 #else
-    if (!QFileInfo::exists(preset_)) preset_.clear();
+    if (!QFileInfo::exists(preset_) && profile()!="Anime") preset_.clear();
 #endif
     interpolationAuto_=interpolationStage()>=0 && settings_->value("player/interpolationAuto",false).toBool();
     subtitleVisible_=settings_->value("subtitle/visible",true).toBool();
@@ -294,6 +309,8 @@ PlayerWindow::PlayerWindow() {
         const int target=frameAtPosition100ns(position(),clip_.totalFrames,clip_.fpsNumerator,clip_.fpsDenominator);
         if(playing_ && frame.frameIndex+1<clip_.totalFrames && frame.frameIndex<target)requestFrame(target);
     });
+    auto *bluetoothTimer=new QTimer(this);bluetoothTimer->setInterval(5000);
+    connect(bluetoothTimer,&QTimer::timeout,this,[this]{if(settings_->value("audio/bluetoothLowLatency",false).toBool() && ready_ && !imageMode_)applyAudioEffects();});bluetoothTimer->start();
     connect(pane_, &PreviewPane::viewChanged, this, [this](float z, float x, float y) { resetZoom_->setVisible(z!=1 || x!=0 || y!=0);if(resetZoom_->isVisible())resetZoom_->raise();if(imageMode_){pane_->adoptView(z,x,y);updateInfo();return;}suspendQualityCheck();if(!madvrMode()) (direct_?clock_:output_)->setView(z, x, y); });
     connect(pane_, &PreviewPane::redrawRequested, this, [this] { if(imageMode_){pane_->surface()->update();return;}if(madvrMode()) { if(lav_) { const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height()); } } else (direct_?clock_:output_)->redraw();
         if(ready_)suspendQualityCheck();if((!direct_ || (nativeAnime_ && qualityStage_!=4 && qualityStage_!=5)) && !profile().isEmpty() && interpolationStage()<0 && superInterpolationStage()<0 && ready_ && !networkSource())profileResize_->start(); });
@@ -355,6 +372,7 @@ bool PlayerWindow::openFile(const QString &input) {
     minimalMode_=audioMode_ || (!isFullScreen() && width()<950);updateMinimalControls();
     imageTools_->setSource(image?QFileInfo(path).absoluteFilePath():QString());
     for(auto *control:QList<QWidget *>{timeline_,play_,time_,frame_,rate_,speedButton_})control->setEnabled(!image || control==play_ && imagePages_>1);
+    loopIn_=loopOut_=-1;loopEnabled_=false;
     lav_.reset(); clock_->pause(); playing_ = false; autoPlay_ = settings_->value("basic/autoplay",true).toBool(); ready_ = pending_ = seekPending_ = rateApplied_ = false;
     if(interpolationAuto_ && interpolationStages(settings_->value("player/interpolationRenderer",0).toInt()).isEmpty())interpolationAuto_=false;
     if(interpolationAuto_){const QStringList stages{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"};preset_=QDir(PresetStore::directory()).filePath("builtin/"+stages[std::clamp(interpolationStages(settings_->value("player/interpolationRenderer",0).toInt()).value(0,"3").toInt(),0,3)]);if(settings_->value("player/interpolationRenderer",0).toInt()==1)preset_.replace(".vpy","-D3D11.vpy");}
@@ -436,7 +454,7 @@ void PlayerWindow::refreshScript() {
     bool audioOnly=playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower());
     if(!audioMode_ && !media_.value("streams").toArray().isEmpty()){audioOnly=true;for(const auto &entry:media_.value("streams").toArray())if(entry.toObject().value("type").toString()=="video")audioOnly=false;}
     if(!hlslFailed_)hlslFallback_.clear();
-    nativeAnime_=nativeBuiltinCompatible() && (!hlslFailed_ || qualityStage_==6 || qualityStage_==7);
+    nativeAnime_=nativeBuiltinCompatible() && !hlslFailed_;
     if(mode=="Anime" && (qualityStage_<4 || qualityStage_>=6) && (!animeSourceSupported() || (high && fixedAnimeStage()<0)))qualityStage_=4;
     if(mode=="Anime" && qualityStage_!=4 && qualityStage_!=5 && (!nativeAnime_ || !hlslColorCompatible())){
         nativeAnime_=false;qualityStage_=5;profileFallback_=true;customShaderPackage_.clear();hlslParameters_.clear();
@@ -448,15 +466,14 @@ void PlayerWindow::refreshScript() {
         else {
             const auto cache=QDir(customShaderDirectory()).filePath("cache");
             auto package=ShaderPackage::prepare(qualityStage_<8?":/filters/builtin-shaders/anime4k-1x.glsl":qualityStage_==10?":/filters/builtin-shaders/moesr-50k.hlsl":":/filters/builtin-shaders/anime4k-mode-a.glsl",cache);
-            if(qualityStage_==8)package=ShaderPackage::enhance(package,{{{"mode","sharpen_edges"},{"strength",0.3},{"threshold",2.0}},{{"mode","enhance_detail"},{"strength",0.3}}},cache);
+            if(qualityStage_==8 || qualityStage_==6)package=ShaderPackage::enhance(package,{{{"mode","sharpen_edges"},{"strength",0.3},{"threshold",2.0}},{{"mode","enhance_detail"},{"strength",0.3}}},cache);
             if(package.packagePath.isEmpty())error=package.error;
             else customShaderPackage_=package.packagePath;
         }
         hlslParameters_.clear();
         if(!error.isEmpty()){
             customShaderPackage_.clear();
-            if(qualityStage_<8){hlslFailed_=true;hlslFallback_=error+tr(" · 原生 1X HLSL");}
-            else {hlslFallback_=error+QStringLiteral(" · D3D11");qualityStage_=5;profileFallback_=true;nativeAnime_=false;}
+            hlslFailed_=true;hlslFallback_=error+QStringLiteral(" · D3D11");qualityStage_=5;profileFallback_=true;nativeAnime_=false;
         }
     }else if(mode=="Anime"){customShaderPackage_.clear();hlslParameters_.clear();}
     const bool native=
@@ -481,7 +498,7 @@ void PlayerWindow::refreshScript() {
     if(server_->initializing()){showStatus(tr("正在初始化 VS，完成后加载滤镜。"));return;}
     output_->resetVideoOutput(); output_->setMuted(true);
     const auto vsSource=mediaInput_;
-    const auto activePreset=mode=="Anime" && qualityStage_>=6?QDir(PresetStore::directory()).filePath(qualityStage_==6?"builtin/Anime-6-1X-Jinc.vpy":"builtin/Anime-7-1X-D3D11.vpy"):preset_;
+    const auto activePreset=mode=="Anime" && qualityStage_>=6?QDir(PresetStore::directory()).filePath("builtin/"+builtinAnimeFiles().value(qualityStage_)):preset_;
     auto result = activePreset.isEmpty() ? VpyScriptBuilder::build(vsSource, SourceFilter::Native, FilterGraph()) : PresetStore::load(activePreset, vsSource);
     customShaderPackage_.clear();hlslParameters_.clear();output_->setCustomShader({});
     if(settings_->value("render/hlsl",true).toBool() && !hlslFailed_ && mode.isEmpty() && !activePreset.isEmpty()){
@@ -557,7 +574,18 @@ void PlayerWindow::restoreRememberedTracks(const QJsonArray &streams){
             subtitleVisible_=settings_->value(prefix+"visible",subtitleVisible_).toBool();
         }
 }
-void PlayerWindow::loadPreset(const QString &path) {
+void PlayerWindow::loadPreset(const QString &requestedPath) {
+    QString path=requestedPath;
+    const auto builtin=QDir(PresetStore::directory()).filePath("builtin");
+    const auto requested=QFileInfo(path);
+    const int requestedStage=builtinAnimeStage(requested.fileName());
+    if(requestedStage>=0 &&
+#ifdef VSR_LITE_PLAYER
+       true
+#else
+       requested.absolutePath()==builtin
+#endif
+    )path=QDir(builtin).filePath(builtinAnimeFiles()[requestedStage]);
     if(QFileInfo(path).fileName()=="Anime-4-Jinc.vpy")settings_->setValue("render/upscale",4);
     if(QFileInfo(path).fileName()=="Anime-5-D3D11.vpy")settings_->setValue("render/upscale",7);
 
@@ -753,6 +781,7 @@ void PlayerWindow::updateState() {
         if (lavKeyPending_ && lav_) { lavKeyPending_ = false; lav_->seek(snap.position100ns); } }
     if(!direct_ && !seekPending_ && seekUiTarget_>=0){const auto rendered=outputSnapshot();if(rendered.presentedVideoFrames>seekPresented_ && rendered.frameIndex==frameAtPosition100ns(seekUiTarget_,clip_.totalFrames,clip_.fpsNumerator,clip_.fpsDenominator))seekUiTarget_=-1;}
     const auto at = position(); const auto duration = snap.duration100ns;
+    if(updateLoop(at,snap.state==ThreeFpState::Ended))return;
     timeline_->setProperty("duration", duration);
     if (!time_->hasFocus()) time_->setText(timeText(seekUiTarget_>=0?seekUiTarget_:at)); duration_->setText("/ " + timeText(duration));
     frame_->setEnabled(!audioMode_);if (!frame_->hasFocus() && !frameEditPending_) frame_->setText(audioMode_?QStringLiteral("—"):QString::number(frameAtPosition100ns(at, clip_.totalFrames, clip_.fpsNumerator, clip_.fpsDenominator)));

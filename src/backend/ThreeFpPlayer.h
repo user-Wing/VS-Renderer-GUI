@@ -5,6 +5,7 @@
 #include <QObject>
 
 class QWidget;
+class TestPlayer;
 
 namespace vsr {
 
@@ -73,6 +74,7 @@ signals:
     void errorOccurred(const QString &message);
 
 private:
+    friend class ::TestPlayer;
     bool createSession();
     bool check(ThreeFpResult result, const QString &operation);
 

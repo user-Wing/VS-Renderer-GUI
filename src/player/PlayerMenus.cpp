@@ -81,6 +81,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     menu->addAction(tr("打开 BD 文件夹…"),this,&PlayerWindow::chooseBluRay);
     menu->addAction(tr("打开 BD 光盘镜像…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("打开 BD 光盘镜像用于播放"),{},"Disc image (*.iso *.img *.vhd *.vhdx)");if(!path.isEmpty())openBluRay(path);});
     menu->addAction(tr("打开链接…"),this,&PlayerWindow::chooseLink);
+    addLoopMenu(menu);
     if(!discRoot_.isEmpty())menu->addAction(tr("BD 主菜单 / 弹出菜单"),this,&PlayerWindow::returnToDiscMenu);
     if(discMenu_ && discMenu_->active()){menu->addAction(tr("切回节目列表模式 (3FP)"),this,[this]{if(!files_.isEmpty())openFile(files_.first());});
         for(bool audio:{true,false}){auto *tracks=PlayerMenu::add(menu,audio?tr("音轨"):tr("字幕"));for(const auto &track:discMenu_->tracks(audio))tracks->addAction(track.second,this,[this,audio,id=track.first]{discMenu_->selectTrack(audio,id);});}
@@ -138,7 +139,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
         const auto path=QDir(PresetStore::directory()).filePath("builtin/"+animeFiles[stage]);
         auto *action=folder->addAction(qualityNames().at(stage),this,[this,path]{loadPreset(path);});
         action->setObjectName(QString("playerAnimeStage%1").arg(stage));
-        action->setToolTip(description("builtin/"+animeFiles[stage]));action->setCheckable(true);
+        action->setToolTip(description(stage==4 || stage==5 || stage==10?"builtin/"+animeFiles[stage]:"anime/"+QString::number(stage)));action->setCheckable(true);
         action->setChecked(fixedAnimeStage()==stage);scalingGroup->addAction(action);
         if(stage!=4 && stage!=5 && !animeSourceSupported())action->setEnabled(false);
     };
@@ -146,8 +147,8 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     auto *automatic=scalingFilters->addAction(tr("自动切换（推荐）"),this,[this,autoPath]{loadPreset(autoPath);});
     automatic->setToolTip(PresetStore::description(autoPath));automatic->setCheckable(true);automatic->setChecked(profile()=="Anime" && fixedAnimeStage()<0);scalingGroup->addAction(automatic);
     auto *moesrMenu=PlayerMenu::add(scalingFilters,QStringLiteral("MoeSR"));moesrMenu->setObjectName("playerMoeSRFilters");scaleChoice(moesrMenu,10);
-    auto *animeMenu=PlayerMenu::add(scalingFilters,tr("Anime4K V4 CNN+"));animeMenu->setObjectName("playerAnimeFilters");describeCategory(animeMenu,"menu/anime4k");
-    for(int stage:{8,9,0,1,2,3,6,7})scaleChoice(animeMenu,stage);
+    auto *animeMenu=PlayerMenu::add(scalingFilters,QStringLiteral("Anime4K"));animeMenu->setObjectName("playerAnimeFilters");describeCategory(animeMenu,"menu/anime4k");
+    for(int stage:{8,9,0,1,6,7})scaleChoice(animeMenu,stage);
     scalingFilters->addSeparator();auto *passThroughFilters=PlayerMenu::add(scalingFilters,tr("常规直通模式"));passThroughFilters->setObjectName("playerPassthroughFilters");describeCategory(passThroughFilters,"menu/passThrough");
     const QStringList algorithmNames{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc (Anti-Alias)","Spline36","Super-XBR","D3D11","Lanczos4","","","","","","","OpenNGU"};
     const QStringList algorithmKeys{"scaling/Nearest","scaling/Bilinear","scaling/Bicubic","scaling/Lanczos3","builtin/Anime-4-Jinc.vpy","scaling/Spline36","scaling/SuperXbr","builtin/Anime-5-D3D11.vpy","scaling/Lanczos4","","","","","","","scaling/OpenNGU"};

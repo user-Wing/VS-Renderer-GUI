@@ -4,7 +4,8 @@
 
 namespace vsr::agent_images {
 constexpr int maximumImages = 4;
-constexpr int maximumEncodedBytes = 512 * 1024;
+constexpr int maximumEncodedBytes = 64 * 1024 * 1024;
+constexpr int maximumConversationBytes = maximumImages * maximumEncodedBytes + 16 * 1024 * 1024;
 bool providerSupportsImages(const AgentProvider &provider);
 bool validDataUrl(const QString &url, QString *mime = nullptr);
 bool validContent(const QJsonArray &blocks);

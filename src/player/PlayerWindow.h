@@ -11,6 +11,7 @@
 #include <QElapsedTimer>
 #include "player/PlayerResources.h"
 class QProcess;
+class QMenu;
 class QKeyEvent;
 class QSlider;
 class QSettings;
@@ -159,6 +160,12 @@ private:
     QTimer *statusTimer_=nullptr;
     QString lastStatus_;
     void showContextMenu(const QPoint &position);
+    void addLoopMenu(QMenu *menu);
+    void setLoopPoint(bool out, qint64 time);
+    void openInRenderer(bool loop);
+    bool updateLoop(qint64 time, bool ended);
+    qint64 loopIn_=-1,loopOut_=-1;
+    bool loopEnabled_=false;
     void showSubtitleStyle();
     void selectSubtitle(int slot, int stream);
     void attachSubtitle(const QString &path, int slot = 0);
@@ -183,6 +190,8 @@ private:
     qint64 decodeBurstFrom_=0,decodeBurstUntil_=0;quint64 decodePoolGeneration_=0;
     quint64 decodePoolBytes_=0;
     unsigned decodePoolFrames_=0;
+    int decodePoolStream_=-1;
+    quint64 bitrateProbeEpoch_=0;
     void resetStatistics();
     bool commitFrameEdit();
     bool frameEditPending_ = false;

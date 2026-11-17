@@ -1,3 +1,9 @@
+#include "player/PlayerBluetooth.h"
+#include "player/PlayerThumbnails.h"
+#include "player/PlayerImage.h"
+#include "player/PlayerAssociations.h"
+#include "player/PlayerBuiltinProfiles.h"
+#include "render/CustomShader.h"
 #include <QFormLayout>
 #include <QCheckBox>
 #include "player/PlayerWindow.h"
@@ -108,14 +114,135 @@ class TestPlayer final : public QObject {
     QString configPath() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
     Q_OBJECT
 private slots:
+    void nativeConcatPreciseSeek(){
+        QTemporaryDir directory;QVERIFY(directory.isValid());
+        const auto video=directory.filePath("segment.mp4");QProcess encode;
+        encode.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),
+            {"-v","error","-nostdin","-f","lavfi","-i","testsrc2=size=64x64:rate=24:duration=2",
+             "-c:v","libx264","-threads","2","-g","24","-bf","2","-y",video});
+        QVERIFY(encode.waitForFinished(20000));QVERIFY2(encode.exitCode()==0,encode.readAllStandardError().constData());
+        const auto playlist=directory.filePath("seek.ffconcat");QFile file(playlist);QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("ffconcat version 1.0\nfile 'segment.mp4'\nduration 2\nfile 'segment.mp4'\nduration 2\n");file.close();
+        ThreeFpApi api;QWidget surface;surface.resize(160,160);surface.show();ThreeFpPlayer player(api,&surface);
+        player.setDecodeMode(1);QVERIFY2(player.openFile(playlist),qPrintable(player.lastError()));
+        QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Ready,10000);
+        for(qint64 target:{0LL,10000000LL,20000000LL,35000000LL,20000000LL}){
+            const auto generation=player.snapshot().timelineGeneration;
+            QVERIFY(player.seek(target));
+            QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().timelineGeneration>generation,5000);
+            QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0 &&
+                qAbs(player.snapshot().position100ns-target)<=10000000/24+1,5000);
+            QVERIFY(player.snapshot().state!=ThreeFpState::Playing);
+        }
+        QVERIFY(player.play());QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().position100ns>21000000,5000);
+        QVERIFY(player.pause());QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
+        QVERIFY(player.seek(10000000));QTRY_VERIFY(qAbs(player.snapshot().position100ns-10000000)<=10000000/24+1);
+    }
+    void decodeBufferExitAndRetry(){
+        QLibrary instrumented(qEnvironmentVariable("VSR_3FP_DLL"));
+        const auto rejectNext=reinterpret_cast<void(*)()>(instrumented.resolve("FFF3FP_RejectNextDecodeBufferForTest"));
+        if(!rejectNext)QSKIP("Requires a Native DLL built with SecurityRegressionTests=true");
+        QTemporaryDir directory;QVERIFY(directory.isValid());
+        const auto video=directory.filePath("buffer.mp4");QProcess encode;
+        encode.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),
+            {"-v","error","-nostdin","-f","lavfi","-i","color=size=32x2160:rate=24:duration=20",
+             "-map","0:v","-map","0:v","-c:v","libx264","-preset","ultrafast","-b:v","512k","-threads","2","-y",video});
+        QVERIFY(encode.waitForFinished(20000));QCOMPARE(encode.exitCode(),0);
+        QSettings settings(configPath(),QSettings::IniFormat);settings.setValue("basic/autoplay",true);
+        settings.setValue("decode/mode",1);settings.setValue("player/preset",QString());
+        settings.setValue("playback/remember",false);settings.setValue("performance/predecode",true);settings.sync();
+        PlayerWindow player;player.show();QVERIFY(player.openFile(video));
+        QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Playing && player.snapshot().videoHeight==2160,10000);
+        player.timer_->stop();
+        const auto update=[&]{player.bufferTimer_.invalidate();player.updateDecodeBuffer();};
+        update();QVERIFY(player.decodePoolFrames_==8);QVERIFY(player.decodePoolBytes_>0);
+        QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().videoBitRate>0,5000);
+        player.bitrateTimer_.invalidate();update();
+        QPointer<QProcess> oldProbe=player.bitrateProbe_;QVERIFY(oldProbe);
+        const auto args=oldProbe->arguments();QCOMPARE(args[args.indexOf("-select_streams")+1],QString::number(player.snapshot().selectedVideoStream));
+        player.minimalMode_=true;update();QVERIFY(!player.bitrateProbe_);
+        oldProbe->setProperty("packets",QByteArray("pts_time=5|size=1000000000\n"));
+        QVERIFY(QMetaObject::invokeMethod(oldProbe,"finished",Qt::DirectConnection,Q_ARG(int,0),Q_ARG(QProcess::ExitStatus,QProcess::NormalExit)));
+        QCOMPARE(player.decodeBurstUntil_,qint64(0));
+        player.minimalMode_=false;update();QVERIFY(player.bitrateProbe_);
+        QPointer<QProcess> cappedProbe=player.bitrateProbe_;
+        bool outputRejected=false;
+        connect(cappedProbe.data(),&QProcess::readyReadStandardOutput,&player,[&]{outputRejected=cappedProbe->property("rejected").toBool();});
+        cappedProbe->setProperty("packets",QByteArray(2*1024*1024,'x'));
+        QTRY_VERIFY(outputRejected);
+        QTRY_VERIFY(!player.bitrateProbe_);
+        QCOMPARE(player.decodeBurstUntil_,qint64(0));
+        const auto selectVideo=reinterpret_cast<ThreeFpResult(*)(void*,int)>(instrumented.resolve("FFF3FP_SelectVideoStream"));
+        QVERIFY(selectVideo);
+        QCOMPARE(selectVideo(player.clock_->handle_,1),ThreeFpResult::Success);
+        QTRY_COMPARE(player.snapshot().selectedVideoStream,1);
+        update();QCOMPARE(player.decodePoolStream_,1);
+        QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().videoBitRate>0,5000);
+        player.bitrateTimer_.invalidate();update();QVERIFY(player.bitrateProbe_);
+        const auto streamArgs=player.bitrateProbe_->arguments();QCOMPARE(streamArgs[streamArgs.indexOf("-select_streams")+1],QString("1"));
+        // The submitted state changes only after success; an unloaded legacy API
+        // explicitly reports the optional extension as unsupported.
+        const auto previousDll=qgetenv("VSR_3FP_DLL");qputenv("VSR_3FP_DLL","kernel32.dll");
+        ThreeFpApi legacy;qputenv("VSR_3FP_DLL",previousDll);
+        QCOMPARE(legacy.setDecodeBuffer(nullptr,1024,8),ThreeFpResult::NotSupported);
+        const auto policy=[&]{return QJsonDocument::fromJson(player.clock_->mediaInfo().toUtf8()).object();};
+        QTRY_COMPARE(policy().value("decodeBufferFrames").toInt(),8);
+        player.minimalMode_=true;update();QCOMPARE(player.decodePoolFrames_,0u);
+        QTRY_COMPARE(policy().value("decodeBufferFrames").toInt(),0);
+        player.minimalMode_=false;update();QCOMPARE(player.decodePoolFrames_,8u);
+        QVERIFY(player.clock_->pause());QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
+        update();QCOMPARE(player.decodePoolFrames_,0u);QVERIFY(!player.bitrateProbe_);
+        QVERIFY(player.clock_->play());QTRY_COMPARE(player.snapshot().state,ThreeFpState::Playing);
+        update();QCOMPARE(player.decodePoolFrames_,8u);
+        player.settings_->setValue("performance/predecode",false);rejectNext();update();
+        QCOMPARE(player.decodePoolFrames_,8u); // Failed submission must remain retryable.
+        update();QCOMPARE(player.decodePoolFrames_,2u);
+        const auto used=player.usage_.memoryMiB;player.usage_.memoryMiB=1000000000;
+        update();QCOMPARE(player.decodePoolBytes_,quint64(0));player.usage_.memoryMiB=used;
+        QVERIFY(player.clock_->setDecodeBuffer(0,48));
+        QTRY_COMPARE(policy().value("decodeBufferEffectiveQueueFrames").toInt(),2);
+        QVERIFY(player.clock_->setDecodeBuffer(1024*1024,8));
+        QTRY_COMPARE(policy().value("decodeBufferBytes").toDouble(),double(1024*1024));
+        QVERIFY(player.clock_->setPlaybackRate(2));QTRY_COMPARE(player.snapshot().playbackRate,2.0);
+        update();QCOMPARE(player.decodePoolFrames_,0u);
+    }
+    void nativeSoftwareDrainAndStep(){
+        QTemporaryDir directory;QVERIFY(directory.isValid());
+        const auto video=directory.filePath("drain.mp4");QProcess encode;
+        encode.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),
+            {"-v","error","-nostdin","-f","lavfi","-i","testsrc2=size=64x64:rate=24:duration=1",
+             "-c:v","libx264","-threads","2","-g","12","-bf","2","-y",video});
+        QVERIFY(encode.waitForFinished(20000));QCOMPARE(encode.exitCode(),0);
+        ThreeFpApi api;QWidget surface;surface.resize(160,160);surface.show();ThreeFpPlayer player(api,&surface);
+        player.setDecodeMode(1);QVERIFY(player.openFile(video));QTRY_COMPARE(player.snapshot().state,ThreeFpState::Ready);
+        QVERIFY(player.play());QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Ended,5000);
+        QCOMPARE(player.snapshot().decodedVideoFrames,quint64(24));
+        QCOMPARE(player.snapshot().queuedVideoFrames,0u);
+        QVERIFY(player.seek(5000000));QTRY_VERIFY(qAbs(player.snapshot().position100ns-5000000)<=1);
+        const auto before=player.snapshot().framePts;
+        QVERIFY(player.stepFrame(1));QTRY_VERIFY(player.snapshot().framePts>before);
+        QVERIFY(qAbs(player.snapshot().position100ns-5416667)<=1);
+        QVERIFY(player.stepFrame(-1));QTRY_COMPARE(player.snapshot().framePts,before);
+        QVERIFY(player.play());QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().state,ThreeFpState::Ended,5000);
+    }
+    void abLoopPlayback(){runAbLoopPlayback();}
+    void abLoopVapourSynth(){runAbLoopPlayback(true);}
+    void thumbnailRegistrationRestoresPrevious(){runThumbnailRegistrationRestoresPrevious();}
+    void upstreamBluetoothPolicy(){runUpstreamBluetoothPolicy();}
+    void upstreamRawImage(){runUpstreamRawImage();}
     void openNguMenu(){runOpenNguMenu();}
     void openNguPlayback(){runOpenNguPlayback();}
     void startupTheme(){runStartupTheme();}
     void infoFpsTracksNativePlayback(){runInfoFpsTracksNativePlayback();}
     void measureBuiltin1080To2160(){runBuiltin1080To2160();}
+    void animeSixMigration(){runAnimeSixMigration();}
+    void animeSixPresets(){runAnimeSixPresets();}
     void hlslOptimizationAcceptance(){runHlslOptimizationAcceptance();}
 private:
+#include "PlayerLoopAcceptance.inc"
 #include "HlslOptimizationAcceptance.inc"
+#include "AnimeSixAcceptance.inc"
+#include "Upstream20261115Acceptance.inc"
 #include "OpenNguAcceptance.inc"
 private slots:
     void audioOutputSettingsPersist(){
@@ -238,24 +365,24 @@ private slots:
         const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE");
         PlayerWindow player;player.settings_->setValue("render/hlsl",false);player.settings_->setValue("basic/autoplay",true);player.settings_->setValue("playback/remember",false);player.resize(1280,800);player.show();
         player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.playing_,15000);
-        const QStringList files{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy","Anime-8-A-CNN-Enhanced.vpy","Anime-9-A-CNN.vpy","MoeSR-50K.vpy"};
-        for(int stage:{10,8,9,0,1,2,3,6,7}){
+        const auto files=builtinAnimeFiles();
+        for(int stage:{10,8,9,0,1,6,7}){
             // A portable builtin copied from another installation still names the same model.
             const auto path=QDir(PresetStore::directory()).filePath("builtin/"+files[stage]);QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));const auto original=file.readAll();file.close();const auto restore=qScopeGuard([&]{PresetStore::write(path,QString::fromUtf8(original));});
             if(stage>=8){auto relocated=QString::fromUtf8(original);relocated.replace(QCoreApplication::applicationDirPath(),"C:/old-portable-install");relocated.prepend("# Legacy portable installation\n");QVERIFY(PresetStore::write(path,relocated));}
             player.showContextMenu(QPoint(20,20));auto *menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);auto *action=menu->findChild<QAction*>(QString("playerAnimeStage%1").arg(stage));QVERIFY(action);QVERIFY(action->isEnabled());action->trigger();menu->close();
             qInfo()<<"builtin route"<<stage<<player.qualityStage_<<player.direct_<<player.nativeAnime_<<player.message_->text();
-            QCOMPARE(player.qualityStage_,stage);QVERIFY(player.direct_);QVERIFY(player.nativeAnime_);if(stage>=8 || stage==6 || stage==7){QVERIFY(!player.customShaderPackage_.isEmpty());QCOMPARE(player.scalingAlgorithm(),stage==6?4:7);}else {const int algorithms[]{10,9,11,12,4,7,13,14};QCOMPARE(player.scalingAlgorithm(),algorithms[stage]);}
+            QCOMPARE(player.qualityStage_,stage);QVERIFY(player.direct_);QVERIFY(player.nativeAnime_);if(stage>=8 || stage==6 || stage==7){QVERIFY(!player.customShaderPackage_.isEmpty());QCOMPARE(player.scalingAlgorithm(),7);}else {const int algorithms[]{10,9,11,12,4,7,13,14};QCOMPARE(player.scalingAlgorithm(),algorithms[stage]);}
             QTRY_VERIFY_WITH_TIMEOUT(player.playing_,5000);const auto frames=player.snapshot().presentedVideoFrames;QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>frames+2,5000);QVERIFY(!player.clock_->capture().isNull());
         }
     }
     void release111Presets(){
         PlayerWindow player;player.settings_->remove("player/animeStages");player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime.vpy"));QCOMPARE(player.initialQualityStage(),8);
         player.settings_->setValue("player/animeStages",QStringList{"10","8","0","6","4","5"});QCOMPARE(player.initialQualityStage(),10);
-        player.showContextMenu(QPoint(20,20));const auto menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);const auto anime=menu->findChild<QMenu*>("playerAnimeFilters");QVERIFY(anime);QCOMPARE(anime->actions().size(),8);QCOMPARE(anime->actions()[0]->objectName(),QString("playerAnimeStage8"));QCOMPARE(anime->actions()[1]->objectName(),QString("playerAnimeStage9"));const auto moesr=menu->findChild<QMenu*>("playerMoeSRFilters");QVERIFY(moesr);const auto siblings=qobject_cast<QMenu*>(anime->parentWidget());QVERIFY(siblings);QVERIFY(siblings->actions().indexOf(moesr->menuAction())<siblings->actions().indexOf(anime->menuAction()));
+        player.showContextMenu(QPoint(20,20));const auto menu=player.findChild<QMenu*>("playerContextMenu");QVERIFY(menu);const auto anime=menu->findChild<QMenu*>("playerAnimeFilters");QVERIFY(anime);QCOMPARE(anime->actions().size(),6);QCOMPARE(anime->actions()[0]->objectName(),QString("playerAnimeStage8"));QCOMPARE(anime->actions()[1]->objectName(),QString("playerAnimeStage9"));const auto moesr=menu->findChild<QMenu*>("playerMoeSRFilters");QVERIFY(moesr);const auto siblings=qobject_cast<QMenu*>(anime->parentWidget());QVERIFY(siblings);QVERIFY(siblings->actions().indexOf(moesr->menuAction())<siblings->actions().indexOf(anime->menuAction()));
         const auto descriptions=QJsonDocument::fromJson([]{QFile file(":/filters/player-menu-descriptions.json");file.open(QIODevice::ReadOnly);return file.readAll();}()).object();
         QCOMPARE(moesr->actions().first()->toolTip(),descriptions.value("builtin/MoeSR-50K.vpy").toString());QVERIFY(!moesr->actions().first()->toolTip().isEmpty());
-        QCOMPARE(anime->actions()[0]->toolTip(),descriptions.value("builtin/Anime-8-A-CNN-Enhanced.vpy").toString());QCOMPARE(anime->actions()[1]->toolTip(),descriptions.value("builtin/Anime-9-A-CNN.vpy").toString());menu->close();
+        QCOMPARE(anime->actions()[0]->toolTip(),descriptions.value("anime/8").toString());QCOMPARE(anime->actions()[1]->toolTip(),descriptions.value("anime/9").toString());menu->close();
         player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-8-A-CNN-Enhanced.vpy"));QCOMPARE(player.fixedAnimeStage(),8);QVERIFY(player.nativeBuiltinCompatible());
     }
     void modeAEnhancementHasPicture(){
@@ -417,7 +544,7 @@ void nguHlslPlaybackAcceptance() {
     }
     void legacyBuiltinAnimeUsesNative(){
         PlayerWindow player;player.settings_->setValue("render/hlsl",true);
-        const QStringList names{"Anime.vpy","Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};
+        auto names=builtinAnimeFiles();names.removeAll(QString());names.prepend("Anime.vpy");
         for(const auto &name:names){const auto path=QDir(PresetStore::directory()).filePath("builtin/"+name);QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));const auto original=file.readAll();file.close();const auto restore=qScopeGuard([&]{PresetStore::write(path,QString::fromUtf8(original));});
             auto legacy=player.builtinScripts_.value(name);QVERIFY(!legacy.isEmpty());legacy.replace("getattr(core, 'vsrplacebo', core.placebo).Shader(","core.placebo.Shader(");QVERIFY(PresetStore::write(path,legacy));player.loadPreset(path);QVERIFY2(player.nativeBuiltinCompatible(),qPrintable(name));
             legacy.replace("clip.set_output(0)","clip = core.std.CropRel(clip, left=2, right=2)\nclip.set_output(0)");QVERIFY(PresetStore::write(path,legacy));QVERIFY(player.nativeBuiltinCompatible());
@@ -425,7 +552,7 @@ void nguHlslPlaybackAcceptance() {
     }
     void remoteBuiltinHlsl(){
         const auto source=qEnvironmentVariable("VSR_NUX_SOURCE");if(source.isEmpty())QSKIP("Set VSR_NUX_SOURCE for native built-in playback");
-        const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-6-1X-Jinc.vpy","Anime-7-1X-D3D11.vpy"};const int algorithms[]{10,9,11,12,4,7};
+        const QStringList names{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-6-AFast-1X-Enhanced.vpy","Anime-7-AFast-1X.vpy","Anime-8-A-CNN-Enhanced.vpy","Anime-9-A-CNN.vpy"};const int algorithms[]{10,9,7,7,7,7};
         for(int i=0;i<names.size();++i){PlayerWindow player;player.settings_->setValue("playback/remember",false);player.settings_->setValue("render/hlsl",true);player.resize(1440,900);player.show();player.toggleFullscreen();player.loadPreset(QDir(PresetStore::directory()).filePath("builtin/"+names[i]));QVERIFY(player.openFile(source));QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.snapshot().state==ThreeFpState::Playing && player.outputSnapshot().presentedVideoFrames>2,20000);QVERIFY2(player.nativeAnime_ && player.direct_,qPrintable(names[i]+": "+player.message_->text()));QCOMPARE(player.scalingAlgorithm(),algorithms[i]);
             const auto before=player.snapshot().presentedVideoFrames;QTest::qWait(1000);QVERIFY(player.snapshot().presentedVideoFrames>before);const auto image=player.clock_->capture();QVERIFY(!image.isNull());player.infoVisible_=true;player.updateInfo();qInfo()<<"native-builtin"<<names[i]<<"algorithm"<<player.scalingAlgorithm()<<"frames"<<player.snapshot().presentedVideoFrames-before<<"capture"<<image.size()<<"status"<<player.message_->text();QVERIFY(player.info_->text().contains("HLSL"));
         }
@@ -445,16 +572,16 @@ void nguHlslPlaybackAcceptance() {
         auto changed=canonical;changed.replace("clip.set_output(0)","clip = core.std.CropRel(clip, left=2, right=2)\nclip.set_output(0)");QVERIFY(PresetStore::write(path,changed));
         player.loadPreset(path);QVERIFY(player.nativeBuiltinCompatible());QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.direct_ && player.outputSnapshot().presentedVideoFrames>0,20000);QVERIFY(player.nativeAnime_);QCOMPARE(player.outputSnapshot().videoWidth,320u);
     }
-    void eightStagesAndExternalDescriptions(){
+    void sixAnimeStagesAndExternalDescriptions(){
         PlayerWindow player;QCOMPARE(player.qualityNames().size(),11);
         const QDir builtin(QDir(PresetStore::directory()).filePath("builtin"));
-        for(int stage:{6,7}){const auto path=builtin.filePath(stage==6?"Anime-6-1X-Jinc.vpy":"Anime-7-1X-D3D11.vpy");QVERIFY(QFileInfo::exists(path));player.loadPreset(path);QCOMPARE(player.fixedAnimeStage(),stage);QCOMPARE(player.qualityStage(),stage);}
+        for(int stage:{6,7}){const auto path=builtin.filePath(stage==6?"Anime-6-AFast-1X-Enhanced.vpy":"Anime-7-AFast-1X.vpy");QVERIFY(QFileInfo::exists(path));player.loadPreset(path);QCOMPARE(player.fixedAnimeStage(),stage);QCOMPARE(player.qualityStage(),stage);}
         player.loadPreset(builtin.filePath("Anime.vpy"));player.settings_->setValue("player/animeStage",0);player.settings_->setValue("player/animeStages",QStringList{"7"});QCOMPARE(player.initialQualityStage(),7);
         player.settings_->setValue("player/animeStages",QStringList{});QCOMPARE(player.initialQualityStage(),5);
         player.media_=QJsonObject{{"streams",QJsonArray{QJsonObject{{"type","video"},{"height",2160},{"width",3840}}}}};
         const auto old=player.preset_;player.loadPreset(builtin.filePath("Anime-6-1X-Jinc.vpy"));QCOMPARE(player.preset_,old);QVERIFY(!player.animeSourceSupported());
         QTemporaryDir directory;const auto custom=directory.filePath("custom.vpy");QVERIFY(PresetStore::write(custom,PresetStore::create(FilterGraph(),SourceFilter::Ffms2,{},"Custom preset explanation")));QCOMPARE(PresetStore::description(custom),QString("Custom preset explanation"));
-        QFile descriptions(QDir(PresetStore::directory()).filePath("preset-descriptions.json"));QVERIFY(descriptions.open(QIODevice::ReadOnly));const auto entries=QJsonDocument::fromJson(descriptions.readAll()).object();QVERIFY(entries.contains("builtin/Anime-6-1X-Jinc.vpy"));QVERIFY(entries.contains("builtin/Super-3-RIFE-A4K.vpy"));
+        QFile descriptions(QDir(PresetStore::directory()).filePath("preset-descriptions.json"));QVERIFY(descriptions.open(QIODevice::ReadOnly));const auto entries=QJsonDocument::fromJson(descriptions.readAll()).object();QVERIFY(entries.contains("anime/6"));QVERIFY(entries.contains("builtin/Super-3-RIFE-A4K.vpy"));
     }
     void audioTapGenerationAndDisable(){
         QTemporaryDir directory;const auto path=directory.filePath("tap.mkv");QProcess encoder;
@@ -598,8 +725,8 @@ void nguHlslPlaybackAcceptance() {
         QTimer::singleShot(100,&player,[&]{auto *dialog=player.findChild<QFileDialog *>();QVERIFY(dialog);dialog->setDirectory(selected);QMetaObject::invokeMethod(dialog,"accept");});specified->actions().first()->menu()->actions().first()->trigger();if(menu)menu->close();QTRY_VERIFY_WITH_TIMEOUT(!player.screenshotPending_,10000);QCOMPARE(QDir(selected).entryList({"*-source.png"},QDir::Files).size(),1);QCOMPARE(player.screenshotDirectory(),destination);
     }
     void algorithmBadgesReflectCurrentStages(){
-        PlayerWindow player;player.show();const auto builtin=QDir(PresetStore::directory()).filePath("builtin/");const QStringList presets{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-2-No-CNN-Enhanced.vpy","Anime-3-No-CNN.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy"},labels{"A4KCNN+","A4KCNN","A4K+","A4K","Jinc","D3D11"};
-        for(int i=0;i<6;++i){player.loadPreset(builtin+presets[i]);player.qualityStage_=i;player.direct_=i>=4;player.message_->clear();player.updateAlgorithmBadges();QCOMPARE(player.algorithmBadge_->text(),labels[i]);QVERIFY(!player.algorithmBadge_->isHidden());QVERIFY(player.interpolationBadge_->isHidden());QVERIFY(player.message_->text().isEmpty());}
+        PlayerWindow player;player.show();const auto builtin=QDir(PresetStore::directory()).filePath("builtin/");const QStringList presets{"Anime-0-CNN-Enhanced.vpy","Anime-1-CNN.vpy","Anime-6-AFast-1X-Enhanced.vpy","Anime-7-AFast-1X.vpy","Anime-4-Jinc.vpy","Anime-5-D3D11.vpy"},labels{"A4K-AFast-CNN+","A4K-AFast-CNN","A4K-AFast-1X+","A4K-AFast-1X","Jinc","D3D11"};const int stages[]{0,1,6,7,4,5};
+        for(int i=0;i<6;++i){player.loadPreset(builtin+presets[i]);player.qualityStage_=stages[i];player.direct_=i>=4;player.message_->clear();player.updateAlgorithmBadges();QCOMPARE(player.algorithmBadge_->text(),labels[i]);QVERIFY(!player.algorithmBadge_->isHidden());QVERIFY(player.interpolationBadge_->isHidden());QVERIFY(player.message_->text().isEmpty());}
         const QStringList interpolation{"Interpolation-0-RIFE.vpy","Interpolation-1-RIFE-Half.vpy","Interpolation-2-MVTools-HQ.vpy","Interpolation-3-MVTools.vpy"},names{"RIFE+","RIFE","MVT+","MVT"};for(bool native:{false,true})for(int i=0;i<4;++i){player.preset_=builtin+interpolation[i];if(native)player.preset_.replace(".vpy","-D3D11.vpy");player.direct_=false;player.updateAlgorithmBadges();QCOMPARE(player.algorithmBadge_->text(),native?QString("D3D11"):QString("Jinc"));QCOMPARE(player.interpolationBadge_->text(),names[i]);QVERIFY(!player.interpolationBadge_->isHidden());}
         player.imageMode_=true;player.updateAlgorithmBadges();QVERIFY(player.algorithmBadge_->isHidden());QVERIFY(player.interpolationBadge_->isHidden());
     }
@@ -1719,8 +1846,6 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         QTest::addColumn<int>("stage");QTest::addColumn<QString>("format");
         QTest::newRow("CNN-enhanced-420-10")<<0<<QString("yuv420p10le");
         QTest::newRow("CNN-422-10")<<1<<QString("yuv422p10le");
-        QTest::newRow("no-CNN-enhanced-444-10")<<2<<QString("yuv444p10le");
-        QTest::newRow("no-CNN-420-10")<<3<<QString("yuv420p10le");
         QTest::newRow("Jinc")<<4<<QString("yuv420p10le");
         QTest::newRow("D3D11")<<5<<QString("yuv420p10le");
     }

@@ -1,10 +1,29 @@
 #include "image/ImageDocument.h"
 #include <QTest>
 #include <cstring>
+#include <stdexcept>
 using namespace vsr;
 class TestImageDocument final : public QObject {
     Q_OBJECT
 private slots:
+    void lazyPreviewCancellationIsContained(){
+        ImageDocument doc({1,1},ImagePrecision::UInt8);
+        doc.addLazyLayer("lazy",{1,1},{},[](const QRect &){return QImage();},{},[](const QRect &,QSize,ImageSamplingQuality)->QImage{throw std::runtime_error("Image composition cancelled");});
+        QVERIFY(doc.composite({0,0,1,1}).isNull());QVERIFY(doc.storageError().contains("cancelled"));
+    }
+    void boundedGroupComposition(){
+        ImageDocument normal({1,1},ImagePrecision::UInt8);QImage image(1,1,QImage::Format_RGBA8888);image.fill(Qt::red);
+        normal.addLayer("pixel",image);QCOMPARE(normal.composite({0,0,1,1}).pixelColor(0,0),QColor(Qt::red));
+        ImageDocument shallow({1,1},ImagePrecision::UInt8);for(int i=0;i<200;++i)shallow.createGroup("group");QVERIFY(!shallow.composite({0,0,1,1}).isNull());
+        ImageDocument deep({1,1},ImagePrecision::UInt8);QUuid parent;
+        for(int i=0;i<32;++i)parent=deep.createGroup("group",parent);
+        QVERIFY(deep.composite({0,0,1,1}).isNull());QVERIFY(deep.storageError().contains("budget"));
+        deep.flatten();QVERIFY(deep.composite({0,0,1,1}).isNull());
+        ImageDocument cancelled({1,1},ImagePrecision::UInt8);cancelled.createGroup("group");
+        QVERIFY(cancelled.composite({0,0,1,1},[]{return true;}).isNull());
+        QVERIFY(cancelled.storageError().contains("cancelled"));QVERIFY(!cancelled.composite({0,0,1,1}).isNull());
+    }
+
     void cacheAndDiscardedHistory(){
         ImageDocument doc({600,600},ImagePrecision::UInt8);doc.setCacheBudget(256*256*4);QImage source(600,600,QImage::Format_ARGB32);source.fill(QColor(13,27,51,143));const auto layer=doc.addLayer("Cache",source);doc.history()->clear();
         QVERIFY(doc.residentBytes()<=256*256*4);QCOMPARE(doc.readRegion(layer,{510,510,8,8}).pixelColor(0,0),QColor(13,27,51,143));

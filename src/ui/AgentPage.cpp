@@ -22,6 +22,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSaveFile>
@@ -43,6 +44,13 @@
 
 namespace vsr {
 namespace {
+QString imageLabel(const QJsonObject &capability,const QString &model)
+{
+    auto state=capability.value("modelImageInputs").toObject().value(model).toString("unknown");
+    if(model==capability.value("model").toString()&&capability.value("imageInputSource").toString("unknown")!="unknown")state=capability.value("imageInputSupported").toBool()?"supported":"unsupported";
+    auto label=state=="supported"?QStringLiteral("支持图像"):state=="unsupported"?QStringLiteral("不支持图像"):QStringLiteral("视觉未确认");
+    if(capability.value("status")=="stale")label+=QStringLiteral("（缓存）");return label;
+}
 QString newId() { return QUuid::createUuid().toString(QUuid::WithoutBraces); }
 bool writeJson(const QString &path, const QJsonObject &object, QString &error)
 {
@@ -67,7 +75,7 @@ QJsonObject readJson(const QString &path, QString &error)
 }
 
 AgentPage::AgentPage(AgentSession *session, QWidget *parent)
-    : QWidget(parent), session_(session), toolLibrary_(std::make_unique<AgentToolLibrary>(session))
+    : QWidget(parent), session_(session), toolLibrary_(std::make_shared<AgentToolLibrary>(session))
 {
     setObjectName("agentPage");
     directory_ = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("agent");
@@ -140,42 +148,76 @@ AgentPage::AgentPage(AgentSession *session, QWidget *parent)
     renderTimer_ = new QTimer(this); renderTimer_->setSingleShot(true); renderTimer_->setInterval(40);
     connect(renderTimer_, &QTimer::timeout, this, &AgentPage::renderConversation);
     connect(send_, &QPushButton::clicked, this, &AgentPage::send);
-    connect(stop_, &QPushButton::clicked, session_, &AgentSession::cancel);
-    connect(new_, &QPushButton::clicked, this, &AgentPage::newConversation);
+    connect(stop_, &QPushButton::clicked, this, [this] { session_->cancel(); });
+    connect(new_, &QPushButton::clicked, this, [this] { newConversation(); });
     connect(import_, &QPushButton::clicked, this, &AgentPage::importConversation);
     connect(export_, &QPushButton::clicked, this, &AgentPage::exportConversation);
     connect(remove_, &QPushButton::clicked, this, [this] {
         if (QMessageBox::question(this, QStringLiteral("删除对话"), QStringLiteral("删除当前对话的本地记录？")) != QMessageBox::Yes) return;
         const auto path = QDir(directory_).filePath("conversations/" + conversationId_ + ".json");
         if (QFile::exists(path) && !QFile::remove(path)) { report(QStringLiteral("无法删除对话文件。"), true); return; }
-        session_->clear(); conversationId_.clear(); newConversation();
+        liveConversations_.remove(conversationId_); session_->clear(); newConversation(false);
     });
     connect(conversations_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *item) {
-        if (item && item->data(Qt::UserRole).toString() != conversationId_) loadConversation(item->data(Qt::UserRole).toString());
+        if (item && !item->data(Qt::UserRole).toString().isEmpty() && item->data(Qt::UserRole).toString() != conversationId_) loadConversation(item->data(Qt::UserRole).toString());
+    });
+    connect(conversations_, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
+        if (!item->data(Qt::UserRole + 1).isValid()) return;
+        auto collapsed = QSettings().value("agent/collapsedProjects").toStringList();
+        const auto project = item->data(Qt::UserRole + 1).toString();
+        if (collapsed.contains(project)) collapsed.removeAll(project); else collapsed.append(project);
+        QSettings().setValue("agent/collapsedProjects", collapsed); refreshConversations();
+    });
+    conversations_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(conversations_, &QListWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+        auto *item = conversations_->itemAt(pos); if (!item) return;
+        const auto id = item->data(Qt::UserRole).toString(); if (id.isEmpty()) return;
+        QMenu menu(this); menu.setObjectName("agentConversationMenu"); menu.setMinimumWidth(220);
+        menu.setWindowFlags(menu.windowFlags() | Qt::FramelessWindowHint); menu.setAttribute(Qt::WA_TranslucentBackground);
+        menu.setStyleSheet(QStringLiteral("QMenu { background:#292e37; color:#eef2f7; border:1px solid #667284; border-radius:12px; padding:7px; font-family:'Segoe UI','Microsoft YaHei UI'; font-size:14px; } QMenu::item { padding:11px 24px 11px 14px; border-radius:7px; margin:2px; } QMenu::item:selected { background:#414c5c; color:#ffffff; } QMenu::separator { height:1px; background:#505b6d; margin:5px 10px; }"));
+        auto *rename = menu.addAction(QStringLiteral("重命名"));
+        auto *move = menu.addAction(QStringLiteral("设置分组…"));
+        auto *chosen = menu.exec(conversations_->viewport()->mapToGlobal(pos));
+        if (chosen != rename && chosen != move) return;
+        if (id != conversationId_) loadConversation(id);
+        if (id != conversationId_) return;
+        auto &entry = liveConversations_[id]; bool ok = false;
+        if (chosen == rename) {
+            const auto title = QInputDialog::getText(this, QStringLiteral("重命名对话"), QStringLiteral("名称"), QLineEdit::Normal, conversationTitle_, &ok).trimmed();
+            if (!ok || title.isEmpty()) return;
+            entry.title = title; entry.renamed = true; conversationTitle_ = title; chatTitle_->setText(title);
+        } else {
+            QStringList groups{QStringLiteral("未分组")};
+            for (int i=0;i<conversations_->count();++i) {
+                const auto group=conversations_->item(i)->data(Qt::UserRole+1);
+                if (group.isValid() && !group.toString().isEmpty() && !groups.contains(group.toString())) groups.append(group.toString());
+            }
+            const int current=qMax(0,groups.indexOf(entry.project));
+            QInputDialog dialog(this); dialog.setObjectName("agentGroupDialog"); dialog.setWindowTitle(QStringLiteral("设置会话分组"));
+            dialog.setLabelText(QStringLiteral("选择已有分组或输入新名称")); dialog.setComboBoxItems(groups); dialog.setComboBoxEditable(true); dialog.setTextValue(groups.value(current));
+            dialog.setOkButtonText(QStringLiteral("保存分组")); dialog.setCancelButtonText(QStringLiteral("取消")); dialog.setMinimumSize(520,220); dialog.resize(560,240);
+            dialog.setStyleSheet(QStringLiteral("QInputDialog { background:#292e37; color:#eef2f7; font-family:'Segoe UI','Microsoft YaHei UI'; font-size:14px; } QInputDialog QLabel { padding:10px 4px; } QInputDialog QComboBox { min-height:36px; padding:4px 10px; } QInputDialog QPushButton { min-width:90px; min-height:30px; }"));
+            if (dialog.exec()!=QDialog::Accepted) return;
+            const auto group=dialog.textValue().trimmed();
+            entry.project=(group.isEmpty() || group==QStringLiteral("未分组"))?QString():group;
+        }
+        saveConversation();
     });
     connect(tools_, &QPushButton::clicked, this, &AgentPage::showTools);
     connect(settings_,&QPushButton::clicked,this,&AgentPage::showProviderSettings);
     connect(features_,&QPushButton::clicked,this,&AgentPage::showFeatureSettings);
     connect(queue_,&QPushButton::clicked,this,&AgentPage::queueRequested);
     connect(usage_,&QPushButton::clicked,this,&AgentPage::showUsage);
-    connect(session_,&AgentSession::usageChanged,this,[this](const QJsonObject &){updateUsage();});
     connect(modelButton_,&QPushButton::clicked,this,&AgentPage::openModelMenu);
     connect(reasoning_,&QPushButton::clicked,this,&AgentPage::showReasoningMenu);
     connect(pending_,&QPushButton::clicked,this,&AgentPage::showPendingMessages);
     connect(access_,&QPushButton::clicked,this,&AgentPage::showAccessMenu);
     connect(workingDirectory_,&QPushButton::clicked,this,&AgentPage::chooseWorkingDirectory);
-    connect(session_,&AgentSession::accessModeChanged,this,[this](AgentAccessMode mode){QSettings().setValue("agent/accessMode",mode==AgentAccessMode::FullEnvironment?"full":"software");updateAccessControls();});
-    connect(session_,&AgentSession::workingDirectoryChanged,this,[this](const QString &path){QSettings().setValue("agent/workingDirectory",path);updateAccessControls();});
     connect(composer_,&AgentComposer::submitted,this,&AgentPage::send);
     connect(composer_,&AgentComposer::completionsRequested,this,&AgentPage::completionsRequested);
     connect(composer_,&AgentComposer::mentionActionRequested,this,&AgentPage::mentionActionRequested);
-    connect(session_,&AgentSession::pendingMessagesChanged,this,[this](const QJsonArray &){updatePendingMessages();renderConversation();});
     connect(provider_,&QPushButton::clicked,this,&AgentPage::openProviderMenu);
-    connect(session_, &AgentSession::textDelta, this, [this](const QString &text) { pendingText_ += text; if (!renderTimer_->isActive()) renderTimer_->start(); });
-    connect(session_, &AgentSession::messageAdded, this, [this](const QJsonObject &) { pendingText_.clear(); renderConversation(); if (!session_->isBusy()) saveConversation(); });
-    connect(session_, &AgentSession::busyChanged, this, &AgentPage::updateBusy);
-    connect(session_, &AgentSession::errorOccurred, this, [this](const QString &error) { report(error, true); });
-    connect(session_, &AgentSession::finished, this, [this] { pendingText_.clear(); renderConversation(); saveConversation(); });
+    watchSession(session_);
     QString error;
     providers_ = AgentProviderStore::load(QDir(directory_).filePath("providers.json"), &error);
     if (!error.isEmpty()) report(error, true);
@@ -183,18 +225,18 @@ AgentPage::AgentPage(AgentSession *session, QWidget *parent)
     const auto toolsPath = QDir(directory_).filePath("tools.json");
     if (QFile::exists(toolsPath)) { error.clear(); const auto document = readJson(toolsPath, error); if (!error.isEmpty() || !toolLibrary_->importTools(document, &error)) report(error, true); }
     for (const auto &name : QSettings().value("agent/disabledTools").toStringList()) session_->setToolEnabled(name, false);
+    session_->setAccessMode(QSettings().value("agent/accessMode","software").toString()=="full"?AgentAccessMode::FullEnvironment:AgentAccessMode::SoftwareOnly);
+    const auto workingDirectory=QSettings().value("agent/workingDirectory").toString();if(!workingDirectory.isEmpty())session_->setWorkingDirectory(workingDirectory);
     refreshConversations();
     const auto last = QSettings().value("agent/lastConversation").toString();
     bool restored = false;
-    for (int i = 0; i < conversations_->count(); ++i) if (conversations_->item(i)->data(Qt::UserRole).toString() == last) { loadConversation(last); restored = true; break; }
-    if (!restored) newConversation();
-    session_->setAccessMode(QSettings().value("agent/accessMode","software").toString()=="full"?AgentAccessMode::FullEnvironment:AgentAccessMode::SoftwareOnly);
-    const auto workingDirectory=QSettings().value("agent/workingDirectory").toString();if(!workingDirectory.isEmpty())session_->setWorkingDirectory(workingDirectory);
+    for (int i = 0; i < conversations_->count(); ++i) if (!last.isEmpty() && conversations_->item(i)->data(Qt::UserRole).toString() == last) { loadConversation(last); restored = true; break; }
+    if (!restored) newConversation(false);
     updateAccessControls();
     updateBusy(session_->isBusy()); updateUsage();updatePendingMessages();
 }
 
-AgentPage::~AgentPage() { saveConversation(); }
+AgentPage::~AgentPage() { shutdown(); }
 
 void AgentPage::report(const QString &message, bool error)
 {
@@ -242,11 +284,13 @@ void AgentPage::setModelCapabilities(const QJsonObject &capabilities)
     source.modelCapability=checked;session_->setProvider(source);updateModelButtons();
     if(capabilities.contains("chatToolsSupported") && !capabilities.value("chatToolsSupported").toBool())report(QStringLiteral("当前 API 未提供 Chat 工具调用能力，软件工具操作不可用。"));
     else if(capabilities.value("chatToolsRequiresOff").toBool())report(QStringLiteral("此模型需要关闭思考才能调用工具；自动模式会采用兼容设置。"));
+    else if(!capabilities.value("imageInputSupported").toBool())report(imageLabel(capabilities,source.model)+QStringLiteral("：当前未开放看图工具；需要分析视频帧时请选择“支持图像”的模型。"));
+    else if(!session_->isBusy())report(QStringLiteral("当前模型支持图像，可使用源帧与局部看图工具。"));
 }
 
 void AgentPage::updateModelButtons()
 {
-    const int index=providerIndex_;if(index<0)return;const auto &source=providers_[index];modelButton_->setText(source.model);modelButton_->setToolTip(source.model);
+    const int index=providerIndex_;if(index<0)return;const auto &source=providers_[index];modelButton_->setText(imageLabel(source.modelCapability,source.model)+" · "+source.model);modelButton_->setToolTip(source.model+"\n"+imageLabel(source.modelCapability,source.model)+QStringLiteral("（按端点元数据；未确认不等于不支持）"));
     QString label=source.reasoningEffort=="off"?QStringLiteral("关闭"):QStringLiteral("自动");for(const auto &item:source.modelCapability.value("reasoningLevels").toArray()){const auto level=item.toObject();if(level.value("id").toString()==source.reasoningEffort)label=level.value("label").toString(source.reasoningEffort);}
     auto defaultLevel=source.modelCapability.value("defaultLevel").toString();for(const auto &item:source.modelCapability.value("reasoningLevels").toArray()){const auto level=item.toObject();if(level.value("id").toString()==defaultLevel)defaultLevel=level.value("label").toString(defaultLevel);}
     const auto status=source.modelCapability.value("status").toString();const QMap<QString,QString> states{{"ready",QStringLiteral("已确认")},{"unknown",QStringLiteral("未识别")},{"error",QStringLiteral("探测失败")},{"stale",QStringLiteral("缓存结果")}};
@@ -262,7 +306,7 @@ void AgentPage::selectModel(const QString &model)
 void AgentPage::openModelMenu()
 {
     const int index=providerIndex_;if(index<0){showProviderSettings();return;}const auto source=providers_[index];QStringList models{source.model};for(const auto &value:source.modelCapability.value("models").toArray())if(!value.toString().isEmpty() && !models.contains(value.toString()))models.append(value.toString());for(const auto &model:QSettings().value("agent/models/"+source.id).toStringList())if(!models.contains(model))models.append(model);
-    QList<AgentChoice> choices;for(const auto &model:models)choices.append({model,model,{}});choices.append({"__custom_model__",QStringLiteral("填写模型 ID…"),QStringLiteral("使用端点支持的其他模型")});
+    QList<AgentChoice> choices;for(const auto &model:models)choices.append({model,model,imageLabel(source.modelCapability,model)});choices.append({"__custom_model__",QStringLiteral("填写模型 ID…"),QStringLiteral("使用端点支持的其他模型")});
     auto *popup=new AgentChoicePopup(QStringLiteral("选择模型"),source.name,choices,source.model,this);popup->setObjectName("agentModelPopup");connect(popup,&AgentChoicePopup::chosen,this,[this,source](const QString &model){if(model!="__custom_model__"){selectModel(model);return;}bool ok=false;const auto custom=QInputDialog::getText(this,QStringLiteral("选择模型"),QStringLiteral("模型 ID"),QLineEdit::Normal,source.model,&ok);if(ok)selectModel(custom);});popup->openFor(modelButton_);
 }
 
@@ -301,53 +345,138 @@ void AgentPage::updateUsage()
 
 
 
+void AgentPage::watchSession(AgentSession *session)
+{
+    connect(session,&AgentSession::usageChanged,this,[this,session](const QJsonObject &){if(session_==session)updateUsage();});
+    connect(session,&AgentSession::accessModeChanged,this,[this,session](AgentAccessMode mode){if(session_==session){QSettings().setValue("agent/accessMode",mode==AgentAccessMode::FullEnvironment?"full":"software");updateAccessControls();}});
+    connect(session,&AgentSession::workingDirectoryChanged,this,[this,session](const QString &path){if(session_==session){QSettings().setValue("agent/workingDirectory",path);updateAccessControls();}});
+    connect(session,&AgentSession::pendingMessagesChanged,this,[this,session](const QJsonArray &){if(session_==session){updatePendingMessages();renderConversation();}});
+    connect(session,&AgentSession::textDelta,this,[this,session](const QString &text){
+        for(auto &entry:liveConversations_)if(entry.session==session)entry.pending+=text;
+        if(session_==session){pendingText_+=text;if(!renderTimer_->isActive())renderTimer_->start();}
+    });
+    connect(session,&AgentSession::messageAdded,this,[this,session](const QJsonObject &){
+        for(auto &entry:liveConversations_)if(entry.session==session)entry.pending.clear();
+        if(session_==session){pendingText_.clear();renderConversation();}if(!session->isBusy())saveSession(session);else refreshConversations();
+    });
+    connect(session,&AgentSession::busyChanged,this,[this,session](bool busy){if(session_==session)updateBusy(busy);refreshConversations();});
+    connect(session,&AgentSession::errorOccurred,this,[this,session](const QString &error){if(session_==session)report(error,true);});
+    connect(session,&AgentSession::finished,this,[this,session]{
+        for(auto &entry:liveConversations_)if(entry.session==session)entry.pending.clear();
+        if(session_==session){pendingText_.clear();renderConversation();}saveSession(session);
+    });
+}
+
+AgentSession *AgentPage::createSession(const QString &id)
+{
+    auto *created=sessionFactory_?sessionFactory_(id):new AgentSession(this);
+    created->setProvider(session_->provider());created->setAccessMode(session_->accessMode());created->setWorkingDirectory(session_->workingDirectory());
+    if(!sessionFactory_){session_->copyToolsTo(created);created->setSystemPrompt(session_->systemPrompt());}
+    watchSession(created);return created;
+}
+
+void AgentPage::activateConversation(const QString &id,AgentSession *session)
+{
+    if(!conversationId_.isEmpty()&&liveConversations_.contains(conversationId_)){
+        auto &old=liveConversations_[conversationId_];old.draft=input_->toPlainText();old.pending=pendingText_;
+    }
+    if(!liveConversations_.contains(id)){
+        const auto library=session==session_?toolLibrary_:std::make_shared<AgentToolLibrary>(session);
+        liveConversations_.insert(id,{session,library,QStringLiteral("新对话"),{}, {},{},false});
+        if(session!=session_){QString error;const auto path=QDir(directory_).filePath("tools.json");if(QFile::exists(path)){const auto document=readJson(path,error);if(error.isEmpty())library->importTools(document,&error);}if(!error.isEmpty())report(error,true);}
+        for(const auto &name:QSettings().value("agent/disabledTools").toStringList())session->setToolEnabled(name,false);
+    }
+    auto &entry=liveConversations_[id];session_=session;toolLibrary_=entry.tools;conversationId_=id;conversationTitle_=entry.title;pendingText_=entry.pending;input_->setPlainText(entry.draft);
+    const auto provider=session_->provider();for(int i=0;i<providers_.size();++i)if(providers_[i].id==provider.id){providerIndex_=i;providers_[i]=provider;provider_->setText(provider.name);provider_->setToolTip(provider.name+"\n"+provider.baseUrl);break;}
+    QSettings().setValue("agent/lastConversation",id);emit activeSessionChanged(session_);
+    updateModelButtons();updateUsage();updatePendingMessages();updateBusy(session_->isBusy());refreshConversations();renderConversation();
+    emit providerModelChanged(session_->provider());
+}
+
 void AgentPage::refreshConversations()
 {
     const QSignalBlocker blocker(conversations_); conversations_->clear();
+    QMap<QString,QString> titles, projects; QStringList order;
     const QDir directory(QDir(directory_).filePath("conversations"));
-    for (const auto &file : directory.entryInfoList({"*.json"}, QDir::Files, QDir::Time)) {
-        QString error; const auto document = readJson(file.absoluteFilePath(), error); if (!error.isEmpty()) continue;
-        auto *item = new QListWidgetItem(document.value("title").toString(QStringLiteral("对话")), conversations_); item->setData(Qt::UserRole, file.completeBaseName()); item->setToolTip(document.value("updatedAt").toString());
-        if (file.completeBaseName() == conversationId_) conversations_->setCurrentItem(item);
+    for(const auto &file:directory.entryInfoList({"*.json"},QDir::Files,QDir::Time)) {
+        QString error; const auto document=readJson(file.absoluteFilePath(),error); if(!error.isEmpty())continue;
+        const auto id=file.completeBaseName(); titles.insert(id,document.value("title").toString(QStringLiteral("对话"))); projects.insert(id,document.value("group").toString()); order.append(id);
+    }
+    for(auto it=liveConversations_.cbegin();it!=liveConversations_.cend();++it) {
+        if(it.key()!=draftConversationId_ && !titles.contains(it.key()) && !it->renamed && it->project.isEmpty() && it->session && it->session->messages().isEmpty() && it->session->pendingMessages().isEmpty())continue;
+        if(!titles.contains(it.key()))order.prepend(it.key());
+        titles.insert(it.key(),it->title); projects.insert(it.key(),it->project);
+    }
+    QStringList groups; for(const auto &id:order)if(!groups.contains(projects[id]))groups.append(projects[id]);
+    const auto collapsed=QSettings().value("agent/collapsedProjects").toStringList();
+    for(const auto &project:groups) {
+        const bool closed=collapsed.contains(project); const auto name=project.isEmpty()?QStringLiteral("未分组"):project;
+        auto *header=new QListWidgetItem((closed?QStringLiteral("▸  "):QStringLiteral("▾  "))+name,conversations_);
+        header->setData(Qt::UserRole+1,project); header->setToolTip(project); QFont font=header->font(); font.setBold(true); header->setFont(font);
+        for(const auto &id:order)if(projects[id]==project) {
+            const auto entry=liveConversations_.value(id); const bool running=entry.session&&entry.session->isBusy();
+            auto *item=new QListWidgetItem(QStringLiteral("   ")+titles[id]+(running?QStringLiteral(" · 运行中"):QString()),conversations_);
+            item->setData(Qt::UserRole,id); item->setToolTip(titles[id]); item->setHidden(closed); if(id==conversationId_)conversations_->setCurrentItem(item);
+        }
     }
 }
 
-void AgentPage::newConversation()
+void AgentPage::newConversation(bool showDraft)
 {
-    if (session_->isBusy()) return;
-    saveConversation(); session_->clear(); pendingText_.clear(); conversationId_ = newId(); conversationTitle_ = QStringLiteral("新对话"); input_->clear();
-    refreshConversations(); renderConversation(); report(QStringLiteral("已新建对话。"));
+    saveConversation();
+    QString id;
+    if(showDraft) {
+        const auto isBlank=[](const Conversation &entry) { return entry.session && !entry.session->isBusy() && entry.session->messages().isEmpty() && entry.session->pendingMessages().isEmpty() && !entry.renamed && entry.project.isEmpty(); };
+        if(liveConversations_.contains(draftConversationId_) && isBlank(liveConversations_[draftConversationId_]))id=draftConversationId_;
+        else if(liveConversations_.contains(conversationId_) && isBlank(liveConversations_[conversationId_]))id=conversationId_;
+        if(id.isEmpty())id=newId();
+        draftConversationId_=id;
+        auto collapsed=QSettings().value("agent/collapsedProjects").toStringList(); collapsed.removeAll(QString()); QSettings().setValue("agent/collapsedProjects",collapsed);
+    } else id=conversationId_.isEmpty()?session_->property("agentConversationId").toString():newId();
+    if(id.isEmpty())id=newId();
+    auto *target=liveConversations_.contains(id)?liveConversations_[id].session.data():(conversationId_.isEmpty()?session_:createSession(id));
+    activateConversation(id,target);
+    report(QStringLiteral("已打开新对话，其他运行中的会话继续后台处理。"));
 }
 
-void AgentPage::saveConversation()
+void AgentPage::saveConversation(){saveSession(session_);}
+void AgentPage::saveSession(AgentSession *session)
 {
-    if (conversationId_.isEmpty() || session_->messages().isEmpty() || session_->isBusy()) return;
-    for (const auto &entry : session_->messages()) if (entry.toObject().value("role").toString() == "user") { const auto message=entry.toObject();conversationTitle_ = message.value(message.contains("displayContent")?"displayContent":"content").toString().simplified().left(42); break; }
-    chatTitle_->setText(conversationTitle_);
-    QString error;
-    const QJsonObject document{{"title", conversationTitle_}, {"updatedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)}, {"conversation", session_->exportConversation()}};
-    if (!writeJson(QDir(directory_).filePath("conversations/" + conversationId_ + ".json"), document, error)) { report(error, true); return; }
-    QSettings().setValue("agent/lastConversation", conversationId_); refreshConversations();
+    for(auto it=liveConversations_.begin();it!=liveConversations_.end();++it){
+        if(it->session!=session)continue;
+        if(session->messages().isEmpty() && !it->renamed && it->project.isEmpty() && !QFile::exists(QDir(directory_).filePath("conversations/"+it.key()+".json")))return;
+        if(!it->renamed)for(const auto &value:session->messages()){const auto message=value.toObject();if(message.value("role")=="user"&&message.value("content").isString()){it->title=message.value(message.contains("displayContent")?"displayContent":"content").toString().simplified().left(42);break;}}
+        QString error;const QJsonObject document{{"title",it->title},{"group",it->project},{"renamed",it->renamed},{"updatedAt",QDateTime::currentDateTimeUtc().toString(Qt::ISODate)},{"conversation",session->exportConversation()}};
+        if(!writeJson(QDir(directory_).filePath("conversations/"+it.key()+".json"),document,error))report(error,true);
+        if(session_==session){conversationTitle_=it->title;chatTitle_->setText(conversationTitle_);}break;
+    }
+    refreshConversations();
 }
 
 void AgentPage::loadConversation(const QString &id)
 {
-    if (session_->isBusy() || QUuid(id).isNull()) return;
-    QString error; const auto document = readJson(QDir(directory_).filePath("conversations/" + id + ".json"), error);
-    if (!error.isEmpty()) { report(error, true); return; }
-    saveConversation();
-    if (!session_->importConversation(document.value("conversation").toObject(), &error)) { report(error, true); return; }
-    conversationId_ = id; conversationTitle_ = document.value("title").toString(); pendingText_.clear(); QSettings().setValue("agent/lastConversation", id); refreshConversations(); renderConversation(); report(QStringLiteral("已恢复对话。"));
+    if(QUuid(id).isNull())return;saveConversation();
+    if(liveConversations_.contains(id)){activateConversation(id,liveConversations_[id].session);return;}
+    QString error;const auto document=readJson(QDir(directory_).filePath("conversations/"+id+".json"),error);
+    if(!error.isEmpty()){report(error,true);return;}
+    AgentSession validated;if(!validated.importConversation(document.value("conversation").toObject(),&error)){report(error,true);return;}
+    auto *target=conversationId_.isEmpty()?session_:createSession(id);
+    if(!target->importConversation(document.value("conversation").toObject(),&error)){report(error,true);return;}
+    activateConversation(id,target);liveConversations_[id].title=document.value("title").toString();liveConversations_[id].project=document.value("group").toString();liveConversations_[id].renamed=document.value("renamed").toBool();conversationTitle_=liveConversations_[id].title;refreshConversations();renderConversation();report(QStringLiteral("已恢复对话。"));
 }
 
 void AgentPage::importConversation()
 {
-    const auto path = QFileDialog::getOpenFileName(this, QStringLiteral("导入 Agent 对话"), {}, "JSON (*.json)"); if (path.isEmpty()) return;
-    QString error; auto document = readJson(path, error); if (!error.isEmpty()) { report(error, true); return; }
-    if (document.contains("conversation")) document = document.value("conversation").toObject();
-    saveConversation();
-    if (!session_->importConversation(document, &error)) { report(error, true); return; }
-    conversationId_ = newId(); pendingText_.clear(); saveConversation(); renderConversation(); report(QStringLiteral("对话已导入。"));
+    const auto path=QFileDialog::getOpenFileName(this,QStringLiteral("导入 Agent 对话"),{},"JSON (*.json)");if(path.isEmpty())return;
+    QString error;auto document=readJson(path,error);if(!error.isEmpty()){report(error,true);return;}if(document.contains("conversation"))document=document.value("conversation").toObject();
+    AgentSession validated;if(!validated.importConversation(document,&error)){report(error,true);return;}
+    saveConversation();const auto id=newId();auto *target=createSession(id);target->importConversation(document);
+    activateConversation(id,target);saveConversation();renderConversation();report(QStringLiteral("对话已导入，其他会话继续后台处理。"));
+}
+
+void AgentPage::shutdown()
+{
+    for(const auto &entry:liveConversations_)if(entry.session){entry.session->cancel();saveSession(entry.session);}
 }
 
 void AgentPage::exportConversation()
@@ -364,7 +493,7 @@ void AgentPage::renderConversation()
 void AgentPage::updateBusy(bool busy)
 {
     updateAccessControls();
-    send_->setEnabled(true);input_->setEnabled(true);stop_->setEnabled(busy);stop_->setVisible(busy);provider_->setEnabled(!busy);modelButton_->setEnabled(!busy);reasoning_->setEnabled(!busy);settings_->setEnabled(!busy);features_->setEnabled(!busy);tools_->setEnabled(!busy);conversations_->setEnabled(!busy);new_->setEnabled(!busy);remove_->setEnabled(!busy);import_->setEnabled(!busy);export_->setEnabled(!busy);
+    send_->setEnabled(true);input_->setEnabled(true);stop_->setEnabled(busy);stop_->setVisible(busy);provider_->setEnabled(!busy);modelButton_->setEnabled(!busy);reasoning_->setEnabled(!busy);settings_->setEnabled(!busy);features_->setEnabled(!busy);tools_->setEnabled(!busy);conversations_->setEnabled(true);new_->setEnabled(true);remove_->setEnabled(!busy);import_->setEnabled(true);export_->setEnabled(true);
     if (busy) report(QStringLiteral("正在处理；继续发送会加入待接收队列。"));
     else if (status_->text() == QStringLiteral("正在处理；继续发送会加入待接收队列。")) report(QStringLiteral("本轮已结束。"));
 }

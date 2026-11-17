@@ -31,7 +31,7 @@ void imageCapability(AgentModelCapability &result,const QJsonObject &metadata)
     const auto flag=[&](const QJsonValue &value){if(!value.isBool())return;declared=true;if(value.toBool())supported=true;else denied=true;};
     const auto modalities=[&](const QJsonValue &value){if(!value.isArray())return;const auto values=value.toArray();for(const auto &item:values)if(!item.isString())return;declared=true;bool image=false;for(const auto &item:values)image|=item.toString().compare("image",Qt::CaseInsensitive)==0;if(image)supported=true;else denied=true;};
     for(const auto &scope:{metadata,metadata.value("capabilities").toObject(),metadata.value("architecture").toObject()}){
-        modalities(scope.value("input_modalities"));modalities(scope.value("inputModalities"));modalities(scope.value("modalities").toObject().value("input"));
+        modalities(scope.value("input"));modalities(scope.value("input_modalities"));modalities(scope.value("inputModalities"));modalities(scope.value("modalities").toObject().value("input"));
         for(const auto *name:{"vision","image_input","imageInput","supports_image_input","imageInputSupported"})flag(scope.value(name));
     }
     if(metadata.value("capabilities").isArray()){
@@ -128,7 +128,7 @@ QJsonObject AgentModelCapability::toJson() const
         {"levels", QJsonArray::fromStringList(levels)}, {"reasoningLevels", choices}, {"optionsByLevel", optionsByLevel},
         {"defaultLevel", defaultLevel}, {"source", source}, {"status", status}, {"label", label}, {"supportsOff", supportsOff},
         {"chatToolsSupported", chatToolsSupported}, {"chatToolsRequiresOff", chatToolsRequiresOff},
-        {"imageInputSupported", imageInputSupported}, {"imageInputSource", imageInputSource}};
+        {"imageInputSupported", imageInputSupported}, {"imageInputSource", imageInputSource}, {"modelImageInputs", modelImageInputs}};
     if (contextWindow > 0) result.insert("contextWindow", contextWindow);
     if (maxOutputTokens > 0) result.insert("maxOutputTokens", maxOutputTokens);
     return result;
@@ -142,6 +142,7 @@ AgentModelCapability AgentModelCapability::fromJson(const QJsonObject &object)
     result.status = object.value("status").toString("unknown"); result.label = object.value("label").toString();
     result.chatToolsSupported = object.value("chatToolsSupported").toBool(true); result.chatToolsRequiresOff = object.value("chatToolsRequiresOff").toBool();
     result.imageInputSupported = object.value("imageInputSupported").toBool(); result.imageInputSource = object.value("imageInputSource").toString("unknown");
+    result.modelImageInputs = object.value("modelImageInputs").toObject();
     result.contextWindow = object.value("contextWindow").toInteger(); result.maxOutputTokens = object.value("maxOutputTokens").toInteger();
     for (const auto &value : object.value("models").toArray()) if (value.isString()) result.models.append(value.toString());
     const auto options = object.value("optionsByLevel").toObject();
@@ -276,6 +277,7 @@ void AgentModelCapabilities::clearCache() { cache_.clear(); for (auto it = gener
 
 void AgentModelCapabilities::publish(const QString &baseUrl, const QString &model, AgentModelCapability capability)
 {
+    capability.modelImageInputs.insert(model,capability.imageInputSource=="unknown"?"unknown":capability.imageInputSupported?"supported":"unsupported");
     const auto json = capability.toJson();
     if (cache_.size() >= 128) cache_.erase(cache_.begin());
     cache_.insert(key(baseUrl, model), {json, QDateTime::currentDateTimeUtc()});
@@ -307,10 +309,11 @@ void AgentModelCapabilities::resolve(const QString &baseUrl, const QString &apiK
         for (const auto &value : models) {
             const auto entry = value.toObject(); const auto id = entry.value("id").toString();
             if (!id.isEmpty() && !result.models.contains(id)) result.models.append(id);
+            if(!id.isEmpty()){const auto image=fromMetadata(baseUrl,id,entry);result.modelImageInputs.insert(id,image.imageInputSource=="unknown"?"unknown":image.imageInputSupported?"supported":"unsupported");}
             if (id == model) metadata = entry;
         }
-        const auto ids = result.models;
-        if (!metadata.isEmpty()) { result = fromMetadata(baseUrl, model, metadata); result.models = ids; }
+        const auto ids = result.models;const auto images=result.modelImageInputs;
+        if (!metadata.isEmpty()) { result = fromMetadata(baseUrl, model, metadata); result.models = ids;result.modelImageInputs=images; }
         const auto host = url.host().toLower();
         const bool ollama = host == "ollama.com" || ((host == "localhost" || host == "127.0.0.1" || host == "::1") && url.port() == 11434) || server.contains("ollama");
         if (ollama && (result.source != "metadata" || result.imageInputSource == "unknown")) {
@@ -330,6 +333,7 @@ void AgentModelCapabilities::resolve(const QString &baseUrl, const QString &apiK
                     if(discovered.maxOutputTokens>0)resolved.maxOutputTokens=discovered.maxOutputTokens;
                 }
                 resolved.models = result.models;
+                resolved.modelImageInputs=result.modelImageInputs;
                 if (!valid) { resolved.status = "error"; resolved.label = QStringLiteral("无法读取 Ollama 思考元数据，使用已知的保守选项"); }
                 publish(baseUrl, model, resolved);
             }); return;

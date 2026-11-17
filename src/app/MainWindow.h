@@ -54,6 +54,7 @@ class MainWindow final : public QMainWindow {
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
+    bool openPlayerSource(const QString &path,qint64 loopIn=-1,qint64 loopOut=-1);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -65,6 +66,8 @@ private:
     friend class ::TestAnalysis;
     friend class ::TestAgentIntegration;
     void initializeAgent();
+    void registerAgentWorkspace(AgentSession *session);
+    AgentTaskQueue *configureAgentConversation(AgentSession *session, const QString &id);
     void initializeAgentFeatures();
     void initializeAgentInteractions();
     void submitAgentInput(const QString &text);
@@ -90,6 +93,8 @@ private:
     void selectPipelineRow(int row);
     void updateParameterInputSize();
     void openSource();
+    void applyPlayerRange();
+    qint64 playerRangeIn_=-1,playerRangeOut_=-1;
     bool addRoute();
     void createAdditionalRoute();
     void selectRoute(int index);

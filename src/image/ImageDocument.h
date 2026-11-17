@@ -91,8 +91,8 @@ public:
     bool hasSelection() const;
     QRect selectionBounds() const;
     quint64 selectionId() const; // Stable content identity restored by undo/redo; zero means no selection.
-    QImage composite(const QRect &documentRegion) const; // Native precision, no display tone mapping.
-    QImage compositePreview(const QRect &documentRegion, QSize outputSize, ImageSamplingQuality quality = ImageSamplingQuality::Nearest) const; // Bounded native-precision preview.
+    QImage composite(const QRect &documentRegion, const std::function<bool()> &cancelled = {}) const; // Native precision, no display tone mapping.
+    QImage compositePreview(const QRect &documentRegion, QSize outputSize, ImageSamplingQuality quality = ImageSamplingQuality::Nearest, const std::function<bool()> &cancelled = {}) const; // Bounded native-precision preview.
     void beginEdit(const QString &label);
     void commitEdit();
     void cancelEdit();

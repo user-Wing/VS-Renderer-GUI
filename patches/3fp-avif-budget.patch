@@ -1,0 +1,107 @@
+--- a/FFF.Native/3FP/Core/AvifIlocShim.cpp
++++ b/FFF.Native/3FP/Core/AvifIlocShim.cpp
+@@ -105,7 +105,7 @@
+ 
+ bool AvifIlocShim::ParseIloc(const std::vector<std::uint8_t>& bytes, const Box& iloc,
+     std::int32_t& version, std::int32_t& offsetSize, std::int32_t& lengthSize,
+-    std::vector<Item>& items, std::string& detail) noexcept {
++    std::vector<Item>& items, std::string& detail) {
+     // Field order here is the order FFmpeg's mov_read_iloc reads them, not the
+     // plain ISO 14496-12 one: HEIF gives every item a data_reference_index, in
+     // version 0 as well, and HEIF version 1/2 add an index before each extent.
+@@ -123,10 +123,11 @@
+     const auto baseOffsetSize = static_cast<std::int32_t>(packed >> 4);
+     const auto indexSize = version ? static_cast<std::int32_t>(packed & 0xF) : 0;
+     if (indexSize != 0) { detail = "The item location box indexes its extents; that layout is not repaired."; return false; }
+-    if (offsetSize > 8 || lengthSize > 8 || baseOffsetSize > 8) { detail = "The item location box uses unsupported field widths."; return false; }
++    if (offsetSize == 0 || lengthSize == 0 || offsetSize > 8 || lengthSize > 8 || baseOffsetSize > 8) { detail = "The item location box uses unsupported field widths."; return false; }
+     std::uint64_t itemCount = 0;
+     if (!ReadUInt(bytes, position, end, version < 2 ? 2 : 4, itemCount)) { detail = "The item location box is truncated."; return false; }
+     if (itemCount == 0 || itemCount > 4096) { detail = "The item location box has an unsupported item count."; return false; }
++    std::uint64_t totalExtents = 0;
+     items.clear();
+     items.reserve(static_cast<std::size_t>(itemCount));
+     for (std::uint64_t index = 0; index < itemCount; ++index) {
+@@ -144,6 +145,10 @@
+         item.extentCountField = position;
+         std::uint64_t extentCount = 0;
+         if (!ReadUInt(bytes, position, end, 2, extentCount)) { detail = "The item location box is truncated."; return false; }
++        if (extentCount > 65536 - totalExtents || extentCount > static_cast<std::uint64_t>((end - position) / (offsetSize + lengthSize))) {
++            detail = "The item location box exceeds the extent budget or is truncated."; return false;
++        }
++        totalExtents += extentCount;
+         auto firstOffsetField = position;
+         for (std::uint64_t extent = 0; extent < extentCount; ++extent) {
+             Extent entry;
+@@ -159,7 +164,7 @@
+     return true;
+ }
+ 
+-bool AvifIlocShim::RepairInPlace(std::vector<std::uint8_t>& bytes, std::string& detail) noexcept {
++bool AvifIlocShim::RepairInPlace(std::vector<std::uint8_t>& bytes, std::string& detail) noexcept try {
+     const auto size = static_cast<std::int64_t>(bytes.size());
+     Box ftyp{};
+     if (!FindBox(bytes, 0, size, "ftyp", ftyp)) { detail = "The file has no file type box."; return false; }
+@@ -211,18 +216,19 @@
+     // Write the merged extent into the slot the demuxer reads, and leave the rest
+     // of the box untouched: the extents that follow become dead bytes that the
+     // box walker skips.
++    auto success = "Merged " + std::to_string(ordered.size()) + " contiguous extents into one.";
+     if (!WriteUInt(bytes, target.extentCountField, 2, 1) ||
+         !WriteUInt(bytes, target.offsetField, offsetSize, ordered.front().offset) ||
+         !WriteUInt(bytes, target.extents.front().lengthField, lengthSize, span)) {
+         detail = "The item location box could not be rewritten.";
+         return false;
+     }
+-    detail = "Merged " + std::to_string(ordered.size()) + " contiguous extents into one.";
+-    return true;
+-}
++    detail = std::move(success);
++    return true;
++} catch (...) { detail.clear(); return false; }
+ 
+ bool AvifIlocShim::ReadAndRepair(const char* pathUtf8, const std::int64_t maxBytes,
+-    std::vector<std::uint8_t>& bytes, std::string& detail) noexcept {
++    std::vector<std::uint8_t>& bytes, std::string& detail) noexcept try {
+     bytes.clear();
+     detail.clear();
+     if (pathUtf8 == nullptr || *pathUtf8 == '\0' || maxBytes <= 0) { detail = "The path is not usable."; return false; }
+@@ -232,10 +238,11 @@
+         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+         OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+     if (file == INVALID_HANDLE_VALUE) { detail = "Could not open the file with shared access."; return false; }
++    struct FileCloser { HANDLE file; ~FileCloser(){ CloseHandle(file); } } closer{file};
+     LARGE_INTEGER fileSize{};
+     const auto sized = GetFileSizeEx(file, &fileSize);
+-    if (!sized || fileSize.QuadPart < 0) { CloseHandle(file); detail = "Could not read the file size."; return false; }
+-    if (fileSize.QuadPart > maxBytes) { CloseHandle(file); detail = "The file is larger than the still-image repair limit."; return false; }
++    if (!sized || fileSize.QuadPart < 0) { detail = "Could not read the file size."; return false; }
++    if (fileSize.QuadPart > maxBytes) { detail = "The file is larger than the still-image repair limit."; return false; }
+     // Small enough that reading it whole costs less than the demuxer's own probing:
+     // still images are the only files that reach this code.
+     std::vector<std::uint8_t> content(static_cast<std::size_t>(fileSize.QuadPart));
+@@ -243,7 +250,6 @@
+     const auto ok = content.empty()
+         ? TRUE
+         : ReadFile(file, content.data(), static_cast<DWORD>(content.size()), &read, nullptr);
+-    CloseHandle(file);
+     if (!ok || static_cast<std::size_t>(read) != content.size()) {
+         detail = "Could not read the whole file.";
+         return false;
+@@ -253,4 +259,4 @@
+     bytes = std::move(content);
+     detail = std::move(reason);
+     return true;
+-}
++} catch (...) { bytes.clear(); detail.clear(); return false; }
+--- a/FFF.Native/3FP/Core/AvifIlocShim.h
++++ b/FFF.Native/3FP/Core/AvifIlocShim.h
+@@ -78,7 +78,7 @@
+     static bool IsStillImageBrand(const std::vector<std::uint8_t>& bytes, const Box& ftyp) noexcept;
+     static bool ParseIloc(const std::vector<std::uint8_t>& bytes, const Box& iloc,
+         std::int32_t& version, std::int32_t& offsetSize, std::int32_t& lengthSize,
+-        std::vector<Item>& items, std::string& detail) noexcept;
++        std::vector<Item>& items, std::string& detail);
+     static bool ReadUInt(const std::vector<std::uint8_t>& bytes, std::int64_t& position,
+         const std::int64_t end, const std::int32_t width, std::uint64_t& value) noexcept;
+     static bool WriteUInt(std::vector<std::uint8_t>& bytes, const std::int64_t position,

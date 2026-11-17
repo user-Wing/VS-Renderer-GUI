@@ -8,6 +8,7 @@
 #include <QAbstractTextDocumentLayout>
 #include <QApplication>
 #include <QDialog>
+#include <QComboBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFontDatabase>
@@ -16,6 +17,10 @@
 #include <QInputMethodEvent>
 #include <QJsonDocument>
 #include <QLabel>
+#include <QLineEdit>
+#include <QInputDialog>
+#include <QMenu>
+#include <QMessageBox>
 #include <QLayout>
 #include <QListWidget>
 #include <QPlainTextEdit>
@@ -120,6 +125,87 @@ private slots:
         auto *view=page.findChild<AgentMarkdownView*>();QVERIFY(view->toPlainText().contains(QStringLiteral("等待 Agent 接收")));page.findChild<QPushButton*>("agentStop")->click();QVERIFY(!session.isBusy());QVERIFY(!page.findChild<QPushButton*>("agentStop")->isVisible());QVERIFY(session.pendingPaused());QCOMPARE(session.pendingMessages().size(),1);
         input->setPlainText(QStringLiteral("保留的草稿"));bool opened=false;QTimer::singleShot(30,&page,[&]{auto *dialog=page.findChild<QDialog*>("agentPendingDialog");opened=dialog && dialog->findChild<QListWidget*>("agentPendingList")->count()==1;if(dialog)dialog->findChild<QPushButton*>("agentPendingEdit")->click();});page.findChild<QPushButton*>("agentPendingMessages")->click();
         QVERIFY(opened);QVERIFY(session.pendingMessages().isEmpty());QCOMPARE(input->toPlainText(),QStringLiteral("保留的草稿\n\n运行中继续发送"));screenshot(page,"ui-pending-edited.png");
+    }
+
+    void runningConversationAllowsNavigationAndExport() {
+        QTcpServer server;QVERIFY(server.listen(QHostAddress::LocalHost,0));
+        QList<QTcpSocket*> sockets;connect(&server,&QTcpServer::newConnection,&server,[&]{while(server.hasPendingConnections()){auto *socket=server.nextPendingConnection();socket->setParent(&server);sockets<<socket;}});
+        QVERIFY(prepare(QString("http://127.0.0.1:%1/v1").arg(server.serverPort())));
+        AgentSession session;AgentPage page(&session);page.show();session.send("Keep running in the original conversation.");
+        QVERIFY(session.isBusy());
+        QTRY_COMPARE(sockets.size(),1);QTRY_VERIFY(sockets[0]->bytesAvailable()>0);
+        QVERIFY(page.findChild<QPushButton*>("agentNewConversation")->isEnabled());
+        QVERIFY(page.findChild<QPushButton*>("agentImportConversation")->isEnabled());
+        QVERIFY(page.findChild<QPushButton*>("agentExportConversation")->isEnabled());
+        const auto firstId=page.conversationId();page.startNewConversation();QVERIFY(session.isBusy());
+        auto *second=page.activeSession();QVERIFY(second!=&session);QVERIFY(second->messages().isEmpty());
+        const auto secondId=page.conversationId();second->send("Second conversation only.");QTRY_COMPARE(sockets.size(),2);QTRY_VERIFY(sockets[0]->bytesAvailable()>0);QTRY_VERIFY(sockets[1]->bytesAvailable()>0);
+        const QByteArray body=R"({"choices":[{"message":{"role":"assistant","content":"FIRST_RESULT_ONLY"},"finish_reason":"stop"}]})";
+        sockets[0]->readAll();sockets[0]->write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "+QByteArray::number(body.size())+"\r\nConnection: close\r\n\r\n"+body);sockets[0]->disconnectFromHost();
+        QTRY_VERIFY(!session.isBusy());QVERIFY(second->isBusy());QVERIFY(!page.findChild<AgentMarkdownView*>()->toPlainText().contains("FIRST_RESULT_ONLY"));
+        QTemporaryDir dir;const auto output=dir.filePath("running.json");
+        const auto choose=[&]{auto *dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget());QVERIFY(dialog);auto *filename=dialog->findChild<QLineEdit*>("fileNameEdit");QVERIFY(filename);filename->setText(output);QVERIFY(dialog->selectedFiles().contains(output));QMetaObject::invokeMethod(dialog,"accept",Qt::DirectConnection);};
+        QTimer::singleShot(50,&page,choose);page.findChild<QPushButton*>("agentExportConversation")->click();QVERIFY(QFileInfo::exists(output));QVERIFY(second->isBusy());
+        QTimer::singleShot(50,&page,choose);page.findChild<QPushButton*>("agentImportConversation")->click();QVERIFY(second->isBusy());QVERIFY2(page.activeSession()!=second,qPrintable(page.findChild<QLabel*>("agentStatus")->text()));QVERIFY(!page.activeSession()->isBusy());
+        const auto select=[&](const QString &id){auto *list=page.findChild<QListWidget*>("agentConversations");for(int i=0;i<list->count();++i)if(list->item(i)->data(Qt::UserRole).toString()==id){list->setCurrentRow(i);return;}};
+        select(firstId);QCOMPARE(page.activeSession(),&session);QVERIFY(page.findChild<AgentMarkdownView*>()->toPlainText().contains("FIRST_RESULT_ONLY"));
+        select(secondId);QCOMPARE(page.activeSession(),second);page.findChild<QPushButton*>("agentStop")->click();QVERIFY(!second->isBusy());
+        select(firstId);QVERIFY(page.findChild<AgentMarkdownView*>()->toPlainText().contains("FIRST_RESULT_ONLY"));
+    }
+
+    void conversationOrganizationPersists() {
+        QVERIFY(prepare()); QTemporaryDir project; QVERIFY(project.isValid()); QSettings().setValue("agent/workingDirectory",project.path());
+        QString id;
+        {
+            AgentSession session; AgentPage page(&session); page.resize(1000,700); page.show();
+            QVERIFY(session.importConversation(QJsonObject{{"schemaVersion",1},{"messages",QJsonArray{QJsonObject{{"role","user"},{"content","original title"}}}}}));
+            id=page.conversationId(); page.startNewConversation();
+            auto *list=page.findChild<QListWidget*>("agentConversations");
+            auto find=[&](const QString &key){for(int i=0;i<list->count();++i)if(list->item(i)->data(Qt::UserRole).toString()==key)return list->item(i);return static_cast<QListWidgetItem*>(nullptr);};
+            auto *item=find(id); QVERIFY(item); list->setCurrentItem(item); item=find(id); QVERIFY(item);
+            QTimer::singleShot(0,&page,[&]{auto *menu=qobject_cast<QMenu*>(QApplication::activePopupWidget()); QVERIFY(menu); menu->setActiveAction(menu->actions().first()); QTest::keyClick(menu,Qt::Key_Return);});
+            QTimer::singleShot(20,&page,[&]{auto *dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); QVERIFY(dialog); dialog->setTextValue("renamed title"); dialog->accept();});
+            QMetaObject::invokeMethod(list,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,list->visualItemRect(item).center()));
+            QCOMPARE(page.findChild<QLabel*>("agentConversationTitle")->text(),QString("renamed title"));
+            item=find(id); QVERIFY(item);
+            QTimer::singleShot(0,&page,[&]{auto *menu=qobject_cast<QMenu*>(QApplication::activePopupWidget()); QVERIFY(menu); screenshot(*menu,"ui-conversation-menu.png"); menu->setActiveAction(menu->actions().at(1)); QTest::keyClick(menu,Qt::Key_Return);});
+            QTimer::singleShot(20,&page,[&]{auto *dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); QVERIFY(dialog); QVERIFY(dialog->width()>=520); screenshot(*dialog,"ui-conversation-group.png"); auto *combo=dialog->findChild<QComboBox*>(); QVERIFY(combo); combo->setEditText(QStringLiteral("动画项目")); dialog->accept();});
+            QMetaObject::invokeMethod(list,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,list->visualItemRect(item).center()));
+            QTemporaryDir other; QVERIFY(other.isValid()); QVERIFY(page.activeSession()->setWorkingDirectory(other.path()));
+            QListWidgetItem *header=nullptr; for(int i=0;i<list->count();++i)if(list->item(i)->data(Qt::UserRole+1).toString()==QStringLiteral("动画项目"))header=list->item(i);
+            QVERIFY(header); QTest::mouseClick(list->viewport(),Qt::LeftButton,Qt::NoModifier,list->visualItemRect(header).center()); QVERIFY(find(id)->isHidden());
+        }
+        {
+            AgentSession session; AgentPage page(&session); page.resize(1000,700); page.show(); auto *list=page.findChild<QListWidget*>("agentConversations");
+            QListWidgetItem *item=nullptr; for(int i=0;i<list->count();++i)if(list->item(i)->data(Qt::UserRole).toString()==id)item=list->item(i);
+            QVERIFY(item); QVERIFY(item->isHidden()); QVERIFY(item->text().contains("renamed title"));
+            QListWidgetItem *header=nullptr; for(int i=0;i<list->count();++i)if(list->item(i)->data(Qt::UserRole+1).toString()==QStringLiteral("动画项目"))header=list->item(i); QVERIFY(header); QTest::mouseClick(list->viewport(),Qt::LeftButton,Qt::NoModifier,list->visualItemRect(header).center());
+            item=nullptr; for(int i=0;i<list->count();++i)if(list->item(i)->data(Qt::UserRole).toString()==id)item=list->item(i);
+            QVERIFY(item); list->setCurrentItem(item); QCOMPARE(page.findChild<QLabel*>("agentConversationTitle")->text(),QString("renamed title"));
+            QTimer::singleShot(0,&page,[]{auto *box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget()); QVERIFY(box); box->button(QMessageBox::Yes)->click();});
+            page.findChild<QPushButton*>("agentDeleteConversation")->click();
+            QVERIFY(page.conversationId()!=id);
+            for(int i=0;i<list->count();++i)QVERIFY(list->item(i)->data(Qt::UserRole).toString()!=page.conversationId());
+            for(int i=0;i<list->count();++i)QVERIFY(list->item(i)->data(Qt::UserRole).toString()!=id);
+            QVERIFY(!QFileInfo::exists(QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("agent/conversations/"+id+".json")));
+            page.findChild<QPushButton*>("agentNewConversation")->click(); const auto blank=page.conversationId();
+            auto countBlank=[&]{int count=0;for(int i=0;i<list->count();++i)if(list->item(i)->data(Qt::UserRole).toString()==blank && !list->item(i)->isHidden())++count;return count;};
+            QCOMPARE(countBlank(),1);
+            for(int i=0;i<5;++i)page.findChild<QPushButton*>("agentNewConversation")->click();
+            QCOMPARE(page.conversationId(),blank); QCOMPARE(countBlank(),1);
+        }
+        { AgentSession session; AgentPage page(&session); auto *list=page.findChild<QListWidget*>("agentConversations"); for(int i=0;i<list->count();++i)QVERIFY(list->item(i)->data(Qt::UserRole).toString()!=id); }
+        QSettings().remove("agent/collapsedProjects");
+    }
+
+    void modelListShowsSupportedTextAndUnknownVision() {
+        QVERIFY(prepare());AgentSession session;AgentPage page(&session);page.show();
+        auto cap=capability();cap.insert("model","model-a");cap.insert("imageInputSource","metadata");cap.insert("imageInputSupported",false);
+        cap.insert("models",QJsonArray{"model-a","vision-b","unknown-c"});cap.insert("modelImageInputs",QJsonObject{{"model-a","unsupported"},{"vision-b","supported"},{"unknown-c","unknown"}});page.setModelCapabilities(cap);
+        QVERIFY(page.findChild<QPushButton*>("agentModelButton")->text().contains(QStringLiteral("不支持图像")));
+        page.openModelMenu();auto *popup=qobject_cast<AgentChoicePopup*>(QApplication::activePopupWidget());QVERIFY(popup);
+        auto *list=popup->findChild<QListWidget*>("agentChoiceList");
+        QVERIFY(list->item(0)->toolTip().contains(QStringLiteral("不支持图像")));QVERIFY(list->item(1)->toolTip().contains(QStringLiteral("支持图像")));QVERIFY(list->item(2)->toolTip().contains(QStringLiteral("视觉未确认")));popup->close();
     }
 
     void accessModeDirectoryAndPersistence() {

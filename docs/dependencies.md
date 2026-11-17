@@ -29,7 +29,7 @@ cmake --build --preset windows-mingw-release
 
 固定运行时更新不得删除已有插件或覆盖用户配置。组件许可见 [第三方声明](../THIRD_PARTY_NOTICES.md)。
 
-Full 当前 FFmpeg 固定为用户提供的 `09-full-shared-newdav1d.zip`，版本 `9.1-dev-3586-gfc00db20fc-full09`，dav1d 提交 `39834d7f71c85a9c555f2ddd7a7add6d671750de`；归档 SHA256 与 ABI 见 `tools/ffmpeg-source.json`，用 `tools/stage-ffmpeg.ps1` 部署。保持同一套 shared DLL，不能仅替换 CLI。
+Full 当前 FFmpeg 固定为 `10-full-shared-svt420fix-20261115-release.zip`：以09完整版重编，修正本地SVT444扩展遗漏抽样参数初始化导致的420编码色块；沿用版本字符串 `9.1-dev-3586-gfc00db20fc-full09` 和dav1d提交 `39834d7f71c85a9c555f2ddd7a7add6d671750de`。发行布局与09一致，3个程序＋83个DLL，剥离调试符号且不携带验收CLI。归档SHA256、ABI及修复身份见 `tools/ffmpeg-source.json`，用 `tools/stage-ffmpeg.ps1` 部署。保持同一套shared DLL，不能仅替换CLI；已运行程序需重启加载新库。本机更新及验证范围见[记录](../development/ffmpeg-svt420fix-20261115.md)。
 
 Full 不再随包携带 LAV / madVR，在“设置 → 组件下载”下载、应用并重启；原接口保留。默认 shader 库只部署完整 Anime4K，内置 MoeSR 不受影响；`tools/package-optional-shaders.ps1` 生成扩展库，可从“设置 → 组件下载”的 `mpv-shaders` 项下载、应用并重启，也可手动解压到 Full 安装目录。`package-portable.ps1` 强制排除已下载的可选组件与额外 shader，并剥离发行 EXE 的冗余符号；源码与本地调试产物保留。
 

@@ -137,13 +137,13 @@ public:
     QByteArray row(int y){ensure();QMutexLocker lock(&mutex_);const int bytes=size_.width()*(depth_/8);if(!raw_->seek(qint64(y)*bytes))fail("Unable to seek PSD plane");auto data=raw_->read(bytes);if(data.size()!=bytes)fail("Unable to read PSD plane");return data;}
 };
 struct Source {
-    Record record;int depth;QColorSpace space;
+    Record record;int depth;QColorSpace space;std::function<bool()> cancelled;
     QHash<int,std::shared_ptr<Plane>> planes;
     QMutex mutex;bool pixelsReady=false,maskReady=false;
     void ensure(bool mask){
         QMutexLocker lock(&mutex);auto &ready=mask?maskReady:pixelsReady;if(ready)return;
         std::vector<std::future<void>> jobs;
-        for(auto it=planes.cbegin();it!=planes.cend();++it)if((it.key()==-2)==mask)jobs.push_back(std::async(std::launch::async,[p=it.value(),thread=QThread::currentThread()]{p->ensure([thread]{return thread->isInterruptionRequested();});}));
+        for(auto it=planes.cbegin();it!=planes.cend();++it)if((it.key()==-2)==mask)jobs.push_back(std::async(std::launch::async,[p=it.value(),thread=QThread::currentThread(),cancelled=cancelled]{p->ensure([thread,cancelled]{return thread->isInterruptionRequested() || (cancelled && cancelled());});}));
         for(auto &job:jobs)job.get();
         ready=true;
     }
@@ -182,7 +182,7 @@ struct Source {
     }
 };
 }
-std::unique_ptr<ImageDocument> ImagePsd::load(const QString &path,QString *error,QStringList *warnings){
+std::unique_ptr<ImageDocument> ImagePsd::load(const QString &path,QString *error,QStringList *warnings,const std::function<bool()> &cancelled){
     try {
         Reader r(path);if(r.bytes(4)!="8BPS")fail("Not a PSD/PSB file");const int version=int(r.u(2));if(version!=1 && version!=2)fail("Unsupported PSD version");r.bytes(6);r.u(2);
         const int height=int(r.u(4)),width=int(r.u(4)),depth=int(r.u(2)),mode=int(r.u(2));if(width<1 || height<1 || width>300000 || height>300000 || (depth!=8 && depth!=16 && depth!=32))fail("Unsupported PSD dimensions/depth");
@@ -207,7 +207,7 @@ std::unique_ptr<ImageDocument> ImagePsd::load(const QString &path,QString *error
         for(auto it=layers.rbegin();it!=layers.rend();++it){auto &layer=*it;if(layer.section==3){if(!stack.isEmpty())stack.removeLast();continue;}layer.parent=stack.isEmpty()?QUuid{}:stack.last();layer.id=QUuid::createUuid();if(layer.section==1 || layer.section==2)stack<<layer.id;ordered<<&layer;}
         QHash<QUuid,QUuid> ids;
         for(auto it=ordered.crbegin();it!=ordered.crend();++it){
-            const auto &layer=**it;auto source=std::make_shared<Source>();source->record=layer;source->depth=depth;source->space=space;
+            const auto &layer=**it;auto source=std::make_shared<Source>();source->record=layer;source->cancelled=cancelled;source->depth=depth;source->space=space;
             for(const auto &channel:layer.channels)if(channel.id>=-2 && channel.id<=2){const auto size=channel.id==-2?layer.maskBounds.size():layer.bounds.size();if(!size.isEmpty())source->planes.insert(channel.id,std::make_shared<Plane>(path,channel,size,depth,version));}
             QUuid id;
             if(layer.section==1 || layer.section==2)id=document->addLayer(layer.name,{},layer.bounds.topLeft());

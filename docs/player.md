@@ -1,5 +1,17 @@
 # Player 操作
 
+## A–B 循环与 Renderer 协同
+
+播放视频时，右键“A–B 循环”依次把当前点设为 A 入点、B 出点；B 必须晚于 A，设置后自动循环。菜单可暂停循环或清除标记，换片会清除 A/B，暂停播放不会自动跳转。
+
+右键“在 VS Renderer 中打开当前视频”打开完整视频；“将 A–B 段送到 VS Renderer 时间组”会按源帧率对齐区间，建立前段、A–B 段、后段并选中 A–B 组，方便加滤镜。两者均打开新的 Renderer 窗口，适用于本地普通视频；不会自动编码。独立播放器首次使用需选择已安装的 `VSRenderer.exe`。
+
+## 资源管理器缩略图
+
+在“设置 → 文件关联”勾选格式，点击“安装所选格式的资源管理器缩略图”，可为 JXL、AVIF、WebP、HEIC/HEIF、QOI、JPEG 2000、EXR 和高位深 AV1 等生成预览，不改变默认打开程序。卸载按钮恢复安装前的缩略图处理器；安装只作用于当前 Windows 用户。
+
+这是 Windows 文件列表缩略图，与下方进度条悬停预览独立。安装会将组件及匹配的 FFmpeg 依赖复制到用户本地目录，单文件播放器退出后仍可使用；升级后可再次安装。缩略图用于浏览，不作为 HDR/ICC 色彩校准依据。
+
 OpenNGU 本地接入：在“图像处理 → 上采样滤镜 → 常规直通模式”中第一项为 OpenNGU，后接 Jinc、D3D11；第二上采样第三项为 OpenNGU，默认仍为 Jinc。BT.709 SDR 使用运行目录 `shaders/OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl` 及其相邻缓存；不可用时回退并在 Tab 说明。第二级只在已有处理结果仍需放大时执行，保留原滤镜。私有参数由用户本地提供，不包含在公开源码补丁中。
 
 ## 轨道记忆、缩略图与链路信息（2026-11-10）
@@ -50,15 +62,15 @@ Full 的 DirectShow 选项连接既有 LAV Audio + 系统渲染图，与解码�
 
 ## 直通、增强与补帧
 
-D3D11/Jinc 和无预设原画使用 3FP 直通，不建立 VS 索引。右键“图像处理”分别选择“上采样滤镜”“第二上采样滤镜”“下采样”。主滤镜中的 Anime4K 六档归在一个子菜单，常规算法单列；第二上采样默认 Jinc (Anti-Alias)，独立于下采样。RTX VSR 开启时提示并改用 D3D11 主直通。Full/Lite 均支持这三段；Lite 不执行任意 VPY 或补帧组合。
+D3D11/Jinc 和无预设原画使用 3FP 直通，不建立 VS 索引。右键“图像处理”分别选择“上采样滤镜”“第二上采样滤镜”“下采样”。主滤镜中的 Anime4K A CNN、AFast CNN、AFast 1X 各有普通与额外增强两档，六档归在一个子菜单，常规算法单列；第二上采样默认 Jinc (Anti-Alias)，独立于下采样。AFast 1X 在源尺寸处理，不执行 CNN 放大；最终放大交给第二上采样，切换 1X 两档不会改变第二上采样选择。RTX VSR 开启时提示并改用 D3D11 主直通。Full/Lite 均支持这三段；Lite 不执行任意 VPY 或补帧组合。
 
 Full的`vpy/preset-descriptions.json`也管理算法和菜单标题的鼠标悬停说明，修改后重新打开右键菜单生效。停留在“上采样滤镜”“第二上采样滤镜”“补帧”等父分类标题上就会显示说明，不需要移入子菜单；进入子菜单或离开分类后停止显示该分类说明。Jinc沿用`builtin/Anime-4-Jinc.vpy`，D3D11沿用`builtin/Anime-5-D3D11.vpy`，你原来填写的内容会在常规直通、第二上采样和下采样中共同显示。其余算法各使用一个`scaling/Nearest`、`scaling/Bilinear`、`scaling/Bicubic`、`scaling/Lanczos3`、`scaling/Lanczos4`、`scaling/Spline36`或`scaling/SuperXbr`键，三个采样菜单共用。
 
-分类标题使用`menu/`开头的键，包括`upsampling`、`secondUpsampling`、`downsampling`、`anime4k`、`passThrough`、`interpolation`等。补帧自动切换的两种输出模式分别使用`interpolation/auto/Jinc`和`interpolation/auto/D3D11`，与`builtin/Interpolation-0-RIFE.vpy`及其D3D11变体的全宽高RIFE说明分开。新增默认键见源码`assets/player-menu-descriptions.json`；补齐缺失键时保留已有说明和`playerGuide`。
+分类标题使用`menu/`开头的键，包括`upsampling`、`secondUpsampling`、`downsampling`、`anime4k`、`passThrough`、`interpolation`等。补帧自动切换的两种输出模式分别使用`interpolation/auto/Jinc`和`interpolation/auto/D3D11`，与`builtin/Interpolation-0-RIFE.vpy`及其D3D11变体的全宽高RIFE说明分开。六档 Anime4K 的悬停说明使用 `anime/8`、`anime/9`、`anime/0`、`anime/1`、`anime/6`、`anime/7`，依次对应 A CNN 增强/普通、AFast CNN 增强/普通和 AFast 1X 增强/普通。新增默认键见源码`assets/player-menu-descriptions.json`；补齐缺失键时保留已有说明和`playerGuide`。
 
 内置 Anime4K 使用原生 HLSL；修改过的 VPY 或不兼容着色器保留原 GLSL。302/915 个库条目已预编译；归档里的源文件和配套字节码一起按需提取，不要求每次重新转换。不支持的 COMPUTE、CHROMA、OFFSET 等语义仍明确拒绝或回退。
 
-原始高度 ≥2160p 时禁用内置 Anime4K，Jinc/D3D11 保持可选。渲染设置完整列出八档，单击选择起始档位、勾选参与自动切换，D3D11 必选；Tab 与底栏显示实际生效链路。自定义 VPY 不受此内置限制，需自行评估资源。
+原始高度 ≥2160p 时禁用内置 Anime4K，Jinc/D3D11 保持可选。渲染设置列出六档 Anime4K、MoeSR 和 Jinc/D3D11 直通，单击选择起始档位、勾选参与自动切换，D3D11 必选；Tab 与底栏显示实际生效链路。自定义 VPY 不受此内置限制，需自行评估资源。
 
 “VapourSynth 预设”只显示用户与社区预设。用户说明来自 Renderer 预设管理的备注；开发者说明由 `vpy/preset-descriptions.json` 的 `builtin/文件名.vpy` 键填写。程序只补缺失的空键，保留已写说明，不内置推荐文案。
 
@@ -180,3 +192,5 @@ paretoImage=
 Tab 功耗显示：NVIDIA GPU 复用系统已安装的 NVML，数值为受支持 NVIDIA GPU 的功耗合计；CPU 复用已安装的 PawnIO 和官方只读模块。接口缺失、硬件不支持或权限不足显示 N/A；程序不安装驱动或更改权限。本机普通权限的 CPU 读取被驱动拒绝，GPU 读取已实测。原始计数差分和支持边界见源码工作区 `development/pawnio-power.md`。
 
 《摇曳露营 Movie Flac X2》的默认 FLAC 2.0 抽样原始响度偏低；100% 保持原始增益，需要提升可按素材启用动态响度标准化或手动主音量。检测结果是该素材抽样结果，不作为所有视频的统一加增益依据。
+
+RAW 图片由配套 Native 内核和 libraw.dll 开发，使用完整尺寸、相机白平衡及16位 sRGB 输出；打开失败明确提示，不使用缩略图冒充开发结果。蓝牙同步补偿在解码设置中启用，codec 可手动指定，补偿叠加声音同步的手动偏移；端点识别与刷新率更新约5秒检查一次。估计值并非实际耳机延迟测量。

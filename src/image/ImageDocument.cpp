@@ -20,6 +20,17 @@
 
 namespace vsr {
 namespace {
+void clearCompositionError(QString &error) {
+    if(error=="Image composition cancelled" || error=="Image group composition budget exceeded" || error.endsWith(": PSD decode cancelled"))error.clear();
+}
+struct CompositeBudget {
+    const std::function<bool()> &cancelled;
+    unsigned visits=0;
+    void check(unsigned depth) {
+        if(depth>64 || ++visits>65536)throw std::runtime_error("Image group composition budget exceeded");
+        if((cancelled && cancelled()) || QThread::currentThread()->isInterruptionRequested())throw std::runtime_error("Image composition cancelled");
+    }
+};
 using Pixel = std::array<float,4>;
 Pixel sample(const QImage &image, int x, int y) {
     const auto *row=image.constScanLine(y);
@@ -173,14 +184,15 @@ struct ImageDocument::Impl {
             if(rect.isEmpty() || output.isEmpty())return {};
             std::vector<std::unique_ptr<QMutexLocker<QMutex>>> locks;for(const auto &l:layers)locks.push_back(std::make_unique<QMutexLocker<QMutex>>(&l->mutex));
             struct Clear {std::vector<std::shared_ptr<FrozenLayer>> &layers;~Clear(){for(const auto &l:layers){l->pixelCache.clear();l->maskCache.clear();}}} clear{layers};
+            const std::function<bool()> cancelled;CompositeBudget budget{cancelled};
             auto blank=[&]{QImage image(output,format);if(image.isNull())throw std::runtime_error("Unable to allocate flattened image region");image.fill(Qt::transparent);image.setColorSpace(space);return image;};
-            std::function<QImage(QUuid,QImage)> render=[&](QUuid parent,QImage out){QImage baseAlpha;
-                for(const auto &l:layers){const auto &info=l->info;if(info.parentId!=parent || !info.visible || info.opacity<=0)continue;QImage source,groupAlpha;if(info.group){source=render(info.id,info.passThrough?out:blank());if(info.passThrough)groupAlpha=render(info.id,blank());}QImage thisAlpha=blank();
+            std::function<QImage(QUuid,QImage,unsigned)> render=[&](QUuid parent,QImage out,unsigned depth){budget.check(depth);QImage baseAlpha;
+                for(const auto &l:layers){const auto &info=l->info;if(info.parentId!=parent || !info.visible || info.opacity<=0)continue;budget.check(depth);QImage source,groupAlpha;if(info.group){source=render(info.id,info.passThrough?out:blank(),depth+1);if(info.passThrough)groupAlpha=render(info.id,blank(),depth+1);}QImage thisAlpha=blank();
                     for(int y=0;y<output.height();++y)for(int x=0;x<output.width();++x){const int dx=rect.x()+int((qint64(2)*x+1)*rect.width()/(qint64(2)*output.width())),dy=rect.y()+int((qint64(2)*y+1)*rect.height()/(qint64(2)*output.height()));if(!QRect(QPoint(),canvas).contains(dx,dy))continue;const int lx=dx-info.offset.x(),ly=dy-info.offset.y();const auto p=info.group?sample(source,x,y):l->pixel(lx,ly),b=sample(out,x,y);float coverage=info.opacity*(info.group?1:info.fillOpacity)*blendIfCoverage(info,p,b);if(info.maskEnabled)coverage*=l->coverage(lx,ly);if(info.clipping && !baseAlpha.isNull())coverage*=sample(baseAlpha,x,y)[3];put(thisAlpha,x,y,{0,0,0,(groupAlpha.isNull()?p[3]:sample(groupAlpha,x,y)[3])*coverage});Pixel result;
                         if(info.group && info.passThrough){result={};result[3]=b[3]*(1-coverage)+p[3]*coverage;if(result[3]>0)for(int c=0;c<3;++c)result[c]=(b[c]*b[3]*(1-coverage)+p[c]*p[3]*coverage)/result[3];}else result=blend(b,p,coverage,info.blend);put(out,x,y,restrictChannels(result,b,info.channels));
                     }if(!info.clipping)baseAlpha=thisAlpha;
                 }return out;};
-            auto image=render({},blank());if(whiteBackground)for(int y=0;y<output.height();++y)for(int x=0;x<output.width();++x){const int dx=rect.x()+int((qint64(2)*x+1)*rect.width()/(qint64(2)*output.width())),dy=rect.y()+int((qint64(2)*y+1)*rect.height()/(qint64(2)*output.height()));if(QRect(QPoint(),canvas).contains(dx,dy))put(image,x,y,blend({1,1,1,1},sample(image,x,y),1,ImageBlendMode::Normal));}return image;
+            auto image=render({},blank(),0);if(whiteBackground)for(int y=0;y<output.height();++y)for(int x=0;x<output.width();++x){const int dx=rect.x()+int((qint64(2)*x+1)*rect.width()/(qint64(2)*output.width())),dy=rect.y()+int((qint64(2)*y+1)*rect.height()/(qint64(2)*output.height()));if(QRect(QPoint(),canvas).contains(dx,dy))put(image,x,y,blend({1,1,1,1},sample(image,x,y),1,ImageBlendMode::Normal));}return image;
         }
     };
     struct State {QList<Layer> layers;Blocks selection;bool selected=false;quint64 selectionId=0;QSize size;ImagePrecision precision=ImagePrecision::UInt8;QColorSpace space;};
@@ -285,7 +297,7 @@ void ImageDocument::setColorSpace(const QColorSpace &space){const bool own=!d->e
 void ImageDocument::setMetadata(const QString &key,const QString &value){d->metadata[key]=value;}
 QString ImageDocument::metadata(const QString &key) const{return d->metadata.value(key);}
 QList<ImageLayerInfo> ImageDocument::layers() const{QList<ImageLayerInfo> out;for(const auto &l:d->state.layers)out<<l.info;return out;}
-void ImageDocument::beginEdit(const QString &label){Q_ASSERT(thread()==QThread::currentThread());Q_ASSERT(!d->editing);d->before=d->state;d->label=label;d->editing=true;d->modified=false;}
+void ImageDocument::beginEdit(const QString &label){clearCompositionError(d->error);Q_ASSERT(thread()==QThread::currentThread());Q_ASSERT(!d->editing);d->before=d->state;d->label=label;d->editing=true;d->modified=false;}
 void ImageDocument::commitEdit(){
     if(!d->editing)return;
     if(!d->error.isEmpty()){cancelEdit();return;}
@@ -506,26 +518,30 @@ QRect ImageDocument::selectionBounds() const{
     }return bounds;
 }
 quint64 ImageDocument::selectionId() const{return d->state.selectionId;}
-QImage ImageDocument::composite(const QRect &rect) const{return compositePreview(rect,rect.size());}
-QImage ImageDocument::compositePreview(const QRect &rect,QSize outputSize,ImageSamplingQuality quality) const{
+QImage ImageDocument::composite(const QRect &rect,const std::function<bool()> &cancelled) const{return compositePreview(rect,rect.size(),ImageSamplingQuality::Nearest,cancelled);}
+QImage ImageDocument::compositePreview(const QRect &rect,QSize outputSize,ImageSamplingQuality quality,const std::function<bool()> &cancelled) const{
+    clearCompositionError(d->error);
     if(rect.isEmpty() || outputSize.isEmpty())return {};
+    if(cancelled && cancelled()){d->error="Image composition cancelled";return {};}
     // An untouched full-size background needs sampling, not a per-pixel blend
     // pass. Keep the general compositor for masks, edits and layer effects.
     if(d->state.layers.size()==1 && QRect(QPoint(),d->state.size).contains(rect)){
         const auto &layer=d->state.layers.first();const ImageLayerInfo plain;
         if(layer.qualityPreview && layer.pixels.isEmpty() && layer.mask.isEmpty() && !layer.maskReader && !layer.info.group && layer.info.parentId.isNull() && layer.info.visible && !layer.info.clipping && layer.info.opacity==1 && layer.info.fillOpacity==1 && layer.info.channels==7 && layer.info.blend==ImageBlendMode::Normal && layer.info.maskDefault==255 && layer.info.blendIfSource==plain.blendIfSource && layer.info.blendIfBackdrop==plain.blendIfBackdrop && QRect(layer.info.offset,layer.info.extent).contains(rect)){
-            auto image=layer.qualityPreview(rect.translated(-layer.info.offset),outputSize,quality).convertToFormat(d->format());image.setColorSpace(d->state.space);return image;
+            try{auto image=layer.qualityPreview(rect.translated(-layer.info.offset),outputSize,quality).convertToFormat(d->format());image.setColorSpace(d->state.space);return image;}catch(const std::exception &e){d->error=QString::fromUtf8(e.what());return {};}
         }
     }
+    CompositeBudget budget{cancelled};
     auto blank=[&]{QImage image(outputSize,d->format());image.fill(Qt::transparent);image.setColorSpace(d->state.space);return image;};
-    std::function<QImage(QUuid,QImage)> render=[&](QUuid parent,QImage out){
+    std::function<QImage(QUuid,QImage,unsigned)> render=[&](QUuid parent,QImage out,unsigned depth){budget.check(depth);
         QImage baseAlpha;
         for(const auto &layer:d->state.layers){
             if(layer.info.parentId!=parent || !layer.info.visible || layer.info.opacity<=0)continue;
+            budget.check(depth);
             QImage source;
             std::unique_ptr<Impl::FrozenLayer> filtered;if(quality==ImageSamplingQuality::Bilinear)filtered=std::make_unique<Impl::FrozenLayer>(layer,d->format(),d->state.space);
             QImage groupAlpha;
-            if(layer.info.group){if(layer.info.passThrough){source=render(layer.info.id,out);groupAlpha=render(layer.info.id,blank());}else source=render(layer.info.id,blank());}
+            if(layer.info.group){if(layer.info.passThrough){source=render(layer.info.id,out,depth+1);groupAlpha=render(layer.info.id,blank(),depth+1);}else source=render(layer.info.id,blank(),depth+1);}
             else if(filtered && layer.qualityPreview)source=layer.qualityPreview(rect.translated(-layer.info.offset),outputSize,quality).convertToFormat(d->format());
             else if(!filtered && layer.preview)source=layer.preview(rect.translated(-layer.info.offset),outputSize).convertToFormat(d->format());
             else if(!filtered && layer.reader && outputSize==rect.size())source=readRegion(layer.info.id,rect.translated(-layer.info.offset));
@@ -533,6 +549,7 @@ QImage ImageDocument::compositePreview(const QRect &rect,QSize outputSize,ImageS
             quint64 previous=std::numeric_limits<quint64>::max();QImage pixels,mask;
             QImage thisAlpha=blank();QImage sourceMask;if(layer.info.maskEnabled){if(filtered && layer.maskQualityPreview)sourceMask=layer.maskQualityPreview(rect.translated(-layer.info.offset),outputSize,quality);else if(!filtered && layer.maskPreview)sourceMask=layer.maskPreview(rect.translated(-layer.info.offset),outputSize);}
             for(int y=0;y<out.height();++y)for(int x=0;x<out.width();++x){
+                if(x==0 && cancelled && cancelled())throw std::runtime_error("Image composition cancelled");
                 const int dx=rect.x()+int((qint64(2)*x+1)*rect.width()/(qint64(2)*out.width())),dy=rect.y()+int((qint64(2)*y+1)*rect.height()/(qint64(2)*out.height()));
                 if(!QRect(QPoint(),d->state.size).contains(dx,dy))continue;
                 const int lx=dx-layer.info.offset.x(),ly=dy-layer.info.offset.y(),tx=tileIndex(lx),ty=tileIndex(ly);const auto key=tileKey(tx,ty);
@@ -556,7 +573,7 @@ QImage ImageDocument::compositePreview(const QRect &rect,QSize outputSize,ImageS
         }
         return out;
     };
-    try{return render({},blank());}catch(const std::exception &e){d->error=QString::fromUtf8(e.what());return {};}
+    try{return render({},blank(),0);}catch(const std::exception &e){d->error=QString::fromUtf8(e.what());return {};}
 }
 QUndoStack *ImageDocument::history(){return &d->history;}
 quint64 ImageDocument::revision() const{return d->revision;}

@@ -530,13 +530,13 @@ bool AgentSession::importConversation(const QJsonObject &document, QString *erro
     const auto fail = [&](const QString &text) { if (error) *error = text; return false; };
     if (busy_) return fail(QStringLiteral("请先停止当前 Agent。"));
     if (document.value("schemaVersion").toInt() != 1 || !document.value("messages").isArray()) return fail(QStringLiteral("会话格式或版本不正确。"));
-    if (QJsonDocument(document).toJson(QJsonDocument::Compact).size() > 16 * 1024 * 1024) return fail(QStringLiteral("会话超过 16 MiB。"));
+    if (QJsonDocument(document).toJson(QJsonDocument::Compact).size() > agent_images::maximumConversationBytes) return fail(QStringLiteral("会话超过 272 MiB。"));
     QJsonArray checked; QSet<QString> pending;
     for (const auto &value : document.value("messages").toArray()) {
         if (!value.isObject()) return fail(QStringLiteral("会话消息格式不正确。"));
         const auto message = value.toObject(); const auto role = message.value("role").toString();
         if (role != "user" && role != "assistant" && role != "tool") return fail(QStringLiteral("只允许导入 user/assistant/tool 消息。"));
-        const auto body=message.value("content");if(!body.isString() && !(role=="assistant" && body.isNull()) && !(role=="user" && body.isArray() && agent_images::validContent(body.toArray())))return fail(QStringLiteral("消息正文须为文本，或最多4张有效本地 PNG/JPEG/WebP 图像内容块（每张不超过512 KiB）。"));
+        const auto body=message.value("content");if(!body.isString() && !(role=="assistant" && body.isNull()) && !(role=="user" && body.isArray() && agent_images::validContent(body.toArray())))return fail(QStringLiteral("消息正文须为文本，或最多4张有效本地 PNG/JPEG/WebP 图像内容块（每张不超过64 MiB）。"));
         QJsonObject item{{"role", role}, {"content", message.value("content")}};
         if(message.contains("displayContent")){
             if(!message.value("displayContent").isString() || message.value("displayContent").toString().toUtf8().size()>256*1024)return fail(QStringLiteral("显示消息须为不超过256 KiB的文本。"));

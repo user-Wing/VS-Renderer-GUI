@@ -1,5 +1,6 @@
 #pragma once
 #include <QStringList>
+#include "image/RawFormats.h"
 #include <QCoreApplication>
 #include <QFileInfo>
 namespace vsr {
