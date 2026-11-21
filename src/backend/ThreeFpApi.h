@@ -297,6 +297,7 @@ public:
     ThreeFpResult setVideoEnhancement(void *handle, bool hdr, bool enabled) const;
     VideoEnhancementStatus videoEnhancementStatus(void *handle, bool hdr) const;
     QImage capture(void *handle, int width, int height) const;
+    QImage captureFullFrame(void *handle, QSize size) const;
     QImage captureFloat(void *handle, int width, int height) const;
     ThreeFpResult redraw(void *handle) const;
     void destroy(void *handle) const;

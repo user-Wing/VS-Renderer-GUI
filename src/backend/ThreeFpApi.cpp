@@ -197,6 +197,24 @@ QImage ThreeFpApi::capture(void *h, int width, int height) const {
     for (int y=0;y<height;++y) {const auto *pixels=reinterpret_cast<const float *>(floating.constScanLine(y));auto *row=reinterpret_cast<QRgb *>(image.scanLine(y)); for(int x=0;x<width;++x) { const auto at=x*4; row[x]=qRgb(qRound(std::clamp(pixels[at],0.0f,1.0f)*255),qRound(std::clamp(pixels[at+1],0.0f,1.0f)*255),qRound(std::clamp(pixels[at+2],0.0f,1.0f)*255)); } }
     return image;
 }
+QImage ThreeFpApi::captureFullFrame(void *handle, QSize size) const
+{
+    using CopyFrame = ThreeFpResult(*)(void *, void *, uint32_t, uint32_t *, uint32_t *, uint32_t, uint32_t);
+    const auto copy = reinterpret_cast<CopyFrame>(library_.resolve("FFF3FP_CopyFrame"));
+    if (!handle || !copy) return {};
+    uint32_t width = size.isValid() ? size.width() : 0;
+    uint32_t height = size.isValid() ? size.height() : 0;
+    const auto query = copy(handle, nullptr, 0, &width, &height, 2, 0);
+    if (query != ThreeFpResult::BufferTooSmall || !width || !height || uint64_t(width) * height > 40000000)
+        return {};
+    QImage image(int(width), int(height), QImage::Format_RGB32);
+    if (!size.isValid()) width = height = 0;
+    if (image.isNull() ||
+        copy(handle, image.bits(), uint32_t(image.sizeInBytes()), &width, &height, 2, 0) != ThreeFpResult::Success ||
+        image.size() != QSize(int(width), int(height)))
+        return {};
+    return image;
+}
 ThreeFpResult ThreeFpApi::redraw(void *h) const { return available() ? redraw_(h) : ThreeFpResult::NativeFailure; }
 void ThreeFpApi::destroy(void *h) const { if (available() && h) destroy_(h); }
 

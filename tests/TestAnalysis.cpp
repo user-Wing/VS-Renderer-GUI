@@ -1,6 +1,8 @@
 #include "ui/AnalysisPage.h"
+#include "ui/CommunityPage.h"
 #include "ui/ExportWindow.h"
 #include <QTreeWidget>
+#include <QStyledItemDelegate>
 #include <QTreeWidgetItemIterator>
 #include <QPlainTextEdit>
 #include <QLineEdit>
@@ -10,6 +12,8 @@
 #include <QDragEnterEvent>
 #include <QMimeData>
 #include <QListWidget>
+#include <QKeySequenceEdit>
+#include <QTableWidget>
 #include "ui/MultiCompareView.h"
 #include "ui/PreviewPane.h"
 #include "app/MainWindow.h"
@@ -28,9 +32,11 @@
 #include <QStackedWidget>
 #include "graph/FilterCatalog.h"
 #include <QCheckBox>
+#include <QColorDialog>
 #include <QFont>
 #include <QGridLayout>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QTabWidget>
 #include <QTabBar>
 #include <QScopeGuard>
@@ -43,8 +49,14 @@
 #include <QSignalSpy>
 #include <QFile>
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QLabel>
 #include <QMenu>
+#include <QClipboard>
+#include <QContextMenuEvent>
+#include <QNetworkAccessManager>
+#include <QNetworkCookie>
+#include <QNetworkReply>
 #include <QMouseEvent>
 #include <QAction>
 #include <QApplication>
@@ -64,9 +76,141 @@
 #include <QTcpSocket>
 #include <QUrlQuery>
 #include <QCryptographicHash>
+#include <cstring>
 #include <windows.h>
 
 using namespace vsr;
+
+namespace {
+class CommunityFixtureReply final : public QNetworkReply {
+public:
+    CommunityFixtureReply(const QNetworkRequest &request, const QJsonObject &value, int status, QObject *parent,
+                          const QList<QNetworkCookie> &cookies = {})
+        : QNetworkReply(parent), body_(QJsonDocument(value).toJson(QJsonDocument::Compact))
+    {
+        setRequest(request);
+        setUrl(request.url());
+        setAttribute(QNetworkRequest::HttpStatusCodeAttribute, status);
+        setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        if (!cookies.isEmpty()) setHeader(QNetworkRequest::SetCookieHeader, QVariant::fromValue(cookies));
+        open(QIODevice::ReadOnly | QIODevice::Unbuffered);
+        QTimer::singleShot(0, this, [this] {
+            setFinished(true);
+            emit readyRead();
+            emit finished();
+        });
+    }
+    qint64 bytesAvailable() const override { return body_.size() - offset_ + QNetworkReply::bytesAvailable(); }
+    void abort() override {}
+
+protected:
+    qint64 readData(char *destination, qint64 maximum) override
+    {
+        const auto count = std::min(maximum, body_.size() - offset_);
+        if (!count) return -1;
+        std::memcpy(destination, body_.constData() + offset_, count);
+        offset_ += count;
+        return count;
+    }
+
+private:
+    QByteArray body_;
+    qint64 offset_ = 0;
+};
+
+class CommunityFixtureNetwork final : public QNetworkAccessManager {
+public:
+    QJsonObject published, postedReply;
+    QByteArray moderatorAction;
+    bool rejectFirst = true;
+    int publishAttempts = 0;
+    QByteArray writeCsrf;
+    bool recycleRead = false;
+    bool restored = false;
+    bool requireLogin = false;
+    bool passwordAuthenticated = false;
+    int detailReads = 0;
+
+protected:
+    QNetworkReply *createRequest(Operation operation, const QNetworkRequest &request, QIODevice *outgoing) override
+    {
+        const auto method = request.attribute(QNetworkRequest::CustomVerbAttribute).toByteArray();
+        const auto path = request.url().path();
+        const QJsonObject board{{"slug", "dev.test"}, {"name", "Fixture"}, {"post_count", 1}};
+        const QJsonObject post{{"id", 42}, {"user_id", 7}, {"title", "Fixture post"},
+            {"username", "Fixture admin"}, {"content", "Formula $x^2$"}, {"pinned", 0}};
+        const auto payload = outgoing ? QJsonDocument::fromJson(outgoing->readAll()).object() : QJsonObject();
+        const auto reply = [&](const QJsonObject &value, int status = 200) {
+            return new CommunityFixtureReply(request, value, status, this);
+        };
+        if (operation == CustomOperation && method != "GET") writeCsrf = request.rawHeader("X-Forum-CSRF");
+        if (path == "/api/forum/auth/session" && requireLogin && !passwordAuthenticated)
+            return reply({{"authenticated", false}});
+        if (path == "/api/forum/auth/session")
+            return reply({{"authenticated", true}, {"csrf", "fixture-csrf"},
+                {"user", QJsonObject{{"id", 7}, {"username", "Fixture admin"}, {"role", "admin"}}}});
+        if (path == "/api/forum/auth/login" && method == "POST") {
+            if (payload.value("username") != QJsonValue("login-fixture") || payload.value("password") != QJsonValue("fixture-only"))
+                return reply({{"error", "Fixture authentication rejected"}}, 401);
+            passwordAuthenticated = true;
+            return new CommunityFixtureReply(request, {{"ok", true}, {"csrf", "fixture-csrf"},
+                {"user", QJsonObject{{"id", 7}, {"username", "Fixture admin"}, {"role", "admin"}}}}, 200, this,
+                {QNetworkCookie("forum_session", "Fixture_native_login_1234567890ABCDE")});
+        }
+        if (path == "/api/forum/boards") return reply({{"boards", QJsonArray{board}}});
+        auto otherPost = post;
+        otherPost["id"] = 43;
+        otherPost["user_id"] = 99;
+        otherPost["title"] = "Second fixture post";
+        if (path == "/api/forum/posts" && method == "GET") return reply({{"posts", QJsonArray{post, otherPost}}});
+        if (path == "/api/forum/posts" && method == "POST") {
+            ++publishAttempts;
+            if (rejectFirst) { rejectFirst = false; return reply({{"error", "Fixture rejection"}}, 403); }
+            published = payload;
+            return reply({{"ok", true}, {"id", 42}}, 201);
+        }
+        if ((path == "/api/forum/posts/42" || path == "/api/forum/posts/43") && method == "GET") {
+            ++detailReads;
+            return reply({{"post", path.endsWith("42") ? post : otherPost}, {"comments", QJsonArray()}});
+        }
+        if (path == "/api/forum/posts/42/comments" && method == "POST") {
+            postedReply = payload;
+            return reply({{"ok", true}, {"id", 51}}, 201);
+        }
+        if (path == "/api/forum/posts/42/moderation" && method == "PUT") {
+            moderatorAction = payload.value("action").toString().toLatin1();
+            return reply({{"ok", true}});
+        }
+        if (path == "/api/admin/login" && method == "POST" && payload.value("password") == QJsonValue("fixture-only"))
+            return new CommunityFixtureReply(request, {{"ok", true}, {"csrf", "fixture-admin-csrf"}}, 200, this,
+                {QNetworkCookie("blog_session", "Fixture_only_blog_session_1234567890")});
+        if (path.startsWith("/api/admin/forum/recycle") &&
+            request.rawHeader("Cookie") == "blog_session=Fixture_only_blog_session_1234567890") {
+            if (method == "GET") {
+                recycleRead = true;
+                return reply({{"posts", restored ? QJsonArray() : QJsonArray{post}}});
+            }
+            if (method == "PUT" && request.rawHeader("X-Blog-CSRF") == "fixture-admin-csrf") {
+                restored = true;
+                return reply({{"ok", true}});
+            }
+        }
+        if (path == "/api/site-config") {
+            const QJsonArray docs{
+                QJsonObject{{"id", "folder"}, {"kind", "folder"}, {"title", "Fixture folder"}},
+                QJsonObject{{"id", "guide"}, {"parent", "folder"}, {"kind", "page"}, {"title", "Fixture guide"}, {"slug", "fixture-guide"}},
+                QJsonObject{{"id", "removed"}, {"parent", "folder"}, {"kind", "page"}, {"title", "Deleted guide"},
+                            {"slug", "removed-guide"}, {"deleted", true}}
+            };
+            return reply({{"sections", QJsonObject{{"essay", QJsonObject{{"docs", docs}}}}}});
+        }
+        if (path == "/api/articles/fixture-guide")
+            return reply({{"article", QJsonObject{{"title", "Fixture guide"}, {"content", "## First\n\n### Child\n\n## Second"}}}});
+        return reply({{"error", "Unexpected fixture request"}}, 404);
+    }
+};
+}
+
 class ViewEventCounter final : public QObject {
 public:
     int hides = 0;
@@ -81,6 +225,306 @@ public:
 class TestAnalysis final : public QObject {
     Q_OBJECT
 private slots:
+    void nativeCommunityPostListSplitterStability()
+    {
+        CommunityPage page([](const QString &, bool) {}, nullptr, std::make_unique<CommunityFixtureNetwork>());
+        page.setStyleSheet(applicationStyleSheet(true));
+        page.resize(1150, 730);
+        page.show();
+        auto *topics = page.findChild<QListWidget *>("communityTopics");
+        auto *reader = page.findChild<QWidget *>("communityPost");
+        QVERIFY(topics && reader);
+        QTRY_COMPARE(topics->count(), 2);
+        topics->itemClicked(topics->item(0));
+        QTRY_VERIFY(reader->isVisible());
+        QSplitter *split = nullptr;
+        for (auto *candidate : page.findChildren<QSplitter *>()) {
+            if (candidate->orientation() == Qt::Horizontal && candidate->widget(0)->isAncestorOf(topics)) {
+                split = candidate;
+                break;
+            }
+        }
+        QVERIFY(split);
+        const auto original = topics->item(0)->text();
+        topics->item(1)->setText(QStringLiteral("AI三字经\nVibe Coding · AI 辅助开发 · admin · 0 回复"));
+        topics->item(0)->setText(original + QString(90, QLatin1Char('W')));
+        split->setSizes({275, 850});
+        topics->doItemsLayout();
+        QCoreApplication::processEvents();
+        QVERIFY(!topics->horizontalScrollBar()->isVisible());
+        QVERIFY(topics->visualItemRect(topics->item(0)).right() < topics->viewport()->width());
+        const auto rowHeight = topics->visualItemRect(topics->item(1)).height();
+        QVERIFY(rowHeight >= 2 * topics->fontMetrics().height());
+        split->setSizes({385, 740});
+        topics->doItemsLayout();
+        QCoreApplication::processEvents();
+        QCOMPARE(topics->visualItemRect(topics->item(1)).height(), rowHeight);
+
+        auto *handle = split->handle(1);
+        const auto center = handle->rect().center();
+        const auto target = center + QPoint(45, 0);
+        const auto bodyWidth = reader->width();
+        QTest::mousePress(handle, Qt::LeftButton, Qt::NoModifier, center);
+        QMouseEvent move(QEvent::MouseMove, target, handle->mapToGlobal(target),
+                         Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(handle, &move);
+        QCoreApplication::processEvents();
+        const auto widthWhileDragging = reader->width();
+        QTest::mouseRelease(handle, Qt::LeftButton, Qt::NoModifier, target);
+        QCOMPARE(widthWhileDragging, bodyWidth);
+        QTRY_VERIFY(reader->width() < bodyWidth);
+    }
+
+    void nativeCommunityReplyToolbarStability()
+    {
+        auto fixture = std::make_unique<CommunityFixtureNetwork>();
+        fixture->requireLogin = true;
+        auto *network = fixture.get();
+        CommunityPage page([](const QString &, bool) {}, nullptr, std::move(fixture));
+        page.resize(1150, 730);
+        page.show();
+        auto *topics = page.findChild<QListWidget *>("communityTopics");
+        auto *reply = page.findChild<QPushButton *>("communityReply");
+        QVERIFY(topics && reply);
+        QTRY_COMPARE(topics->count(), 2);
+        topics->itemClicked(topics->item(0));
+        QTRY_VERIFY(reply->isVisible() && reply->isEnabled());
+        const auto position = reply->geometry();
+        ViewEventCounter events;
+        reply->installEventFilter(&events);
+
+        topics->itemClicked(topics->item(1));
+        QVERIFY(reply->isVisible());
+        QVERIFY(!reply->isEnabled());
+        topics->itemActivated(topics->item(1));
+        QCOMPARE(network->detailReads, 2);
+        QTRY_VERIFY(reply->isEnabled());
+        QCOMPARE(events.hides, 0);
+        QCOMPARE(reply->geometry(), position);
+        const auto toolbarButtons = reply->parentWidget()->findChildren<QPushButton *>(QString(), Qt::FindDirectChildrenOnly);
+        QVERIFY(toolbarButtons.size() >= 5);
+        QCOMPARE(reply->font().family(), QStringLiteral("Microsoft YaHei UI"));
+        for (const auto *button : toolbarButtons)
+            QCOMPARE(button->font(), reply->font());
+    }
+
+    void nativeCommunityLoginAndRichEditor()
+    {
+        const auto organization = QCoreApplication::organizationName();
+        const auto application = QCoreApplication::applicationName();
+        const bool testMode = QStandardPaths::isTestModeEnabled();
+        QCoreApplication::setOrganizationName("VSRendererTests");
+        QCoreApplication::setApplicationName("CommunityRichEditorFixture");
+        QStandardPaths::setTestModeEnabled(true);
+        const auto draft = QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
+            .filePath("community-post-draft.json");
+        const auto restore = qScopeGuard([&] {
+            QFile::remove(draft);
+            QSettings().remove("community");
+            QCoreApplication::setOrganizationName(organization);
+            QCoreApplication::setApplicationName(application);
+            QStandardPaths::setTestModeEnabled(testMode);
+        });
+        auto fixture = std::make_unique<CommunityFixtureNetwork>();
+        auto *network = fixture.get();
+        fixture->requireLogin = true;
+        CommunityPage page([](const QString &, bool) {}, nullptr, std::move(fixture));
+        page.resize(1150, 730);
+        page.show();
+        auto *create = page.findChild<QPushButton *>("communityNewPost");
+        QVERIFY(create);
+        create->click();
+        auto *source = page.findChild<QPlainTextEdit *>("communityMarkdownSource");
+        auto *preview = page.findChild<QWidget *>("communityMarkdownWeb");
+        QVERIFY(source && preview && source->isVisible() && preview->isVisible());
+        auto *split = page.findChild<QSplitter *>("communityLivePreviewSplit");
+        QVERIFY(split && split->orientation() == Qt::Horizontal && split->count() == 2);
+        source->setPlainText("colored");
+        source->selectAll();
+        QTimer::singleShot(20, &page, [] {
+            if (auto *dialog = qobject_cast<QColorDialog *>(QApplication::activeModalWidget())) {
+                dialog->setCurrentColor(QColor("#123abc"));
+                dialog->accept();
+            }
+        });
+        page.findChild<QPushButton *>("communityInsertColor")->click();
+        QCOMPARE(source->toPlainText(), QString("{color:#123abc}colored{/color}"));
+        source->setPlainText("hidden");
+        source->selectAll();
+        QTimer::singleShot(20, &page, [] {
+            auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            if (!dialog || dialog->objectName() != "communityBlackoutDialog") return;
+            dialog->findChild<QLineEdit *>("communityBlackoutHint")->setText("warning");
+            dialog->accept();
+        });
+        page.findChild<QPushButton *>("communityInsertBlackout")->click();
+        QCOMPARE(source->toPlainText(), QString("{blackout:warning}hidden{/blackout}"));
+        auto *submit = page.findChild<QPushButton *>("communitySubmitPost");
+        submit->click();
+        auto *login = page.findChild<QDialog *>("communityLoginDialog");
+        QVERIFY(login && login->isVisible());
+        login->findChild<QLineEdit *>("communityLoginName")->setText("login-fixture");
+        auto *password = login->findChild<QLineEdit *>("communityLoginPassword");
+        QCOMPARE(password->echoMode(), QLineEdit::Password);
+        auto *visibility = login->findChild<QPushButton *>("communityLoginShowPassword");
+        QVERIFY(visibility && login->findChild<QPushButton *>("communityLoginRegister"));
+        visibility->click();
+        QCOMPARE(password->echoMode(), QLineEdit::Normal);
+        visibility->click();
+        QCOMPARE(password->echoMode(), QLineEdit::Password);
+        password->setText("incorrect");
+        auto *signIn = login->findChild<QPushButton *>("communityLoginSubmit");
+        signIn->click();
+        QTRY_COMPARE(login->findChild<QLabel *>("communityLoginStatus")->text(), QString("Fixture authentication rejected"));
+        QVERIFY(password->text().isEmpty());
+        login->findChild<QCheckBox *>()->setChecked(true);
+        password->setText("fixture-only");
+        signIn->click();
+        QTRY_VERIFY(network->passwordAuthenticated);
+        QTRY_VERIFY(page.findChild<QPushButton *>("communityAccount")->text().contains("Fixture admin"));
+        QTRY_VERIFY(!page.findChild<QDialog *>("communityLoginDialog"));
+        QVERIFY(source->isVisible() && preview->isVisible());
+        QCOMPARE(source->toPlainText(), QString("{blackout:warning}hidden{/blackout}"));
+        const auto encrypted = QSettings().value("community/sessionDpapi").toByteArray();
+        QVERIFY(!encrypted.isEmpty() && !encrypted.contains("Fixture_native_login"));
+    }
+    void nativeTutorialNavigation()
+    {
+        CommunityPage page([](const QString &, bool) {}, nullptr, std::make_unique<CommunityFixtureNetwork>());
+        const auto previous = QSettings().value("community/lastTutorial");
+        const auto restore = qScopeGuard([&] {
+            if (previous.isValid()) QSettings().setValue("community/lastTutorial", previous);
+            else QSettings().remove("community/lastTutorial");
+        });
+        page.resize(1100, 650);
+        page.show();
+        auto *tabs = page.findChild<QTabBar *>("communityTabs");
+        QVERIFY(tabs);
+        tabs->setCurrentIndex(1);
+        auto *tree = page.findChild<QTreeWidget *>("communityTutorialTree");
+        auto *outline = page.findChild<QTreeWidget *>("communityTutorialOutline");
+        QVERIFY(tree && outline);
+        QTRY_COMPARE(tree->topLevelItemCount(), 1);
+        QCOMPARE(tree->topLevelItem(0)->childCount(), 1);
+        QCOMPARE(tree->currentItem()->text(0), QString("Fixture guide"));
+        QTRY_COMPARE(outline->topLevelItemCount(), 2);
+        QCOMPARE(outline->topLevelItem(0)->text(0), QString("First"));
+        QCOMPARE(outline->topLevelItem(0)->childCount(), 1);
+        QCOMPARE(outline->topLevelItem(0)->child(0)->text(0), QString("Child"));
+    }
+    void nativeCommunityWriteFlows()
+    {
+        const auto organization = QCoreApplication::organizationName();
+        const auto application = QCoreApplication::applicationName();
+        const bool testMode = QStandardPaths::isTestModeEnabled();
+        QCoreApplication::setOrganizationName("VSRendererTests");
+        QCoreApplication::setApplicationName("CommunityWriteFixture");
+        QStandardPaths::setTestModeEnabled(true);
+        const auto draft = QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
+            .filePath("community-post-draft.json");
+        const auto restore = qScopeGuard([&] {
+            QFile::remove(draft);
+            QCoreApplication::setOrganizationName(organization);
+            QCoreApplication::setApplicationName(application);
+            QStandardPaths::setTestModeEnabled(testMode);
+        });
+        auto fixture = std::make_unique<CommunityFixtureNetwork>();
+        auto *network = fixture.get();
+        CommunityPage page([](const QString &, bool) {}, nullptr, std::move(fixture));
+        page.resize(1150, 730);
+        page.show();
+        auto *account = page.findChild<QPushButton *>("communityAccount");
+        QVERIFY(account);
+        QTRY_VERIFY(account->text().contains("Fixture admin"));
+        auto *create = page.findChild<QPushButton *>("communityNewPost");
+        create->click();
+        auto *title = page.findChild<QLineEdit *>("communityComposeTitle");
+        auto *board = page.findChild<QComboBox *>("communityComposeBoard");
+        auto *body = page.findChild<QPlainTextEdit *>("communityMarkdownSource");
+        auto *submit = page.findChild<QPushButton *>("communitySubmitPost");
+        QVERIFY(title && title->isVisible() && body && body->isVisible() && submit && board);
+        QCOMPARE(board->currentData().toString(), QString("dev.test"));
+        title->setText("New title");
+        body->setPlainText("Draft $x^2$");
+        submit->click();
+        QTRY_VERIFY(submit->isEnabled());
+        QCOMPARE(network->publishAttempts, 1);
+        QVERIFY(title->isVisible());
+        QCOMPARE(body->toPlainText(), QString("Draft $x^2$"));
+        submit->click();
+        QTRY_COMPARE(network->published.value("content").toString(), QString("Draft $x^2$"));
+        QCOMPARE(network->published.value("board").toString(), QString("dev.test"));
+        QCOMPARE(network->published.value("title").toString(), QString("New title"));
+        QCOMPARE(network->writeCsrf, QByteArray("fixture-csrf"));
+        auto *reply = page.findChild<QPushButton *>("communityReply");
+        QTRY_VERIFY(reply && reply->isVisible() && reply->isEnabled());
+        reply->click();
+        QVERIFY(body->isVisible());
+        QVERIFY(!title->isVisible());
+        body->setPlainText("Reply $y$");
+        submit->click();
+        QTRY_COMPARE(network->postedReply.value("content").toString(), QString("Reply $y$"));
+        auto *manage = page.findChild<QPushButton *>("communityManagePost");
+        QTRY_VERIFY(manage && manage->isVisible());
+        bool triggered = false;
+        QTimer popupTimeout;
+        popupTimeout.setSingleShot(true);
+        connect(&popupTimeout, &QTimer::timeout, &page, [] {
+            if (auto *popup = QApplication::activePopupWidget()) popup->close();
+        });
+        popupTimeout.start(1500);
+        QTimer::singleShot(0, &page, [&] {
+            auto *popup = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            if (!popup) return;
+            for (auto *action : popup->actions()) {
+                if (action->text() == QStringLiteral("置顶")) { action->trigger(); triggered = true; break; }
+            }
+            popup->close();
+        });
+        manage->click();
+        popupTimeout.stop();
+        QVERIFY(triggered);
+        QTRY_COMPARE(network->moderatorAction, QByteArray("pin"));
+        triggered = false;
+        popupTimeout.start(1500);
+        QTimer inputTimeout;
+        inputTimeout.setSingleShot(true);
+        connect(&inputTimeout, &QTimer::timeout, &page, [] {
+            if (auto *input = qobject_cast<QInputDialog *>(QApplication::activeModalWidget())) input->reject();
+        });
+        inputTimeout.start(2000);
+        QTimer::singleShot(0, &page, [&] {
+            auto *popup = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            if (!popup) return;
+            for (auto *action : popup->actions()) {
+                if (!action->text().startsWith(QStringLiteral("帖子回收站"))) continue;
+                QTimer::singleShot(0, &page, [] {
+                    if (auto *input = qobject_cast<QInputDialog *>(QApplication::activeModalWidget())) {
+                        input->setTextValue("fixture-only");
+                        input->accept();
+                    }
+                });
+                action->trigger();
+                triggered = true;
+                break;
+            }
+            popup->close();
+        });
+        account->click();
+        popupTimeout.stop();
+        inputTimeout.stop();
+        QVERIFY(triggered);
+        QTRY_VERIFY(network->recycleRead);
+        auto *recycle = page.findChild<QDialog *>("communityRecycle");
+        QVERIFY(recycle);
+        auto *records = recycle->findChild<QTreeWidget *>();
+        QTRY_COMPARE(records->topLevelItemCount(), 1);
+        records->setCurrentItem(records->topLevelItem(0));
+        for (auto *button : recycle->findChildren<QPushButton *>())
+            if (button->text() == QStringLiteral("恢复帖子")) button->click();
+        QTRY_VERIFY(network->restored);
+        QTRY_COMPARE(records->topLevelItemCount(), 0);
+    }
     void playerRangeHandoff() {
         QTemporaryDir directory;const auto recovery=qgetenv("VSR_RECOVERY_ROOT");qputenv("VSR_RECOVERY_ROOT",directory.filePath("recovery").toUtf8());
         const auto restore=qScopeGuard([&]{if(recovery.isNull())qunsetenv("VSR_RECOVERY_ROOT");else qputenv("VSR_RECOVERY_ROOT",recovery);});
@@ -351,6 +795,353 @@ private slots:
         for(int step=0;step<20;++step)QApplication::sendEvent(s,&wheel);
         for(int i=0;i<3;++i){QVERIFY(view->pane(i)->zoom()>128);QCOMPARE(view->pane(i)->zoom(),view->pane(1)->zoom());}
     }
+    void rendererCubePreviewMediaFixture()
+    {
+        const auto source = qEnvironmentVariable("VSR_TEST_CUBE_MEDIA");
+        const auto cube = qEnvironmentVariable("VSR_TEST_CUBE_LUT");
+        if (source.isEmpty() || cube.isEmpty()) QSKIP("Set VSR_TEST_CUBE_MEDIA and VSR_TEST_CUBE_LUT to exercise real media");
+        QVERIFY(QFileInfo(source).isFile() && QFileInfo(cube).isFile());
+        QTemporaryDir recovery;
+        QVERIFY(recovery.isValid());
+        const auto previousRecovery = qgetenv("VSR_RECOVERY_ROOT");
+        qputenv("VSR_RECOVERY_ROOT", recovery.path().toUtf8());
+        const auto restore = qScopeGuard([&] {
+            if (previousRecovery.isNull()) qunsetenv("VSR_RECOVERY_ROOT");
+            else qputenv("VSR_RECOVERY_ROOT", previousRecovery);
+        });
+        MainWindow window;
+        window.resize(1280, 760);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        const int filter = qEnvironmentVariableIntValue("VSR_TEST_CUBE_SOURCE_FILTER");
+        const int row = window.sourceFilter_->findData(filter);
+        QVERIFY(row >= 0);
+        window.sourceFilter_->setCurrentIndex(row);
+        qInfo() << "Dropping Cube preview media with source selector" << filter;
+        QMimeData mime;
+        mime.setUrls({QUrl::fromLocalFile(source)});
+        QDragEnterEvent enter(QPoint(420, 300), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&window, &enter);
+        QVERIFY(enter.isAccepted());
+        QDropEvent drop(QPointF(420, 300), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(&window, &drop);
+        QVERIFY(drop.isAccepted());
+        auto *catalog = window.findChild<QListWidget *>("rendererCatalog");
+        QVERIFY(catalog);
+        for (int i = 0; i < catalog->count(); ++i)
+            if (catalog->item(i)->data(Qt::UserRole) == "cube_lut") catalog->setCurrentRow(i);
+        QVERIFY(catalog->currentItem() && catalog->currentItem()->data(Qt::UserRole) == "cube_lut");
+        for (auto *button : window.findChildren<QPushButton *>())
+            if (button->text() == QStringLiteral("添加到处理链")) { button->click(); break; }
+        QCOMPARE(window.graph_.nodes().size(), 1);
+        auto *fileField = window.findChild<QWidget *>("parameter_file");
+        QVERIFY(fileField);
+        auto *fileEdit = fileField->findChild<QLineEdit *>();
+        QVERIFY(fileEdit);
+        fileEdit->setText(cube);
+        QVERIFY(QMetaObject::invokeMethod(fileEdit, "editingFinished"));
+        const auto imported = window.graph_.at(0)->parameters.value("file").toString();
+        QVERIFY(imported.startsWith("luts/"));
+        QVERIFY(QFileInfo(QDir(QCoreApplication::applicationDirPath()).filePath(imported)).isFile());
+        QVERIFY(!window.graph_.at(0)->parameters.value("manual_space").toBool());
+        auto *server = window.findChild<VapourSynthFrameServer *>();
+        QVERIFY(server);
+        QSignalSpy errors(server, &VapourSynthFrameServer::errorOccurred);
+        qInfo() << "Validating Cube preview";
+        window.validateScript();
+        QTRY_VERIFY2_WITH_TIMEOUT(!errors.isEmpty() || window.lastVsFrame_ >= 0, qPrintable(window.taskStatus_->text()), 20000);
+        QVERIFY2(errors.isEmpty(), qPrintable(window.taskStatus_->text()));
+        QTRY_VERIFY2_WITH_TIMEOUT(window.processedPlayer_->snapshot().presentedVideoFrames > 0,
+                                 qPrintable(window.processedPlayer_->lastError()), 5000);
+        QVERIFY2(window.vsScriptReady_, qPrintable(window.taskStatus_->text()));
+        const auto frame = window.processedPlayer_->snapshot();
+        qInfo() << "Cube preview presented" << frame.videoWidth << "x" << frame.videoHeight;
+    }
+
+    void rendererThemedItemEditors()
+    {
+        QTemporaryDir files;
+        const auto path = files.filePath("theme.ini");
+        const auto originalStyle = qApp->styleSheet();
+        const auto restoreStyle = qScopeGuard([&] { qApp->setStyleSheet(originalStyle); });
+        qApp->setStyleSheet(applicationStyleSheet(true));
+        MainWindow window;
+        window.show();
+        window.selectPage(2);
+        auto *page = window.pages_->widget(2);
+        auto *categories = page->findChild<QListWidget *>("rendererSettingsCategories");
+        QVERIFY(categories);
+        const auto setBackground = [page, path](const QString &color) {
+            QSettings theme(path, QSettings::IniFormat);
+            theme.setValue("fixture/color", color);
+            theme.sync();
+            applyPageTheme(page, path, "fixture");
+            QCoreApplication::processEvents();
+        };
+        const auto sample = [](QWidget *editor, QWidget *viewport) {
+            const auto p = editor->mapTo(viewport, QPoint(editor->width() * 3 / 4, editor->height() / 2));
+            const auto image = viewport->grab().toImage();
+            return image.pixelColor(QPointF(p * image.devicePixelRatio()).toPoint());
+        };
+        setBackground("#993300");
+        categories->setCurrentItem(categories->findItems(QStringLiteral("快捷键"), Qt::MatchExactly).value(0));
+        auto *table = page->findChild<QTableWidget *>("rendererShortcuts");
+        QVERIFY(table && table->isVisible());
+        table->setCurrentCell(0, 1);
+        table->editItem(table->currentItem());
+        auto *combo = table->findChild<QComboBox *>();
+        QVERIFY(combo && combo->isVisible());
+        QCoreApplication::processEvents();
+        const auto comboColor = sample(combo, table->viewport());
+        QCOMPARE(comboColor.alpha(), 255);
+        setBackground("#006699");
+        QCOMPARE(sample(combo, table->viewport()), comboColor);
+        combo->showPopup();
+        QTRY_VERIFY(combo->view()->isVisible());
+        QCOMPARE(sample(combo, table->viewport()).alpha(), 255);
+        combo->hidePopup();
+
+        categories->setCurrentItem(categories->findItems(QStringLiteral("右键设置"), Qt::MatchExactly).value(0));
+        auto *tree = page->findChild<QTreeWidget *>("rendererContextMenuSettings");
+        QVERIFY(tree && tree->isVisible());
+        for (auto *button : tree->parentWidget()->findChildren<QPushButton *>())
+            if (button->text() == QStringLiteral("新建子菜单")) button->click();
+        auto *name = tree->findChild<QLineEdit *>();
+        QVERIFY(name && name->isVisible());
+        QCoreApplication::processEvents();
+        const auto nameColor = sample(name, tree->viewport());
+        QCOMPARE(nameColor.alpha(), 255);
+        setBackground("#993300");
+        QCOMPARE(sample(name, tree->viewport()), nameColor);
+    }
+
+    void rendererWorkspaceShortcutsAndMenu()
+    {
+        const auto oldOrganization = QCoreApplication::organizationName();
+        const auto oldApplication = QCoreApplication::applicationName();
+        QCoreApplication::setOrganizationName("VSRendererTests");
+        QCoreApplication::setApplicationName("renderer-shortcuts-menu-test");
+        QSettings settings;
+        settings.remove("renderer");
+        const auto restore = qScopeGuard([&] {
+            settings.remove("renderer");
+            QCoreApplication::setOrganizationName(oldOrganization);
+            QCoreApplication::setApplicationName(oldApplication);
+        });
+        MainWindow window;
+        window.show();
+        window.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&window));
+        QTest::keyClick(&window, Qt::Key_A);
+        QCOMPARE(window.routes_.size(), 2);
+        auto *search = window.findChild<QLineEdit *>("rendererCatalogSearch");
+        QVERIFY(search);
+        search->setFocus();
+        QTest::keyClick(search, Qt::Key_A);
+        QCOMPARE(window.routes_.size(), 2);
+        window.selectPage(2);
+        QTest::keyClick(&window, Qt::Key_A);
+        QCOMPARE(window.routes_.size(), 2);
+        auto *categories = window.findChild<QListWidget *>("rendererSettingsCategories");
+        QVERIFY(categories);
+        categories->setCurrentItem(categories->findItems(QStringLiteral("快捷键"), Qt::MatchExactly).value(0));
+        auto *table = window.findChild<QTableWidget *>("rendererShortcuts");
+        QVERIFY(table && table->isVisible());
+        QCOMPARE(table->columnCount(), 3);
+        QVERIFY(!(table->item(0, 2)->flags() & Qt::ItemIsEditable));
+        auto *shortcutPage = table->parentWidget();
+        const auto buttons = shortcutPage->findChildren<QPushButton *>();
+        for (auto *button : buttons)
+            if (button->text() == QStringLiteral("添加快捷键")) button->click();
+        auto *newBinding = table->item(8, 0);
+        QVERIFY(newBinding);
+        auto *recorder = table->findChild<QKeySequenceEdit *>();
+        QVERIFY(recorder);
+        QTest::keyClick(recorder, Qt::Key_K, Qt::AltModifier);
+        QTest::keyClick(recorder, Qt::Key_Return);
+        QTRY_COMPARE(newBinding->text(), QStringLiteral("Alt+K"));
+        for (auto *button : buttons)
+            if (button->text() == QStringLiteral("保存")) button->click();
+        QCOMPARE(settings.value("renderer/shortcuts").toList().last().toMap().value("key").toString(), QStringLiteral("Alt+K"));
+
+        categories->setCurrentItem(categories->findItems(QStringLiteral("右键设置"), Qt::MatchExactly).value(0));
+        auto *tree = window.findChild<QTreeWidget *>("rendererContextMenuSettings");
+        QVERIFY(tree && tree->isVisible());
+        auto *menuPage = tree->parentWidget();
+        const auto click = [menuPage](const QString &label) {
+            for (auto *button : menuPage->findChildren<QPushButton *>())
+                if (button->text() == label) { button->click(); return true; }
+            return false;
+        };
+        QVERIFY(click(QStringLiteral("新建子菜单")));
+        auto *group = tree->topLevelItem(0);
+        QVERIFY(group);
+        auto *nameEdit = tree->findChild<QLineEdit *>();
+        QVERIFY(nameEdit);
+        nameEdit->setText(QStringLiteral("Old Name"));
+        QTest::keyClick(nameEdit, Qt::Key_Return);
+        QTRY_COMPARE(group->text(0), QStringLiteral("Old Name"));
+        auto *catalog = menuPage->findChild<QComboBox *>();
+        QVERIFY(catalog);
+        catalog->setCurrentIndex(catalog->findData("resize"));
+        QVERIFY(click(QStringLiteral("加入滤镜")));
+        QCOMPARE(group->childCount(), 1);
+        QStyleOptionViewItem itemStyle;
+        itemStyle.initFrom(tree);
+        itemStyle.font = tree->font();
+        QStyledItemDelegate defaultSpacing;
+        const auto normalHeight = defaultSpacing.sizeHint(itemStyle, tree->indexFromItem(group)).height();
+        QTRY_COMPARE(tree->visualItemRect(group).height(), qRound(normalHeight * 1.3));
+        QCOMPARE(tree->visualItemRect(group->child(0)).height(), tree->visualItemRect(group).height());
+        tree->setCurrentItem(group->child(0));
+        QVERIFY(click(QStringLiteral("重命名")));
+        nameEdit = nullptr;
+        for (auto *editor : tree->findChildren<QLineEdit *>())
+            if (editor->isVisible()) nameEdit = editor;
+        QVERIFY(nameEdit);
+        nameEdit->setText(QStringLiteral("My Filters"));
+        QTest::keyClick(nameEdit, Qt::Key_Return);
+        QTRY_COMPARE(group->text(0), QStringLiteral("My Filters"));
+
+        QTemporaryDir files;
+        const auto profilePath = files.filePath("preview.json");
+        const auto useQtDialogs = QCoreApplication::testAttribute(Qt::AA_DontUseNativeDialogs);
+        QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        const auto restoreDialogs = qScopeGuard([&] { QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs, useQtDialogs); });
+        const auto chooseFile = [&window, profilePath] {
+            QTimer::singleShot(100, &window, [profilePath] {
+                if (auto *dialog = qobject_cast<QFileDialog *>(QApplication::activeModalWidget())) {
+                    dialog->selectFile(profilePath);
+                    if (auto *name = dialog->findChild<QLineEdit *>("fileNameEdit")) name->setText(profilePath);
+                    QMetaObject::invokeMethod(dialog, "accept");
+                }
+            });
+        };
+        chooseFile();
+        QVERIFY(click(QStringLiteral("导出")));
+        QVERIFY(QFileInfo::exists(profilePath));
+        QVERIFY(click(QStringLiteral("移除所选")));
+        QCOMPARE(tree->topLevelItemCount(), 0);
+        chooseFile();
+        QVERIFY(click(QStringLiteral("导入")));
+        QCOMPARE(tree->topLevelItemCount(), 1);
+
+        window.selectPage(0);
+        window.selectRoute(0);
+        const auto source = files.filePath("timeline.mkv");
+        QProcess ffmpeg;
+        ffmpeg.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),
+            {"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=24:duration=2",
+             "-c:v","ffv1","-y",source});
+        QVERIFY(ffmpeg.waitForFinished(10000));
+        QCOMPARE(ffmpeg.exitCode(), 0);
+        QVERIFY(window.loadSource(source));
+        QTRY_COMPARE_WITH_TIMEOUT(window.sourceFpsNumerator_, 24, 8000);
+        window.replaceTimeGroups({{"First",0,{}, {},0}, {"Second",0,{}, {},12}, {"Third",1,{}, {},24}});
+        QVERIFY(window.sourcePlayer_->seekFrame(12));
+        QTRY_VERIFY_WITH_TIMEOUT(qAbs(window.sourcePlayer_->snapshot().position100ns - 5000000) < 1000, 8000);
+        QCOMPARE(window.timeGroupIndex_, 0);
+        window.setFocus();
+        auto *pane = window.compareView_->processedPane(1);
+        auto *surface = pane->surface();
+        const auto point = surface->rect().center();
+        QContextMenuEvent context(QContextMenuEvent::Mouse, point, surface->mapToGlobal(point));
+        QApplication::sendEvent(surface, &context);
+        auto *menu = window.findChild<QMenu *>("rendererPreviewMenu");
+        QVERIFY(menu);
+        QVERIFY(menu->testAttribute(Qt::WA_TranslucentBackground));
+        auto *filters = menu->actions().last()->menu();
+        QVERIFY(filters);
+        QVERIFY(filters->testAttribute(Qt::WA_TranslucentBackground));
+        QCOMPARE(filters->title(), QStringLiteral("My Filters"));
+        filters->actions().first()->trigger();
+        menu->close();
+        QCOMPARE(window.routeIndex_, 0);
+        QCOMPARE(window.timeGroupIndex_, 1);
+        const auto groups = window.currentTimeGroups();
+        QVERIFY(groups[0].graph.nodes().isEmpty());
+        QCOMPARE(groups[1].graph.nodes().size(), 1);
+        QVERIFY(groups[2].graph.nodes().isEmpty());
+        QCOMPARE(window.graph_.nodes().size(), 1);
+        QCOMPARE(window.graph_.nodes().first().definitionId, QStringLiteral("resize"));
+
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        const auto duration = window.sourcePlayer_->snapshot().duration100ns;
+        QVERIFY(duration > 5000000);
+        window.timeline_->setValue(int(4900000 * qint64(window.timeline_->maximum()) / duration));
+        window.seekTimeline(window.timeline_->value());
+        QVERIFY(window.timelineSeekPending_);
+        QContextMenuEvent beforeBoundary(QContextMenuEvent::Mouse, point, surface->mapToGlobal(point));
+        QApplication::sendEvent(surface, &beforeBoundary);
+        auto *earlierMenu = window.findChild<QMenu *>("rendererPreviewMenu");
+        QVERIFY(earlierMenu);
+        QVERIFY(earlierMenu->actions().last()->menu());
+        earlierMenu->actions().last()->menu()->actions().first()->trigger();
+        earlierMenu->close();
+        QCOMPARE(window.timeGroupIndex_, 0);
+        const auto earlierGroups = window.currentTimeGroups();
+        QCOMPARE(earlierGroups[0].graph.nodes().size(), 1);
+        QCOMPARE(earlierGroups[1].graph.nodes().size(), 1);
+        QVERIFY(earlierGroups[2].graph.nodes().isEmpty());
+
+        const auto reply = [](QMessageBox::StandardButton result) {
+            if (auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+                if (auto *button = box->button(result)) button->click();
+        };
+        QTimer::singleShot(100, &window, [reply] { reply(QMessageBox::No); });
+        window.confirmRemoveRoute();
+        QCOMPARE(window.routes_.size(), 2);
+        QTimer::singleShot(100, &window, [reply] { reply(QMessageBox::Yes); });
+        window.confirmRemoveRoute();
+        QCOMPARE(window.routes_.size(), 1);
+    }
+
+    void rendererKeyframeButtons_data()
+    {
+        QTest::addColumn<QString>("suffix");
+        QTest::newRow("mp4") << QStringLiteral("mp4");
+        QTest::newRow("mkv") << QStringLiteral("mkv");
+    }
+
+    void rendererKeyframeButtons()
+    {
+        QFETCH(QString, suffix);
+        QTemporaryDir directory;
+        const auto source = directory.filePath("gop." + suffix);
+        QProcess ffmpeg;
+        ffmpeg.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),
+            {"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=12:duration=3",
+             "-c:v","libx264","-g","12","-keyint_min","12","-sc_threshold","0","-y",source});
+        QVERIFY(ffmpeg.waitForFinished(10000));
+        QCOMPARE(ffmpeg.exitCode(), 0);
+        MainWindow window;
+        window.show();
+        QVERIFY(window.loadSource(source));
+        QTRY_VERIFY_WITH_TIMEOUT(window.sourcePlayer_->snapshot().presentedVideoFrames > 0, 10000);
+        auto *next = window.findChild<QPushButton *>("rendererNextKeyframe");
+        auto *previous = window.findChild<QPushButton *>("rendererPreviousKeyframe");
+        QVERIFY(next && previous);
+        const auto hasPresented = [&](qint64 framePts, qint64 position) {
+            const auto snap = window.sourcePlayer_->snapshot();
+            return snap.framePts != framePts && qAbs(snap.position100ns - position) < 1000000;
+        };
+        auto framePts = window.sourcePlayer_->snapshot().framePts;
+        next->click();
+        QTRY_VERIFY_WITH_TIMEOUT(hasPresented(framePts, 10000000), 8000);
+        framePts = window.sourcePlayer_->snapshot().framePts;
+        previous->click();
+        QTRY_VERIFY_WITH_TIMEOUT(hasPresented(framePts, 0), 8000);
+        framePts = window.sourcePlayer_->snapshot().framePts;
+        QVERIFY(window.sourcePlayer_->seekFrame(11));
+        QTRY_VERIFY_WITH_TIMEOUT(hasPresented(framePts, 9166667), 8000);
+        framePts = window.sourcePlayer_->snapshot().framePts;
+        next->click();
+        QTRY_VERIFY_WITH_TIMEOUT(hasPresented(framePts, 10000000), 8000);
+        framePts = window.sourcePlayer_->snapshot().framePts;
+        next->click();
+        QTRY_VERIFY_WITH_TIMEOUT(hasPresented(framePts, 20000000), 8000);
+    }
+
     void rendererHlslPreviewAndGlslFallback(){
         QTemporaryDir directory;QVERIFY(directory.isValid());
         const auto source=directory.filePath("renderer-hlsl.mkv"),shader=directory.filePath("renderer.glsl");
@@ -377,6 +1168,16 @@ private slots:
         const auto surface=window.processedPane_->surface()->size()*window.processedPane_->surface()->devicePixelRatioF();
         ThreeFpPixelProbe pixel{};QVERIFY(window.processedPlayer_->samplePixel(surface.width()/2,surface.height()/2,pixel));
         QVERIFY2(pixel.red>.9f && pixel.green<.1f && pixel.blue<.1f,"Renderer did not execute the native red shader");
+        window.sourcePlayer_->setView(2, .4f, .3f);
+        window.processedPlayer_->setView(2, -.5f, .2f);
+        window.copyPreviewFrame(-1);
+        QCOMPARE(QApplication::clipboard()->image().size(), QSize(320, 180));
+        window.copyPreviewFrame(0);
+        const auto rendered = QApplication::clipboard()->image();
+        QCOMPARE(rendered.size(), QSize(640, 360));
+        QVERIFY(rendered.pixelColor(8, 8).red() > 220);
+        window.sourcePlayer_->setView(1, 0, 0);
+        window.processedPlayer_->setView(1, 0, 0);
         QFile preview(QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).filePath("preview.vpy"));
         QVERIFY(preview.open(QIODevice::ReadOnly));const auto previewScript=preview.readAll();preview.close();
         QVERIFY(!previewScript.contains(".Shader(clip"));
@@ -391,6 +1192,10 @@ private slots:
         QCOMPARE(window.processedPlayer_->snapshot().videoWidth,640u); // Original shader output dimensions are restored.
         QVERIFY(window.processedPlayer_->samplePixel(surface.width()/2,surface.height()/2,pixel));
         QVERIFY2(pixel.blue>.7f && pixel.red<.2f,"GLSL fallback did not restore the original blue source");
+        window.copyPreviewFrame(0);
+        const auto glslFrame = QApplication::clipboard()->image();
+        QCOMPARE(glslFrame.size(), QSize(640, 360));
+        QVERIFY(glslFrame.pixelColor(16, 16).blue() > 150);
         QVERIFY(preview.open(QIODevice::ReadOnly));QVERIFY(preview.readAll().contains(".Shader(clip"));
         QCOMPARE(window.currentScript(source).script,fullScript.script);
     }
@@ -561,7 +1366,10 @@ private slots:
             for(const auto &parameter:definition.parameters) {
                 if(definition.id=="anime4k" && parameter.id=="dimension_axis")continue;
                 auto *label=editor.findChild<QLabel *>("parameterLabel_"+parameter.id);auto *field=editor.findChild<QWidget *>("parameter_"+parameter.id);
-                QVERIFY(label && field);QVERIFY2(!label->geometry().intersects(field->geometry()),qPrintable(definition.id+":"+parameter.id));
+                QVERIFY(label && field);
+                QCOMPARE(label->isVisible(), field->isVisible());
+                if (!field->isVisible()) continue;
+                QVERIFY2(!label->geometry().intersects(field->geometry()),qPrintable(definition.id+":"+parameter.id));
                 if(parameter.type==ParameterType::Boolean)QVERIFY(std::abs(field->geometry().right()-(editor.width()-9))<=1);
                 if(auto *combo=qobject_cast<QComboBox *>(field)) {
                     QVERIFY(combo->width()>=70 && combo->width()<=120);
@@ -602,6 +1410,37 @@ private slots:
         FilterGraph graph;const int id=graph.add("anime4k");ParameterEditor editor;editor.setNode(FilterCatalog::find("anime4k"),graph.at(id));editor.resize(620,850);editor.show();
         for(bool dark:{true,false}){qApp->setStyleSheet(applicationStyleSheet(dark));QTest::qWait(100);const auto image=editor.grab().toImage();QVERIFY(!image.isNull());const auto background=image.pixelColor(image.width()-4,image.height()-4);QVERIFY(dark?background.lightness()<80:background.lightness()>220);auto *label=editor.findChild<QLabel *>();QVERIFY(label);const auto text=label->palette().color(QPalette::WindowText);QVERIFY(dark?text.lightness()>180:text.lightness()<80);editor.grab().save(QCoreApplication::applicationDirPath()+QString(dark?"/renderer-parameters-dark.png":"/renderer-parameters-light.png"));}
     }
+    void themedCubeLabelsFollowBackground() {
+        const auto style = qApp->styleSheet();
+        const auto restore = qScopeGuard([&] { qApp->setStyleSheet(style); });
+        qApp->setStyleSheet(applicationStyleSheet(true));
+        QTemporaryDir fixture;
+        const auto path = fixture.filePath("themes.ini");
+        MainWindow window;
+        window.show();
+        QCoreApplication::processEvents();
+        const auto sample = [&](const QColor &color) {
+            QSettings theme(path, QSettings::IniFormat);
+            theme.setValue("VSR-Main/color", color.name());
+            theme.sync();
+            auto *page = window.pages_->widget(0);
+            applyPageTheme(page, path, "VSR-Main");
+            FilterGraph graph;
+            graph.add("cube_lut");
+            window.parameterEditor_->setNode(FilterCatalog::find("cube_lut"), &graph.nodes().first());
+            QCoreApplication::processEvents();
+            auto *label = window.parameterEditor_->findChild<QLabel *>("parameterLabel_file");
+            if (!label) return QColor();
+            const auto position = label->mapTo(page, QPoint(label->width() - 4, label->height() / 2));
+            const auto image = page->grab().toImage();
+            return image.pixelColor(position * image.devicePixelRatio());
+        };
+        const auto warm = sample(QColor("#bb3300"));
+        const auto cool = sample(QColor("#0033bb"));
+        QVERIFY(warm.isValid() && cool.isValid());
+        QVERIFY2(warm.red() > cool.red() + 12 && cool.blue() > warm.blue() + 12,
+            qPrintable(warm.name() + " / " + cool.name()));
+    }
     void rendererSettingsPageAndVpyWarning()
     {
         const auto oldOrganization=QCoreApplication::organizationName(),oldApplication=QCoreApplication::applicationName();
@@ -613,12 +1452,26 @@ private slots:
         auto *pages=window.findChild<QStackedWidget *>();auto *button=window.findChild<QToolButton *>("applicationSettings");
         auto *page=window.findChild<QWidget *>("rendererSettingsPage");QVERIFY(pages && button && page);
         button->click();QCOMPARE(pages->currentWidget(),page);QVERIFY(button->isChecked());QVERIFY(!QApplication::activeModalWidget());
+        auto *categories=page->findChild<QListWidget*>("rendererSettingsCategories");
+        QVERIFY(categories);
+        QCOMPARE(categories->count(),7);
+        QVERIFY(page->findChild<QComboBox*>("rendererLanguage")->isVisible());
+        categories->setCurrentRow(1);
+        auto *themeEditor=page->findChild<QWidget*>("pageThemeEditor");
+        QVERIFY(themeEditor && themeEditor->isVisible());
+        QVERIFY(!QApplication::activeModalWidget());
         auto *theme=window.findChild<QComboBox*>("rendererTheme");QVERIFY(theme);const auto previousStyle=qApp->styleSheet();const auto previousDark=settings.value("appearance/dark");
         const auto restoreTheme=qScopeGuard([&]{qApp->setStyleSheet(previousStyle);if(previousDark.isValid())settings.setValue("appearance/dark",previousDark);else settings.remove("appearance/dark");});
         theme->setCurrentIndex(1);QVERIFY(qApp->styleSheet().contains("#202124"));page->grab().save(QCoreApplication::applicationDirPath()+"/renderer-settings-dark.png");theme->setCurrentIndex(0);
+        categories->setCurrentRow(2);
+        QVERIFY(page->findChild<QLineEdit*>("rendererFfmpegExecutable")->isVisible());
+        categories->setCurrentRow(3);
+        QVERIFY(page->findChild<QCheckBox*>("rendererForumRememberLogin")->isVisible());
+        QVERIFY(page->findChild<QLineEdit*>("rendererCommunitySource")->isVisible());
+        categories->setCurrentRow(0);
         auto *source=window.findChild<QComboBox *>("rendererSettingsSource");
         auto *apply=window.findChild<QPushButton *>("rendererApplySettings");QVERIFY(source && apply);
-        const int choice=1-source->currentIndex();source->setCurrentIndex(choice);apply->click();
+        const int choice=source->currentIndex()==0?1:0;source->setCurrentIndex(choice);apply->click();
         QCOMPARE(window.findChild<QComboBox *>("sourceFilter")->currentIndex(),choice);QCOMPARE(settings.value("sourceFilter").toInt(),choice);
         for(auto *nav:window.findChild<QWidget *>("pageNavigation")->findChildren<QToolButton *>())
             if(nav->text()==QStringLiteral("图像分析比对"))nav->click();
@@ -1203,23 +2056,29 @@ private slots:
         QCOMPARE(rail->width(), 44);
         auto *toggle = window.findChild<QAction *>("navigationToggle");
         QVERIFY(toggle);
+        auto *toggleButton = rail->findChild<QToolButton *>("navigationToggleButton");
+        QVERIFY(toggleButton);
+        QCOMPARE(toggleButton->defaultAction(), toggle);
+        QCOMPARE(rail->layout()->itemAt(0)->widget(), toggleButton);
         toggle->trigger();
         QCOMPARE(rail->width(), 180);
-        const auto buttons = rail->findChildren<QToolButton *>();
-        QCOMPARE(buttons.size(), 5);
-        for(auto *button:buttons){QCOMPARE(button->size(),buttons.first()->size());QCOMPARE(button->iconSize(),QSize(22,22));}
+        QCOMPARE(rail->findChildren<QToolButton *>(QString(), Qt::FindDirectChildrenOnly).size(),
+            window.navigationButtons_.size() + 1);
+        for (auto *button : window.navigationButtons_) {
+            QCOMPARE(button->size(), toggleButton->size());
+            QCOMPARE(button->iconSize(), toggleButton->iconSize());
+        }
         QVERIFY(!window.findChild<QComboBox *>("sourceFilter")->isVisible());
         window.findChild<QToolButton *>("applicationSettings")->click();
         auto *settingsSource=window.findChild<QComboBox *>("rendererSettingsSource");
         QVERIFY(settingsSource && settingsSource->isVisible());
-        QCOMPARE(settingsSource->count(),2);
-        buttons[1]->click();
+        window.navigationButtons_[1]->click();
         QVERIFY(window.findChild<AnalysisPage *>()->isVisible());
-        buttons[0]->click();
+        window.navigationButtons_[0]->click();
         QVERIFY(!window.findChild<AnalysisPage *>()->isVisible());
         toggle->trigger();
         QCOMPARE(rail->width(), 44);
-        buttons[1]->click();
+        window.navigationButtons_[1]->click();
         toggle->trigger();
         QTest::qWait(150);
         window.grab().save(QCoreApplication::applicationDirPath() + "/analysis-navigation.png");

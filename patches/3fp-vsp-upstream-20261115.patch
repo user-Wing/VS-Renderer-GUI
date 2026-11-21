@@ -2165,7 +2165,7 @@ index 6f1d915..498387f 100644
                      decoderSurfaceFormat != AV_PIX_FMT_NONE ? decoderSurfaceFormat : decoderFormat);
                  if (decoderBitDepth > 0) json << ",\"decoderBitDepth\":" << decoderBitDepth;
 +                std::int64_t frameDelay = 0;
-+                if (av_opt_get_int(videoDecoder_->priv_data, "max_frame_delay", 0, &frameDelay) >= 0)
++                if (av_opt_get_int(videoDecoder_, "max_frame_delay", AV_OPT_SEARCH_CHILDREN, &frameDelay) >= 0)
 +                    json << ",\"decoderFrameDelay\":" << frameDelay;
                  const auto acceleration = HardwareAccelerationName(videoDecoder_);
                  if (!acceleration.empty())

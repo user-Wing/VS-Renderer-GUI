@@ -1,0 +1,231 @@
+diff --git a/FFF.Native/3FP/Api/FFF.Player.Api.h b/FFF.Native/3FP/Api/FFF.Player.Api.h
+--- a/FFF.Native/3FP/Api/FFF.Player.Api.h
++++ b/FFF.Native/3FP/Api/FFF.Player.Api.h
+@@ -1864,6 +1864,9 @@
+     Source = 0,
+     // The current swap-chain size: what the window is showing right now.
+     Window = 1,
++    // Whole video with no preview zoom or overlays. Width and height may
++    // request the shader output size; zero selects the decoded frame size.
++    FullVideo = 2,
+ };
+ 
+ enum class FFF3FPCopyFrameFormat : std::uint32_t {
+diff --git a/FFF.Native/3FP/Api/PlayerApi.cpp b/FFF.Native/3FP/Api/PlayerApi.cpp
+--- a/FFF.Native/3FP/Api/PlayerApi.cpp
++++ b/FFF.Native/3FP/Api/PlayerApi.cpp
+@@ -460,9 +460,9 @@
+         return FFFResult::InvalidArgument;
+     const auto layoutValue = static_cast<std::uint32_t>(layout);
+     const auto formatValue = static_cast<std::uint32_t>(format);
+-    if (layoutValue > 1 || formatValue > 1) return FFFResult::InvalidArgument;
+-    std::uint32_t frameWidth = 0;
+-    std::uint32_t frameHeight = 0;
++    if (layoutValue > 2 || formatValue > 1) return FFFResult::InvalidArgument;
++    std::uint32_t frameWidth = layoutValue == 2 ? *width : 0;
++    std::uint32_t frameHeight = layoutValue == 2 ? *height : 0;
+     const auto result = static_cast<PlayerSession*>(player)->CopyFrame(pixels, capacity,
+         frameWidth, frameHeight, layoutValue, formatValue);
+     // Publish the size on every path: the two-call contract needs it even when the
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.h b/FFF.Native/3FP/Render/VideoRenderer.h
+--- a/FFF.Native/3FP/Render/VideoRenderer.h
++++ b/FFF.Native/3FP/Render/VideoRenderer.h
+@@ -771,7 +771,7 @@
+     /// swapWidth_/swapHeight_ so the same code can also paint an off-screen surface at
+     /// the source resolution (screenshot readback) without a second render path.
+     FFFResult DrawCachedVideo(ID3D11RenderTargetView* target,
+-        std::uint32_t outputWidth, std::uint32_t outputHeight) noexcept;
++        std::uint32_t outputWidth, std::uint32_t outputHeight, bool fullVideo = false) noexcept;
+     FFFResult DrawCachedVideo(ID3D11RenderTargetView* target) noexcept {
+         return DrawCachedVideo(target, swapWidth_, swapHeight_);
+     }
+diff --git a/FFF.Native/3FP/Render/VideoRenderer.cpp b/FFF.Native/3FP/Render/VideoRenderer.cpp
+--- a/FFF.Native/3FP/Render/VideoRenderer.cpp
++++ b/FFF.Native/3FP/Render/VideoRenderer.cpp
+@@ -4171,7 +4171,8 @@
+ FFFResult PlayerVideoRenderer::CopyFrame(void* const pixels,
+     const std::uint32_t capacity, std::uint32_t& width, std::uint32_t& height,
+     const std::uint32_t layout, const std::uint32_t format) noexcept {
+-    if (layout > 1 || format > 1) return FFFResult::InvalidArgument;
++    if (layout > 2 || format > 1) return FFFResult::InvalidArgument;
++    const bool fullVideo = layout == 2;
+     std::lock_guard deviceLock(deviceMutex_);
+     if (!hasCachedVideo_ || device_ == nullptr || context_ == nullptr)
+         return FFFResult::InvalidState;
+@@ -4183,9 +4184,10 @@
+     const auto rotated = (viewRotation_.load(std::memory_order_acquire) & 1u) != 0;
+     const auto sourceLayoutWidth = rotated ? sourceHeight_ : sourceWidth_;
+     const auto sourceLayoutHeight = rotated ? sourceWidth_ : sourceHeight_;
+-    const auto targetWidth = layout == 1 ? swapWidth_ : sourceLayoutWidth;
+-    const auto targetHeight = layout == 1 ? swapHeight_ : sourceLayoutHeight;
++    const auto targetWidth = layout == 1 ? swapWidth_ : fullVideo && width && height ? width : sourceLayoutWidth;
++    const auto targetHeight = layout == 1 ? swapHeight_ : fullVideo && width && height ? height : sourceLayoutHeight;
+     if (targetWidth == 0 || targetHeight == 0) return FFFResult::InvalidState;
++    if (fullVideo && std::uint64_t(targetWidth) * targetHeight > 40000000) return FFFResult::InvalidArgument;
+ 
+     width = targetWidth;
+     height = targetHeight;
+@@ -4206,14 +4208,14 @@
+ 
+     constexpr float black[] = {0, 0, 0, 1};
+     context_->ClearRenderTargetView(target.Get(), black);
+-    const auto drawn = DrawCachedVideo(target.Get(), targetWidth, targetHeight);
++    const auto drawn = DrawCachedVideo(target.Get(), targetWidth, targetHeight, fullVideo);
+     if (drawn != FFFResult::Success) return drawn;
+     // Subtitle/danmaku/lyrics layers are composited in the same order the presenter
+     // uses, so the screenshot matches what the user sees rather than video only.
+     const TimedTextLayerSlot slots[] = {TimedTextLayerSlot::Danmaku,
+         TimedTextLayerSlot::Subtitle, TimedTextLayerSlot::Lyrics,
+         TimedTextLayerSlot::Disc, TimedTextLayerSlot::PlayerInformation};
+-    for (const auto slot : slots) {
++    if (!fullVideo) for (const auto slot : slots) {
+         const auto layerDrawn = DrawTimedText(slot);
+         if (layerDrawn != FFFResult::Success) return layerDrawn;
+         CompositeTimedText(target.Get(), slot);
+@@ -9397,7 +9399,7 @@
+ }
+ 
+ FFFResult PlayerVideoRenderer::DrawCachedVideo(ID3D11RenderTargetView* target,
+-    const std::uint32_t outputWidth, const std::uint32_t outputHeight) noexcept {
++    const std::uint32_t outputWidth, const std::uint32_t outputHeight, const bool fullVideo) noexcept {
+     if (!hasCachedVideo_ || target == nullptr) return FFFResult::InvalidState;
+     if (outputWidth == 0 || outputHeight == 0) return FFFResult::InvalidArgument;
+     const auto projection360 = projection360Enabled_.load(std::memory_order_acquire) != 0;
+@@ -9408,7 +9410,9 @@
+     // move below half a pixel, which read as the picture "climbing a grid".
+     float subPixelX = 0.0f, subPixelY = 0.0f;
+     float subPixelW = 0.0f, subPixelH = 0.0f;
+-    if (lyricsLayoutEnabled_.load(std::memory_order_acquire) && sourceLimitedToNativeSize_) {
++    if (fullVideo) {
++        destination = {0, 0, outputWidth, outputHeight};
++    } else if (lyricsLayoutEnabled_.load(std::memory_order_acquire) && sourceLimitedToNativeSize_) {
+         destination = CalculateLyricsCoverDestination(sourceWidth_, sourceHeight_,
+             outputWidth, outputHeight,
+             std::bit_cast<float>(coverRegionWidthPercentageBits_.load(
+@@ -9445,7 +9449,7 @@
+     const auto zoom = std::bit_cast<float>(viewZoomBits_.load(std::memory_order_acquire));
+     const auto panX = std::bit_cast<float>(viewPanXBits_.load(std::memory_order_acquire));
+     const auto panY = std::bit_cast<float>(viewPanYBits_.load(std::memory_order_acquire));
+-    if (!projection360 && std::abs(zoom - 1.0f) > 1e-4f) {
++    if (!fullVideo && !projection360 && std::abs(zoom - 1.0f) > 1e-4f) {
+         const float fittedWidth = static_cast<float>(destination.width);
+         const float fittedHeight = static_cast<float>(destination.height);
+         const float zoomedWidth = std::max(1.0f, fittedWidth * zoom);
+@@ -9483,7 +9487,7 @@
+     const auto animeAlgorithm = upscaleAlgorithm_.load() & 255u;
+     const bool customShader = customShader_.active();
+     const auto secondary = upscaleAlgorithm_.load() >> 24;
+-    const bool openNgu = upscaleShader_.active() && (animeAlgorithm == 15u || secondary == 16u) &&
++    const bool openNgu = !fullVideo && upscaleShader_.active() && (animeAlgorithm == 15u || secondary == 16u) &&
+         decodedTransfer_.load(std::memory_order_acquire) == 0 && !colorEngine_.settings.engine && !projection360 &&
+         cachedVideoSettings_.gamut == 0 && actualMode_ == FFF3FPColorMode::MapToSdr && !cachedTransformEnabled_;
+     const bool anime = animeAlgorithm >= 9u && animeAlgorithm <= 14u;
+diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
+--- a/FFF.Native/3FP/Core/PlayerSession.cpp
++++ b/FFF.Native/3FP/Core/PlayerSession.cpp
+@@ -1951,81 +1951,31 @@
+         // K1：非 fragmented 或 CopyTable 为空表 → 现有逻辑原样（R4.2）。
+     }
+ 
+-    const auto searchTimestamp = currentTimestamp + direction;
++    // Seek relative to the last presented PTS. An index timestamp can
++    // instead be DTS (e.g. MP4 with B-frames); going through the seek
++    // preview or a second index entry can land in the wrong GOP.
+     const auto flags = direction < 0 ? AVSEEK_FLAG_BACKWARD : 0;
+-    const auto entryIndex = av_index_search_timestamp(stream, searchTimestamp, flags);
+-    const auto* entry = entryIndex >= 0 ? avformat_index_get_entry(stream, entryIndex) : nullptr;
+-
+-    // F-C keyframe stepping (C-K1-STEP@2, direction a): the FFmpeg 8 runtime's
+-    // av_index_search_timestamp is keyframe-aware ("only keyframes otherwise"
+-    // unless AVSEEK_FLAG_ANY is passed), so the hit entry is already a keyframe
+-    // entry. DoSeek's internal av_seek_frame BACKWARD keyframe alignment always
+-    // lands one keyframe earlier (measured invariant): a +1 step handed the hit
+-    // entry directly would stay on the current GOP head, so +1 selects the NEXT
+-    // keyframe entry after the hit one and the fixed one-keyframe pull lands
+-    // exactly on the expected next keyframe. A -1 step keeps its pre-fix chain
+-    // verbatim - the hit "previous keyframe" entry pulled one further back is
+-    // precisely the expected previous-keyframe landing (probe baseline:
+-    // audio_test 95.05s / noaudio_test 95.00s). The DoSeek call shape (-1, false)
+-    // is unchanged.
+-    if (entry != nullptr) {
+-        if (direction < 0) {
+-            // -1: pre-fix behaviour verbatim (C-K1-STEP@2 §2, zero change).
+-            const auto targetPosition = std::max<std::int64_t>(0,
+-                StreamTimestampPosition100ns(format_, videoStream_, entry->timestamp));
+-            DoSeek(targetPosition, -1, false);
+-        } else {
+-            // +1 (C-K1-STEP@2 §1): first keyframe entry strictly after the hit
+-            // entry; none left → boundary (the hit entry is the last keyframe).
+-            const auto entryCount = avformat_index_get_entries_count(stream);
+-            int nextKeyframeIndex = -1;
+-            for (int i = entryIndex + 1; i < entryCount; ++i) {
+-                const auto* candidate = avformat_index_get_entry(stream, i);
+-                if (candidate != nullptr && (candidate->flags & AVINDEX_KEYFRAME) != 0) {
+-                    nextKeyframeIndex = i;
+-                    break;
+-                }
+-            }
+-            if (nextKeyframeIndex >= 0) {
+-                const auto* nextKeyframeEntry =
+-                    avformat_index_get_entry(stream, nextKeyframeIndex);
+-                const auto targetPosition = std::max<std::int64_t>(0,
+-                    StreamTimestampPosition100ns(format_, videoStream_,
+-                        nextKeyframeEntry->timestamp));
+-                DoSeek(targetPosition, -1, false);
+-            } else {
+-                // The hit entry is the last keyframe in the index → boundary: stay
+-                // where we are, same semantics as the K2 tableHasKeyframe branch
+-                // above (SetState + boundary:true event, position untouched).
+-                SetState(FFF3FPState::Paused, "step-keyframe");
+-                Emit(FFF3FPEvent::OperationCompleted,
+-                    "{\"operation\":\"step-keyframe\",\"direction\":" +
+-                    std::to_string(direction) + ",\"position100ns\":" +
+-                    std::to_string(snapshot_.position100ns) + ",\"boundary\":true}");
+-                return;
+-            }
+-        }
+-    } else {
+-        if (av_seek_frame(format_, videoStream_, searchTimestamp, flags) < 0) {
+-            SetState(FFF3FPState::Paused, "step-keyframe");
+-            return;
+-        }
+-        ClearVideoQueue();
+-        StopSoftwareVideoDecode();
+-        avcodec_flush_buffers(videoDecoder_);
+-        if (audioDecoder_) avcodec_flush_buffers(audioDecoder_);
+-        seekTarget100ns_ = -1;
+-        seekTargetFrame_ = -1;
+-        keyframeSeekPending_ = true;
+-        draining_ = false;
+-        demuxEnded_ = audioDecoderDrained_ = externalAudioDrained_ = audioClockFinished_ = false;
+-        // 只清内容周期，不清帧率散布：DoStepKeyframe 是同一个文件里的单帧步进，而
+-        // "恒定/可变"是这个文件的属性，步进一次就把判词退回"还没测出来"是错的。
+-        // 散布只在媒体身份变化处清（DoOpen / DoClose）。
+-        lastVideoFrameDuration100ns_ = 0;
+-        snapshot_.frameIndex = -1;
+-        PublishSnapshot();
+-    }
++    if (av_seek_frame(format_, videoStream_, currentTimestamp + direction, flags) < 0) {
++        SetState(FFF3FPState::Paused, "step-keyframe");
++        Emit(FFF3FPEvent::OperationCompleted,
++            "{\"operation\":\"step-keyframe\",\"direction\":" +
++            std::to_string(direction) + ",\"position100ns\":" +
++            std::to_string(snapshot_.position100ns) + ",\"boundary\":true}");
++        return;
++    }
++    ClearVideoQueue();
++    avcodec_flush_buffers(videoDecoder_);
++    if (audioDecoder_) avcodec_flush_buffers(audioDecoder_);
++    seekTarget100ns_ = -1;
++    seekTargetFrame_ = -1;
++    keyframeSeekPending_ = true;
++    draining_ = false;
++    demuxEnded_ = audioDecoderDrained_ = externalAudioDrained_ = audioClockFinished_ = false;
++    lastVideoFrameDuration100ns_ = 0;
++    snapshot_.frameIndex = -1;
++    ++snapshot_.timelineGeneration;
++    NoteTapGeneration();
++    PublishSnapshot();
+     DecodeUntilSeekTarget();
+     SetState(FFF3FPState::Paused, "step-keyframe");
+     Emit(FFF3FPEvent::OperationCompleted,

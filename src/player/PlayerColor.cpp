@@ -1,5 +1,8 @@
 #include "player/PlayerWindow.h"
 #include "backend/ThreeFpPlayer.h"
+#include "color/CubeLut.h"
+#include "player/PlayerDiscMenu.h"
+#include "player/PlayerImageTools.h"
 #include <QSettings>
 #include <QDialog>
 #include <QFormLayout>
@@ -15,10 +18,67 @@
 #include <QFileDialog>
 #include <QScrollArea>
 #include <QTimer>
+#include <QStandardPaths>
 
 namespace vsr {
 namespace {
 constexpr int defaultColorEngine=0;
+}
+void PlayerWindow::migrateCubeLibrary()
+{
+    if (settings_->value("cube/libraryMigrated").toBool()) return;
+    const auto library = playerCubeLibrary();
+    const QDir old(QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)).filePath("VSPlayer/luts"));
+    for (const auto &name : old.entryList({"*.cube"}, QDir::Files | QDir::NoSymLinks))
+        if (importCubeFile(old.filePath(name), library).isEmpty()) return;
+    settings_->setValue("cube/libraryMigrated", true);
+}
+
+void PlayerWindow::loadCube()
+{
+    migrateCubeLibrary();
+    const auto library = playerCubeLibrary();
+    const auto chosen = QFileDialog::getOpenFileName(this, tr("加载cube调色"),
+        library.exists() ? library.absolutePath() : QFileInfo(library.absolutePath()).absolutePath(), tr("3D Cube LUT (*.cube)"));
+    if (chosen.isEmpty()) return;
+    QString error;
+    const auto path = importCubeFile(chosen, library, &error);
+    if (path.isEmpty()) { setError(error); return; }
+    if (canApplyCube()) applyCube(path);
+    else showStatus(tr("Cube 已导入本地库。"));
+}
+
+bool PlayerWindow::canApplyCube() const
+{
+    if (imageMode_) return ready_;
+#ifndef VSR_LITE_PLAYER
+    if (source_.isEmpty() || audioMode_ || madvrMode() || networkSource() ||
+        (discMenu_ && discMenu_->active()) || mediaInput_.startsWith("bluray:") || mediaInput_.endsWith(".ffconcat"))
+        return false;
+    const auto snap = clock_->snapshot();
+    return snap.selectedVideoStream >= 0 && !snap.isHdrSource &&
+        (snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Playing ||
+         snap.state == ThreeFpState::Paused || snap.state == ThreeFpState::Ended);
+#else
+    return false;
+#endif
+}
+
+void PlayerWindow::applyCube(const QString &path)
+{
+    if (!canApplyCube()) return;
+    const bool p3 = settings_->value("cube/manualSpace").toBool() ?
+        settings_->value("cube/displayP3").toBool() : cubeUsesDisplayP3(path);
+    if (imageMode_) {
+        imageTools_->applyCube(path, p3);
+        return;
+    }
+#ifndef VSR_LITE_PLAYER
+    videoCubePath_ = path;
+    videoCubeP3_ = p3;
+    if (minimalMode_) setMinimalMode(false);
+    else refreshScript();
+#endif
 }
 void PlayerWindow::applyColorSettings() {
     auto c=VsrColorDefaultSettings();

@@ -1,3 +1,4 @@
+#include "ui/ShortcutTable.h"
 #include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
 #include "player/TimelineThumbnail.h"
@@ -247,6 +248,7 @@ PlayerWindow::PlayerWindow() {
     imageTools_=new PlayerImageTools(pane_,central);layout->insertWidget(0,imageTools_);
     connect(imageTools_,&PlayerImageTools::errorOccurred,this,&PlayerWindow::setError);
     connect(imageTools_,&PlayerImageTools::statusChanged,this,&PlayerWindow::showStatus);
+    connect(imageTools_,&PlayerImageTools::cubeRequested,this,&PlayerWindow::loadCube);
     connect(imageTools_,&PlayerImageTools::imageRemoved,this,[this](const QString &path){
         if(source_!=path)return;
         const int index=files_.indexOf(path);files_.removeAll(path);
@@ -367,6 +369,7 @@ bool PlayerWindow::openFile(const QString &input) {
     if(bitrateProbe_){bitrateProbe_->disconnect(this);bitrateProbe_->kill();bitrateProbe_->deleteLater();bitrateProbe_=nullptr;}decodeBurstFrom_=decodeBurstUntil_=0;decodePoolBytes_=decodePoolFrames_=0;bitrateTimer_.invalidate();
     stopDiscIndexing();discIndexParts_.clear();
     if(aiSubtitles_)aiSubtitles_->stop();
+    videoCubePath_.clear();
     savePosition(); imageLoader_->cancel();deferred_.clear();deferredAudio_.clear();network_->cancel(); server_->unloadScript();
     imageMode_=image;audioMode_=!image && playerAudioExtensions().contains(suffix);audioMetadataLoaded_=false;audioMetadata_={};setProperty("audioOnly",audioMode_);setProperty("lyricCount",0);lyricLabel_->clear();lyricLabel_->hide();pane_->setImage({});pane_->adoptView(1,0,0);resetZoom_->hide();
     minimalMode_=audioMode_ || (!isFullScreen() && width()<950);updateMinimalControls();
@@ -415,9 +418,11 @@ bool PlayerWindow::openFile(const QString &input) {
 bool PlayerWindow::openMedia() {
     lav_.reset();
 #ifdef VSR_LITE_PLAYER
-    setDirectMode(true);
+    setDirectMode(true, false);
 #else
-    setDirectMode(minimalMode_ || mediaInput_.startsWith("bluray:") || networkSource() || (!madvrMode() && (preset_.isEmpty() || (!profile().isEmpty() && interpolationStage()<0) || playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower()))));
+    setDirectMode(minimalMode_ || mediaInput_.startsWith("bluray:") || networkSource() || (!madvrMode() &&
+        videoCubePath_.isEmpty() && (preset_.isEmpty() || (!profile().isEmpty() && interpolationStage()<0) ||
+        playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower()))), false);
 #endif
     applyScaling();
     clock_->setClockOnly(minimalMode_ || audioMode_ || (!direct_ && !madvrMode()));
@@ -481,7 +486,9 @@ void PlayerWindow::refreshScript() {
         true ||
 #endif
         mode=="Anime" || !settings_->value("render/customShader").toString().isEmpty() || nativeAnime_ || mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic";
-    setDirectMode(native);
+    const bool cubeActive = !videoCubePath_.isEmpty() && !networkSource() && !audioOnly &&
+        !mediaInput_.startsWith("bluray:") && !mediaInput_.endsWith(".ffconcat");
+    setDirectMode(native && !cubeActive);
     rendererBadge_->setText(direct_?"3FP":"VS");
     applyScaling();
     profileSize_=profileTarget();autoPlay_=resume;
@@ -516,6 +523,12 @@ void PlayerWindow::refreshScript() {
     }
     if(!mode.isEmpty())result.script.replace("core.placebo.Shader(","getattr(core, 'vsrplacebo', core.placebo).Shader(");
     if (!result.errors.isEmpty()) { setError(result.errors.join('\n')); autoPlay_ = false; return; }
+    if (cubeActive) {
+        result.script += VpyScriptBuilder::cubeHelper();
+        result.script += QStringLiteral("\nimport vapoursynth as _vsr_cube_vs\n_vsr_cube_out = _vsr_cube_vs.get_output(0)\n"
+            "_vsr_cube(_vsr_cube_out.clip, %1, %2).set_output(0, alpha=_vsr_cube_out.alpha)\n")
+            .arg(VpyScriptBuilder::pythonString(videoCubePath_), videoCubeP3_ ? "12" : "1");
+    }
     result.script.replace(QRegularExpression("(?<![A-Za-z_])(?:vs\\.)?core\\.ffms2\\.Source\\("),"_vsr_player_ffms(");
     result.script.replace(QRegularExpression("(?<![A-Za-z_])(?:vs\\.)?core\\.lsmas\\.LWLibavSource\\("),"_vsr_player_lsmas(");
     const auto ffindex=playerIndexPath(*settings_,vsSource,"ffindex"),lwi=playerIndexPath(*settings_,vsSource,"lwi");
@@ -817,17 +830,9 @@ bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
         auto *key = static_cast<QKeyEvent *>(event);
         if(key->key()==Qt::Key_Escape && equalizerPopup_ && equalizerPopup_->isVisible()){equalizerPopup_->close();return true;}
         if (key->key() == Qt::Key_Tab && !minimalMode_ && !source_.isEmpty()) { infoVisible_ = !infoVisible_;infoFpsTimer_.invalidate(); updateInfo(); if(infoVisible_){info_->show();info_->raise();}else {static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();} return true; }
-        const bool editing = qApp->activePopupWidget() || qobject_cast<QComboBox *>(object) || qobject_cast<QComboBox *>(qApp->focusWidget()) || qobject_cast<QLineEdit *>(object) || qobject_cast<QDoubleSpinBox *>(object) || qobject_cast<QLineEdit *>(qApp->focusWidget()) || qobject_cast<QDoubleSpinBox *>(qApp->focusWidget());
+        const bool editing = qApp->activePopupWidget() || isShortcutEditor(qobject_cast<QWidget *>(object)) || isShortcutEditor(qApp->focusWidget());
         if(!editing && discMenu_ && discMenu_->active() && discMenuNavigation_){int command=-1;switch(key->key()){case Qt::Key_Return:case Qt::Key_Enter:command=0;break;case Qt::Key_Up:command=1;break;case Qt::Key_Down:command=2;break;case Qt::Key_Left:command=3;break;case Qt::Key_Right:command=4;break;case Qt::Key_Menu:command=5;break;default:break;}if(command>=0){discMenu_->navigate(command);return true;}}
         if(!editing && handleShortcut(key))return true;
-        if(!editing && (key->key()==Qt::Key_Left || key->key()==Qt::Key_Right)) {
-            const int direction=key->key()==Qt::Key_Left?-1:1;
-            if(imageMode_){nextFile(direction);return true;}
-            if(key->modifiers() & Qt::ControlModifier)seekTime(position()+qint64(settings_->value(key->modifiers() & Qt::AltModifier?"playback/ctrlAltSeconds":"playback/ctrlSeconds",key->modifiers() & Qt::AltModifier?60:10).toInt())*10000000*direction);
-            else {const auto mode=settings_->value("playback/arrows","seconds").toString();if(mode=="frame")stepFrame(direction);else if(mode=="keyframe"){suspendQualityCheck();manualFrame_=-1;if(lav_){clock_->seek(position());lavKeyPending_=true;}generation_=clock_->snapshot().timelineGeneration;seekPending_=clock_->stepKeyframe(direction);}else seekTime(position()+direction*10000000);}
-            return true;
-        }
-        if (!editing && key->key() == Qt::Key_Space) { togglePlayback(); return true; }
         if((key->key()==Qt::Key_Return || key->key()==Qt::Key_Enter) && frameEditPending_){commitFrameEdit();return true;}
         if((key->key()==Qt::Key_Return || key->key()==Qt::Key_Enter) && frameJumpTarget_>=0)return true;
         if ((!editing && (key->key()==Qt::Key_Return || key->key()==Qt::Key_Enter)) || key->key()==Qt::Key_F11) {toggleFullscreen();return true;}
@@ -847,11 +852,16 @@ bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
     return QMainWindow::eventFilter(object, event);
 }
 bool PlayerWindow::handleShortcut(QKeyEvent *event){
+    if (isPlayerFullscreenKey(event->key())) return false;
     const auto key=QKeySequence(event->keyCombination()).toString(QKeySequence::PortableText);
     const auto entries=playerShortcuts(*settings_);
-    for(int row=0;row<entries.size();++row){
-        const auto &entry=entries[row];if(QKeySequence::fromString(entry.key,QKeySequence::PortableText).toString(QKeySequence::PortableText)!=key)continue;
-        const auto prefix=shortcutPrefix(row);if(!settings_->value(prefix+"enabled",true).toBool())return true;
+    const int count = playerShortcutCount(*settings_, entries.size());
+    for(int row=0;row<count;++row){
+        const auto entry=entries.value(row, {{}, "play", 0});
+        const auto prefix=shortcutPrefix(row);
+        if(!settings_->value(prefix+"enabled",true).toBool())continue;
+        const auto assigned = settings_->value(prefix+"key", entry.key).toString();
+        if(assigned.isEmpty() || QKeySequence::fromString(assigned,QKeySequence::PortableText).toString(QKeySequence::PortableText)!=key)continue;
         const auto action=settings_->value(prefix+"action",entry.action).toString();const double value=settings_->value(prefix+"value",entry.value).toDouble();
         if(event->isAutoRepeat() && (action=="play" || action=="mute" || action=="list" || action=="minimal"))return true;
         if(action=="play")togglePlayback();
@@ -896,7 +906,7 @@ void PlayerWindow::setMinimalMode(bool enabled){
     if(imageMode_ || (discMenu_ && discMenu_->active()) || minimalMode_==enabled)return;
     const auto at=position();const bool resume=playing_ || autoPlay_;minimalMode_=enabled;updateMinimalControls();
     if(!enabled && !isFullScreen())resize(normalWindowSize_.expandedTo(QSize(1000,500)));
-    if(!source_.isEmpty()){server_->unloadScript();output_->stop();clock_->pause();playing_=false;seekPending_=false;seekUiTarget_=queuedSeek_=-1;rateApplied_=false;resumeAt_=at;autoPlay_=resume;setDirectMode(true);openMedia();}
+    if(!source_.isEmpty()){server_->unloadScript();output_->stop();clock_->pause();playing_=false;seekPending_=false;seekUiTarget_=queuedSeek_=-1;rateApplied_=false;resumeAt_=at;autoPlay_=resume;openMedia();}
 }
 void PlayerWindow::dragEnterEvent(QDragEnterEvent *event) {
     if(event->mimeData()->hasUrls()){dragStatus_=message_->text();event->acceptProposedAction();}

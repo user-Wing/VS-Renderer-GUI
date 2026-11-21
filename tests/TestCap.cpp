@@ -151,11 +151,22 @@ private slots:
         for(auto *screen:QApplication::screens()) {
             QString error;const auto image=cap::captureScreen(screen,&error);
             QVERIFY2(!image.isNull(),qPrintable(error));
-            qInfo()<<"desktop-capture"<<screen->name()<<image.size()<<image.depth()<<image.text("capHdr");
+            qInfo()<<"desktop-capture"<<screen->name()<<image.size()<<image.depth()<<image.text("capHdr")<<"DPR"<<screen->devicePixelRatio()<<"logical"<<screen->geometry();
+            qInfo().noquote()<<image.text("capDisplayEvidence")<<image.text("vsrColorEvidence");
             capturedHdr|=image.text("capHdr")=="scRGB-FP16" && image.depth()==128;
         }
         if(qEnvironmentVariable("VSR_CAP_DEVICE_TEST")=="HDR") {
             QVERIFY2(capturedHdr,"No active HDR output was available to desktop capture in this session.");
+        }
+    }
+    void realWgcBackend(){
+        if(!qEnvironmentVariableIsSet("VSR_CAP_WGC_TEST"))QSKIP("Set VSR_CAP_WGC_TEST for a one-shot WGC monitor probe");
+        for(auto *screen:QApplication::screens()){
+            QString error;QElapsedTimer timer;timer.start();const auto image=cap::captureWgcScreen(screen,&error);
+            QVERIFY2(!image.isNull(),qPrintable(error));QCOMPARE(image.format(),QImage::Format_RGBA32FPx4);
+            double minimum=1e10,maximum=-1e10;qsizetype finite=0;
+            for(int y=0;y<image.height();y+=7){const auto *p=reinterpret_cast<const float*>(image.constScanLine(y));for(int x=0;x<image.width();x+=7)for(int c=0;c<3;++c)if(std::isfinite(p[x*4+c])){minimum=std::min(minimum,double(p[x*4+c]));maximum=std::max(maximum,double(p[x*4+c]));++finite;}}
+            QVERIFY(finite>0);QVERIFY(maximum>minimum);qInfo()<<"WGC native one-shot"<<screen->name()<<image.size()<<"ms"<<timer.elapsed()<<"min"<<minimum<<"max"<<maximum<<"FP16 source storage; effective content precision unmeasured";
         }
     }
 };

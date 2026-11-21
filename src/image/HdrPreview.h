@@ -1,6 +1,7 @@
 #pragma once
 #include <QColorSpace>
 #include <QImage>
+#include "color/ScreenshotColor.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -8,13 +9,13 @@
 namespace vsr {
 // Shared by desktop SDR companions and the player's raster preview.
 // Original HDR pixels are retained separately; scRGB 1.0 represents 80 nits.
-inline QImage imageForSdrDisplay(const QImage &original, bool scRgb = false, double desktopWhiteNits = 0) {
+inline QImage imageForSdrDisplay(const QImage &original, bool scRgb = false, double desktopWhiteNits = 0, bool inferDesktopWhite = true) {
     if(original.isNull())return {};
     const auto transfer=original.colorSpace().transferFunction();
     const bool pq=transfer==QColorSpace::TransferFunction::St2084;
     const bool hlg=transfer==QColorSpace::TransferFunction::Hlg;
     if(!scRgb && !pq && !hlg)return original;
-    if(desktopWhiteNits<=0)desktopWhiteNits=original.text("capSdrWhiteNits").toDouble();
+    if(desktopWhiteNits<=0 && inferDesktopWhite)desktopWhiteNits=original.text("capSdrWhiteNits").toDouble();
     const bool desktop=std::isfinite(desktopWhiteNits) && desktopWhiteNits>0;
     const double whiteNits=desktop?desktopWhiteNits:203.0;
     const auto source=original.convertToFormat(scRgb?QImage::Format_RGBA32FPx4:QImage::Format_RGBA64);
@@ -61,12 +62,15 @@ inline QImage imageForSdrDisplay(const QImage &original, bool scRgb = false, dou
             }
             // Desktop SDR pixels already include the OS reference-white gain.
             // Undo that gain without applying a second, film-style tone curve.
-            if(!desktop){
+            if(desktop){
+                std::array<double,3> mapped{rgb[0],rgb[1],rgb[2]};screenshot::desktopMap(mapped);
+                for(int c=0;c<3;++c)rgb[c]=mapped[c];
+            }else{
                 const double lum=std::max(0.0,.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2]);
                 const double mapped=lum*(2.51*lum+.03)/(lum*(2.43*lum+.59)+.14);
                 if(lum>0)for(auto &v:rgb)v*=mapped/lum;
             }
-            const auto alpha=scRgb?quint16(std::lround(std::clamp(double(floats[x*4+3]),0.0,1.0)*65535.0)):pixel.alpha();
+            const auto alpha=scRgb?quint16(std::lround(std::clamp(screenshot::finite(floats[x*4+3]),0.0,1.0)*65535.0)):pixel.alpha();
             out[x]=QRgba64::fromRgba64(pack(rgb[0]),pack(rgb[1]),pack(rgb[2]),alpha);
         }
     }

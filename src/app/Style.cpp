@@ -20,6 +20,9 @@ QString applicationStyleSheet(bool dark)
         QToolButton:pressed, QPushButton:pressed { background: #e5e5e5; }
         QToolButton:disabled, QPushButton:disabled { color: #929292; background: #eeeeee; }
         QToolButton:checked, QPushButton:checked { background: #e5f1fb; border-color: #5aa7df; }
+        QTabBar#communityTabs::tab { background: #f3f3f3; padding: 7px 10px; border-bottom: 2px solid #d1d1d1; }
+        QTabBar#communityTabs::tab:hover { background: #f0f0f0; }
+        QTabBar#communityTabs::tab:selected { background: #e5f1fb; border-bottom-color: #0067c0; }
         QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-bottom: 2px solid #0067c0; }
         QListWidget, QTreeWidget, QPlainTextEdit, QScrollArea { background: #ffffff; border: 1px solid #d1d1d1; }
         QListWidget::item { min-height: 32px; padding: 1px 6px; }

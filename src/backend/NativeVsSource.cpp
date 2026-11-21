@@ -41,10 +41,14 @@ struct Source {
     }
     void open() {
         close(); ordinal = -1; draining = false;
-        if (avformat_open_input(&format, path.c_str(), nullptr, nullptr) < 0 ||
-            avformat_find_stream_info(format, nullptr) < 0)
+        if (avformat_open_input(&format, path.c_str(), nullptr, nullptr) < 0)
             throw std::runtime_error("Source could not open media");
-        stream = av_find_best_stream(format, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+        // The JXL demuxer has a single stream. Decode its complete packet below
+        // rather than probing an image whose codestream exceeds the probe size.
+        const bool jpegXL = format->nb_streams == 1 && format->streams[0]->codecpar->codec_id == AV_CODEC_ID_JPEGXL;
+        if (!jpegXL && avformat_find_stream_info(format, nullptr) < 0)
+            throw std::runtime_error("Source could not open media");
+        stream = jpegXL ? 0 : av_find_best_stream(format, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
         if (stream < 0) throw std::runtime_error("Source has no video stream");
         auto* st = format->streams[stream];
         if (const auto* dv = av_packet_side_data_get(st->codecpar->coded_side_data,
@@ -102,7 +106,7 @@ struct Source {
 
 VSVideoFormat videoFormat(const AVFrame* f, VSCore* core, const VSAPI* api) {
     const auto* d = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(f->format));
-    if (!d || (d->flags & (AV_PIX_FMT_FLAG_HWACCEL | AV_PIX_FMT_FLAG_BE | AV_PIX_FMT_FLAG_PAL | AV_PIX_FMT_FLAG_ALPHA)))
+    if (!d || (d->flags & (AV_PIX_FMT_FLAG_HWACCEL | AV_PIX_FMT_FLAG_PAL | AV_PIX_FMT_FLAG_ALPHA)))
         throw std::runtime_error("Source pixel format is not supported by the lossless VS bridge");
     const bool rgb = (d->flags & AV_PIX_FMT_FLAG_RGB) != 0;
     const bool floating = (d->flags & AV_PIX_FMT_FLAG_FLOAT) != 0;
@@ -225,6 +229,7 @@ const VSFrame* VS_CC getFrame(int n, int reason, void* data, void**, VSFrameCont
         output = api->newVideoFrame(&fmt, s.frame->width, s.frame->height, nullptr, core);
         if (!output) throw std::runtime_error("VS source frame allocation failed");
         const auto* descriptor = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(s.frame->format));
+        const bool swapBytes = descriptor->flags & AV_PIX_FMT_FLAG_BE;
         const auto* stream = s.format->streams[s.stream]->codecpar;
         const bool needsDigest = sideData(s, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA, AV_PKT_DATA_MASTERING_DISPLAY_METADATA) ||
             sideData(s, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL, AV_PKT_DATA_CONTENT_LIGHT_LEVEL) ||
@@ -233,8 +238,8 @@ const VSFrame* VS_CC getFrame(int n, int reason, void* data, void**, VSFrameCont
             av_packet_side_data_get(stream->coded_side_data, stream->nb_coded_side_data, AV_PKT_DATA_DYNAMIC_HDR10_PLUS);
         std::uint64_t digest = UINT64_C(14695981039346656037);
         for (int plane = 0; plane < fmt.numPlanes; ++plane) {
-            // Descriptor components are logical R/G/B (even when the planes
-            // are GBR) or Y/U/V. Packed RGB is only deinterleaved byte-for-byte.
+            // Descriptor components follow logical R/G/B or Y/U/V order.
+            // VapourSynth on Windows stores multibyte samples little-endian.
             const auto component = descriptor->comp[plane];
             const int input = component.plane, rows = api->getFrameHeight(output, plane);
             const int samples = api->getFrameWidth(output, plane), width = samples * fmt.bytesPerSample;
@@ -244,7 +249,12 @@ const VSFrame* VS_CC getFrame(int n, int reason, void* data, void**, VSFrameCont
             for (int y = 0; y < rows; ++y) {
                 const auto* row = s.frame->data[input] + y * s.frame->linesize[input] + component.offset;
                 auto* target = destination + y * stride;
-                if (component.step == fmt.bytesPerSample) std::memcpy(target, row, width);
+                if (swapBytes) {
+                    for (int x = 0; x < samples; ++x) {
+                        const auto* sample = row + x * component.step;
+                        std::reverse_copy(sample, sample + fmt.bytesPerSample, target + x * fmt.bytesPerSample);
+                    }
+                } else if (component.step == fmt.bytesPerSample) std::memcpy(target, row, width);
                 else for (int x = 0; x < samples; ++x)
                     std::memcpy(target + x * fmt.bytesPerSample, row + x * component.step, fmt.bytesPerSample);
                 if (needsDigest) for (int x = 0; x < width; ++x) { digest ^= target[x]; digest *= UINT64_C(1099511628211); }
@@ -286,7 +296,10 @@ void VS_CC create(const VSMap* in, VSMap* out, void*, VSCore* core, const VSAPI*
 }
 }
 
+void registerNativeCube(VSPlugin *plugin, const VSPLUGINAPI *api);
+
 VS_EXTERNAL_API(void) VapourSynthPluginInit2(VSPlugin* plugin, const VSPLUGINAPI* api) {
     api->configPlugin("com.vsrenderer.native-source", "vsrsource", "VS Renderer FFmpeg source", VS_MAKE_VERSION(1, 0), VAPOURSYNTH_API_VERSION, 0, plugin);
     api->registerFunction("Source", "source:data;", "clip:vnode;", create, nullptr, plugin);
+    registerNativeCube(plugin, api);
 }

@@ -1,5 +1,7 @@
 #include "player/PlayerThumbnails.h"
 #include "player/PlayerAssociations.h"
+#include "image/RawFormats.h"
+#include <algorithm>
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -33,7 +35,7 @@ QStringList imports(const QString &path){
     return result;
 }
 }
-QStringList thumbnailExtensions(){return playerVideoExtensions()+QStringList{"jxl","avif","webp","png","jpg","jpeg","bmp","gif","tif","tiff","heic","heif","qoi","jp2","j2k","exr"};}
+QStringList thumbnailExtensions(){return playerVideoExtensions()+playerImageExtensions();}
 bool registerThumbnailProvider(const QStringList &extensions,const QString &library,const QString &root){
     if(extensions.isEmpty()||!QFileInfo(library).isFile())return false;
     for(const auto &extension:extensions)if(!thumbnailExtensions().contains(extension))return false;
@@ -75,6 +77,11 @@ bool installPlayerThumbnails(const QStringList &extensions,QString *error){
     if(extensions.isEmpty())return fail(QCoreApplication::translate("PlayerWindow","请先勾选需要缩略图的视频或图片格式。"));
     QDir source(QCoreApplication::applicationDirPath());
     QStringList names{"vsr-thumbnail.dll","vsr-thumbnail-worker.exe","avutil-61.dll","swresample-7.dll","avcodec-63.dll","avformat-63.dll","swscale-10.dll"};
+    const auto rawFormats = playerRawExtensions();
+    const bool raw = std::any_of(extensions.cbegin(), extensions.cend(), [&rawFormats](const QString &extension) {
+        return rawFormats.contains(extension);
+    });
+    if (raw) names << "FFF.Native.dll" << "libraw.dll";
     const auto locate=[&](const QString &name,const QString &parent=QString()){
         for(const auto &folder:QStringList{parent,source.absolutePath(),QFileInfo(playerAssociationExecutable()).absolutePath()})if(!folder.isEmpty()){const auto path=QDir(folder).filePath(name);if(QFileInfo(path).isFile())return path;}
         return QStandardPaths::findExecutable(name);

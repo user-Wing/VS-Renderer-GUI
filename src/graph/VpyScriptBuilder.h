@@ -27,6 +27,7 @@ public:
     static ScriptBuildResult buildGroups(const QString &sourcePath, SourceFilter sourceFilter,
                                          const QList<FilterTimeGroup> &groups);
     static QString pythonString(const QString &value);
+    static QString cubeHelper();
     static QString upgradeSharpen(const QString &script, const FilterGraph &graph);
     static QString networkSource(const QString &script, const QString &source);
 };

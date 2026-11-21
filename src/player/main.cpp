@@ -10,6 +10,9 @@
 #include "player/PlayerImageTools.h"
 #include <QTimer>
 #include <QFileInfo>
+#include <QFile>
+#include <QMessageBox>
+#include <QTemporaryDir>
 #include "update/SinglePlayerUpdater.h"
 #include <qt_windows.h>
 #include <array>
@@ -67,16 +70,46 @@ int main(int argc, char **argv) {
         vsr::registerPlayerAssociations(extensions, QCoreApplication::applicationFilePath());
 #endif
     QFont font("Comic Sans MS"); font.setPixelSize(13); app.setFont(font);
+    const auto arguments = app.arguments();
+#ifndef VSR_LITE_PLAYER
+    std::unique_ptr<QTemporaryDir> previewSettings;
+    if (arguments.value(1) == "--renderer-preview") {
+        previewSettings = std::make_unique<QTemporaryDir>();
+        if (!previewSettings->isValid() || arguments.size() < 3) {
+            QMessageBox::warning(nullptr, QStringLiteral("VS Player"), QStringLiteral("无法准备 Renderer 预览会话。"));
+            return 1;
+        }
+        const auto current = qEnvironmentVariable("VSR_PLAYER_CONFIG",
+            QDir(app.applicationDirPath()).filePath("player.ini"));
+        const auto preview = previewSettings->filePath("player.ini");
+        if (QFileInfo::exists(current) && !QFile::copy(current, preview)) {
+            QMessageBox::warning(nullptr, QStringLiteral("VS Player"), QStringLiteral("无法读取播放器预览配置。"));
+            return 1;
+        }
+        QSettings settings(preview, QSettings::IniFormat);
+        settings.setValue("player/preset", QString());
+        settings.setValue("player/renderer", "VS");
+        settings.setValue("player/interpolationAuto", false);
+        settings.setValue("playback/remember", false);
+        settings.remove("render/customShader");
+        settings.sync();
+        qputenv("VSR_PLAYER_CONFIG", preview.toUtf8());
+    }
+#endif
     vsr::PlayerWindow window; window.show();
 #ifdef VSR_LITE_PLAYER
     auto *updater=new vsr::SinglePlayerUpdater(&window);QTimer::singleShot(5000,&window,[updater]{updater->check();});
 #endif
-    const auto arguments = app.arguments();
     QTimer::singleShot(0,&window,[&window,arguments]{
 #ifdef VSR_LITE_PLAYER
     for (int i = 1; i < arguments.size(); ++i)
         if (!arguments[i].endsWith(".vpy", Qt::CaseInsensitive)) window.openFile(arguments[i]);
 #else
+    if (arguments.value(1) == "--renderer-preview") {
+        if (arguments.size() > 3) window.loadPreset(arguments[3]);
+        window.openFile(arguments[2]);
+        return;
+    }
     for (int i = 1; i < arguments.size(); ++i)
         if (arguments[i].endsWith(".vpy", Qt::CaseInsensitive)) window.loadPreset(arguments[i]);
         else window.openFile(arguments[i]);

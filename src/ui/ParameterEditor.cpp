@@ -1,4 +1,5 @@
 #include "ui/ParameterEditor.h"
+#include "color/CubeLut.h"
 
 #include "graph/FilterCatalog.h"
 #include "graph/FilterGraph.h"
@@ -13,6 +14,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QAbstractItemView>
@@ -132,16 +134,38 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             auto *path = new QLineEdit(value.toString(), container);
             if (definition->id == "anime4k" && id == "shader") shaderPath = path;
             auto *browse = new QPushButton(QStringLiteral("浏览…"), container);
-            connect(path, &QLineEdit::editingFinished, this,
-                    [this, id, path] { emit parameterChanged(id, path->text()); });
-            connect(browse, &QPushButton::clicked, this, [this, id, path] {
-                const QString selected = QFileDialog::getOpenFileName(
-                    this, QStringLiteral("选择 GLSL/HLSL 着色器"), path->text(),
-                    QStringLiteral("Shaders (*.glsl *.hook *.hlsl);;所有文件 (*.*)"));
-                if (!selected.isEmpty()) {
-                    path->setText(selected);
-                    emit parameterChanged(id, selected);
+            const bool cube = definition->id == "cube_lut";
+            const auto commit = [this, id, path, cube](const QString &entered) {
+                auto selected = entered;
+                if (cube && !selected.isEmpty()) {
+                    const QDir appDir(QCoreApplication::applicationDirPath());
+                    const auto absolute = appDir.absoluteFilePath(selected);
+                    QString error;
+                    selected = importCubeFile(absolute, cubeLibrary(), &error);
+                    if (selected.isEmpty()) {
+                        path->setText(path->property("appliedCube").toString());
+                        QMessageBox::warning(this, QStringLiteral("导入 Cube"), error);
+                        return;
+                    }
+                    selected = appDir.relativeFilePath(selected);
                 }
+                path->setText(selected);
+                if (cube) path->setProperty("appliedCube", selected);
+                emit parameterChanged(id, selected);
+            };
+            if (cube) path->setProperty("appliedCube", value);
+            connect(path, &QLineEdit::editingFinished, this,
+                    [commit, path, cube] {
+                        if (!cube || path->text() != path->property("appliedCube").toString()) commit(path->text());
+                    });
+            connect(browse, &QPushButton::clicked, this, [this, path, cube, commit] {
+                const auto library = cubeLibrary();
+                const auto start = cube ? (library.exists() ? library.absolutePath() : QCoreApplication::applicationDirPath()) : path->text();
+                const QString selected = QFileDialog::getOpenFileName(
+                    this, cube ? QStringLiteral("选择 Cube LUT") : QStringLiteral("选择 GLSL/HLSL 着色器"), start,
+                    cube ? QStringLiteral("Cube LUT (*.cube)") :
+                        QStringLiteral("Shaders (*.glsl *.hook *.hlsl);;所有文件 (*.*)"));
+                if (!selected.isEmpty()) commit(selected);
             });
             layout->addWidget(path, 1);
             layout->addWidget(browse);
@@ -165,6 +189,17 @@ void ParameterEditor::setNode(const FilterDefinition *definition, const FilterNo
             form_->addWidget(label, row, 0, Qt::AlignVCenter);
             form_->addWidget(editor, row++, 1, Qt::AlignRight | Qt::AlignVCenter);
         }
+    }
+    if (definition->id == "cube_lut") {
+        auto *manual = findChild<QCheckBox *>("parameter_manual_space");
+        auto *space = findChild<QComboBox *>("parameter_space");
+        auto *label = findChild<QLabel *>("parameterLabel_space");
+        const auto showSpace = [space, label](bool visible) {
+            space->setVisible(visible);
+            label->setVisible(visible);
+        };
+        showSpace(manual->isChecked());
+        connect(manual, &QCheckBox::toggled, this, showSpace);
     }
     if (shaderMode && shaderPath) {
         QStringList choices;for(const auto &p:definition->parameters)if(p.id=="mode")choices=p.choices;

@@ -18,6 +18,35 @@ class TestPreviewPane final : public QObject {
     Q_OBJECT
 
 private slots:
+    void comparisonDragSlowsDownOnlyAtLowZoom()
+    {
+        PreviewPane pane("Test", "Fit");
+        pane.resize(640, 400);
+        pane.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&pane));
+        auto *surface = pane.surface();
+        const QPoint start = surface->rect().center();
+        const QPoint end = start + QPoint(12, 0);
+        const auto drag = [&](float zoom, bool comparison) {
+            pane.setComparisonPan(comparison);
+            pane.adoptView(zoom, 0, 0);
+            QMouseEvent press(QEvent::MouseButtonPress, start, surface->mapToGlobal(start),
+                              Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QMouseEvent move(QEvent::MouseMove, end, surface->mapToGlobal(end),
+                             Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QMouseEvent release(QEvent::MouseButtonRelease, end, surface->mapToGlobal(end),
+                                Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(surface, &press);
+            QApplication::sendEvent(surface, &move);
+            QApplication::sendEvent(surface, &release);
+            return pane.pan().x();
+        };
+        const auto normal = drag(1.25, false);
+        QVERIFY(normal > 0);
+        QVERIFY(std::abs(drag(1.25, true) / normal - 0.7) < 0.001);
+        const auto high = drag(5.0, false);
+        QVERIFY(std::abs(drag(5.0, true) - high) < 0.001);
+    }
     void nativeSurfaceIsBlackBeforeFirstFrame(){
         PreviewPane pane("Test","Native");pane.resize(640,400);pane.findChild<QLabel *>("previewPlaceholder")->setStyleSheet("background:white");pane.show();QVERIFY(QTest::qWaitForWindowExposed(&pane));QTest::qWait(50);pane.setSurfaceActive(true);QTest::qWait(50);
         const auto window=reinterpret_cast<HWND>(pane.surface()->winId());const auto dc=GetDC(window);QVERIFY(dc);const auto pixel=GetPixel(dc,pane.surface()->width()/2,pane.surface()->height()/2);ReleaseDC(window,dc);

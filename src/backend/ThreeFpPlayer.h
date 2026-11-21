@@ -68,6 +68,7 @@ public:
     bool setVideoEnhancement(bool hdr, bool enabled);
     VideoEnhancementStatus videoEnhancementStatus(bool hdr) const;
     QImage capture() const;
+    QImage captureFullFrame(QSize size = {}) const;
     QImage captureFloat() const;
 
 signals:

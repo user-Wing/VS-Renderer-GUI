@@ -23,6 +23,23 @@ using namespace vsr;
 class TestParameterEditor final : public QObject {
     Q_OBJECT
 private slots:
+    void cubeManualProfileShowsOnlyWhenEnabled()
+    {
+        FilterGraph graph;
+        const int row = graph.add("cube_lut");
+        ParameterEditor editor;
+        editor.setNode(FilterCatalog::find("cube_lut"), graph.at(row));
+        auto *manual = editor.findChild<QCheckBox *>("parameter_manual_space");
+        auto *space = editor.findChild<QComboBox *>("parameter_space");
+        QVERIFY(manual && space);
+        QCOMPARE(manual->isChecked(), false);
+        QVERIFY(space->isHidden());
+        manual->setChecked(true);
+        QVERIFY(!space->isHidden());
+        manual->setChecked(false);
+        QVERIFY(space->isHidden());
+    }
+
     void openNguFirstShaderAndExport(){
         const auto *definition=FilterCatalog::find("anime4k");QVERIFY(definition);
         QStringList choices;for(const auto &p:definition->parameters)if(p.id=="mode")choices=p.choices;

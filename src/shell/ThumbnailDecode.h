@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <atomic>
 #include <string>
+#include <vector>
+#include <cmath>
 #include <cerrno>
 extern "C" {
 #include <libavformat/avformat.h>
@@ -63,6 +65,78 @@ struct Input {
         return SUCCEEDED(i.stream->Seek(move,DWORD(origin),&result))?int64_t(result.QuadPart):AVERROR(EIO);
     }
 };
+HBITMAP thumbnailBitmap(int width,int height,void **pixels){
+    BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=width;
+    info.bmiHeader.biHeight=-height;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
+    return CreateDIBSection(nullptr,&info,DIB_RGB_COLORS,pixels,nullptr,0);
+}
+
+void setMatrix(Decoder &d,SwsContext *scaler,const AVFrame *frame){
+    const int matrix=frame->colorspace==AVCOL_SPC_BT709?SWS_CS_ITU709:frame->colorspace==AVCOL_SPC_BT2020_NCL?SWS_CS_BT2020:SWS_CS_DEFAULT;
+    d.sws_setColorspaceDetails(scaler,d.sws_getCoefficients(matrix),frame->color_range==AVCOL_RANGE_JPEG,d.sws_getCoefficients(matrix),1,0,1<<16,1<<16);
+}
+
+HRESULT decodeGrid(Decoder &d,AVFormatContext *format,const AVStreamGroup *group,UINT size,HBITMAP *bitmap,WTS_ALPHATYPE *alpha){
+    const auto &grid=*group->params.tile_grid;
+    if(!grid.offsets||grid.nb_tiles==0||grid.nb_tiles>256||grid.width<=0||grid.height<=0||
+       grid.horizontal_offset<0||grid.vertical_offset<0||grid.horizontal_offset>grid.coded_width||
+       grid.vertical_offset>grid.coded_height||grid.width>grid.coded_width-grid.horizontal_offset||
+       grid.height>grid.coded_height-grid.vertical_offset||grid.coded_width>32768||grid.coded_height>32768)return E_FAIL;
+    const double ratio=std::min(1.0,double(size)/std::max(grid.width,grid.height));
+    const auto scale=[ratio](int value){return int(std::lround(value*ratio));};
+    const int width=std::max(1,scale(grid.width)),height=std::max(1,scale(grid.height));
+    std::vector<uint32_t> canvas(size_t(width)*height,
+        0xff000000u|uint32_t(grid.background[0])<<16|uint32_t(grid.background[1])<<8|grid.background[2]);
+    auto *packet=d.av_packet_alloc();
+    auto *frame=d.av_frame_alloc();
+    unsigned remaining=grid.nb_tiles;
+    std::vector<bool> filled(remaining);
+    for(int n=0;packet&&frame&&remaining&&n<4096&&d.av_read_frame(format,packet)>=0;++n){
+        for(unsigned i=0;i<grid.nb_tiles;++i){
+            const auto &offset=grid.offsets[i];
+            if(filled[i]||offset.idx>=group->nb_streams)continue;
+            const auto *track=group->streams[offset.idx];
+            if(int(track->index)!=packet->stream_index)continue;
+            if(offset.horizontal<0||offset.vertical<0||offset.horizontal>=grid.coded_width||offset.vertical>=grid.coded_height)continue;
+            const auto *decoder=d.avcodec_find_decoder(track->codecpar->codec_id);
+            auto *codec=decoder?d.avcodec_alloc_context3(decoder):nullptr;
+            if(!codec)continue;
+            codec->thread_count=1;codec->max_pixels=67108864;
+            const bool decoded=d.avcodec_parameters_to_context(codec,track->codecpar)>=0&&d.avcodec_open2(codec,decoder,nullptr)>=0&&
+                d.avcodec_send_packet(codec,packet)>=0&&
+                (d.avcodec_receive_frame(codec,frame)==0||
+                 (d.avcodec_send_packet(codec,nullptr)>=0&&d.avcodec_receive_frame(codec,frame)==0));
+            d.avcodec_free_context(&codec);
+            if(!decoded||frame->width<=0||frame->height<=0||frame->width>32768||frame->height>32768)continue;
+            const int x=scale(offset.horizontal-grid.horizontal_offset),y=scale(offset.vertical-grid.vertical_offset);
+            const int w=std::max(1,scale(offset.horizontal-grid.horizontal_offset+frame->width)-x);
+            const int h=std::max(1,scale(offset.vertical-grid.vertical_offset+frame->height)-y);
+            if(int64_t(w)*h>4194304)continue;
+            auto *scaler=d.sws_getContext(frame->width,frame->height,AVPixelFormat(frame->format),w,h,AV_PIX_FMT_BGRA,SWS_BILINEAR,nullptr,nullptr,nullptr);
+            if(!scaler)continue;
+            setMatrix(d,scaler,frame);
+            std::vector<uint32_t> tile(size_t(w)*h+16);
+            uint8_t *target[]{reinterpret_cast<uint8_t*>(tile.data()),nullptr,nullptr,nullptr};int stride[]{w*4,0,0,0};
+            const int rows=d.sws_scale(scaler,frame->data,frame->linesize,0,frame->height,target,stride);
+            d.sws_freeContext(scaler);
+            if(rows!=h)continue;
+            const int first=std::max(0,x),last=std::min(width,x+w);
+            if(first<last)for(int py=std::max(0,y);py<std::min(height,y+h);++py)
+                std::copy_n(tile.data()+size_t(py-y)*w+first-x,last-first,canvas.data()+size_t(py)*width+first);
+            filled[i]=true;
+            --remaining;
+        }
+        d.av_packet_unref(packet);
+    }
+    d.av_frame_free(&frame);d.av_packet_free(&packet);
+    if(remaining)return E_FAIL;
+    void *pixels=nullptr;
+    auto image=thumbnailBitmap(width,height,&pixels);if(!image)return E_OUTOFMEMORY;
+    std::copy(canvas.begin(),canvas.end(),static_cast<uint32_t*>(pixels));
+    *bitmap=image;*alpha=WTSAT_RGB;
+    return S_OK;
+}
+
 HRESULT decode(IStream *stream,UINT size,HBITMAP *bitmap,WTS_ALPHATYPE *alpha){
     Decoder d;if(!d.load())return HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
     Input input{stream,GetTickCount64()+15000};LARGE_INTEGER zero{};
@@ -79,6 +153,14 @@ HRESULT decode(IStream *stream,UINT size,HBITMAP *bitmap,WTS_ALPHATYPE *alpha){
         AVDictionary *options=nullptr;d.av_dict_set(&options,"protocol_whitelist","",0);
         const int opened=d.avformat_open_input(&format,nullptr,nullptr,&options);d.av_dict_free(&options);
         if(opened<0)break;
+        const AVStreamGroup *grid=nullptr;
+        for(unsigned i=0;i<format->nb_stream_groups;++i){
+            const auto *candidate=format->stream_groups[i];
+            if(candidate->type!=AV_STREAM_GROUP_PARAMS_TILE_GRID||!candidate->params.tile_grid)continue;
+            if(!grid||candidate->disposition&AV_DISPOSITION_DEFAULT)grid=candidate;
+            if(candidate->disposition&AV_DISPOSITION_DEFAULT)break;
+        }
+        if(grid){result=decodeGrid(d,format,grid,size,bitmap,alpha);break;}
         // JPEG XL probing decodes the whole image. Decode it only once below.
         const bool jpegxl=format->nb_streams==1&&format->streams[0]->codecpar->codec_id==AV_CODEC_ID_JPEGXL;
         if(!jpegxl&&d.avformat_find_stream_info(format,nullptr)<0)break;
@@ -108,10 +190,8 @@ HRESULT decode(IStream *stream,UINT size,HBITMAP *bitmap,WTS_ALPHATYPE *alpha){
         const double factor=std::min(1.,double(size)/std::max(frame->width,frame->height));
         const int width=std::max(1,int(frame->width*factor)),height=std::max(1,int(frame->height*factor));
         scaler=d.sws_getContext(frame->width,frame->height,AVPixelFormat(frame->format),width,height,AV_PIX_FMT_BGRA,SWS_BILINEAR,nullptr,nullptr,nullptr);if(!scaler)break;
-        const int matrix=frame->colorspace==AVCOL_SPC_BT709?SWS_CS_ITU709:frame->colorspace==AVCOL_SPC_BT2020_NCL?SWS_CS_BT2020:SWS_CS_DEFAULT;
-        d.sws_setColorspaceDetails(scaler,d.sws_getCoefficients(matrix),frame->color_range==AVCOL_RANGE_JPEG,d.sws_getCoefficients(matrix),1,0,1<<16,1<<16);
-        BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=width;info.bmiHeader.biHeight=-height;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
-        void *pixels=nullptr;auto image=CreateDIBSection(nullptr,&info,DIB_RGB_COLORS,&pixels,nullptr,0);if(!image)break;
+        setMatrix(d,scaler,frame);
+        void *pixels=nullptr;auto image=thumbnailBitmap(width,height,&pixels);if(!image)break;
         uint8_t *output[]{static_cast<uint8_t*>(pixels),nullptr,nullptr,nullptr};int stride[]{width*4,0,0,0};
         if(d.sws_scale(scaler,frame->data,frame->linesize,0,frame->height,output,stride)!=height){DeleteObject(image);break;}
         // Shell expects premultiplied BGRA.

@@ -47,11 +47,12 @@ QString fileVersion(const QString &path){
 ComponentDownloads::ComponentDownloads(QWidget *parent):QWidget(parent),network_(new QNetworkAccessManager(this)){
     setObjectName("componentDownloads");cache_=QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).filePath("components");QDir().mkpath(cache_);
     auto *layout=new QVBoxLayout(this);auto *bar=new QHBoxLayout;bar->addWidget(new QLabel(tr("Full 版 · 软件与组件下载"),this));bar->addStretch();automatic_=new QCheckBox(tr("自动下载最新版本"),this);automatic_->setObjectName("componentAutomatic");bar->addWidget(automatic_);auto *refreshButton=new QPushButton(tr("刷新版本"),this);bar->addWidget(refreshButton);auto *clean=new QPushButton(tr("清理本地缓存"),this);bar->addWidget(clean);layout->addLayout(bar);
-    table_=new QTreeWidget(this);table_->setObjectName("componentVersions");table_->setHeaderLabels({tr("组件 / 可下载的程序包"),tr("版本"),tr("本地版本"),tr("大小")});table_->header()->setSectionResizeMode(0,QHeaderView::Stretch);table_->setColumnWidth(1,100);table_->setColumnWidth(2,105);table_->setColumnWidth(3,90);layout->addWidget(table_,1);
+    table_=new QTreeWidget(this);table_->setObjectName("componentVersions");table_->setUniformRowHeights(true);table_->setHeaderLabels({tr("组件 / 可下载的程序包"),tr("版本"),tr("本地版本"),tr("大小")});table_->header()->setSectionResizeMode(0,QHeaderView::Stretch);table_->setColumnWidth(1,100);table_->setColumnWidth(2,105);table_->setColumnWidth(3,90);layout->addWidget(table_,1);
     for(const auto &id:ids){auto *group=new QTreeWidgetItem(table_);group->setText(0,title(id));group->setData(0,Qt::UserRole,id);groups_[id]=group;}
     auto *actions=new QHBoxLayout;auto *download=new QPushButton(tr("下载所选版本"),this);download->setObjectName("componentDownload");actions->addWidget(download);apply_=new QPushButton(tr("应用组件并重启"),this);apply_->setEnabled(false);actions->addWidget(apply_);softwareButton_=new QPushButton(tr("安装已下载的新版本本体"),this);softwareButton_->setEnabled(false);actions->addWidget(softwareButton_);actions->addStretch();layout->addLayout(actions);
     status_=new QLabel(tr("读取各组件目录中的 Windows 程序包；旧本体只下载，组件可以安装旧版本。"),this);status_->setObjectName("componentStatus");status_->setWordWrap(true);layout->addWidget(status_);
     connect(refreshButton,&QPushButton::clicked,this,&ComponentDownloads::refresh);connect(automatic_,&QCheckBox::toggled,this,[this](bool checked){if(checked)refresh();});
+    connect(table_, &QTreeWidget::itemExpanded, this, &ComponentDownloads::populateVersions);
     connect(download,&QPushButton::clicked,this,[this]{if(downloading_)return;const auto *item=table_->currentItem();if(!item || item->parent()==nullptr)return;const auto id=item->parent()->data(0,Qt::UserRole).toString();const int index=item->data(0,Qt::UserRole).toInt();queue_={releases_[id].at(index)};downloadNext();});
     connect(clean,&QPushButton::clicked,this,[this]{if(downloading_){status_->setText(tr("下载/验证期间不能清理缓存。"));return;}int removed=0;for(const auto &name:QDir(cache_).entryList({"*.7z","*.zip","*.exe","*.partial","*.aria2"},QDir::Files))removed+=QFile::remove(QDir(cache_).filePath(name));status_->setText(tr("已清理 %1 个下载缓存文件；已安装组件保留。").arg(removed));software_={};softwareButton_->setEnabled(false);});
     connect(apply_,&QPushButton::clicked,this,&ComponentDownloads::installComponents);connect(softwareButton_,&QPushButton::clicked,this,&ComponentDownloads::installSoftware);
@@ -85,14 +86,35 @@ QString ComponentDownloads::localVersion(const QString &id)const{
     if(!QFileInfo(QDir(app).filePath(file)).isFile())return {};if(id=="MadVR" || id=="LAV-Filters")return fileVersion(QDir(app).filePath(file));if(id=="ffmpeg" && !installed.isEmpty())return installed;
     QProcess p;p.start(QDir(app).filePath(file),{id=="ffmpeg"?"-version":"--version"});if(!p.waitForFinished(1500))return {};const auto output=QString::fromUtf8(p.readAllStandardOutput());const auto match=QRegularExpression("\\d+(?:\\.\\d+){1,3}").match(output);return match.captured(0);
 }
-void ComponentDownloads::refresh(){if(pending_ || downloading_)return;releases_.clear();status_->setText(tr("正在读取 ModelScope 组件目录…"));pending_=ids.size();for(const auto &id:ids){auto *group=groups_[id];qDeleteAll(group->takeChildren());group->setText(2,localVersion(id));fetch(id,1);}}
+void ComponentDownloads::refresh(){if(pending_ || downloading_)return;releases_.clear();status_->setText(tr("正在读取 ModelScope 组件目录…"));pending_=ids.size();for(const auto &id:ids){auto *group=groups_[id];group->setChildIndicatorPolicy(QTreeWidgetItem::DontShowIndicatorWhenChildless);qDeleteAll(group->takeChildren());group->setText(2,localVersion(id));fetch(id,1);}}
 void ComponentDownloads::fetch(const QString &id,int page){
     QUrl url("https://modelscope.cn/api/v1/datasets/ARXChem/Software-List/repo/tree");QUrlQuery query;query.addQueryItem("Revision","master");query.addQueryItem("Root",id);query.addQueryItem("Recursive","True");query.addQueryItem("PageNumber",QString::number(page));query.addQueryItem("PageSize","100");url.setQuery(query);QNetworkRequest request(url);request.setTransferTimeout(20000);auto *reply=network_->get(request);
     connect(reply,&QNetworkReply::finished,this,[this,reply,id,page]{const auto doc=QJsonDocument::fromJson(reply->readAll()).object();const auto data=doc.value("Data").toObject();const auto files=data.value("Files").toArray();const bool ok=reply->error()==QNetworkReply::NoError && doc.value("Code").toInt()==200 && data.value("Files").isArray();reply->deleteLater();
         if(ok){releases_[id].append(releases(id,files));if(files.size()==100 && page<1000){fetch(id,page+1);return;}}
         auto &found=releases_[id];std::stable_sort(found.begin(),found.end(),[](const auto &a,const auto &b){return newer(a.version,b.version);});auto *group=groups_[id];
-        for(int i=0;i<found.size();++i){auto *row=new QTreeWidgetItem(group);row->setText(0,QFileInfo(found[i].path).fileName());row->setToolTip(0,found[i].path);row->setText(1,found[i].version);row->setText(3,QString::number(found[i].size/1048576.,'f',1)+" MiB");row->setData(0,Qt::UserRole,i);}group->setToolTip(0,ok?(found.isEmpty()?tr("没有可用 Windows 程序包；源码/说明/安装器不列入"):id):tr("目录不可用或请求失败，可稍后刷新"));if(--pending_==0)finishRefresh();
+        group->setChildIndicatorPolicy(found.isEmpty() ? QTreeWidgetItem::DontShowIndicatorWhenChildless : QTreeWidgetItem::ShowIndicator);
+        if (group->isExpanded()) populateVersions(group);
+        group->setToolTip(0,ok?(found.isEmpty()?tr("没有可用 Windows 程序包；源码/说明/安装器不列入"):id):tr("目录不可用或请求失败，可稍后刷新"));if(--pending_==0)finishRefresh();
     });
+}
+void ComponentDownloads::populateVersions(QTreeWidgetItem *group)
+{
+    if (group->parent() || group->childCount()) return;
+    const auto id = group->data(0, Qt::UserRole).toString();
+    // A refresh can still be collecting subsequent pages for this group.
+    if (group->childIndicatorPolicy() != QTreeWidgetItem::ShowIndicator) return;
+    const auto found = releases_.value(id);
+    QList<QTreeWidgetItem *> rows;
+    rows.reserve(found.size());
+    for (int i = 0; i < found.size(); ++i) {
+        const auto &release = found.at(i);
+        auto *row = new QTreeWidgetItem({QFileInfo(release.path).fileName(), release.version,
+            QString(), QString::number(release.size/1048576., 'f', 1)+" MiB"});
+        row->setToolTip(0, release.path);
+        row->setData(0, Qt::UserRole, i);
+        rows.append(row);
+    }
+    group->addChildren(rows);
 }
 void ComponentDownloads::finishRefresh(){status_->setText(tr("版本列表已刷新；展开组件选择版本。缺少程序包的分类可悬停查看原因。"));if(automatic_->isChecked()){for(const auto &id:ids)if(!releases_[id].isEmpty() && newer(releases_[id].first().version,localVersion(id)))queue_<<releases_[id].first();if(queue_.isEmpty())status_->setText(tr("本地版本不低于可下载的最新版本，无需下载。"));else downloadNext();}}
 QString ComponentDownloads::cacheFile(const ComponentRelease &r)const{return QDir(cache_).filePath(r.id+"-"+r.sha256.left(12)+"-"+QFileInfo(r.path).fileName());}

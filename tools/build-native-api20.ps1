@@ -26,6 +26,12 @@ if(!$applied){
     if($LASTEXITCODE -ne 0){throw 'VSP upstream integration patch failed.'}
 }
 $projectRoot=Split-Path $PSScriptRoot -Parent
+$previewPatch=Join-Path $projectRoot 'patches/3fp-vsr-preview.patch'
+& git -C $NativeRoot apply --reverse --check $previewPatch 2>$null
+if($LASTEXITCODE -ne 0){
+    & git -C $NativeRoot apply $previewPatch
+    if($LASTEXITCODE -ne 0){throw 'VSR preview patch failed.'}
+}
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/PlaybackScheduling.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/PlaybackScheduling.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/LocalMediaPath.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/LocalMediaPath.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/AudioFormatPolicy.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Audio/AudioFormatPolicy.h') -Force

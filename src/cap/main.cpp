@@ -22,6 +22,8 @@
 #include "UiAccess.h"
 #include "HotkeyEdit.h"
 #include "image/ImageJxl.h"
+#include "image/ScreenshotPng.h"
+#include "image/ImageHdrSurface.h"
 #include "ui/About.h"
 
 static QString defaultDirectory()
@@ -46,6 +48,7 @@ static void copyImage(const QImage &image, unsigned attempt=0, unsigned request=
         for(int y=0;y<image.height();++y)raw.append(reinterpret_cast<const char*>(image.constScanLine(y)),image.width()*16);
         mime->setData("application/x-vscap-scrgb",raw);
         mime->setData("application/x-vscap-sdr-white-nits",QByteArray::number(cap::sdrWhiteNits(image),'g',17));
+        mime->setData("application/x-vscap-color-evidence",QJsonDocument(vsr::screenshot::json(vsr::screenshot::evidence(image))).toJson(QJsonDocument::Compact));
     }
     QApplication::clipboard()->setMimeData(mime);
     // Clipboard viewers can briefly hold OpenClipboard while processing a copy.
@@ -118,6 +121,15 @@ protected:
 
 class CaptureOverlay final : public QWidget {
     QImage canvas_, display_;
+    vsr::ImageHdrSurface *hdrSurface_=nullptr;
+    bool renderingChrome_=false, chromeUpdatePending_=false;
+    QString previewStatus_;
+    void updatePreviewStatus(){
+        const auto facts=vsr::screenshot::evidence(canvas_);
+        setProperty("capPreviewStatus",previewStatus_);
+        bar_->setToolTip(QStringLiteral("预览：%1\n捕获：%2；源存储 %3 位；有效精度未测量\n%4")
+            .arg(previewStatus_,facts.backend).arg(facts.sourceBits).arg(facts.degradation));
+    }
     bool displayDirty_ = true, embedded_ = false, constrainShape_ = false;
     std::function<void()> positionExternalBar_;
     QRect selection_, hoveredWindow_, pressedWindow_;
@@ -170,7 +182,8 @@ public:
         else {
             setGeometry(screen->geometry());
             MONITORINFO monitor{};monitor.cbSize=sizeof(monitor);
-            if(const auto *native=screen->nativeInterface<QNativeInterface::QWindowsScreen>())GetMonitorInfoW(native->handle(),&monitor);
+            if(const auto *native=screen->nativeInterface<QNativeInterface::QWindowsScreen>())if(GetMonitorInfoW(native->handle(),&monitor))
+                cap::placeCaptureWindow(this,QRect(monitor.rcMonitor.left,monitor.rcMonitor.top,monitor.rcMonitor.right-monitor.rcMonitor.left,monitor.rcMonitor.bottom-monitor.rcMonitor.top));
             struct Scan { CaptureOverlay *self; QScreen *screen; RECT monitor; } scan{this,screen,monitor.rcMonitor};
             EnumWindows([](HWND hwnd,LPARAM param)->BOOL {
                 auto *data=reinterpret_cast<Scan*>(param);
@@ -256,6 +269,11 @@ public:
         updateColor();updateOptions();
         bar_->adjustSize();
         bar_->hide();
+        if(!embedded_ && vsr::screenshot::evidence(canvas_).units==vsr::screenshot::Units::ScRgb80Nits){
+            hdrSurface_=new vsr::ImageHdrSurface(this);hdrSurface_->setGeometry(rect());
+            if(QGuiApplication::platformName()=="windows")hdrSurface_->setHdrEnabled(true);
+            previewStatus_=hdrSurface_->status();updatePreviewStatus();
+        }
         if(!embedded_){show();raise();activateWindow();}
     }
     QWidget *takeToolBar(QWidget *parent,std::function<void()> position) {
@@ -363,6 +381,10 @@ private:
 protected:
     bool eventFilter(QObject *object,QEvent *event) override {
         auto *widget=qobject_cast<QWidget*>(object);
+        if(hdrSurface_ && hdrSurface_->hdrActive() && !renderingChrome_ && widget && widget!=this && widget!=hdrSurface_ && isAncestorOf(widget) &&
+           (event->type()==QEvent::Paint || event->type()==QEvent::UpdateRequest || event->type()==QEvent::Show || event->type()==QEvent::Hide) && !chromeUpdatePending_){
+            chromeUpdatePending_=true;QTimer::singleShot(0,this,[this]{chromeUpdatePending_=false;update();});
+        }
         if(object==strokeButton_ && event->type()==QEvent::Wheel){
             const auto steps=static_cast<QWheelEvent*>(event)->angleDelta().y()/120;
             penWidth_=qBound(1,penWidth_+steps,512);penWidthInput_->setValue(penWidth_);updateOptions();event->accept();return true;
@@ -428,17 +450,21 @@ protected:
         setSelectionPixels(pixels);
         positionBar();update();
     }
-    void paintEvent(QPaintEvent *) override {
-        QPainter p(this);
-        if(displayDirty_){display_=cap::preview(canvas_);displayDirty_=false;}
-        p.drawImage(rect(), display_);
-        if(!embedded_)p.fillRect(rect(), QColor(0,0,0,105));
+    void paintChrome(QPainter &p,bool native) {
+        if(!embedded_){
+            if(native){
+                QRegion mask(rect());
+                if(!selection_.isEmpty())mask-=QRegion(selection_);
+                else if(selecting_ && !dragging_ && !hoveredWindow_.isEmpty())mask-=QRegion(hoveredWindow_);
+                p.save();p.setClipRegion(mask);p.fillRect(rect(),QColor(0,0,0,105));p.restore();
+            }else p.fillRect(rect(), QColor(0,0,0,105));
+        }
         if(!embedded_ && selecting_ && !dragging_ && !hoveredWindow_.isEmpty()){
-            p.drawImage(hoveredWindow_,display_,pixelRect(hoveredWindow_));
+            if(!native)p.drawImage(hoveredWindow_,display_,pixelRect(hoveredWindow_));
             p.setPen(QPen(QColor(110,190,255),2));p.setBrush(Qt::NoBrush);p.drawRect(hoveredWindow_.adjusted(1,1,-1,-1));
         }
         if (!embedded_ && !selection_.isEmpty()) {
-            p.drawImage(selection_, display_, selectionPixels_);
+            if(!native)p.drawImage(selection_, display_, selectionPixels_);
             p.setPen(QPen(Qt::white,1,Qt::DashLine));
             p.drawRect(selection_);
             const auto finalSize=selectionPixels_.size();
@@ -455,6 +481,25 @@ protected:
             const QRect drawRect=shapeRect();
             if(tool_==Rect)p.drawRect(drawRect);else if(tool_==Ellipse)p.drawEllipse(drawRect);else drawLine(p,origin_,last_);
         }
+    }
+    void paintEvent(QPaintEvent *) override {
+        if(hdrSurface_ && hdrSurface_->hdrActive()){
+            hdrSurface_->setGeometry(rect());
+            RECT client{};GetClientRect(reinterpret_cast<HWND>(winId()),&client);
+            cap::placeCaptureWindow(hdrSurface_,QRect(0,0,client.right,client.bottom));
+            const auto pixels=hdrSurface_->presentationPixelSize();QImage chrome(pixels,QImage::Format_RGBA8888);chrome.fill(Qt::transparent);
+            renderingChrome_=true;
+            {QPainter painter(&chrome);painter.scale(double(pixels.width())/width(),double(pixels.height())/height());paintChrome(painter,true);
+                for(auto *box:texts_)if(box->isVisible())box->render(&painter,box->pos(),QRegion(),QWidget::DrawChildren);
+                if(bar_->isVisible())bar_->render(&painter,bar_->pos());}
+            renderingChrome_=false;
+            hdrSurface_->present(canvas_,rect(),chrome,0,cap::sdrWhiteNits(canvas_),true);
+            if(hdrSurface_->hdrActive()){hdrSurface_->raise();return;}
+            previewStatus_=hdrSurface_->status();updatePreviewStatus();
+        }
+        QPainter p(this);
+        if(displayDirty_){display_=cap::preview(canvas_);displayDirty_=false;}
+        p.drawImage(rect(),display_);paintChrome(p,false);
     }
     void mousePressEvent(QMouseEvent *e) override {
         if(e->button()==Qt::RightButton){if(!embedded_)close();return;}
@@ -715,28 +760,34 @@ private:
             if(!image.colorSpace().isValid())image.setColorSpace(QColorSpace::SRgb);
             image=image.convertedToColorSpace(QColorSpace::SRgbLinear,QImage::Format_RGBA32FPx4);image.setText("capHdr","scRGB-FP16");image.setText("capSdrWhiteNits","80");
         }
-        const bool hdr=image.text("capHdr")=="scRGB-FP16";
+        if(job.avif.color=="pq2020"){
+            auto facts=vsr::screenshot::evidence(image);facts.advancedSdr=false;facts.units=vsr::screenshot::Units::ScRgb80Nits;vsr::screenshot::attach(image,facts);
+        }
+        auto plan=vsr::screenshot::exportPlan(image);
         QTemporaryDir work(QDir::tempPath()+"/vscap-XXXXXX");if(!work.isValid())return QStringLiteral("无法创建编码暂存目录。");
         const auto input=work.filePath("input.png"),encoded=work.filePath("result.avif");
-        // The HDR raw-input path does not create unused PQ PNG pixels.
-        if(!hdr){auto pixels=cap::pngPixels(image);if(!pixels.colorSpace().isValid())pixels.setColorSpace(QColorSpace::SRgb);if(pixels.colorSpace()!=QColorSpace(QColorSpace::SRgb))pixels=pixels.convertedToColorSpace(QColorSpace::SRgb);pixels.setColorSpace({});QImageWriter writer(input,"png");writer.setCompression(30);if(!writer.write(pixels))return writer.errorString();}
+        auto pixels=vsr::screenshot::exportPixels(image,plan);
+        if(!plan.cicpPrimaries || !plan.cicpTransfer){
+            if(!pixels.colorSpace().isValid())pixels.setColorSpace(QColorSpace::SRgb);
+            pixels=pixels.convertedToColorSpace(QColorSpace::SRgb,QImage::Format_RGBA64);plan=vsr::screenshot::exportPlan(pixels);
+        }
+        const auto stagedError=vsr::screenshot::writePng(input,pixels,plan,true);if(!stagedError.isEmpty())return stagedError;
         QStringList args{"-o",work.path(),"--format","avif","--template","result","--quality",QString::number(job.avif.quality),"--avif-encoder","aom","--avif-color-representation","yuv","--speed",QString::number(job.avif.speed),"--alpha","auto","--image-size-limit","none","--keep-metadata","--no-summary","--no-log"};
         args+=job.avif.pixelArguments();
-        args<<"--color-primaries"<<(hdr?"9":"1")<<"--transfer-characteristics"<<(hdr?"16":"13")<<"--matrix-coefficients"<<(hdr?"9":"1")<<"--color-range"<<"1";
-        if(hdr)args<<"--stdin-wgc-rgba16f"<<QString("%1x%2").arg(image.width()).arg(image.height());else args<<"-i"<<input;
+        args<<"--color-primaries"<<QString::number(plan.cicpPrimaries)<<"--transfer-characteristics"<<QString::number(plan.cicpTransfer)<<"--matrix-coefficients"<<QString::number(plan.yuvMatrix)<<"--color-range"<<"1";
+        args<<"-i"<<input;
         QProcess process;process.setProcessChannelMode(QProcess::MergedChannels);process.start(job.encoder,args);if(!process.waitForStarted(10000))return process.errorString();
 #ifdef Q_OS_WIN
         HANDLE child=OpenProcess(PROCESS_SET_INFORMATION,FALSE,DWORD(process.processId()));if(child){SetPriorityClass(child,BELOW_NORMAL_PRIORITY_CLASS);CloseHandle(child);}
 #endif
         QByteArray log;QElapsedTimer timer;timer.start();
-        if(hdr){const auto raw=image.convertToFormat(QImage::Format_RGBA16FPx4);for(int y=0;y<raw.height();++y){if(process.write(reinterpret_cast<const char*>(raw.constScanLine(y)),qint64(raw.width())*8)<0)return QStringLiteral("AVIF输入写入失败。");while(process.bytesToWrite()>4*1024*1024){process.waitForBytesWritten(100);log=(log+process.readAll()).right(65536);if(process.state()==QProcess::NotRunning)return QString::fromUtf8(log);if(timer.elapsed()>300000){process.kill();process.waitForFinished();return QStringLiteral("AVIF输入超时。");}}}}
         process.closeWriteChannel();while(!process.waitForFinished(100)){log=(log+process.readAll()).right(65536);if(timer.elapsed()>300000){process.kill();process.waitForFinished();return QStringLiteral("AVIF编码超时。");}}
         log=(log+process.readAll()).right(65536);if(process.exitCode()!=0||process.exitStatus()!=QProcess::NormalExit||!QFileInfo::exists(encoded))return QStringLiteral("AVIF编码失败：")+QString::fromUtf8(log.right(1200));
         QFile source(encoded);QSaveFile dest(job.path);if(!source.open(QIODevice::ReadOnly)||!dest.open(QIODevice::WriteOnly))return QStringLiteral("AVIF输出不可写。");while(!source.atEnd()){const auto data=source.read(4*1024*1024);if(data.isEmpty()||dest.write(data)!=data.size())return QStringLiteral("AVIF输出写入失败。");}return dest.commit()?QString():dest.errorString();
     }
     bool enqueueSave(QImage image,const QString &path,const QString &format){
         if(saveQueue_.size()+failedSaves_.size()>=8){tray_.showMessage("VS Cap",QStringLiteral("保存队列已满，请等待或重试失败任务。截图窗口保留，可稍后保存。"),QSystemTrayIcon::Warning);return false;}
-        SaveJob job{image,path,format,{},cap::AvifOptions::load(settings_)};
+        SaveJob job{vsr::screenshot::FrozenFrame(image).pixels(),path,format,{},cap::AvifOptions::load(settings_)};
         if(format=="avif"){QString error;job.encoder=vsr::optionalRuntimeExecutable("awj","AWJ.com",true,&error);if(job.encoder.isEmpty()){tray_.showMessage("VS Cap",error,QSystemTrayIcon::Warning);return false;}}
         saveQueue_.append(std::move(job));pumpSaves();return true;
     }
@@ -781,6 +832,7 @@ private:
                 for(int y=0;y<h;++y)memcpy(pic.scanLine(y),raw.constData()+8+qint64(y)*w*16,w*16);
                 pic.setColorSpace(QColorSpace::SRgbLinear);pic.setText("capHdr","scRGB-FP16");
                 pic.setText("capSdrWhiteNits",QString::fromLatin1(QApplication::clipboard()->mimeData()->data("application/x-vscap-sdr-white-nits")));
+                pic.setText("vsrColorEvidence",QString::fromUtf8(QApplication::clipboard()->mimeData()->data("application/x-vscap-color-evidence")));
             }
         }
         const bool hadImage=!pic.isNull();
@@ -798,7 +850,11 @@ private:
         QDialog dialog;
         dialog.setWindowTitle(QStringLiteral("VS Cap 设置"));
         QVBoxLayout outer(&dialog);QTabWidget tabs;outer.addWidget(&tabs);
-        QWidget general;tabs.addTab(&general,QStringLiteral("基本设置"));tabs.addTab(vsr::aboutLabel("VS Cap"),QStringLiteral("关于"));
+        QWidget general;tabs.addTab(&general,QStringLiteral("基本设置"));
+        auto *about = vsr::aboutLabel("VS Cap");
+        about->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+        about->setMargin(12);
+        tabs.addTab(about,QStringLiteral("关于"));
         QFormLayout layout(&general);
         cap::HotkeyEdit screenshot(QKeySequence(settings_.value("hotkeys/capture","Alt+A").toString()));
         cap::HotkeyEdit pin(QKeySequence(settings_.value("hotkeys/pin","Alt+T").toString()));
@@ -816,7 +872,11 @@ private:
         QComboBox format;format.setObjectName("capDefaultFormat");format.addItem("JXL · 16-bit 无损","jxl");format.addItem("AVIF · AWJ","avif");format.addItem("PNG · 16-bit 无损","png");
         format.setCurrentIndex(qMax(0,format.findData(settings_.value("save/format","jxl").toString())));
         QSpinBox quality;quality.setObjectName("capAvifQuality");quality.setRange(1,100);quality.setValue(settings_.value("avif/quality",70).toInt());quality.setSuffix(QStringLiteral("（推荐 70）"));
-        QComboBox pixelFormat;pixelFormat.setObjectName("capAvifPixelFormat");pixelFormat.addItems({"444p12","444p10","420p10"});pixelFormat.setCurrentText(cap::AvifOptions::load(settings_).format);
+        QComboBox pixelFormat;pixelFormat.setObjectName("capAvifPixelFormat");
+        pixelFormat.addItem(QStringLiteral("yuv444p12le"), QStringLiteral("444p12"));
+        pixelFormat.addItem(QStringLiteral("yuv444p10le"), QStringLiteral("444p10"));
+        pixelFormat.addItem(QStringLiteral("yuv420p10le"), QStringLiteral("420p10"));
+        pixelFormat.setCurrentIndex(pixelFormat.findData(cap::AvifOptions::load(settings_).format));
         QComboBox color; color.setObjectName("capAvifColor");color.addItem(QStringLiteral("自动：SDR sRGB / HDR BT.2020 PQ"),"auto");color.addItem(QStringLiteral("sRGB SDR（HDR生成桌面白位副本）"),"srgb");color.addItem(QStringLiteral("BT.2020 PQ（SDR以80nit白位转换）"),"pq2020");color.setCurrentIndex(qMax(0,color.findData(settings_.value("avif/color","auto"))));
         QSpinBox speed;speed.setObjectName("capAvifSpeed");speed.setRange(0,10);speed.setValue(settings_.value("avif/speed",6).toInt());
         QWidget saveLocation;QHBoxLayout saveLayout(&saveLocation);saveLayout.setContentsMargins(0,0,0,0);
@@ -856,7 +916,7 @@ private:
         settings_.setValue("save/defaultDirectory",saveDirectory.text().trimmed().isEmpty()?defaultDirectory():QDir::cleanPath(saveDirectory.text().trimmed()));
         settings_.setValue("general/autostart",autostart.isChecked());
         settings_.setValue("general/minimizeToTray",trayMode.isChecked());
-        settings_.setValue("avif/pixelFormat",pixelFormat.currentText());settings_.setValue("avif/color",color.currentData());settings_.setValue("avif/speed",speed.value());
+        settings_.setValue("avif/pixelFormat",pixelFormat.currentData());settings_.setValue("avif/color",color.currentData());settings_.setValue("avif/speed",speed.value());
         settings_.setValue("save/format",format.currentData().toString());
         settings_.setValue("avif/quality",quality.value());
         settings_.setValue("general/uiAccess",uiAccess.isChecked());

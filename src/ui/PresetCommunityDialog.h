@@ -1,5 +1,5 @@
 #pragma once
-#include <QDialog>
+#include <QWidget>
 #include <QJsonObject>
 #include <QUrl>
 #include <functional>
@@ -9,7 +9,7 @@ class QTreeWidgetItem;
 class QNetworkAccessManager;
 class QPushButton;
 namespace vsr {
-class PresetCommunityDialog final : public QDialog {
+class PresetCommunityDialog final : public QWidget {
 public:
     PresetCommunityDialog(std::function<void(const QString &,bool)> import,QWidget *parent=nullptr);
     static QString defaultSource();

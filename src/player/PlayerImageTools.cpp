@@ -64,6 +64,7 @@ QIcon toolIcon(int index) {
     if(index==6){p.drawRect(QRectF(3,10,11,11));p.drawLine(10,14,21,3);p.drawLine(15,3,21,3);p.drawLine(21,3,21,9);}
     if(index==7){p.drawLine(5,2,5,18);p.drawLine(2,5,18,5);p.drawLine(18,5,18,22);p.drawLine(5,18,22,18);p.drawLine(9,8,9,15);p.drawLine(14,8,14,15);p.drawLine(8,10,15,10);p.drawLine(8,14,15,14);}
     if(index==8){p.drawLine(4,7,19,7);p.drawLine(16,4,19,7);p.drawLine(16,10,19,7);p.drawLine(20,17,5,17);p.drawLine(8,14,5,17);p.drawLine(8,20,5,17);}
+    if(index==9){p.drawPolygon(QPolygonF{QPointF(12,2),QPointF(21,7),QPointF(21,17),QPointF(12,22),QPointF(3,17),QPointF(3,7)});p.drawPolyline(QPolygonF{QPointF(3,7),QPointF(12,12),QPointF(21,7)});p.drawLine(12,12,12,22);}
     return QIcon(pixels);
 }
 QString extension(const QString &format) { return format=="jpgli"?QStringLiteral("jpg"):format; }
@@ -88,22 +89,98 @@ PlayerImageTools::PlayerImageTools(PreviewPane *pane,QWidget *parent) : QWidget(
     setObjectName("playerImageToolbar");setFixedHeight(38);setStyleSheet("#playerImageToolbar{background:#1e1e1e;} QToolButton{background:transparent;border:0;border-radius:4px;} QToolButton:hover{background:#42464d;} QToolButton:disabled{color:#777;}");
     auto *row=new QHBoxLayout(this);row->setContentsMargins(12,3,12,3);row->setSpacing(12);
     connect(PhotoCraftEditor::instance(),&PhotoCraftEditor::errorOccurred,this,&PlayerImageTools::errorOccurred);
-    const QStringList names{tr("PhotoCraft 图像编辑器"),tr("左转"),tr("右转"),tr("镜像"),tr("删除到回收站"),tr("设置为桌面背景"),tr("高精度导出和格式转换")};
-    const QStringList ids{"edit","rotateLeft","rotateRight","mirror","recycle","wallpaper","convert"};
-    for(int i=0;i<names.size();++i){auto *button=new QToolButton(this);button->setObjectName("imageTool_"+ids[i]);button->setAccessibleName(names[i]);button->setToolTip(names[i]);button->setIcon(toolIcon(i==6?8:i));button->setIconSize(QSize(24,24));button->setFixedSize(40,40);button->setToolButtonStyle(Qt::ToolButtonIconOnly);button->setEnabled(false);row->addWidget(button);
+    const QStringList names{tr("PhotoCraft 图像编辑器"),tr("左转"),tr("右转"),tr("镜像"),tr("删除到回收站"),tr("设置为桌面背景"),tr("高精度导出和格式转换"),tr("加载cube调色")};
+    const QStringList ids{"edit","rotateLeft","rotateRight","mirror","recycle","wallpaper","convert","cube"};
+    for(int i=0;i<names.size();++i){auto *button=new QToolButton(this);button->setObjectName("imageTool_"+ids[i]);button->setAccessibleName(names[i]);button->setToolTip(names[i]);button->setIcon(toolIcon(i==6?8:i==7?9:i));button->setIconSize(QSize(24,24));button->setFixedSize(40,40);button->setToolButtonStyle(Qt::ToolButtonIconOnly);button->setEnabled(false);row->addWidget(button);
         button->setFixedSize(32,32);button->setIconSize(QSize(21,21));
         connect(button,&QToolButton::clicked,this,[this,i]{
             if(task_ || (!ready_ && !(i==0 && nativeDocument(source_))))return;
             if(i==0)editImage();
             else if(i<=3){const QTransform change=i==1?QTransform(0,-1,1,0,0,0):i==2?QTransform(0,1,-1,0,0,0):QTransform::fromScale(-1,1);pane_->setImageTransform(pane_->imageTransform()*change);}
-            else if(i==4)recycleImage();else if(i==5)wallpaper();else convertImage();
+            else if(i==4)recycleImage();else if(i==5)wallpaper();else if(i==6)convertImage();else emit cubeRequested();
         });
     }
     row->addStretch();hide();
 }
 PlayerImageTools::~PlayerImageTools() {if(task_){task_->requestInterruption();task_->wait();}}
-void PlayerImageTools::setSource(const QString &path) {source_=path;setReady(false);setVisible(!path.isEmpty());}
+void PlayerImageTools::setSource(const QString &path) {++cubeGeneration_;ungraded_={};cubePath_.clear();source_=path;setReady(false);setVisible(!path.isEmpty());}
 void PlayerImageTools::setReady(bool ready) {ready_=ready;const bool document=nativeDocument(source_);for(auto *b:findChildren<QToolButton *>())b->setEnabled(!task_ && (ready || (b->objectName()=="imageTool_edit" && document)));}
+
+void PlayerImageTools::applyCube(const QString &path, bool displayP3)
+{
+    if (task_ || !ready_ || pane_->image().isNull()) return;
+    const auto original = ungraded_.isNull() ? pane_->image() : ungraded_;
+    const auto transfer = original.colorSpace().transferFunction();
+    if (transfer == QColorSpace::TransferFunction::St2084 || transfer == QColorSpace::TransferFunction::Hlg ||
+        original.pixelFormat().typeInterpretation() == QPixelFormat::FloatingPoint) {
+        emit errorOccurred(tr("此 Cube 流程需要 SDR 图片。"));
+        return;
+    }
+    auto image = std::make_shared<QImage>();
+    auto failure = std::make_shared<QString>();
+    const auto generation = cubeGeneration_;
+    task_ = QThread::create([original, path, displayP3, image, failure] {
+        const QColorSpace space(displayP3 ? QColorSpace::DisplayP3 : QColorSpace::SRgb);
+        auto rgb = original.convertToFormat(QImage::Format_RGBA64);
+        if (!rgb.colorSpace().isValid()) rgb.setColorSpace(QColorSpace::SRgb);
+        if (rgb.colorSpace() != space) rgb.convertToColorSpace(space);
+        QTemporaryDir temp;
+        const auto input = temp.filePath("source.png"), output = temp.filePath("graded.png");
+        if (!temp.isValid() || rgb.isNull() || !rgb.save(input, "PNG")) {
+            *failure = tr("无法准备 16 位调色图像。");
+            return;
+        }
+        if (!QFile::copy(path, temp.filePath("grade.cube"))) {
+            *failure = tr("无法读取本地 Cube 文件。");
+            return;
+        }
+        QProcess ffmpeg;
+        ffmpeg.setWorkingDirectory(temp.path());
+        const auto bundled = QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe");
+        ffmpeg.start(QFileInfo(bundled).isFile() ? bundled : QStringLiteral("ffmpeg.exe"),
+            {"-v","error","-nostdin","-i",input,"-vf","lut3d=file=grade.cube:interp=trilinear",
+             "-frames:v","1","-pix_fmt","rgba64be","-y",output});
+        if (ffmpeg.waitForStarted()) {
+            while (!ffmpeg.waitForFinished(100)) {
+                if (QThread::currentThread()->isInterruptionRequested()) { ffmpeg.kill(); ffmpeg.waitForFinished(); return; }
+                if (ffmpeg.state() == QProcess::NotRunning) break;
+            }
+            if (ffmpeg.exitStatus() == QProcess::NormalExit && ffmpeg.exitCode() == 0) image->load(output, "PNG");
+        }
+        if (image->isNull()) {
+            *failure = tr("FFmpeg 无法应用此 Cube 文件。") + QString::fromUtf8(ffmpeg.readAllStandardError()).trimmed().left(800);
+            return;
+        }
+        image->setColorSpace(space);
+        for (const auto &key : original.textKeys()) image->setText(key, original.text(key));
+        image->setText("sourceBitDepth", "16");
+        image->setText("sourcePixelFormat", "Cube LUT · RGB16");
+    });
+    connect(task_, &QThread::finished, this, [this, original, path, image, failure, generation] {
+        auto *finished = task_; task_ = nullptr; finished->deleteLater(); setReady(ready_);
+        if (generation != cubeGeneration_) return;
+        if (!failure->isEmpty()) { emit errorOccurred(*failure); return; }
+        if (image->isNull()) return;
+        const auto transform = pane_->imageTransform();
+        ungraded_ = original;
+        cubePath_ = path;
+        pane_->setImage(*image);
+        if (!transform.isIdentity()) pane_->setImageTransform(transform);
+        emit statusChanged(tr("已应用 Cube 调色，可通过格式转换另存图片。"));
+    });
+    setReady(ready_);
+    task_->start();
+}
+
+void PlayerImageTools::clearCube()
+{
+    if (task_ || ungraded_.isNull()) return;
+    const auto transform = pane_->imageTransform();
+    pane_->setImage(ungraded_);
+    ungraded_ = {};
+    cubePath_.clear();
+    if (!transform.isIdentity()) pane_->setImageTransform(transform);
+}
 void PlayerImageTools::editImage() {
     if(nativeDocument(source_)){PhotoCraftEditor::instance()->open(source_);return;}
     const auto suffix=QFileInfo(source_).suffix().toLower();

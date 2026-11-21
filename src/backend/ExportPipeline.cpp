@@ -82,7 +82,7 @@ ExportPipeline::ExportPipeline(QObject *parent)
 
 ExportPlan ExportPipeline::buildPlan(const QString &command, const QString &sourcePath,
                                      const QString &outputPath, const QString &scriptPath,
-                                     const QString &applicationDirectory)
+                                     const QString &applicationDirectory, const QString &customFfmpeg)
 {
     ExportPlan plan;
     QString normalized = command.trimmed();
@@ -98,8 +98,14 @@ ExportPlan ExportPipeline::buildPlan(const QString &command, const QString &sour
     }
 
     const QString requestedFfmpeg = tokens.takeFirst();
+    const QFileInfo explicitPath(requestedFfmpeg);
+    if (!customFfmpeg.isEmpty() && !explicitPath.isAbsolute() && !QFileInfo(customFfmpeg).isFile()) {
+        plan.error = QStringLiteral("自定义 FFmpeg 路径已失效，请在设置中更新或清空。");
+        return plan;
+    }
     plan.ffmpegProgram = resolveExecutable(
-        requestedFfmpeg, applicationDirectory, QStringLiteral("runtime/ffmpeg/ffmpeg.exe"),
+        !explicitPath.isAbsolute() && !customFfmpeg.isEmpty() ? customFfmpeg : requestedFfmpeg,
+        applicationDirectory, QStringLiteral("runtime/ffmpeg/ffmpeg.exe"),
         QStringLiteral("C:\\PortableSoft\\FFmpegFreeUI ReadyToRun x64\\ffmpeg.exe"));
     plan.vspipeProgram = resolveExecutable(
         QStringLiteral("vspipe.exe"), applicationDirectory,

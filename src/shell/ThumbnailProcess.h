@@ -1,12 +1,13 @@
 #pragma once
 
 // The Explorer-side DLL only launches the bounded worker and receives BGRA pixels.
-HRESULT workerThumbnail(const std::wstring &path,UINT size,HBITMAP *bitmap,WTS_ALPHATYPE *alpha){
+HRESULT workerThumbnail(const std::wstring &path,const std::wstring &extension,UINT size,HBITMAP *bitmap,WTS_ALPHATYPE *alpha){
     wchar_t dllPath[32768];const auto count=GetModuleFileNameW(module,dllPath,32768);if(!count||count==32768)return E_FAIL;
     const auto folder=std::wstring(dllPath).substr(0,std::wstring(dllPath).find_last_of(L"\\/")+1);
     const auto worker=folder+L"vsr-thumbnail-worker.exe";
     if(path.find(L'"')!=std::wstring::npos)return E_INVALIDARG;
     auto command=L"\""+worker+L"\" \""+path+L"\" "+std::to_wstring(size);
+    if(!extension.empty())command+=L" "+extension;
     SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES),nullptr,TRUE};HANDLE read=nullptr,write=nullptr;
     if(!CreatePipe(&read,&write,&security,0))return HRESULT_FROM_WIN32(GetLastError());
     SetHandleInformation(read,HANDLE_FLAG_INHERIT,0);
@@ -40,7 +41,8 @@ HRESULT workerThumbnail(const std::wstring &path,UINT size,HBITMAP *bitmap,WTS_A
         if(header[0]!=0x56535448||!header[1]||!header[2]||header[1]>size||header[2]>size||data.size()!=16+size_t(header[1])*header[2]*4)break;
         BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=LONG(header[1]);info.bmiHeader.biHeight=-LONG(header[2]);info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
         void *pixels=nullptr;auto image=CreateDIBSection(nullptr,&info,DIB_RGB_COLORS,&pixels,nullptr,0);if(!image)break;
-        memcpy(pixels,data.data()+16,data.size()-16);*bitmap=image;*alpha=WTSAT_ARGB;result=S_OK;
+        memcpy(pixels,data.data()+16,data.size()-16);*bitmap=image;
+        *alpha=header[3]==WTSAT_RGB?WTSAT_RGB:WTSAT_ARGB;result=S_OK;
     }while(false);
     if(initialized)DeleteProcThreadAttributeList(startup.lpAttributeList);
     if(job)CloseHandle(job);if(process.hThread)CloseHandle(process.hThread);if(process.hProcess){WaitForSingleObject(process.hProcess,1000);CloseHandle(process.hProcess);}

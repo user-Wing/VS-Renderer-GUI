@@ -13,6 +13,7 @@ MultiCompareView::MultiCompareView(QWidget *parent) : QWidget(parent)
         clips_[i] = new QWidget(this);
         clips_[i]->setAttribute(Qt::WA_NativeWindow);
         panes_[i] = new PreviewPane(QStringLiteral("视频 %1").arg(i + 1), QStringLiteral("直接解码"), clips_[i]);
+        panes_[i]->setComparisonPan(true);
         panes_[i]->setMinimumSize(0, 0);
         panes_[i]->setPlaceholderText(QStringLiteral("等待视频"));
         clips_[i]->hide();

@@ -27,6 +27,7 @@ class QStackedWidget;
 class QToolButton;
 class QSplitter;
 class QSpinBox;
+class QKeyEvent;
 
 class TestAnalysis;
 class TestAgentIntegration;
@@ -44,6 +45,7 @@ class VapourSynthFrameServer;
 class PlayerLanguage;
 class AgentSession;
 class AgentPage;
+class CommunityPage;
 class AgentInstructions;
 class AgentMcpManager;
 class AgentTaskQueue;
@@ -75,6 +77,8 @@ private:
     QWidget *buildSidebar();
     QWidget *buildParameterPanel();
     QWidget *buildSettingsPage();
+    QWidget *buildShortcutSettings();
+    QWidget *buildContextMenuSettings();
     QWidget *buildWorkspace();
     QWidget *buildTransport();
     void applyPreviewScaling();
@@ -82,7 +86,6 @@ private:
     void refreshTimeGroups(int selected);
     QList<FilterTimeGroup> currentTimeGroups() const;
     void replaceTimeGroups(const QList<FilterTimeGroup> &groups);
-    void showCommunity();
     void buildToolbar();
     void selectPage(int index);
     void showSettings();
@@ -99,6 +102,15 @@ private:
     void createAdditionalRoute();
     void selectRoute(int index);
     void removeRoute();
+    void confirmRemoveRoute();
+    void setRouteVisibility(bool visible);
+    bool handleRendererShortcut(QKeyEvent *key, bool execute);
+    void addFilterToRoute(const QString &id);
+    void addFilterAtPlayhead(const QString &id);
+    void connectPreviewContextMenu(PreviewPane *pane);
+    void showPreviewContextMenu(PreviewPane *pane, const QPoint &position);
+    void openPreviewInPlayer(int route);
+    void copyPreviewFrame(int route);
     void updateRouteChoices();
     void renderAdditionalRoute(int index);
     void scanWorkingFolder(const QString &folder = {});
@@ -115,6 +127,7 @@ private:
     void validateScript();
     void exportCurrentResult();
     void togglePlayback();
+    void stepPreview(int direction, bool keyframe);
     void seekTimeline(int sliderValue);
     void requestProcessedFrame(int frameIndex);
     QString writePreviewScript(QString *error = nullptr, const QString &script = {}) const;
@@ -159,6 +172,7 @@ private:
     AgentTaskQueue *agentQueue_ = nullptr;
     AgentModelCapabilities *agentModels_ = nullptr;
     QStackedWidget *pages_ = nullptr;
+    CommunityPage *communityPage_ = nullptr;
     QWidget *navigation_ = nullptr;
     QList<QAction *> vsActions_;
     QList<QToolButton *> navigationButtons_;

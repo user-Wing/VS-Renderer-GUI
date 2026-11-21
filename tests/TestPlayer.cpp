@@ -41,7 +41,11 @@
 #include <QSettings>
 #include <QSlider>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
 #include <QTest>
+#include <QTableWidget>
+#include <QAbstractItemDelegate>
+#include <QKeySequenceEdit>
 #include <QMenu>
 #include <QPointer>
 #include <QAction>
@@ -2467,6 +2471,166 @@ if(qEnvironmentVariableIntValue("VSR_PERF_INPUT_DIVISOR")==2 || gpuThreads>0){QV
         QSettings saved(configPath(),QSettings::IniFormat);QCOMPARE(saved.value("basic/language").toString(),"en_US");QCOMPARE(saved.value("decode/video").toString(),"3FP");QCOMPARE(saved.value("decode/audio").toString(),"LAV");QCOMPARE(saved.value("player/animeStage").toInt(),3);QVERIFY(!saved.value("basic/autoplay").toBool());QVERIFY(std::abs(player.windowOpacity()-.9)<.01);QVERIFY(player.styleSheet().contains("#172839"));
         QContextMenuEvent englishEvent(QContextMenuEvent::Mouse,QPoint(30,30),pane->surface()->mapToGlobal(QPoint(30,30)));QApplication::sendEvent(pane->surface(),&englishEvent);menu=player.findChild<QMenu *>("playerContextMenu");bool english=false;for(auto *action:menu->actions())if(action->text()=="Settings…"){settingsAction=action;english=true;}QVERIFY(english);menu->close();
         QTimer::singleShot(100,&player,[&]{auto *dialog=player.findChild<QDialog *>("playerSettings");QVERIFY(dialog);auto *categories=dialog->findChild<QListWidget *>();QCOMPARE(categories->item(0)->text(),"General");QCOMPARE(categories->item(6)->text(),"Cache");QCOMPARE(categories->item(7)->text(),"File associations");dialog->grab().save("build/player-settings-english.png");dialog->reject();});settingsAction->trigger();
+    }
+    void cubeMenuVisibleBeforeMediaIsReady() {
+        PlayerWindow player;
+        player.settings_->setValue("cube/libraryMigrated", true);
+        player.show();
+        player.showContextMenu(player.mapToGlobal(QPoint(40, 40)));
+        auto *menu = player.findChild<QMenu *>("playerContextMenu");
+        QVERIFY(menu);
+        auto *cube = menu->findChild<QMenu *>("playerCubeLuts");
+        QVERIFY(cube && cube->menuAction()->isVisible());
+        QVERIFY(cube->actions().first()->isEnabled());
+        menu->close();
+    }
+
+    void cubeMenuAppliesLutFromMinimalVideo() {
+        QTemporaryDir fixtures;
+        const auto source = fixtures.filePath("cube-menu.mkv");
+        QProcess ffmpeg;
+        ffmpeg.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),
+            {"-v","error","-f","lavfi","-i","color=c=green:size=160x90:rate=8:duration=2","-c:v","ffv1","-y",source});
+        QVERIFY(ffmpeg.waitForFinished(10000));
+        QCOMPARE(ffmpeg.exitCode(), 0);
+        const auto library = QDir(QCoreApplication::applicationDirPath()).filePath("luts");
+        QVERIFY(QDir().mkpath(library));
+        QTemporaryFile lut(QDir(library).filePath("cube-menu-XXXXXX.cube"));
+        QVERIFY(lut.open());
+        QVERIFY(lut.write("TITLE \"Fixture red\"\nLUT_3D_SIZE 2\n" + QByteArray("1 0 0\n").repeated(8)) > 0);
+        lut.close();
+
+        PlayerWindow player;
+        player.settings_->setValue("cube/libraryMigrated", true);
+        player.settings_->setValue("basic/autoplay", false);
+        player.loadPreset({});
+        player.resize(800, 500);
+        player.show();
+        QVERIFY(player.openFile(source));
+        QVERIFY(player.minimalMode_);
+        QTRY_VERIFY_WITH_TIMEOUT(player.clock_->snapshot().selectedVideoStream >= 0, 8000);
+        player.showContextMenu(player.mapToGlobal(QPoint(40, 40)));
+        auto *menu = player.findChild<QMenu *>("playerContextMenu");
+        QVERIFY(menu);
+        auto *cube = menu->findChild<QMenu *>("playerCubeLuts");
+        QVERIFY(cube);
+        QAction *choice = nullptr;
+        for (auto *action : cube->actions())
+            if (action->toolTip() == lut.fileName()) choice = action;
+        QVERIFY(choice && choice->isEnabled());
+        choice->trigger();
+        menu->close();
+        QVERIFY(!player.minimalMode_);
+        QCOMPARE(player.videoCubePath_, lut.fileName());
+        QTRY_VERIFY2_WITH_TIMEOUT(!player.direct_ && player.outputSnapshot().presentedVideoFrames > 0,
+            qPrintable(QString("state=%1, direct=%2, %3 | %4")
+                .arg(int(player.snapshot().state)).arg(player.direct_)
+                .arg(player.lastStatus_, player.server_->errorString())), 12000);
+        const auto frame = player.output_->captureFullFrame();
+        QCOMPARE(frame.size(), QSize(160, 90));
+        const auto red = frame.pixelColor(80, 45);
+        QVERIFY2(red.red() > red.green() + 100 && red.red() > red.blue() + 100, qPrintable(red.name()));
+    }
+
+    void settingsDownloadsShortcutsRoundTrip() {
+        PlayerWindow player;
+        player.show();
+        bool applied = false;
+        QTimer::singleShot(0, &player, [&] {
+            auto *dialog = player.findChild<QDialog *>("playerSettings");
+            QVERIFY(dialog);
+            const auto close = qScopeGuard([dialog] { if (dialog->isVisible()) dialog->reject(); });
+            auto *categories = dialog->findChild<QListWidget *>();
+            auto *shortcuts = dialog->findChild<QTableWidget *>("playerShortcuts");
+            QVERIFY(categories && shortcuts);
+            const auto downloads = categories->findItems(QStringLiteral("组件下载"), Qt::MatchExactly);
+            const auto keys = categories->findItems(QStringLiteral("快捷键"), Qt::MatchExactly);
+            QCOMPARE(downloads.size(), 1);
+            QCOMPARE(keys.size(), 1);
+            auto *componentTree = dialog->findChild<QTreeWidget *>("componentVersions");
+            QVERIFY(componentTree);
+            for (int i = 0; i < 10; ++i) {
+                categories->setCurrentItem(downloads.first());
+                QTest::qWait(25);
+                QVERIFY(componentTree->isVisible());
+                QVERIFY(!shortcuts->isVisible());
+                categories->setCurrentItem(keys.first());
+                QTest::qWait(25);
+                QVERIFY(!componentTree->isVisible());
+                QVERIFY(shortcuts->isVisible());
+            }
+            categories->setCurrentItem(downloads.first());
+            QTest::qWait(25);
+            QVERIFY(!shortcuts->isVisible());
+            QVERIFY(componentTree->uniformRowHeights());
+            QCOMPARE(shortcuts->columnCount(), 3);
+            QVERIFY(!shortcuts->cellWidget(0, 1));
+            QVERIFY(!shortcuts->cellWidget(0, 2));
+            categories->setCurrentItem(keys.first());
+            auto *keyItem = shortcuts->item(0, 0);
+            shortcuts->editItem(keyItem);
+            auto *recorder = shortcuts->viewport()->findChild<QKeySequenceEdit *>();
+            QVERIFY(recorder);
+            QTest::keyClick(recorder, Qt::Key_K, Qt::AltModifier);
+            auto *confirmKey = shortcuts->findChild<QToolButton *>("confirmShortcutKey");
+            QVERIFY(confirmKey);
+            confirmKey->click();
+            QTRY_COMPARE(keyItem->text(), QStringLiteral("Alt+K"));
+            auto *mode = shortcuts->item(0, 1);
+            shortcuts->editItem(mode);
+            auto *combo = shortcuts->viewport()->findChild<QComboBox *>();
+            QVERIFY(combo);
+            const int mute = combo->findText(QStringLiteral("静音"));
+            QVERIFY(mute >= 0);
+            combo->setCurrentIndex(mute);
+            QVERIFY(QMetaObject::invokeMethod(combo, "activated", Q_ARG(int, mute)));
+            QCOMPARE(mode->data(Qt::UserRole).toString(), QStringLiteral("mute"));
+            QVERIFY(!(shortcuts->item(0, 2)->flags() & Qt::ItemIsEditable));
+            auto *value = shortcuts->item(1, 2);
+            shortcuts->editItem(value);
+            auto *spin = shortcuts->viewport()->findChild<QDoubleSpinBox *>();
+            QVERIFY(spin);
+            spin->setValue(3.25);
+            QTest::keyClick(spin, Qt::Key_Return);
+            QTRY_COMPARE(value->data(Qt::EditRole).toDouble(), 3.25);
+            auto *addShortcut = dialog->findChild<QPushButton *>("playerAddShortcut");
+            QVERIFY(addShortcut);
+            const int existingRows = shortcuts->rowCount();
+            addShortcut->click();
+            QCOMPARE(shortcuts->rowCount(), existingRows + 1);
+            QKeySequenceEdit *newEditor = nullptr;
+            for (auto *editor : shortcuts->findChildren<QKeySequenceEdit *>())
+                if (editor->isVisible()) newEditor = editor;
+            QVERIFY(newEditor);
+            QTest::keyClick(newEditor, Qt::Key_U, Qt::AltModifier);
+            QTest::keyClick(newEditor, Qt::Key_Return);
+            QTRY_COMPARE(shortcuts->item(existingRows, 0)->text(), QStringLiteral("Alt+U"));
+            categories->setCurrentItem(downloads.first());
+            auto *ok = dialog->findChild<QPushButton *>("playerConfirmSettings");
+            QVERIFY(ok);
+            applied = true;
+            ok->click();
+        });
+        player.showSettings();
+        QVERIFY(applied);
+        QCOMPARE(player.settings_->value("shortcuts/0/action").toString(), QStringLiteral("mute"));
+        QCOMPARE(player.settings_->value("shortcuts/0/key").toString(), QStringLiteral("Alt+K"));
+        QCOMPARE(player.settings_->value("shortcuts/1/value").toDouble(), 3.25);
+        const int lastBinding = player.settings_->value("shortcuts/rowCount").toInt() - 1;
+        QVERIFY(lastBinding >= 20);
+        const auto lastKey = QString("shortcuts/%1/key").arg(lastBinding);
+        QCOMPARE(player.settings_->value(lastKey).toString(), QStringLiteral("Alt+U"));
+        QKeyEvent added(QEvent::KeyPress, Qt::Key_U, Qt::AltModifier);
+        QVERIFY(player.handleShortcut(&added));
+        player.settings_->setValue(lastKey, QStringLiteral("Return"));
+        QKeyEvent reserved(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+        QVERIFY(!player.handleShortcut(&reserved));
+        const auto previousMute = player.mute_->isChecked();
+        QKeyEvent shortcut(QEvent::KeyPress, Qt::Key_K, Qt::AltModifier);
+        QVERIFY(player.handleShortcut(&shortcut));
+        QCOMPARE(player.mute_->isChecked(), !previousMute);
+        QKeyEvent old(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
+        QVERIFY(!player.handleShortcut(&old));
     }
     void applySettingsKeepsPlaybackState() {
         QTemporaryDir directory;const auto video=directory.filePath("apply.mkv");QProcess ffmpeg;

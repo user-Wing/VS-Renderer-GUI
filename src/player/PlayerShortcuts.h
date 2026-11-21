@@ -19,4 +19,13 @@ inline QList<PlayerShortcut> playerShortcuts(QSettings &settings){
         {"Ctrl+C","clipboard",0},{".","minimal",0}};
 }
 inline QString shortcutPrefix(int row){return QString("shortcuts/%1/").arg(row);}
+inline constexpr int maximumPlayerShortcuts = 512;
+inline int playerShortcutCount(const QSettings &settings, int defaultCount)
+{
+    return qBound(defaultCount, settings.value("shortcuts/rowCount", defaultCount).toInt(), maximumPlayerShortcuts);
+}
+inline bool isPlayerFullscreenKey(int key)
+{
+    return key == Qt::Key_Return || key == Qt::Key_Enter;
+}
 }

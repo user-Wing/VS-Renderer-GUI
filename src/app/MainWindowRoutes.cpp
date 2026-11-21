@@ -19,6 +19,7 @@
 #include <QStandardPaths>
 #include <QSignalBlocker>
 #include <QFutureWatcher>
+#include <QMessageBox>
 #include <QtConcurrentRun>
 #include <functional>
 #include <algorithm>
@@ -28,8 +29,47 @@ void MainWindow::updateRouteChoices(){
 }
 void MainWindow::createAdditionalRoute(){
     auto *pane=compareView_->addProcessedPane();additionalRoutes_.push_back(std::make_unique<RenderRoute>(api_,pane,this));auto *changedRoute=additionalRoutes_.back().get();connect(pane,&PreviewPane::viewChanged,this,[this,changedRoute](float zoom,float x,float y){if(!syncView_->isChecked())return;sourcePane_->adoptView(zoom,x,y);sourcePlayer_->setView(zoom,x,y);processedPane_->adoptView(zoom,x,y);processedPlayer_->setView(zoom,x,y);for(auto &route:additionalRoutes_)if(route.get()!=changedRoute)route->setView(zoom,x,y);});
+    connectPreviewContextMenu(pane);
     if(syncView_->isChecked())additionalRoutes_.back()->setView(sourcePane_->zoom(),sourcePane_->pan().x(),sourcePane_->pan().y());
     applyPreviewScaling();
+}
+void MainWindow::confirmRemoveRoute()
+{
+    if (routes_.size() > 1 && QMessageBox::question(this, QStringLiteral("移除当前路"),
+            QStringLiteral("移除路 %1 及其处理链？").arg(routeIndex_ + 1),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes)
+        removeRoute();
+}
+
+void MainWindow::setRouteVisibility(bool visible)
+{
+    auto &route = routes_[routeIndex_];
+    if (route.visible == visible) return;
+    route.visible = visible;
+    compareView_->setRouteVisible(routeIndex_, visible);
+    if (routeIndex_ > 0) {
+        additionalRoutes_[routeIndex_ - 1]->setVisible(visible);
+    } else if (!visible) {
+        pendingPreview_ = false;
+        frameServer_->unloadScript();
+        processedPlayer_->stop();
+        vsScriptReady_ = false;
+    } else if (!route.previewScript.isEmpty() && !sourcePath_->text().isEmpty()) {
+        validateScript();
+    }
+    updateRouteChoices();
+    checkpointProject();
+}
+
+void MainWindow::stepPreview(int direction, bool keyframe)
+{
+    if (!sourcePlayer_ || sourcePath_->text().isEmpty()) return;
+    sourcePlayer_->pause();
+    const bool stepped = keyframe ? sourcePlayer_->stepKeyframe(direction) : sourcePlayer_->stepFrame(direction);
+    if (!stepped) return;
+    playing_ = false;
+    requestedVsFrame_ = -1;
+    vsFramePending_ = false;
 }
 bool MainWindow::addRoute(){
     if(routes_.size()>=3)return false;

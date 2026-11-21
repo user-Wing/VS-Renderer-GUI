@@ -24,6 +24,14 @@ foreach ($exe in @("VSRenderer.exe", "vs-player.exe", "FFF.Native.dll")) {
 }
 Copy-Item -LiteralPath (Join-Path $buildRoot 'vsr-source.dll') -Destination $output -Force
 Copy-Item -LiteralPath (Join-Path $buildRoot 'Qt6Concurrent.dll') -Destination $output -Force
+$communityMarkdown = Join-Path $buildRoot 'community-markdown'
+if (Test-Path -LiteralPath $communityMarkdown) {
+    Copy-Item -LiteralPath $communityMarkdown -Destination $output -Recurse -Force
+}
+foreach ($name in @('WebView2Loader.dll', 'WebView2-LICENSE.txt')) {
+    $file = Join-Path $buildRoot $name
+    if (Test-Path -LiteralPath $file) { Copy-Item -LiteralPath $file -Destination $output -Force }
+}
 New-Item -ItemType Directory -Path (Join-Path $output 'tools') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'tools/download-bd.py') -Destination (Join-Path $output 'tools') -Force
 if (Test-Path -LiteralPath (Join-Path $buildRoot 'color/vsr-color.dll')) {

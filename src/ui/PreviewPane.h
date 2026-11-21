@@ -34,6 +34,7 @@ public:
     void setBadge(const QString &badge);
     void setPlaceholderText(const QString &text);
     void setPixelText(const QString &text);
+    void setComparisonPan(bool enabled) { comparisonPan_ = enabled; }
 
 signals:
     void viewChanged(float zoom, float panX, float panY);
@@ -65,6 +66,8 @@ private:
     float panX_ = 0.0f;
     float panY_ = 0.0f;
     bool dragging_ = false;
+    bool comparisonPan_ = false;
+    double panSensitivity() const;
     QPointF dragStart_;
     QPointF dragPanStart_;
     QSize videoSize_;

@@ -1,6 +1,7 @@
 #include "graph/VpyScriptBuilder.h"
 
 #include "graph/FilterCatalog.h"
+#include "color/CubeLut.h"
 #include "graph/FilterGraph.h"
 
 #include <QLocale>
@@ -265,9 +266,57 @@ QString emitNode(const FilterNode &node, bool gpu = true)
     if (node.definitionId == "grain_add")
         return QString("clip = core.grain.Add(clip, var=%1, constant=%2)")
             .arg(realNumber(p, "var"), booleanValue(p, "constant"));
+    if (node.definitionId == "cube_lut") {
+        const auto path = p.value("file").toString();
+        const bool p3 = p.value("manual_space").toBool()
+            ? p.value("space").toString() == "Display P3 SDR"
+            : cubeUsesDisplayP3(QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(path));
+        return QString("clip = _vsr_cube(clip, %1, %2)")
+            .arg(VpyScriptBuilder::pythonString(path), p3 ? "12" : "1");
+    }
     return {};
 }
 
+}
+
+QString VpyScriptBuilder::cubeHelper()
+{
+    return QStringLiteral(R"PY(
+def _vsr_cube(c, path, lut_primaries):
+    import os
+    import vapoursynth as vs
+    core = vs.core
+    root = globals().get('_vsr_directory', %1)
+    if path and not os.path.isabs(path):
+        path = os.path.join(root, path)
+    if not path.lower().endswith('.cube') or not os.path.isfile(path):
+        raise ValueError('Select a local .cube file')
+    if os.path.getsize(path) > 32 * 1024 * 1024:
+        raise ValueError('Cube LUT exceeds 32 MiB')
+    if not hasattr(core, 'vsrsource'):
+        core.std.LoadPlugin(path=os.path.join(root, 'vsr-source.dll'))
+    if c.format is None:
+        raise ValueError('Cube requires a constant video format')
+    with c.get_frame(0) as frame:
+        props = frame.props
+        p = props.get('_Primaries', 2)
+        t = props.get('_Transfer', 2)
+        m = props.get('_Matrix', 2)
+        rng = props.get('_ColorRange', 2)
+    if t in (16, 18):
+        raise ValueError('SDR Cube LUT requires SDR input')
+    p = 1 if p in (0, 2) else p
+    t = (13 if c.format.color_family == vs.RGB else 1) if t in (0, 2) else t
+    is_yuv = c.format.color_family == vs.YUV
+    if is_yuv and m in (0, 2):
+        m = 9 if p == 9 else 1
+    rng = rng if rng in (0, 1) else (1 if is_yuv else 0)
+    source = core.resize.Bicubic(c, format=vs.RGBS, primaries_in=p, transfer_in=t, range_in=rng,
+        primaries=lut_primaries, transfer=13, range=0, **({'matrix_in': m} if is_yuv else {}))
+    graded = core.vsrsource.Cube(source, file=path)
+    return core.resize.Bicubic(graded, format=c.format.id, primaries_in=lut_primaries, transfer_in=13,
+        range_in=0, primaries=p, transfer=t, range=rng, **({'matrix': m} if is_yuv else {}))
+)PY").arg(pythonString(QCoreApplication::applicationDirPath()));
 }
 
 ScriptBuildResult VpyScriptBuilder::build(const QString &sourcePath, SourceFilter sourceFilter,
@@ -278,6 +327,9 @@ ScriptBuildResult VpyScriptBuilder::build(const QString &sourcePath, SourceFilte
         result.errors.append(QStringLiteral("尚未选择源视频。"));
         return result;
     }
+    // Bundled FFMS2 and L-SMASH do not expose still JPEG XL as a video track.
+    if (QFileInfo(sourcePath).suffix().compare("jxl", Qt::CaseInsensitive) == 0)
+        sourceFilter = SourceFilter::Native;
 
     QSet<QString> namespaces;
     namespaces.insert(sourceFilter == SourceFilter::Native ? QStringLiteral("vsrsource") :
@@ -327,6 +379,9 @@ def _vsr_matrix(c):
     return 9 if primaries == 9 else 5 if primaries == 5 else 6 if primaries in (6, 7) else 1
 )PY");
     body << QStringLiteral("clip = src");
+    if (std::any_of(graph.nodes().cbegin(), graph.nodes().cend(), [](const FilterNode &node) {
+        return node.enabled && node.definitionId == "cube_lut";
+    })) body << cubeHelper();
 
     const bool hasInterpolation = std::any_of(graph.nodes().cbegin(), graph.nodes().cend(), [](const FilterNode &node) {
         return node.enabled && (node.definitionId == "rife" || node.definitionId == "mvtools" || node.definitionId == "qtgmc" || node.definitionId == "smdegrain" || node.definitionId == "bm3d");

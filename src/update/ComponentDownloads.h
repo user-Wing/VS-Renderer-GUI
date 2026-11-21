@@ -26,6 +26,7 @@ signals:
     void componentPrepared(const QString &id,const QString &version,const QString &payload);
 private:
     void fetch(const QString &id,int page);
+    void populateVersions(QTreeWidgetItem *group);
     void finishRefresh();
     void downloadNext();
     void verify();

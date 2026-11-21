@@ -69,11 +69,21 @@ public:
         wchar_t temporary[MAX_PATH]{};HRESULT result=E_FAIL;
         try{
             auto inputPath=path;
+            std::wstring extension;
             if(inputPath.empty()){
                 // Shell file streams expose their path; avoid copying large media.
                 STATSTG stat{};
                 if(SUCCEEDED(stream->Stat(&stat,STATFLAG_DEFAULT))){
-                    if(stat.pwcsName){const auto attributes=PathIsRelativeW(stat.pwcsName)?INVALID_FILE_ATTRIBUTES:GetFileAttributesW(stat.pwcsName);if(attributes!=INVALID_FILE_ATTRIBUTES&&!(attributes&FILE_ATTRIBUTE_DIRECTORY))inputPath=stat.pwcsName;CoTaskMemFree(stat.pwcsName);}
+                    if(stat.pwcsName){
+                        const auto attributes=PathIsRelativeW(stat.pwcsName)?INVALID_FILE_ATTRIBUTES:GetFileAttributesW(stat.pwcsName);
+                        if(attributes!=INVALID_FILE_ATTRIBUTES&&!(attributes&FILE_ATTRIBUTE_DIRECTORY))inputPath=stat.pwcsName;
+                        const auto *suffix=PathFindExtensionW(stat.pwcsName);
+                        if(suffix&&*suffix){
+                            extension=suffix+1;
+                            if(extension.size()>7||extension.find_first_not_of(L"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")!=std::wstring::npos)extension.clear();
+                        }
+                        CoTaskMemFree(stat.pwcsName);
+                    }
                 }
             }
             if(inputPath.empty()){
@@ -89,7 +99,7 @@ public:
                 if(file!=INVALID_HANDLE_VALUE)CloseHandle(file);
                 if(!copied){DeleteFileW(temporary);return E_FAIL;}inputPath=temporary;
             }
-            result=workerThumbnail(inputPath,std::min<UINT>(size,1024),bitmap,alpha);
+            result=workerThumbnail(inputPath,extension,std::min<UINT>(size,1024),bitmap,alpha);
         }catch(...){result=E_FAIL;}
         if(*temporary)DeleteFileW(temporary);return result;
     }

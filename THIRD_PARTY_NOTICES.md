@@ -19,6 +19,16 @@
 
 Full发行打包会剥离无签名原生模块的非运行符号，并移除Agent依赖的类型声明与源码映射；不修改运行代码及导出接口，签名和托管程序不参与符号剥离。AWJ独立CLI与MKV工具使用7z归档按需展开；AWJ保留1.3.1对应源码与完整上游法律文件，移除旧版1.2.1源码残留。
 
+## Microsoft Edge WebView2
+
+论坛社区按需使用 Windows 的 Evergreen Runtime。构建采用 Microsoft.Web.WebView2 1.0.3719.77，随 Renderer 复制 x64 加载器和 `WebView2-LICENSE.txt`。 [WebView2 SDK](https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.3719.77)
+
+论坛阅读和预览离线使用 Lute（取自源站锁定的 Vditor 3.11.3 构建，木兰宽松许可证第 2 版）、KaTeX 0.19.1（MIT，随附 WOFF2 字体）和 DOMPurify 3.4.18（采用 MPL 2.0）。许可随 `community-markdown/vendor/` 分发。 [Lute](https://github.com/88250/lute) [KaTeX](https://github.com/KaTeX/KaTeX/tree/v0.19.1) [DOMPurify](https://github.com/cure53/DOMPurify/tree/3.4.18)
+
+论坛编辑器随附 Vditor 3.11.3，许可见 `community-markdown/vendor/vditor/LICENSE`。 [Vditor](https://github.com/Vanessa219/vditor)
+
+代码语法高亮使用 Highlight.js 11.12.0（BSD-3-Clause）。PDF 预览使用 PDF.js 6.5.438（Apache-2.0，随附 CMap 与标准字体及各自许可）。 [Highlight.js](https://www.npmjs.com/package/@highlightjs/cdn-assets/v/11.12.0) [PDF.js](https://github.com/mozilla/pdf.js/tree/v6.5.438)
+
 ## Agent 的 Node / npm / MCP 运行时
 
 `runtime/agent/` 使用独立进程提供 MCP stdio 与 Streamable HTTP 连接，不改变 Qt/C++ 模块的许可。Node.js v24.19.0 x64 来自本机既有 Node 安装（MIT，内含组件另见完整声明），npm 11.17.0 为 Artistic-2.0，官方 `@modelcontextprotocol/client` / `@modelcontextprotocol/core` 2.4.0 为 Apache-2.0。对应来源为 [Node.js](https://github.com/nodejs/node/tree/v24.19.0)、[npm CLI](https://github.com/npm/cli/tree/v11.17.0)、[MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)。
@@ -109,3 +119,6 @@ The Windows runtime uses the official VapourSynth R81 ABI3 wheel (LGPL-2.1-or-la
 CPU 功耗读取使用 PawnIO.Modules 0.2.11 的原始签名模块（LGPL-2.1-or-later），来源、哈希、版权与完整源码获取入口见 [assets/pawnio/NOTICE.md](assets/pawnio/NOTICE.md)，许可见 [COPYING](assets/pawnio/COPYING)。运行包将说明和许可放在 `licenses/PawnIO-Modules/`；驱动和 PawnIOLib.dll 复用用户已有安装。NVIDIA 功耗接口动态读取已安装的 NVML，不随包重新分发驱动库。
 
 LibRaw 0.21.4: camera RAW development, dynamically loaded by FFF.Native.dll. Source: https://github.com/LibRaw/LibRaw/tree/0.21.4 . LGPL-2.1 / CDDL-1.0 dual license; bundled notices and source revision: `licenses/libraw/`.
+## TrueToneCap 桌面颜色策略参考
+
+截图颜色分类与桌面最大 RGB 饱和策略参考 [TrueToneCap](https://github.com/luoye-cpu/TrueToneCap/tree/a855dc21ed6c81ddb762a03c8dd3bf684159e278)，固定提交 `a855dc21ed6c81ddb762a03c8dd3bf684159e278`，Copyright TrueToneCap contributors，Apache-2.0。策略改写位于 `src/color/ScreenshotColor.h`（2026-11-17，C++ 类型、非有限值和 signed RGB 处理）；许可见 [third_party/truetonecap/LICENSE](third_party/truetonecap/LICENSE)。未复用其二进制、模型、WinUI 或旧 Qt sidecar。根项目 MIT 许可保持不变。

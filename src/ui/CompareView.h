@@ -12,7 +12,7 @@ public:
     void removeProcessedPane(int route);
     void setRouteVisible(int route,bool visible);
     PreviewPane *sourcePane() const;
-    PreviewPane *processedPane() const;
+    PreviewPane *processedPane(int route = 0) const;
     CompareMode mode() const { return mode_; }
     double splitRatio() const;
     void setMode(CompareMode mode);

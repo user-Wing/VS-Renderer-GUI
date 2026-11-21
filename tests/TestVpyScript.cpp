@@ -3,16 +3,43 @@
 #include "graph/FilterCatalog.h"
 #include "graph/PresetStore.h"
 #include "graph/HlslPreview.h"
+#include "color/CubeLut.h"
 
 #include <QTest>
 #include <QFile>
 #include <QJsonArray>
+#include <QTemporaryDir>
 
 using namespace vsr;
 
 class TestVpyScript final : public QObject {
     Q_OBJECT
 private slots:
+    void cubeProfileFromHeaderAndManualOverride()
+    {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const auto input = temp.filePath(QStringLiteral("calibration.cube"));
+        const auto storage = cubeLibrary(temp.path());
+        QVERIFY(PresetStore::write(input, "TITLE \"Camera W0, Display P3\"\n# sRGB transfer\nLUT_3D_SIZE 2\n"));
+        const auto imported = importCubeFile(input, storage);
+        QCOMPARE(imported, storage.filePath("calibration.cube"));
+        QCOMPARE(importCubeFile(input, storage), imported);
+        QCOMPARE(cubeLabel(imported), QStringLiteral("Camera W0, Display P3"));
+        QVERIFY(cubeUsesDisplayP3(imported));
+
+        FilterGraph graph;
+        const int row = graph.add("cube_lut");
+        QVERIFY(graph.setParameter(row, "file", imported));
+        const auto build = [&] { return VpyScriptBuilder::build("input.jxl", SourceFilter::Ffms2, graph); };
+        auto autoProfile = build();
+        QCOMPARE(autoProfile.requiredNamespaces, QStringList{QStringLiteral("vsrsource")});
+        const auto call = QString("clip = _vsr_cube(clip, %1, ").arg(VpyScriptBuilder::pythonString(imported));
+        QVERIFY(autoProfile.script.contains(call + "12)"));
+        QVERIFY(graph.setParameter(row, "manual_space", true));
+        QVERIFY(build().script.contains(call + "1)"));
+    }
+
     void openNguExportUsesGlsl(){
         FilterGraph graph;const auto index=graph.add("anime4k");graph.at(index)->parameters["mode"]="OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl";
         const auto script=VpyScriptBuilder::build("input.mkv",SourceFilter::Ffms2,graph);QVERIFY(script.errors.isEmpty());QVERIFY(script.script.contains("OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl"));QVERIFY(!script.script.contains("OpenNGU-AA-Medium-BestMatch-2x-SDR.hlsl"));

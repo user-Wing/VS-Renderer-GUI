@@ -310,10 +310,10 @@ QSize PlayerWindow::profileTarget() const {
     if(multiple>0)return QSize(w*multiple,h*multiple);
     return QSize(qMax(2,fitted.width()/2*2),qMax(2,fitted.height()/2*2));
 }
-void PlayerWindow::setDirectMode(bool enabled) {
+void PlayerWindow::setDirectMode(bool enabled, bool reopenSource) {
     if(direct_==enabled)return;
     if(aiSubtitles_)aiSubtitles_->stop();
-    const bool opened=!media_.isEmpty();const auto at=position();
+    const bool opened=reopenSource && !media_.isEmpty();const auto at=opened?position():0;
     const auto state=clock_->snapshot().state;if(state==ThreeFpState::Ready || state==ThreeFpState::Playing || state==ThreeFpState::Paused || state==ThreeFpState::Ended)clock_->stop();
     clock_.swap(output_);direct_=enabled;
     clock_->setClockOnly(!enabled);

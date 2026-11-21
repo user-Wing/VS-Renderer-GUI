@@ -3,7 +3,7 @@
 #include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
 #include "player/PlayerShortcuts.h"
-#include <QTableWidget>
+#include "ui/ShortcutTable.h"
 #include "ui/About.h"
 #include "ui/PageTheme.h"
 #include "player/PortableChart.h"
@@ -55,6 +55,20 @@
 #include <algorithm>
 
 namespace vsr {
+namespace {
+QList<ShortcutAction> playerShortcutActions()
+{
+    return {{"none",PlayerWindow::tr("无")},{"play",PlayerWindow::tr("播放 / 暂停")},
+        {"volume",PlayerWindow::tr("音量 (%)"),true},{"rate",PlayerWindow::tr("倍速"),true},
+        {"mute",PlayerWindow::tr("静音")},{"list",PlayerWindow::tr("列表定位")},
+        {"jinc",PlayerWindow::tr("Jinc 直通")},{"d3d11",PlayerWindow::tr("D3D11 直通")},
+        {"auto",PlayerWindow::tr("自动切换")},{"seek",PlayerWindow::tr("跳转 (秒)"),true},
+        {"frame",PlayerWindow::tr("逐帧"),true},{"keyframe",PlayerWindow::tr("关键帧"),true},
+        {"chapter",PlayerWindow::tr("章节"),true},{"clipboard",PlayerWindow::tr("当前帧 PNG 到剪贴板")},
+        {"minimal",PlayerWindow::tr("极简模式")}};
+}
+}
+
 bool PlayerWindow::madvrMode() const { return QFileInfo(source_).suffix().compare("mpls",Qt::CaseInsensitive)!=0 && !imageMode_ && !networkSource() && settings_->value("player/renderer","VS").toString()=="madVR"; }
 void PlayerWindow::resetStatistics() { skippedFrames_=submittedFrames_=0; frameMilliseconds_=0;infoFpsTimer_.invalidate();infoCurrentFps_=0;if(interpolationWarning_)showInterpolationWarning(false);suspendQualityCheck(); }
 void PlayerWindow::toggleFullscreen() {
@@ -294,24 +308,67 @@ void PlayerWindow::showSettings() {
     connect(aiGuide,&QPushButton::clicked,&dialog,[]{QDesktopServices::openUrl(QUrl::fromLocalFile(QDir(QCoreApplication::applicationDirPath()).filePath("runtime/ai-subtitles/README.md")));});
     auto *aiModels=new QPushButton(tr("手动下载模型与 mmproj…"),&dialog);subtitlePage->addRow(aiModels);connect(aiModels,&QPushButton::clicked,&dialog,[]{QDesktopServices::openUrl(QUrl("https://huggingface.co/ggml-org/Qwen3-ASR-0.6B-GGUF/tree/main"));});
     auto *aiRuntime=new QPushButton(tr("手动下载 llama.cpp 推理运行时…"),&dialog);subtitlePage->addRow(aiRuntime);connect(aiRuntime,&QPushButton::clicked,&dialog,[]{QDesktopServices::openUrl(QUrl("https://github.com/ggml-org/llama.cpp/releases"));});
-    page()->addRow(new ComponentDownloads(stack));
+    stack->addWidget(new ComponentDownloads(stack));
 #endif
     categories->addItem(tr("快捷键"));auto *shortcutForm=page();
-    auto *shortcuts=new QTableWidget(&dialog);shortcuts->setObjectName("playerShortcuts");shortcuts->setColumnCount(4);shortcuts->setHorizontalHeaderLabels({tr("快捷键"),tr("功能模式"),tr("步进 / 值"),tr("启用")});
-    const auto entries=playerShortcuts(*settings_);shortcuts->setRowCount(entries.size());
-    const QStringList actions{"none","play","volume","rate","mute","list","jinc","d3d11","auto","seek","frame","keyframe","chapter","clipboard","minimal"};
-    const QStringList actionLabels{tr("无"),tr("播放 / 暂停"),tr("音量 (%)"),tr("倍速"),tr("静音"),tr("列表定位"),tr("Jinc 直通"),tr("D3D11 直通"),tr("自动切换"),tr("跳转 (秒)"),tr("逐帧"),tr("关键帧"),tr("章节"),tr("当前帧 PNG 到剪贴板"),tr("极简模式")};
-    for(int row=0;row<entries.size();++row){const auto prefix=shortcutPrefix(row);const auto &entry=entries[row];auto *key=new QTableWidgetItem(entry.key);key->setFlags(key->flags() & ~Qt::ItemIsEditable);shortcuts->setItem(row,0,key);
-        auto *mode=new QComboBox(shortcuts);for(int i=0;i<actions.size();++i)mode->addItem(actionLabels[i],actions[i]);mode->setCurrentIndex(qMax(0,mode->findData(settings_->value(prefix+"action",entry.action))));shortcuts->setCellWidget(row,1,mode);
-        auto *value=new QDoubleSpinBox(shortcuts);value->setRange(-36000,36000);value->setDecimals(2);value->setValue(settings_->value(prefix+"value",entry.value).toDouble());shortcuts->setCellWidget(row,2,value);
-        auto *enabled=new QCheckBox(shortcuts);enabled->setChecked(settings_->value(prefix+"enabled",true).toBool());shortcuts->setCellWidget(row,3,enabled);
+    auto *shortcuts = new ShortcutTable(playerShortcutActions(), &dialog);
+    shortcuts->setObjectName("playerShortcuts");
+    shortcuts->setMinimumHeight(380);
+    const auto entries = playerShortcuts(*settings_);
+    const int shortcutCount = playerShortcutCount(*settings_, entries.size());
+    for (int row = 0; row < shortcutCount; ++row) {
+        const auto prefix = shortcutPrefix(row);
+        const auto entry = entries.value(row, {{}, "play", 0});
+        const auto key = settings_->value(prefix+"enabled", true).toBool()
+            ? settings_->value(prefix+"key", entry.key).toString() : QString();
+        const auto sequence = QKeySequence::fromString(key, QKeySequence::PortableText);
+        shortcuts->append({!sequence.isEmpty() && isPlayerFullscreenKey(sequence[0].key()) ? QString() : sequence.toString(QKeySequence::PortableText),
+                           settings_->value(prefix+"action", entry.action).toString(),
+                           settings_->value(prefix+"value", entry.value).toDouble()});
     }
-    shortcuts->setColumnWidth(0,140);shortcuts->setColumnWidth(1,220);shortcuts->setMinimumHeight(380);shortcuts->setStyleSheet("QTableWidget#playerShortcuts QComboBox,QTableWidget#playerShortcuts QDoubleSpinBox,QTableWidget#playerShortcuts QLineEdit{background:transparent;border:none;color:palette(text);}");shortcutForm->addRow(shortcuts);
+    shortcutForm->addRow(shortcuts);
+    auto *shortcutButtons = new QHBoxLayout;
+    auto *addShortcut = new QPushButton(tr("添加快捷键"), &dialog);
+    addShortcut->setObjectName("playerAddShortcut");
+    auto *removeShortcut = new QPushButton(tr("移除所选"), &dialog);
+    removeShortcut->setObjectName("playerRemoveShortcut");
+    shortcutButtons->addWidget(addShortcut);
+    shortcutButtons->addWidget(removeShortcut);
+    shortcutButtons->addStretch();
+    shortcutForm->addRow(shortcutButtons);
+    const auto updateShortcutButtons = [=] {
+        addShortcut->setEnabled(shortcuts->rowCount() < maximumPlayerShortcuts);
+        removeShortcut->setEnabled(shortcuts->currentRow() >= entries.size());
+    };
+    connect(shortcuts, &QTableWidget::currentCellChanged, &dialog, updateShortcutButtons);
+    connect(addShortcut, &QPushButton::clicked, &dialog, [=] {
+        shortcuts->append({{}, "play"});
+        shortcuts->setCurrentCell(shortcuts->rowCount() - 1, 0);
+        shortcuts->editItem(shortcuts->currentItem());
+    });
+    connect(removeShortcut, &QPushButton::clicked, &dialog, [=] {
+        if (shortcuts->currentRow() >= entries.size()) shortcuts->removeRow(shortcuts->currentRow());
+        updateShortcutButtons();
+    });
+    updateShortcutButtons();
     categories->addItem(tr("关于"));page()->addRow(aboutLabel("VS Player",&dialog));
     const int requestedPage=property("settingsPage").isValid()?property("settingsPage").toInt():0;setProperty("settingsPage",QVariant());categories->setCurrentRow(qBound(0,requestedPage,categories->count()-1));
     auto *footer=new QHBoxLayout;auto *load=new QPushButton(tr("加载预设…"),&dialog);load->setObjectName("playerLoadSettings");auto *save=new QPushButton(tr("保存预设…"),&dialog);save->setObjectName("playerSaveSettings");footer->addWidget(load);footer->addWidget(save);footer->addStretch();
     auto *cancel=new QPushButton(tr("取消(&N)"),&dialog);cancel->setObjectName("playerCancelSettings");auto *ok=new QPushButton(tr("确定(&Y)"),&dialog);ok->setObjectName("playerConfirmSettings");ok->setDefault(true);auto *apply=new QPushButton(tr("应用(&A)"),&dialog);apply->setObjectName("playerApplySettings");footer->addWidget(cancel);footer->addWidget(ok);footer->addWidget(apply);outer->addLayout(footer);
-    const auto store=[&]{settings_->setValue("playback/thumbnails",thumbnails->isChecked());settings_->setValue("audio/renderer",audioRenderer->currentData());settings_->setValue("audio/endpoint",audioDevice->currentData());settings_->setValue("audio/exclusive",audioExclusive->isChecked());settings_->setValue("performance/bufferMiB",bufferMiB->value());for(int row=0;row<entries.size();++row){const auto prefix=shortcutPrefix(row);settings_->setValue(prefix+"action",qobject_cast<QComboBox*>(shortcuts->cellWidget(row,1))->currentData());settings_->setValue(prefix+"value",qobject_cast<QDoubleSpinBox*>(shortcuts->cellWidget(row,2))->value());settings_->setValue(prefix+"enabled",qobject_cast<QCheckBox*>(shortcuts->cellWidget(row,3))->isChecked());}settings_->setValue("decode/softwarePreScaleHeight",preScale->currentData());settings_->setValue("screenshot/path",screenshotPath->text().trimmed());settings_->setValue("basic/language",language->currentData());settings_->setValue("basic/autoplay",autoplay->isChecked());settings_->setValue("theme/chineseFont",chineseFont->currentFont().family());settings_->setValue("theme/latinFont",latinFont->currentFont().family());settings_->setValue("theme/background",background->text());settings_->setValue("theme/opacity",opacity->value());settings_->setValue("theme/bottomTransparency",100-bottomTransparency->value());settings_->setValue("theme/menuOpacity",menuOpacity->value());settings_->setValue("theme/playlistTransparency",playlistTransparency->value());settings_->setValue("playback/remember",remember->isChecked());settings_->setValue("playback/multithread",multithread->isChecked());settings_->setValue("playback/arrows",arrows->currentData());settings_->setValue("playback/ctrlSeconds",ctrl->value());settings_->setValue("playback/ctrlAltSeconds",ctrlAlt->value());settings_->setValue("cache/path",cacheMode->currentIndex()==0?QString():QFileInfo(cachePath->text()).absoluteFilePath());settings_->setValue("player/volume",volume->value());settings_->setValue("subtitle/visible",subtitles->isChecked());settings_->setValue("performance/predecode",predecode->isChecked());settings_->setValue("performance/frames",frames->value());settings_->setValue("performance/resizeBeforeEnhance",resizeFirst->isChecked());for(int n=0;n<4;++n)settings_->setValue("performance/"+keys[n],limits[n]->value());settings_->setValue("player/core",core->currentData());settings_->setValue("decode/video",core->currentData());settings_->setValue("decode/audio",audioCore->currentData());settings_->setValue("decode/mode",hardware->currentData());settings_->setValue("decode/output",output->currentData());settings_->setValue("player/renderer",
+    const auto store=[&]{
+        const int previousCount = playerShortcutCount(*settings_, entries.size());
+        for (int row = shortcuts->rowCount(); row < previousCount; ++row)
+            settings_->remove(shortcutPrefix(row).chopped(1));
+        settings_->setValue("shortcuts/rowCount", shortcuts->rowCount());
+        for (int row = 0; row < shortcuts->rowCount(); ++row) {
+            const auto prefix = shortcutPrefix(row);
+            const auto binding = shortcuts->binding(row);
+            settings_->setValue(prefix+"key", binding.key);
+            settings_->setValue(prefix+"action", binding.action);
+            settings_->setValue(prefix+"value", binding.value);
+            settings_->setValue(prefix+"enabled", !binding.key.isEmpty());
+        }
+        settings_->setValue("playback/thumbnails",thumbnails->isChecked());settings_->setValue("audio/renderer",audioRenderer->currentData());settings_->setValue("audio/endpoint",audioDevice->currentData());settings_->setValue("audio/exclusive",audioExclusive->isChecked());settings_->setValue("performance/bufferMiB",bufferMiB->value());settings_->setValue("decode/softwarePreScaleHeight",preScale->currentData());settings_->setValue("screenshot/path",screenshotPath->text().trimmed());settings_->setValue("basic/language",language->currentData());settings_->setValue("basic/autoplay",autoplay->isChecked());settings_->setValue("theme/chineseFont",chineseFont->currentFont().family());settings_->setValue("theme/latinFont",latinFont->currentFont().family());settings_->setValue("theme/background",background->text());settings_->setValue("theme/opacity",opacity->value());settings_->setValue("theme/bottomTransparency",100-bottomTransparency->value());settings_->setValue("theme/menuOpacity",menuOpacity->value());settings_->setValue("theme/playlistTransparency",playlistTransparency->value());settings_->setValue("playback/remember",remember->isChecked());settings_->setValue("playback/multithread",multithread->isChecked());settings_->setValue("playback/arrows",arrows->currentData());settings_->setValue("playback/ctrlSeconds",ctrl->value());settings_->setValue("playback/ctrlAltSeconds",ctrlAlt->value());settings_->setValue("cache/path",cacheMode->currentIndex()==0?QString():QFileInfo(cachePath->text()).absoluteFilePath());settings_->setValue("player/volume",volume->value());settings_->setValue("subtitle/visible",subtitles->isChecked());settings_->setValue("performance/predecode",predecode->isChecked());settings_->setValue("performance/frames",frames->value());settings_->setValue("performance/resizeBeforeEnhance",resizeFirst->isChecked());for(int n=0;n<4;++n)settings_->setValue("performance/"+keys[n],limits[n]->value());settings_->setValue("player/core",core->currentData());settings_->setValue("decode/video",core->currentData());settings_->setValue("decode/audio",audioCore->currentData());settings_->setValue("decode/mode",hardware->currentData());settings_->setValue("decode/output",output->currentData());settings_->setValue("player/renderer",
 #ifdef VSR_LITE_PLAYER
         "VS"
 #else
@@ -324,7 +381,10 @@ void PlayerWindow::showSettings() {
         for(int output=0;output<2;++output){QStringList stages;for(int stage=0;stage<4;++stage)if(interpolationChoices[output*4+stage]->isChecked())stages<<QString::number(stage);settings_->setValue(output?"player/interpolationStagesD3D11":"player/interpolationStagesJinc",stages);}
 #endif
     };
-    connect(apply,&QPushButton::clicked,&dialog,[&]{storeStages();store();applySettings(true);language_->updateWidgets(&dialog);});
+    connect(apply,&QPushButton::clicked,&dialog,[&] {
+        storeStages();store();applySettings(true);language_->updateWidgets(&dialog);
+        shortcuts->setActions(playerShortcutActions());
+    });
     connect(save,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getSaveFileName(&dialog,tr("保存完整配置"),"vs-player.ini","INI (*.ini)");if(!file.isEmpty()){storeStages();store();if(!saveConfiguration(file))setError(tr("配置保存失败。"));}});
     connect(load,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getOpenFileName(&dialog,tr("加载完整配置"),{},"INI (*.ini)");if(!file.isEmpty()){if(loadConfiguration(file))dialog.reject();else setError(tr("配置文件无效。"));}});
     connect(ok,&QPushButton::clicked,&dialog,&QDialog::accept);connect(cancel,&QPushButton::clicked,&dialog,&QDialog::reject);

@@ -1,10 +1,12 @@
 #include "ImageJxl.h"
+#include "color/ScreenshotColor.h"
 #include <QColorSpace>
 #include <QFile>
 #include <QSaveFile>
 #include <QScopeGuard>
 #include <QThread>
 #include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 #include <jxl/decode.h>
 #include <jxl/encode.h>
 #include <jxl/thread_parallel_runner.h>
@@ -14,8 +16,9 @@
 namespace vsr {
 QString writeJxl(const QString &path,const QImage &input) {
     if(input.isNull())return QStringLiteral("No JPEG XL pixels");
-    auto image=input.convertToFormat(QImage::Format_RGBA64);
-    const auto space=image.colorSpace().isValid()?image.colorSpace():QColorSpace(QColorSpace::SRgb);
+    const auto plan=screenshot::exportPlan(input);
+    auto image=screenshot::exportPixels(input,plan);
+    const auto space=plan.target;
     auto *encoder=JxlEncoderCreate(nullptr);
     if(!encoder)return QStringLiteral("JPEG XL encoder allocation failed");
     const auto cleanup=qScopeGuard([&]{JxlEncoderDestroy(encoder);});
@@ -45,9 +48,12 @@ QString writeJxl(const QString &path,const QImage &input) {
     const auto icc=space.iccProfile();
     const auto colorStatus=structured?JxlEncoderSetColorEncoding(encoder,&color):JxlEncoderSetICCProfile(encoder,reinterpret_cast<const uint8_t*>(icc.constData()),icc.size());
     if(colorStatus!=JXL_ENC_SUCCESS)return QStringLiteral("JPEG XL color encoding rejected");
-    const auto white=input.text("capSdrWhiteNits");
-    if(!white.isEmpty()) {
-        const auto xml=QString("<vscap capSdrWhiteNits=\"%1\"/>").arg(white.toDouble(),0,'g',17).toUtf8();
+    const auto white=input.text("capSdrWhiteNits"),facts=input.text("vsrColorEvidence");
+    if(!white.isEmpty() || !facts.isEmpty()) {
+        QByteArray xml;QXmlStreamWriter writer(&xml);writer.writeStartElement("vscap");
+        if(!white.isEmpty())writer.writeAttribute("capSdrWhiteNits",QString::number(white.toDouble(),'g',17));
+        if(!facts.isEmpty())writer.writeAttribute("vsrColorEvidence",facts);
+        writer.writeEndElement();
         if(JxlEncoderUseBoxes(encoder)!=JXL_ENC_SUCCESS || JxlEncoderAddBox(encoder,"xml ",reinterpret_cast<const uint8_t*>(xml.constData()),xml.size(),JXL_FALSE)!=JXL_ENC_SUCCESS)return QStringLiteral("JPEG XL metadata rejected");
     }
     auto *frame=JxlEncoderFrameSettingsCreate(encoder,nullptr);
@@ -79,7 +85,7 @@ QImage readJxl(const QString &path,QString *error) {
     const auto threads=qScopeGuard([&]{JxlThreadParallelRunnerDestroy(runner);});
     if(!runner || JxlDecoderSetParallelRunner(decoder,JxlThreadParallelRunner,runner)!=JXL_DEC_SUCCESS || JxlDecoderSubscribeEvents(decoder,JXL_DEC_BASIC_INFO|JXL_DEC_COLOR_ENCODING|JXL_DEC_FULL_IMAGE|JXL_DEC_BOX|JXL_DEC_BOX_COMPLETE)!=JXL_DEC_SUCCESS)return fail(QStringLiteral("JPEG XL decoder initialization failed"));
     JxlDecoderSetInput(decoder,bytes,file.size());JxlDecoderCloseInput(decoder);
-    QImage image;QColorSpace space;QByteArray xml(4096,0);bool xmlActive=false,complete=false;QString white;
+    QImage image;QColorSpace space;QByteArray xml(4096,0);bool xmlActive=false,complete=false;QString white,facts;
     const JxlPixelFormat format{4,JXL_TYPE_UINT16,JXL_NATIVE_ENDIAN,0};
     for(;;) {
         const auto status=JxlDecoderProcessInput(decoder);
@@ -112,13 +118,15 @@ QImage readJxl(const QString &path,QString *error) {
         } else if(status==JXL_DEC_BOX_COMPLETE && xmlActive) {
             const size_t unused=JxlDecoderReleaseBoxBuffer(decoder);xmlActive=false;
             QXmlStreamReader reader(xml.left(xml.size()-qsizetype(unused)));
-            while(!reader.atEnd())if(reader.readNext()==QXmlStreamReader::StartElement && reader.name()==u"vscap")white=reader.attributes().value("capSdrWhiteNits").toString();
+            while(!reader.atEnd())if(reader.readNext()==QXmlStreamReader::StartElement && reader.name()==u"vscap"){
+                white=reader.attributes().value("capSdrWhiteNits").toString();facts=reader.attributes().value("vsrColorEvidence").toString();
+            }
         } else if(status==JXL_DEC_BOX_NEED_MORE_OUTPUT) {
             JxlDecoderReleaseBoxBuffer(decoder);xmlActive=false; // Unrelated large XML is optional metadata.
         } else if(status==JXL_DEC_FULL_IMAGE)complete=true;
         else if(status==JXL_DEC_SUCCESS) {
             if(!complete)return fail(QStringLiteral("JPEG XL contains no complete image"));
-            image.setColorSpace(space);if(!white.isEmpty())image.setText("capSdrWhiteNits",white);return image;
+            image.setColorSpace(space);if(!white.isEmpty())image.setText("capSdrWhiteNits",white);if(!facts.isEmpty())image.setText("vsrColorEvidence",facts);return image;
         } else return fail(QStringLiteral("Invalid or truncated JPEG XL image"));
     }
 }

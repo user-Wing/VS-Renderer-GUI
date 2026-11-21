@@ -5,6 +5,7 @@
 #include <QPaintEngine>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -57,12 +58,18 @@ struct ImageHdrSurface::Impl {
     ComPtr<ID3D11DeviceContext> context;
     ComPtr<IDXGISwapChain3> swap;
     ComPtr<ID3D11RenderTargetView> backBuffer;
+    ComPtr<ID3D11Texture2D> probeTarget;
     ComPtr<ID3D11VertexShader> vertexShader;
     ComPtr<ID3D11PixelShader> pixelShader;
     ComPtr<ID3D11Buffer> constants;
     ComPtr<ID3D11SamplerState> sampler;
     ComPtr<ID3D11ShaderResourceView> imageView,overlayView;
     QSize bufferSize;
+    QSize pixelSize(bool probe=false) const {
+        RECT client{};
+        if(!probe && GetClientRect(reinterpret_cast<HWND>(owner->winId()),&client) && client.right>0 && client.bottom>0)return {client.right,client.bottom};
+        return (owner->size()*owner->devicePixelRatioF()).expandedTo({1,1});
+    }
     qint64 imageKey = 0,overlayKey = 0;
     QElapsedTimer displayCheck;
     bool failure(const QString &message,HRESULT hr=S_OK){
@@ -93,16 +100,22 @@ struct ImageHdrSurface::Impl {
         hr=device->CreateRenderTargetView(buffer.Get(),nullptr,backBuffer.ReleaseAndGetAddressOf());
         return SUCCEEDED(hr) || failure(QStringLiteral("Unable to create HDR render target"),hr);
     }
-    bool initialize(){
-        if(!outputSupportsHdr())return false;
+    bool initialize(bool probe=false){
+        if(!probe && !outputSupportsHdr())return false;
         const D3D_FEATURE_LEVEL levels[]={D3D_FEATURE_LEVEL_11_1,D3D_FEATURE_LEVEL_11_0};D3D_FEATURE_LEVEL feature{};
-        auto hr=D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,levels,2,D3D11_SDK_VERSION,device.ReleaseAndGetAddressOf(),&feature,context.ReleaseAndGetAddressOf());
-        if(hr==E_INVALIDARG)hr=D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,levels+1,1,D3D11_SDK_VERSION,device.ReleaseAndGetAddressOf(),&feature,context.ReleaseAndGetAddressOf());
+        auto hr=D3D11CreateDevice(nullptr,probe?D3D_DRIVER_TYPE_WARP:D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,levels,2,D3D11_SDK_VERSION,device.ReleaseAndGetAddressOf(),&feature,context.ReleaseAndGetAddressOf());
+        if(hr==E_INVALIDARG)hr=D3D11CreateDevice(nullptr,probe?D3D_DRIVER_TYPE_WARP:D3D_DRIVER_TYPE_HARDWARE,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,levels+1,1,D3D11_SDK_VERSION,device.ReleaseAndGetAddressOf(),&feature,context.ReleaseAndGetAddressOf());
         if(FAILED(hr))return failure(QStringLiteral("Unable to initialize D3D11 HDR output"),hr);
         ComPtr<IDXGIDevice> dxgi;ComPtr<IDXGIAdapter> adapter;ComPtr<IDXGIFactory2> factory;
         hr=device.As(&dxgi);if(SUCCEEDED(hr))hr=dxgi->GetAdapter(adapter.GetAddressOf());if(SUCCEEDED(hr))hr=adapter->GetParent(__uuidof(IDXGIFactory2),reinterpret_cast<void **>(factory.GetAddressOf()));
         if(FAILED(hr))return failure(QStringLiteral("Unable to obtain the HDR swap-chain factory"),hr);
-        bufferSize=(owner->size()*owner->devicePixelRatioF()).expandedTo({1,1});
+        bufferSize=pixelSize(probe);
+        if(probe){
+            D3D11_TEXTURE2D_DESC td{};td.Width=bufferSize.width();td.Height=bufferSize.height();td.MipLevels=td.ArraySize=1;td.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;td.SampleDesc.Count=1;td.BindFlags=D3D11_BIND_RENDER_TARGET;
+            hr=device->CreateTexture2D(&td,nullptr,probeTarget.GetAddressOf());
+            if(SUCCEEDED(hr))hr=device->CreateRenderTargetView(probeTarget.Get(),nullptr,backBuffer.GetAddressOf());
+            if(FAILED(hr))return failure(QStringLiteral("Unable to create FP16 probe target"),hr);
+        }else{
         DXGI_SWAP_CHAIN_DESC1 desc{};desc.Width=bufferSize.width();desc.Height=bufferSize.height();desc.Format=DXGI_FORMAT_R16G16B16A16_FLOAT;desc.SampleDesc.Count=1;desc.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;desc.BufferCount=2;desc.Scaling=DXGI_SCALING_STRETCH;desc.SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD;desc.AlphaMode=DXGI_ALPHA_MODE_IGNORE;
         ComPtr<IDXGISwapChain1> first;hr=factory->CreateSwapChainForHwnd(device.Get(),reinterpret_cast<HWND>(owner->winId()),&desc,nullptr,nullptr,first.GetAddressOf());
         if(SUCCEEDED(hr))hr=first.As(&swap);if(FAILED(hr))return failure(QStringLiteral("Unable to create an FP16 HDR swap chain"),hr);
@@ -110,6 +123,7 @@ struct ImageHdrSurface::Impl {
         if(FAILED(hr) || !(support & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT))return failure(QStringLiteral("The swap chain does not support scRGB presentation"),hr);
         hr=swap->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);if(FAILED(hr))return failure(QStringLiteral("Unable to select the scRGB output color space"),hr);
         if(!makeBackBuffer())return false;
+        }
 
         ComPtr<ID3DBlob> vs,ps,errors;hr=D3DCompile(HdrShader,sizeof(HdrShader)-1,"ImageHdrSurface",nullptr,nullptr,"vs","vs_5_0",D3DCOMPILE_OPTIMIZATION_LEVEL3,0,vs.GetAddressOf(),errors.GetAddressOf());
         if(FAILED(hr))return failure(QStringLiteral("Unable to compile HDR vertex shader"),hr);
@@ -132,7 +146,7 @@ struct ImageHdrSurface::Impl {
     }
     void reset(){
         if(context)context->ClearState();
-        overlayView.Reset();imageView.Reset();sampler.Reset();constants.Reset();pixelShader.Reset();vertexShader.Reset();backBuffer.Reset();swap.Reset();
+        overlayView.Reset();imageView.Reset();sampler.Reset();constants.Reset();pixelShader.Reset();vertexShader.Reset();backBuffer.Reset();probeTarget.Reset();swap.Reset();
         if(context)context->Flush();
         context.Reset();device.Reset();imageKey=overlayKey=0;bufferSize={};
     }
@@ -159,6 +173,13 @@ bool ImageHdrSurface::setHdrEnabled(bool enabled){
 }
 bool ImageHdrSurface::hdrActive() const{return d->active;}
 QString ImageHdrSurface::status() const{return d->state;}
+QSize ImageHdrSurface::presentationPixelSize() const{
+#ifdef Q_OS_WIN
+    return d->pixelSize(bool(d->probeTarget));
+#else
+    return (size()*devicePixelRatioF()).expandedTo({1,1});
+#endif
+}
 bool ImageHdrSurface::validateShaders(QString *error){
 #ifdef Q_OS_WIN
     for(const auto *entry:{"vs","ps"}){
@@ -171,6 +192,24 @@ bool ImageHdrSurface::validateShaders(QString *error){
     if(error)*error=QStringLiteral("Native HDR output is supported on Windows only");return false;
 #endif
 }
+QImage ImageHdrSurface::compositionProbe(const QImage &native,const QImage &overlay,double paperWhiteNits,bool absoluteScRgb,QString *error){
+#ifdef Q_OS_WIN
+    ImageHdrSurface surface;surface.resize(native.size());
+    if(!surface.d->initialize(true)){if(error)*error=surface.status();return {};}
+    surface.present(native,surface.rect(),overlay,0,paperWhiteNits,absoluteScRgb);
+    if(!surface.d->active){if(error)*error=surface.status();return {};}
+    auto &d=*surface.d;D3D11_TEXTURE2D_DESC td{};d.probeTarget->GetDesc(&td);td.Usage=D3D11_USAGE_STAGING;td.BindFlags=0;td.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;auto hr=d.device->CreateTexture2D(&td,nullptr,staging.GetAddressOf());
+    if(SUCCEEDED(hr))d.context->CopyResource(staging.Get(),d.probeTarget.Get());
+    D3D11_MAPPED_SUBRESOURCE mapped{};if(SUCCEEDED(hr))hr=d.context->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped);
+    if(FAILED(hr)){if(error)*error=QStringLiteral("FP16 compositor readback failed (0x%1)").arg(quint32(hr),8,16,QChar('0'));return {};}
+    QImage image(td.Width,td.Height,QImage::Format_RGBA16FPx4);
+    if(!image.isNull())for(UINT y=0;y<td.Height;++y)std::memcpy(image.scanLine(y),static_cast<const char*>(mapped.pData)+y*mapped.RowPitch,td.Width*8);
+    d.context->Unmap(staging.Get(),0);image.setColorSpace(QColorSpace::SRgbLinear);return image.convertToFormat(QImage::Format_RGBA32FPx4);
+#else
+    Q_UNUSED(native);Q_UNUSED(overlay);Q_UNUSED(paperWhiteNits);Q_UNUSED(absoluteScRgb);if(error)*error=QStringLiteral("Windows D3D11 required");return {};
+#endif
+}
 QPaintEngine *ImageHdrSurface::paintEngine() const{return nullptr;}
 void ImageHdrSurface::paintEvent(QPaintEvent *){}
 bool ImageHdrSurface::nativeEvent(const QByteArray &type,void *message,qintptr *result){
@@ -179,12 +218,12 @@ bool ImageHdrSurface::nativeEvent(const QByteArray &type,void *message,qintptr *
 #endif
     return QWidget::nativeEvent(type,message,result);
 }
-void ImageHdrSurface::present(const QImage &native,const QRectF &target,const QImage &overlay,double exposure,double paperWhiteNits){
+void ImageHdrSurface::present(const QImage &native,const QRectF &target,const QImage &overlay,double exposure,double paperWhiteNits,bool absoluteScRgb){
 #ifdef Q_OS_WIN
     if(!d->active)return;
     if(!std::isfinite(exposure) || !std::isfinite(paperWhiteNits) || paperWhiteNits<=0 || target.isEmpty())return;
-    if(d->displayCheck.elapsed()>1000){if(!d->outputSupportsHdr())return;d->displayCheck.restart();}
-    const QSize pixels=(size()*devicePixelRatioF()).expandedTo({1,1});
+    if(d->swap && d->displayCheck.elapsed()>1000){if(!d->outputSupportsHdr())return;d->displayCheck.restart();}
+    const QSize pixels=presentationPixelSize();
     if(pixels!=d->bufferSize){d->context->OMSetRenderTargets(0,nullptr,nullptr);d->backBuffer.Reset();const auto hr=d->swap->ResizeBuffers(0,pixels.width(),pixels.height(),DXGI_FORMAT_UNKNOWN,0);if(FAILED(hr)){d->failure(QStringLiteral("Unable to resize HDR swap chain"),hr);return;}d->bufferSize=pixels;if(!d->makeBackBuffer())return;}
     if(d->imageKey!=native.cacheKey() || !d->imageView){
         QImage image=native.convertToFormat(QImage::Format_RGBA32FPx4);
@@ -199,18 +238,18 @@ void ImageHdrSurface::present(const QImage &native,const QRectF &target,const QI
         QImage image;if(overlay.isNull()){image=QImage(1,1,QImage::Format_RGBA8888);image.fill(Qt::transparent);}else image=overlay.convertToFormat(QImage::Format_RGBA8888);
         if(!d->upload(image,DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,d->overlayView))return;d->overlayKey=overlay.cacheKey();
     }
-    const float ratio=devicePixelRatioF(),white=paperWhiteNits/80.;
+    const float sx=float(pixels.width())/width(),sy=float(pixels.height())/height(),white=paperWhiteNits/80.;
     // Qt 6.10 maps PQ's 10000 nit endpoint to 64 linear units. PQ is absolute;
     // ordinary linear/SDR input uses the user-selected relative paper white.
-    const float imageWhite=native.colorSpace().transferFunction()==QColorSpace::TransferFunction::St2084?10000.f/(64*80):white;
-    const float settings[]={float(target.x())*ratio,float(target.y())*ratio,float(target.width())*ratio,float(target.height())*ratio,float(pixels.width()),float(pixels.height()),white,float(std::exp2(std::clamp(exposure,-32.,32.)))*imageWhite};
+    const float imageWhite=absoluteScRgb?1.f:native.colorSpace().transferFunction()==QColorSpace::TransferFunction::St2084?10000.f/(64*80):white;
+    const float settings[]={float(target.x())*sx,float(target.y())*sy,float(target.width())*sx,float(target.height())*sy,float(pixels.width()),float(pixels.height()),white,float(std::exp2(std::clamp(exposure,-32.,32.)))*imageWhite};
     d->context->UpdateSubresource(d->constants.Get(),0,nullptr,settings,0,0);
     D3D11_VIEWPORT viewport{};viewport.Width=pixels.width();viewport.Height=pixels.height();viewport.MaxDepth=1;d->context->RSSetViewports(1,&viewport);
     auto *back=d->backBuffer.Get();d->context->OMSetRenderTargets(1,&back,nullptr);d->context->IASetInputLayout(nullptr);d->context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);d->context->VSSetShader(d->vertexShader.Get(),nullptr,0);d->context->PSSetShader(d->pixelShader.Get(),nullptr,0);
     auto *cb=d->constants.Get();d->context->PSSetConstantBuffers(0,1,&cb);auto *sampler=d->sampler.Get();d->context->PSSetSamplers(0,1,&sampler);ID3D11ShaderResourceView *views[]={d->imageView.Get(),d->overlayView.Get()};d->context->PSSetShaderResources(0,2,views);d->context->Draw(3,0);
-    const auto hr=d->swap->Present(1,0);if(FAILED(hr))d->failure(QStringLiteral("HDR presentation failed"),hr);
+    const auto hr=d->swap?d->swap->Present(1,0):S_OK;if(FAILED(hr))d->failure(QStringLiteral("HDR presentation failed"),hr);
 #else
-    Q_UNUSED(native);Q_UNUSED(target);Q_UNUSED(overlay);Q_UNUSED(exposure);Q_UNUSED(paperWhiteNits);
+    Q_UNUSED(native);Q_UNUSED(target);Q_UNUSED(overlay);Q_UNUSED(exposure);Q_UNUSED(paperWhiteNits);Q_UNUSED(absoluteScRgb);
 #endif
 }
 }

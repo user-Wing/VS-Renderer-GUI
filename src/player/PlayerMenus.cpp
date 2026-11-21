@@ -1,5 +1,7 @@
 #include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
+#include "player/PlayerImageTools.h"
+#include "color/CubeLut.h"
 #include "player/PlayerAiSubtitles.h"
 #include "player/PlayerMenu.h"
 #include "player/PlayerDiscMenu.h"
@@ -72,6 +74,51 @@ void PlayerWindow::attachSubtitle(const QString &path,int slot) {
     });watcher->setFuture(QtConcurrent::run([path]{return PlayerAudioMetadata::probe(path);}));return;}
     selectSubtitle(slot,-2);showStatus(tr("已挂载字幕：%1").arg(QFileInfo(path).fileName()));
 }
+void PlayerWindow::addCubeMenu(QMenu *menu)
+{
+    migrateCubeLibrary();
+    const auto active = imageMode_ ? imageTools_->cubePath() : videoCubePath_;
+    auto *cube = PlayerMenu::add(menu, tr("Cube 调色"));
+    cube->setObjectName("playerCubeLuts");
+    const bool canApply = canApplyCube();
+    cube->addAction(tr("导入 Cube…"), this, &PlayerWindow::loadCube);
+    if (!canApply) cube->addAction(tr("适用于 SDR 图片或 Full 版本地 SDR 视频"))->setEnabled(false);
+    auto *manual = cube->addAction(tr("手动指定工作色域"));
+    manual->setCheckable(true);
+    manual->setChecked(settings_->value("cube/manualSpace").toBool());
+    auto *profiles = PlayerMenu::add(cube, tr("工作色域"));
+    profiles->menuAction()->setVisible(manual->isChecked());
+    connect(manual, &QAction::toggled, this, [this, active, profiles](bool checked) {
+        settings_->setValue("cube/manualSpace", checked);
+        profiles->menuAction()->setVisible(checked);
+        if (!active.isEmpty()) applyCube(active);
+    });
+    auto *spaces = new QActionGroup(profiles);
+    for (const bool p3 : {false, true}) {
+        auto *action = profiles->addAction(p3 ? tr("Display P3 SDR") : tr("sRGB SDR"), this, [this, active, p3] {
+            settings_->setValue("cube/displayP3", p3);
+            if (!active.isEmpty()) applyCube(active);
+        });
+        action->setCheckable(true);
+        action->setChecked(settings_->value("cube/displayP3").toBool() == p3);
+        spaces->addAction(action);
+    }
+    cube->addSeparator();
+    const auto library = playerCubeLibrary();
+    for (const auto &name : library.entryList({"*.cube"}, QDir::Files | QDir::NoSymLinks, QDir::Name)) {
+        const auto path = library.absoluteFilePath(name);
+        auto *action = cube->addAction(cubeLabel(path), this, [this, path] { applyCube(path); });
+        action->setCheckable(true);
+        action->setChecked(QFileInfo(active) == QFileInfo(path));
+        action->setToolTip(path);
+        action->setEnabled(canApply);
+    }
+    if (!active.isEmpty()) cube->addAction(tr("移除 Cube 调色"), this, [this] {
+        if (imageMode_) imageTools_->clearCube();
+        else { videoCubePath_.clear(); refreshScript(); }
+    });
+}
+
 void PlayerWindow::showContextMenu(const QPoint &position) {
     if(!imageMode_){const auto refreshed=QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();if(!refreshed.isEmpty())media_=refreshed;}
     applyBlurayMetadata();
@@ -85,11 +132,13 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     if(!discRoot_.isEmpty())menu->addAction(tr("BD 主菜单 / 弹出菜单"),this,&PlayerWindow::returnToDiscMenu);
     if(discMenu_ && discMenu_->active()){menu->addAction(tr("切回节目列表模式 (3FP)"),this,[this]{if(!files_.isEmpty())openFile(files_.first());});
         for(bool audio:{true,false}){auto *tracks=PlayerMenu::add(menu,audio?tr("音轨"):tr("字幕"));for(const auto &track:discMenu_->tracks(audio))tracks->addAction(track.second,this,[this,audio,id=track.first]{discMenu_->selectTrack(audio,id);});}
+        addCubeMenu(menu);
         menu->addAction(tr("设置…"),this,&PlayerWindow::showSettings);menu->addAction(tr("全屏 / 退出全屏"),this,&PlayerWindow::toggleFullscreen);menu->popup(position);return;
     }
     auto *playlist=menu->addAction(tr("播放列表"));playlist->setCheckable(true);playlist->setChecked(playlistPinned_);connect(playlist,&QAction::toggled,this,&PlayerWindow::setPlaylistPinned);
     auto *wheel=PlayerMenu::add(menu,tr("鼠标滚轮"));auto *wheelGroup=new QActionGroup(wheel);for(const auto &mode:QStringList{"volume","zoom"}){auto *action=wheel->addAction(mode=="volume"?tr("音量调节"):imageMode_?tr("放大图片"):tr("放大视频"));action->setCheckable(true);action->setChecked((imageMode_?QString("zoom"):settings_->value("player/wheel","volume").toString())==mode);action->setEnabled(!imageMode_ || mode=="zoom");wheelGroup->addAction(action);connect(action,&QAction::triggered,this,[this,mode]{settings_->setValue("player/wheel",mode);});}
     menu->addSeparator();
+    addCubeMenu(menu);
     auto *shaders=PlayerMenu::add(menu,tr("自定义 GLSL/HLSL 着色器"));shaders->setObjectName("playerCustomShaders");
     shaders->addAction(tr("导入着色器…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("导入 GLSL/HLSL 着色器"),customShaderDirectory(),"Shaders (*.hlsl *.glsl *.hook)");if(!path.isEmpty())importCustomShader(path);});
     shaders->addAction(tr("存储路径（浏览）…"),this,[this]{const auto directory=QFileDialog::getExistingDirectory(this,tr("着色器存储路径"),customShaderDirectory());if(!directory.isEmpty())settings_->setValue("render/shaderDirectory",directory);});
@@ -296,7 +345,7 @@ void PlayerWindow::captureImage(bool source,const QString &directory,const QStri
     QJsonObject metadata{{"sourceFile",source_},{"stage",source?"source":"display"},{"position100ns",double(position())},{"hdr",false},{"encoding","encoded-RGB"}};
     if(imageMode_){const auto image=source?pane_->image():pane_->captureImage();if(image.isNull()){setError(tr("没有可截取画面。"));return;}const auto transfer=image.colorSpace().transferFunction();const auto format=image.format();const bool floating=format==QImage::Format_RGBA32FPx4 || format==QImage::Format_RGBA16FPx4 || format==QImage::Format_RGBX32FPx4 || format==QImage::Format_RGBX16FPx4;metadata["hdr"]=floating || transfer==QColorSpace::TransferFunction::St2084 || transfer==QColorSpace::TransferFunction::Hlg;if(transfer==QColorSpace::TransferFunction::Linear)metadata["encoding"]="linear-RGB";metadata["inputBitDepthPerChannel"]=image.pixelFormat().bitsPerPixel()/std::max(1,int(image.pixelFormat().channelCount()));screenshotPending_=true;saveScreenshot(file,image,metadata);return;}
     if(!source){auto *renderer=direct_?clock_.get():output_.get();const auto status=renderer->colorStatus();auto image=madvrMode()&&lav_?lav_->capture():renderer->captureFloat();if(image.isNull()){setError(tr("当前渲染器未返回可截取画面。"));return;}
-        metadata["hdr"]=!madvrMode() && status.outputHdr;metadata["inputBitDepthPerChannel"]=madvrMode()?8:int(status.outputBits);metadata["renderer"]=madvrMode()?"madVR 8-bit capture interface":QString::fromUtf8(status.engine);metadata["qtInfoOverlay"]=infoVisible_;metadata["readbackBitDepth"]=image.text("readbackBitDepth").toInt();metadata["outputHdr"]=bool(status.outputHdr);metadata["tone"]=int(status.tone);metadata["gamut"]=int(status.gamut);metadata["dither"]=int(status.dither);metadata["targetPeakNits"]=status.targetPeak;metadata["iccProfile"]=QString::fromUtf8(status.profile);metadata["lutActive"]=bool(status.lutActive);
+        metadata["hdr"]=!madvrMode() && status.outputHdr;metadata["inputBitDepthPerChannel"]=madvrMode()?8:int(status.outputBits);metadata["renderer"]=madvrMode()?"madVR 8-bit capture interface":QString::fromUtf8(status.engine);metadata["qtInfoOverlay"]=infoVisible_;metadata["readbackBitDepth"]=image.text("readbackBitDepth").toInt();metadata["captureStorageBits"]=madvrMode()?8:image.text("readbackBitDepth").toInt();metadata["outputHdr"]=bool(status.outputHdr);metadata["tone"]=int(status.tone);metadata["gamut"]=int(status.gamut);metadata["dither"]=int(status.dither);metadata["targetPeakNits"]=status.targetPeak;metadata["iccProfile"]=QString::fromUtf8(status.profile);metadata["lutActive"]=bool(status.lutActive);
         if(status.outputHdr && !madvrMode()){metadata["encoding"]="scRGB-linear";metadata["linearUnitNits"]=80;image.setColorSpace(QColorSpace(QColorSpace::SRgbLinear));}
         else if(status.activeEngine==1 && status.iccState==1){QFile profile(QString::fromUtf8(status.profile));if(profile.open(QIODevice::ReadOnly))image.setColorSpace(QColorSpace::fromIccProfile(profile.readAll()));}
         else{metadata["pngPrimaries"]=1;metadata["pngTransfer"]=status.activeEngine==1 || madvrMode()?13:1;}

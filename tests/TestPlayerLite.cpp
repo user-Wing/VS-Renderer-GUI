@@ -63,6 +63,26 @@ class TestPlayer final : public QObject {
     QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
     QString configPath() const {return config();}
 private slots:
+    void cubeMenuVisibleForImages() {
+        QTemporaryDir directory;
+        const auto file = directory.filePath("cube.png");
+        QImage image(40, 40, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QVERIFY(image.save(file));
+        PlayerWindow player;
+        player.settings_->setValue("cube/libraryMigrated", true);
+        player.show();
+        QVERIFY(player.openFile(file));
+        QTRY_VERIFY(player.imageMode_ && player.ready_);
+        player.showContextMenu(player.mapToGlobal(QPoint(40, 40)));
+        auto *menu = player.findChild<QMenu *>("playerContextMenu");
+        QVERIFY(menu);
+        auto *cube = menu->findChild<QMenu *>("playerCubeLuts");
+        QVERIFY(cube && cube->menuAction()->isVisible());
+        QVERIFY(cube->actions().first()->isEnabled());
+        menu->close();
+    }
+
     void abLoopPlayback(){runAbLoopPlayback();}
     void thumbnailRegistrationRestoresPrevious(){runThumbnailRegistrationRestoresPrevious();}
     void upstreamBluetoothPolicy(){runUpstreamBluetoothPolicy();}

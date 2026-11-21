@@ -22,7 +22,7 @@ public:
 
     static ExportPlan buildPlan(const QString &command, const QString &sourcePath,
                                 const QString &outputPath, const QString &scriptPath,
-                                const QString &applicationDirectory);
+                                const QString &applicationDirectory, const QString &customFfmpeg = {});
     bool start(const ExportPlan &plan);
     bool isRunning() const;
     void cancel();

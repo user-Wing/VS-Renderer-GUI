@@ -121,7 +121,7 @@ private:
     void suspendQualityCheck();
     void applyScaling();
     bool openNguActive_=false;
-    void setDirectMode(bool enabled);
+    void setDirectMode(bool enabled, bool reopenSource = true);
     void ensureProfiles();
     bool nativeBuiltinCompatible() const;
     bool hlslColorCompatible() const;
@@ -151,6 +151,13 @@ private:
     QLabel *aiCaption_=nullptr;
     void showColorSettings();
     void applyColorSettings();
+    void loadCube();
+    bool canApplyCube() const;
+    void applyCube(const QString &path);
+    void addCubeMenu(QMenu *menu);
+    void migrateCubeLibrary();
+    QString videoCubePath_;
+    bool videoCubeP3_ = false;
     void showSpeedPopup();
     void updateInfo();
     void updateAudioInfo(const QJsonObject &audio, quint64 bitRate);

@@ -1,6 +1,8 @@
 #include "runtime/OptionalRuntime.h"
 #include "player/PlayerPng.h"
 #include "image/ImageJxl.h"
+#include "color/ScreenshotColor.h"
+#include "image/ScreenshotPng.h"
 #include <QFile>
 #include <QSaveFile>
 #include <QJsonDocument>
@@ -34,16 +36,10 @@ QString writeScreenshot(const QString &path,const QImage &input,QJsonObject meta
     if(input.isNull())return QStringLiteral("No screenshot pixels");
     auto image=input;
     if(metadata.value("encoding").toString()=="scRGB-linear") {
-        image=input.convertToFormat(QImage::Format_RGBA32FPx4);
-        const auto pq=[](double v){const double p=std::pow(std::clamp(v*.008,0.0,1.0),2610.0/16384.0);return float(std::pow((3424.0/4096.0+2413.0/128.0*p)/(1+2392.0/128.0*p),2523.0/32.0));};
-        for(int y=0;y<image.height();++y){auto *row=reinterpret_cast<float*>(image.scanLine(y));for(int x=0;x<image.width();++x){auto *v=row+x*4;const double r=v[0],g=v[1],b=v[2];v[0]=pq(.6274039*r+.3292830*g+.0433131*b);v[1]=pq(.0690973*r+.9195404*g+.0113623*b);v[2]=pq(.0163914*r+.0880133*g+.8955953*b);}}
-        image.setColorSpace(QColorSpace::Bt2100Pq);
-    } else if(!image.colorSpace().isValid()) {
-        const int primaries=metadata.value("pngPrimaries").toInt(1),transfer=metadata.value("pngTransfer").toInt(13);
-        image.setColorSpace(QColorSpace(primaries==9?QColorSpace::Primaries::Bt2020:primaries==12?QColorSpace::Primaries::DciP3D65:QColorSpace::Primaries::SRgb,
-            transfer==16?QColorSpace::TransferFunction::St2084:transfer==18?QColorSpace::TransferFunction::Hlg:transfer==8?QColorSpace::TransferFunction::Linear:transfer==1 || transfer==14 || transfer==15?QColorSpace::TransferFunction::Bt2020:QColorSpace::TransferFunction::SRgb));
-    }
-    image=image.convertToFormat(QImage::Format_RGBA64);
+        auto facts=screenshot::evidence(image);facts.units=screenshot::Units::ScRgb80Nits;facts.primaries=screenshot::Primaries::Rec709;facts.transfer=screenshot::Transfer::Linear;
+        screenshot::attach(image,facts);
+    }else if(!image.colorSpace().isValid())image.setColorSpace(screenshot::spaceFromCicp(metadata.value("pngPrimaries").toInt(1),metadata.value("pngTransfer").toInt(13)));
+    image=screenshot::exportPixels(image,screenshot::exportPlan(image));
     if(format=="jxl")return writeJxl(path,image);
     // The single-file edition deliberately uses external FFmpeg; Full can use
     // its existing AWJ encoder, without embedding another 40 MB tool in Lite.
@@ -51,18 +47,16 @@ QString writeScreenshot(const QString &path,const QImage &input,QJsonObject meta
     const auto staged=temporary.filePath("input.png"),encoded=temporary.filePath("result.avif");
     const QDir app(QCoreApplication::applicationDirPath());QProcess process;process.setProcessChannelMode(QProcess::MergedChannels);
     const auto awj=optionalRuntimeExecutable("awj","AWJ.com");
-    const bool hdr=image.colorSpace().transferFunction()==QColorSpace::TransferFunction::St2084 || image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Hlg;
-    const auto primaries=image.colorSpace().primaries()==QColorSpace::Primaries::Bt2020?"9":image.colorSpace().primaries()==QColorSpace::Primaries::DciP3D65?"12":"1";
-    const auto transfer=hdr?(image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Hlg?"18":"16"):image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Linear?"8":image.colorSpace().transferFunction()==QColorSpace::TransferFunction::Bt2020?"1":"13";
-    auto stagedImage=image;
-    // Explicit PNG cICP avoids Qt's approximate ICC being rejected by AWJ's strict parser.
-    stagedImage.setColorSpace({});
-    const auto stagedError=writeScreenshotPng(staged,stagedImage,{{"pngPrimaries",QString(primaries).toInt()},{"pngTransfer",QString(transfer).toInt()}});if(!stagedError.isEmpty())return stagedError;
-    if(QFileInfo::exists(awj))process.start(awj,{"-i",staged,"-o",temporary.path(),"--format","avif","--template","result","--quality","70","--avif-encoder","aom","--chroma","444","--bit-depth",hdr?"12":"10","--speed","6","--color-primaries",primaries,"--transfer-characteristics",transfer,"--matrix-coefficients",hdr?"9":"1","--color-range","1","--keep-metadata","--no-summary","--no-log"});
+    auto plan=screenshot::exportPlan(image);
+    if(!plan.cicpPrimaries || !plan.cicpTransfer){image=image.convertedToColorSpace(QColorSpace::SRgb,QImage::Format_RGBA64);plan=screenshot::exportPlan(image);}
+    const auto primaries=QString::number(plan.cicpPrimaries),transfer=QString::number(plan.cicpTransfer);
+    const bool hdr=plan.cicpTransfer==16 || plan.cicpTransfer==18;
+    const auto stagedError=screenshot::writePng(staged,image,plan,true);if(!stagedError.isEmpty())return stagedError;
+    if(QFileInfo::exists(awj))process.start(awj,{"-i",staged,"-o",temporary.path(),"--format","avif","--template","result","--quality","70","--avif-encoder","aom","--chroma","444","--bit-depth",hdr?"12":"10","--speed","6","--color-primaries",primaries,"--transfer-characteristics",transfer,"--matrix-coefficients",QString::number(plan.yuvMatrix),"--color-range","1","--keep-metadata","--no-summary","--no-log"});
     else {
         const auto bundled=app.filePath("ffmpeg.exe");
-        const auto filter=QString("scale=out_color_matrix=%1:out_range=full,setparams=color_primaries=%2:color_trc=%3:colorspace=%4:range=full").arg(hdr?"bt2020":"bt709",primaries,transfer,hdr?"9":"1");
-        process.start(QFileInfo::exists(bundled)?bundled:QStringLiteral("ffmpeg.exe"),{"-v","error","-i",staged,"-frames:v","1","-vf",filter,"-c:v","libaom-av1","-still-picture","1","-crf","19","-cpu-used","6","-pix_fmt",hdr?"yuv444p12le":"yuv444p10le","-color_primaries",primaries,"-color_trc",transfer,"-colorspace",hdr?"9":"1","-color_range","pc","-y",encoded});
+        const auto filter=QString("scale=out_color_matrix=%1:out_range=full,setparams=color_primaries=%2:color_trc=%3:colorspace=%4:range=full").arg(plan.yuvMatrix==9?"bt2020":"bt709",primaries,transfer,QString::number(plan.yuvMatrix));
+        process.start(QFileInfo::exists(bundled)?bundled:QStringLiteral("ffmpeg.exe"),{"-v","error","-i",staged,"-frames:v","1","-vf",filter,"-c:v","libaom-av1","-still-picture","1","-crf","19","-cpu-used","6","-pix_fmt",hdr?"yuv444p12le":"yuv444p10le","-color_primaries",primaries,"-color_trc",transfer,"-colorspace",QString::number(plan.yuvMatrix),"-color_range","pc","-y",encoded});
     }
     if(!process.waitForStarted())return QStringLiteral("AVIF requires AWJ or FFmpeg with libaom-av1: ")+process.errorString();
     while(!process.waitForFinished(100))if(QThread::currentThread()->isInterruptionRequested()){process.kill();process.waitForFinished();return QStringLiteral("Screenshot canceled");}
@@ -75,17 +69,17 @@ QString writeScreenshot(const QString &path,const QImage &input,QJsonObject meta
 static QString writeScreenshotImage(const QString &path,const QImage &input,QJsonObject metadata){
     if(input.isNull())return QStringLiteral("No screenshot pixels");
     const bool hdr=metadata.value("hdr").toBool();
-    if(input.colorSpace().transferFunction()==QColorSpace::TransferFunction::St2084 || input.colorSpace().transferFunction()==QColorSpace::TransferFunction::Hlg){metadata["pngPrimaries"]=9;metadata["pngTransfer"]=input.colorSpace().transferFunction()==QColorSpace::TransferFunction::St2084?16:18;}
     const auto original=hdr?input.convertToFormat(QImage::Format_RGBA32FPx4):QImage();
     QImage encoded=input;
     if(metadata.value("encoding").toString()=="scRGB-linear"){
-        encoded=original.copy();
-        const auto pq=[](double nits){const double p=std::pow(std::clamp(nits/10000.0,0.0,1.0),2610.0/16384.0);return float(std::pow((3424.0/4096.0+2413.0/128.0*p)/(1+2392.0/128.0*p),2523.0/32.0));};
-        for(int y=0;y<encoded.height();++y){auto *row=reinterpret_cast<float *>(encoded.scanLine(y));for(int x=0;x<encoded.width();++x){auto *p=row+x*4;const double r=p[0]*80,g=p[1]*80,b=p[2]*80;
-            p[0]=pq(.6274039*r+.3292830*g+.0433131*b);p[1]=pq(.0690973*r+.9195404*g+.0113623*b);p[2]=pq(.0163914*r+.0880133*g+.8955953*b);}}
-        encoded.setColorSpace(QColorSpace(QColorSpace::Bt2100Pq));metadata["pngPrimaries"]=9;metadata["pngTransfer"]=16;
-    }
-    const auto image=encoded.convertToFormat(QImage::Format_RGBA64);
+        auto facts=screenshot::evidence(input);facts.units=screenshot::Units::ScRgb80Nits;facts.primaries=screenshot::Primaries::Rec709;facts.transfer=screenshot::Transfer::Linear;
+        facts.sourceBits=metadata.value("captureStorageBits").toInt(facts.sourceBits);facts.backend=metadata.value("backend").toString();
+        screenshot::attach(encoded,facts);
+    }else if(!encoded.colorSpace().isValid())encoded.setColorSpace(screenshot::spaceFromCicp(metadata.value("pngPrimaries").toInt(),metadata.value("pngTransfer").toInt()));
+    const auto plan=screenshot::exportPlan(encoded);
+    const auto image=screenshot::exportPixels(encoded,plan);
+    metadata["colorEvidence"]=screenshot::json(plan.source);
+    metadata["pngPrimaries"]=plan.cicpPrimaries;metadata["pngTransfer"]=plan.cicpTransfer;
     const qsizetype stride=qsizetype(image.width())*8;
     QByteArray raw((stride+1)*image.height(),Qt::Uninitialized),above(stride,0),row(stride,Qt::Uninitialized),candidate(stride,Qt::Uninitialized);
     for(int y=0;y<image.height();++y){const auto *pixels=reinterpret_cast<const QRgba64 *>(image.constScanLine(y));
@@ -186,10 +180,7 @@ QImage decodeRgbaPng(const QString &path,const std::atomic<quint64> &generation,
         }else if(!std::memcmp(type,"pHYs",4) && size==9 && data[8]==1){dpmX=int(qFromBigEndian<quint32>(data));dpmY=int(qFromBigEndian<quint32>(data+4));}
         else if(!std::memcmp(type,"cICP",4)){
             if(size!=4 || data[2]!=0 || data[3]!=1)return {};
-            const auto primaries=data[0]==9?QColorSpace::Primaries::Bt2020:data[0]==1?QColorSpace::Primaries::SRgb:QColorSpace::Primaries::Custom;
-            const auto transfer=data[1]==16?QColorSpace::TransferFunction::St2084:data[1]==18?QColorSpace::TransferFunction::Hlg:data[1]==13?QColorSpace::TransferFunction::SRgb:QColorSpace::TransferFunction::Custom;
-            if(primaries==QColorSpace::Primaries::Custom || transfer==QColorSpace::TransferFunction::Custom)return {};
-            cicpSpace=QColorSpace(primaries,transfer);
+            cicpSpace=screenshot::spaceFromCicp(data[0],data[1]);if(!cicpSpace.isValid())return {};
         }else if(!std::memcmp(type,"tEXt",4) && size>16 && size<=80 && !std::memcmp(data,"capSdrWhiteNits",16)){
             desktopWhite=QString::fromLatin1(reinterpret_cast<const char*>(data+16),qsizetype(size-16));
         }else if(!std::memcmp(type,"gAMA",4) || !std::memcmp(type,"cHRM",4) || !std::memcmp(type,"acTL",4) || !std::memcmp(type,"eXIf",4))return {};

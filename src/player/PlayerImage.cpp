@@ -14,6 +14,7 @@
 #include <QColorSpace>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QTransform>
 #include <QScopeGuard>
 #include <avif/avif.h>
@@ -24,6 +25,60 @@
 #include <algorithm>
 
 namespace vsr {
+namespace {
+struct HeifGrid { QString filter; QColorSpace color; };
+
+HeifGrid heifGrid(const QByteArray &json)
+{
+    const auto groups = QJsonDocument::fromJson(json).object().value("stream_groups").toArray();
+    QJsonObject group;
+    for (const auto &value : groups) {
+        const auto candidate = value.toObject();
+        if (candidate.value("type") != "Tile Grid") continue;
+        const bool primary = candidate.value("disposition").toObject().value("default").toInt() == 1;
+        if (group.isEmpty() || primary) group = candidate;
+        if (primary) break;
+    }
+    const auto components = group.value("components").toArray();
+    const auto streams = group.value("streams").toArray();
+    if (components.isEmpty() || streams.isEmpty()) return {};
+    const auto grid = components.first().toObject();
+    const auto tiles = grid.value("subcomponents").toArray();
+    const int w = grid.value("width").toInt(), h = grid.value("height").toInt();
+    const int x = grid.value("horizontal_offset").toInt(), y = grid.value("vertical_offset").toInt();
+    const int cw = grid.value("coded_width").toInt(), ch = grid.value("coded_height").toInt();
+    if (tiles.isEmpty() || tiles.size() > 64 || x < 0 || y < 0 || w <= 0 || h <= 0 ||
+        cw <= x || ch <= y || qint64(cw) * ch > 67108864 || w > cw - x || h > ch - y) return {};
+    QString inputs;
+    QStringList offsets;
+    for (const auto &value : tiles) {
+        const auto tile = value.toObject();
+        const auto i = tile.value("stream_index").toInt(-1);
+        const int left = tile.value("tile_horizontal_offset").toInt(-1);
+        const int top = tile.value("tile_vertical_offset").toInt(-1);
+        if (i < 0 || i >= streams.size() || left < 0 || top < 0 || left >= cw || top >= ch) return {};
+        const int index = streams.at(i).toObject().value("index").toInt(-1);
+        if (index < 0 || index > 1024) return {};
+        inputs += QStringLiteral("[0:%1]").arg(index);
+        offsets.append(QStringLiteral("%1_%2").arg(left).arg(top));
+    }
+    const auto first = streams.first().toObject();
+    const auto primaries = first.value("color_primaries").toString();
+    const auto transfer = first.value("color_transfer").toString();
+    const auto gamut = primaries == "smpte432" ? QColorSpace::Primaries::DciP3D65 :
+        primaries == "bt2020" ? QColorSpace::Primaries::Bt2020 :
+        primaries == "bt709" ? QColorSpace::Primaries::SRgb : QColorSpace::Primaries::Custom;
+    const auto curve = transfer == "iec61966-2-1" ? QColorSpace::TransferFunction::SRgb :
+        transfer == "smpte2084" ? QColorSpace::TransferFunction::St2084 :
+        transfer == "arib-std-b67" ? QColorSpace::TransferFunction::Hlg : QColorSpace::TransferFunction::Custom;
+    if (tiles.size() > 1)
+        inputs += QStringLiteral("xstack=inputs=%1:layout=%2:fill=black,").arg(tiles.size()).arg(offsets.join('|'));
+    inputs += QStringLiteral("crop=w=%1:h=%2:x=%3:y=%4:exact=1[still]").arg(w).arg(h).arg(x).arg(y);
+    return {inputs, gamut != QColorSpace::Primaries::Custom && curve != QColorSpace::TransferFunction::Custom ?
+        QColorSpace(gamut, curve) : QColorSpace()};
+}
+}
+
 PlayerImage::PlayerImage(QObject *parent) : QObject(parent), worker_(new QObject) {
     // Large still images must not inherit Qt's small default allocation limit.
     QImageReader::setAllocationLimit(0);
@@ -174,11 +229,31 @@ void PlayerImage::open(const QString &path) {
             if(image.isNull() && suffix!="avif" && temporary.isValid()) {
                 decoded=temporary.filePath("image.png");QProcess process;
                 const auto bundled=QDir(runtime).filePath("ffmpeg.exe");
-                process.start(QFileInfo::exists(bundled)?bundled:QStringLiteral("ffmpeg.exe"),
-                    {"-v","error","-i",path,"-frames:v","1","-y",decoded});
+                QStringList args{"-v","error","-nostdin"};
+                HeifGrid grid;
+                if (suffix == "heic" || suffix == "heif") {
+                    QProcess probe;
+                    const auto probePath = QDir(runtime).filePath("ffprobe.exe");
+                    probe.start(QFileInfo::exists(probePath) ? probePath : QStringLiteral("ffprobe.exe"),
+                        {"-v","error","-show_stream_groups","-of","json",path});
+                    if (probe.waitForFinished(5000) && !probe.exitCode())
+                        grid = heifGrid(probe.readAllStandardOutput());
+                    if (probe.state() != QProcess::NotRunning) { probe.kill(); probe.waitForFinished(); }
+                    if (generation != generation_) return;
+                }
+                if (!grid.filter.isEmpty()) args << "-threads" << "1" << "-noautorotate";
+                args << "-i" << path;
+                if (!grid.filter.isEmpty()) args << "-filter_complex_threads" << "2" << "-filter_complex" << grid.filter
+                    << "-map" << "[still]" << "-pix_fmt" << "rgb48be";
+                args << "-frames:v" << "1" << "-y" << decoded;
+                process.start(QFileInfo::exists(bundled)?bundled:QStringLiteral("ffmpeg.exe"), args);
                 if(process.waitForStarted()) {
                     while(!process.waitForFinished(100))if(generation!=generation_){process.kill();process.waitForFinished();return;}
                     QImageReader fallback(decoded);fallback.setAutoTransform(true);image=fallback.read();
+                    if (!image.isNull() && !grid.filter.isEmpty()) {
+                        if (grid.color.isValid()) image.setColorSpace(grid.color);
+                        decoderName = "FFmpeg HEIF grid / RGB16";
+                    }
                     if(image.isNull())error=QString::fromUtf8(process.readAllStandardError())+fallback.errorString();
                 }
             }

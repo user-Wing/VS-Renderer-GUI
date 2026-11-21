@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.1.4 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.1.5 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,7 +18,7 @@ if(WIN32)
     add_library(vsr_thumbnail SHARED src/shell/ThumbnailProvider.cpp)
     add_executable(vsr_thumbnail_worker src/shell/ThumbnailWorker.cpp)
     set_target_properties(vsr_thumbnail_worker PROPERTIES OUTPUT_NAME "vsr-thumbnail-worker" AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
-    target_include_directories(vsr_thumbnail_worker PRIVATE "${VSR_FFMPEG_ROOT}/include")
+    target_include_directories(vsr_thumbnail_worker PRIVATE src "${VSR_FFMPEG_ROOT}/include")
     target_link_libraries(vsr_thumbnail_worker PRIVATE ole32 uuid gdi32 shlwapi)
     add_dependencies(vsr_thumbnail vsr_thumbnail_worker)
     set_target_properties(vsr_thumbnail PROPERTIES PREFIX "" OUTPUT_NAME "vsr-thumbnail" AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
@@ -34,12 +34,13 @@ if(WIN32)
             message(FATAL_ERROR "Missing FFmpeg SDK file: ${VSR_FFMPEG_ROOT}/${required}. Set VSR_FFMPEG_ROOT to the SDK used by Native.")
         endif()
     endforeach()
-    add_library(vsr_native_source SHARED src/backend/NativeVsSource.cpp)
+    add_library(vsr_native_source SHARED src/backend/NativeVsSource.cpp src/backend/NativeVsCube.cpp)
     set_target_properties(vsr_native_source PROPERTIES PREFIX "" OUTPUT_NAME "vsr-source"
         AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
     target_include_directories(vsr_native_source PRIVATE third_party/vapoursynth/include
         "${VSR_FFMPEG_ROOT}/include")
     target_link_libraries(vsr_native_source PRIVATE
+        "${VSR_FFMPEG_ROOT}/lib/x64/avfilter-12.lib"
         "${VSR_FFMPEG_ROOT}/lib/x64/avformat-63.lib"
         "${VSR_FFMPEG_ROOT}/lib/x64/avcodec-63.lib"
         "${VSR_FFMPEG_ROOT}/lib/x64/avutil-61.lib")
@@ -68,11 +69,21 @@ target_include_directories(vsr_optional_runtime PUBLIC src)
 target_link_libraries(vsr_optional_runtime PUBLIC Qt6::Core)
 
 # VS Cap is an independent tray application: no 3FP/VS or media runtime dependency.
-qt_add_executable(VSCap WIN32 src/cap/main.cpp src/cap/DesktopCapture.cpp src/cap/DesktopCapture.h src/cap/UiAccess.cpp src/cap/UiAccess.h)
+qt_add_executable(VSCap WIN32 src/cap/main.cpp src/cap/DesktopCapture.cpp src/cap/DesktopCapture.h src/cap/UiAccess.cpp src/cap/UiAccess.h src/image/ImageHdrSurface.cpp src/image/ImageHdrSurface.h)
 set_target_properties(VSCap PROPERTIES OUTPUT_NAME "vs-cap")
 target_include_directories(VSCap PRIVATE src)
-target_link_libraries(VSCap PRIVATE vsr_optional_runtime Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent user32 advapi32 shell32 dwmapi d3d11 dxgi)
+target_link_libraries(VSCap PRIVATE vsr_optional_runtime Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent user32 advapi32 shell32 dwmapi d3d11 dxgi d3dcompiler)
 target_compile_definitions(VSCap PRIVATE VSR_VERSION="${PROJECT_VERSION}")
+option(VSR_BUILD_WGC_BRIDGE "Build Windows Graphics Capture bridge using MSVC and Windows SDK" ON)
+if(WIN32 AND VSR_BUILD_WGC_BRIDGE)
+    add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/vsr-wgc.dll"
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_SOURCE_DIR}/tools/build-wgc.ps1"
+            -Source "${CMAKE_SOURCE_DIR}/src/cap/WgcBridge.cpp" -Output "${CMAKE_BINARY_DIR}/vsr-wgc.dll"
+        DEPENDS src/cap/WgcBridge.cpp src/cap/WgcBridge.h tools/build-wgc.ps1 VERBATIM)
+    add_custom_target(vsr_wgc_bridge DEPENDS "${CMAKE_BINARY_DIR}/vsr-wgc.dll")
+    add_dependencies(VSCap vsr_wgc_bridge)
+endif()
+
 qt_add_library(vsr_bluray STATIC src/bluray/BlurayCatalog.cpp src/bluray/BlurayCatalog.h
     src/bluray/BlurayWidget.cpp src/bluray/BlurayWidget.h)
 target_include_directories(vsr_bluray PUBLIC src)
@@ -138,8 +149,11 @@ qt_add_executable(VSRenderer WIN32
     src/ui/PresetDialog.cpp
     src/ui/PresetCommunityDialog.cpp
     src/ui/PresetCommunityDialog.h
+    src/ui/CommunityPage.cpp src/ui/CommunityPage.h
+    src/ui/CommunityMarkdownEditor.cpp src/ui/CommunityMarkdownEditor.h
+    src/ui/CommunityWebView.cpp src/ui/CommunityWebView.h
     src/main.cpp
-    src/app/MainWindowPresets.cpp src/app/MainWindowRoutes.cpp
+    src/app/MainWindowPresets.cpp src/app/MainWindowRoutes.cpp src/app/MainWindowPreviewActions.cpp
     src/app/MainWindowAgent.cpp src/app/AgentVideoFrames.cpp src/app/AgentVideoFrames.h src/ui/AgentPage.cpp src/ui/AgentPage.h
     src/app/MainWindowAgentFeatures.cpp src/app/MainWindowAgentInteractions.cpp
     src/ui/AgentPageDialogs.cpp
@@ -151,6 +165,7 @@ qt_add_executable(VSRenderer WIN32
     src/ui/AgentMcpDialog.cpp src/ui/AgentMcpDialog.h
     src/ui/AgentTaskDialog.cpp src/ui/AgentTaskDialog.h
     src/app/MainWindowTimeGroups.cpp
+    src/player/PlayerMenu.cpp
     src/player/PlayerResources.cpp
     src/player/PlayerLanguage.cpp
     src/app/MainWindow.cpp
@@ -187,10 +202,41 @@ qt_add_executable(VSRenderer WIN32
 )
 
 target_include_directories(VSRenderer PRIVATE src third_party/vapoursynth/include)
-target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network vsr_agent vsr_bluray vsr_components pdh psapi dxgi)
+target_link_libraries(VSRenderer PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network vsr_agent vsr_bluray vsr_components pdh psapi dxgi crypt32)
 target_compile_definitions(VSRenderer PRIVATE VSR_VERSION="${PROJECT_VERSION}")
 
 if(WIN32)
+    set(VSR_WEBVIEW2_SDK "" CACHE PATH "Root of the Microsoft.Web.WebView2 NuGet package")
+    set(webview2_sdk "${VSR_WEBVIEW2_SDK}")
+    if(NOT webview2_sdk)
+        set(webview2_sdk "$ENV{USERPROFILE}/.nuget/packages/microsoft.web.webview2/1.0.3719.77")
+    endif()
+    if(EXISTS "${webview2_sdk}/build/native/include/WebView2.h" AND
+       EXISTS "${webview2_sdk}/runtimes/win-x64/native/WebView2Loader.dll")
+        target_include_directories(VSRenderer SYSTEM PRIVATE "${webview2_sdk}/build/native/include")
+        target_compile_definitions(VSRenderer PRIVATE VSR_WEBVIEW2)
+        target_link_libraries(VSRenderer PRIVATE ole32)
+        set_property(TARGET VSRenderer APPEND PROPERTY LINK_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/community-markdown/index.html"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/community-markdown/editor.html"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/community-markdown/editor.css"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/community-markdown/editor.js"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/community-markdown/document.css"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/community-markdown/enhancements.js"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/community-markdown/document.js")
+        add_custom_command(TARGET VSRenderer POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${webview2_sdk}/runtimes/win-x64/native/WebView2Loader.dll"
+                "$<TARGET_FILE_DIR:VSRenderer>/WebView2Loader.dll"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${webview2_sdk}/LICENSE.txt"
+                "$<TARGET_FILE_DIR:VSRenderer>/WebView2-LICENSE.txt"
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/assets/community-markdown"
+                "$<TARGET_FILE_DIR:VSRenderer>/community-markdown"
+            VERBATIM)
+    else()
+        message(STATUS "WebView2 SDK absent: community webpages will use the system-browser fallback")
+    endif()
     configure_file(assets/icons/renderer.rc "${CMAKE_CURRENT_BINARY_DIR}/renderer-icons.rc" @ONLY)
     set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/renderer-icons.rc" PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/renderer.ico")
     target_sources(VSRenderer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/renderer-icons.rc")
@@ -351,11 +397,16 @@ if(BUILD_TESTING)
     qt_add_executable(vsr_cap_tests tests/TestCap.cpp src/cap/DesktopCapture.cpp)
     target_include_directories(vsr_cap_tests PRIVATE src)
     target_link_libraries(vsr_cap_tests PRIVATE Qt6::Widgets Qt6::Test d3d11 dxgi vsr_jxl)
-    add_test(NAME cap-precision COMMAND vsr_cap_tests)
-    qt_add_executable(vsr_cap_workflow_tests tests/TestCapWorkflow.cpp src/cap/DesktopCapture.cpp src/cap/UiAccess.cpp)
+    add_test(NAME cap-precision COMMAND vsr_cap_tests -o cap-precision-results.txt,txt)
+    qt_add_executable(vsr_screenshot_color_tests tests/TestScreenshotColor.cpp src/cap/DesktopCapture.cpp src/image/ImageHdrSurface.cpp)
+    target_include_directories(vsr_screenshot_color_tests PRIVATE src)
+    target_link_libraries(vsr_screenshot_color_tests PRIVATE Qt6::Widgets Qt6::Test vsr_jxl d3d11 dxgi d3dcompiler)
+    add_test(NAME screenshot-color-decisions COMMAND vsr_screenshot_color_tests -o screenshot-color-results.txt,txt)
+
+    qt_add_executable(vsr_cap_workflow_tests tests/TestCapWorkflow.cpp src/cap/DesktopCapture.cpp src/cap/UiAccess.cpp src/image/ImageHdrSurface.cpp)
     target_include_directories(vsr_cap_workflow_tests PRIVATE src)
     target_compile_definitions(vsr_cap_workflow_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
-    target_link_libraries(vsr_cap_workflow_tests PRIVATE vsr_optional_runtime Qt6::Widgets Qt6::Test Qt6::Concurrent d3d11 dxgi dwmapi advapi32 shell32 user32 vsr_jxl)
+    target_link_libraries(vsr_cap_workflow_tests PRIVATE vsr_optional_runtime Qt6::Widgets Qt6::Test Qt6::Concurrent d3d11 dxgi d3dcompiler dwmapi advapi32 shell32 user32 vsr_jxl)
     add_test(NAME cap-workflow COMMAND vsr_cap_workflow_tests -o cap-workflow-results.txt,txt)
     set(VSR_NATIVE_SOURCE_ROOT "${CMAKE_SOURCE_DIR}/.deps/fff-vsp-20261115" CACHE PATH
         "Patched Native source tree used by native regression tests")
@@ -492,7 +543,7 @@ if(BUILD_TESTING)
     list(FILTER analysis_test_sources EXCLUDE REGEX "src/main.cpp|VSRenderer_autogen")
     qt_add_executable(vsr_analysis_tests tests/TestAnalysis.cpp ${analysis_test_sources})
     target_include_directories(vsr_analysis_tests PRIVATE src third_party/vapoursynth/include)
-    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_agent vsr_bluray vsr_components pdh psapi dxgi)
+    target_link_libraries(vsr_analysis_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_agent vsr_bluray vsr_components pdh psapi dxgi crypt32)
     target_compile_definitions(vsr_analysis_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME direct-video-comparison COMMAND vsr_analysis_tests -o analysis-test-results.txt,txt)
 
@@ -556,7 +607,7 @@ if(BUILD_TESTING)
     add_test(NAME agent-video-frames COMMAND vsr_agent_video_frame_tests -o agent-video-frame-results.txt,txt)
     qt_add_executable(vsr_agent_integration_tests tests/TestAgentIntegration.cpp ${analysis_test_sources})
     target_include_directories(vsr_agent_integration_tests PRIVATE src third_party/vapoursynth/include)
-    target_link_libraries(vsr_agent_integration_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_agent vsr_bluray vsr_components pdh psapi dxgi)
+    target_link_libraries(vsr_agent_integration_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network vsr_agent vsr_bluray vsr_components pdh psapi dxgi crypt32)
     target_compile_definitions(vsr_agent_integration_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}")
     add_test(NAME agent-software-integration COMMAND vsr_agent_integration_tests -o agent-integration-results.txt,txt)
 

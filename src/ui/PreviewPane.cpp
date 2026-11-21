@@ -167,6 +167,10 @@ PreviewPane::PreviewPane(const QString &title, const QString &badge, QWidget *pa
 QWidget *PreviewPane::surface() const { return surface_; }
 float PreviewPane::zoom() const { return zoom_; }
 QPointF PreviewPane::pan() const { return QPointF(panX_, panY_); }
+double PreviewPane::panSensitivity() const
+{
+    return comparisonPan_ ? 0.7 + 0.3 * std::clamp((zoom_ - 2.0) / 2.0, 0.0, 1.0) : 1.0;
+}
 void PreviewPane::setChromeVisible(bool visible) { titleBar_->setVisible(visible); }
 void PreviewPane::setVideoSize(const QSize &size) { videoSize_ = size; }
 void PreviewPane::setImage(const QImage &image) {
@@ -263,8 +267,9 @@ bool PreviewPane::eventFilter(QObject *watched, QEvent *event)
             if (!videoSize_.isEmpty()) fitted = QSizeF(videoSize_.scaled(surface_->size(), Qt::KeepAspectRatio));
             const double overflowX = std::max(1.0, fitted.width() * zoom_ - surface_->width());
             const double overflowY = std::max(1.0, fitted.height() * zoom_ - surface_->height());
-            const float dx = static_cast<float>(delta.x() * 2.0 / overflowX);
-            const float dy = static_cast<float>(delta.y() * 2.0 / overflowY);
+            const double travel = 2.0 * panSensitivity();
+            const float dx = static_cast<float>(delta.x() * travel / overflowX);
+            const float dy = static_cast<float>(delta.y() * travel / overflowY);
             panX_ = std::clamp(static_cast<float>(dragPanStart_.x()) + dx, -1.0f, 1.0f);
             panY_ = std::clamp(static_cast<float>(dragPanStart_.y()) + dy, -1.0f, 1.0f);
             emit viewChanged(zoom_, panX_, panY_);
@@ -320,8 +325,9 @@ void PreviewPane::applyWheel(QWheelEvent *event, const QPointF &surfacePosition)
         double dx=pixels.isNull()?angles.x()/120.0*60:pixels.x();double dy=pixels.isNull()?angles.y()/120.0*60:pixels.y();
         if(event->modifiers().testFlag(Qt::ShiftModifier)){dx+=dy;dy=0;}
         const double spanX=std::max(0.0,double(fitted.width()-surface_->width())),spanY=std::max(0.0,double(fitted.height()-surface_->height()));
-        if(spanX>0)panX_=std::clamp(float(panX_+dx*2/spanX),-1.f,1.f);
-        if(spanY>0)panY_=std::clamp(float(panY_+dy*2/spanY),-1.f,1.f);
+        const double travel = 2.0 * panSensitivity();
+        if(spanX>0)panX_=std::clamp(float(panX_+dx*travel/spanX),-1.f,1.f);
+        if(spanY>0)panY_=std::clamp(float(panY_+dy*travel/spanY),-1.f,1.f);
         adoptView(zoom_,panX_,panY_);emit viewChanged(zoom_,panX_,panY_);return;
     }
     if (event->angleDelta().y() == 0)

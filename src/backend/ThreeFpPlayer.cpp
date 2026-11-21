@@ -279,6 +279,7 @@ VsrColorStatus ThreeFpPlayer::colorStatus() const {
 bool ThreeFpPlayer::setOutputFormat(const QString &format) { outputFormat_=format; return handle_ && check(api_.setExternalOutputFormat(handle_,format.toUtf8().constData()),QStringLiteral("输出像素格式")); }
 void ThreeFpPlayer::setAntiRinging(bool enabled) { antiRinging_=enabled; setScalingAlgorithms(upscale_,downscale_); }
 QImage ThreeFpPlayer::capture() const { const auto size=surface_->size()*surface_->devicePixelRatioF(); return handle_ ? api_.capture(handle_,size.width(),size.height()) : QImage(); }
+QImage ThreeFpPlayer::captureFullFrame(QSize size) const { return handle_ ? api_.captureFullFrame(handle_, size) : QImage(); }
 QImage ThreeFpPlayer::captureFloat() const { const auto size=surface_->size()*surface_->devicePixelRatioF(); return handle_ ? api_.captureFloat(handle_,size.width(),size.height()) : QImage(); }
 bool ThreeFpPlayer::setSubtitle(const QImage &image) {
     QRect area=image.rect();const auto region=image.text("vsrSubtitleRect").split(',');

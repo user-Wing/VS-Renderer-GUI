@@ -77,6 +77,8 @@ FilterGraph PresetStore::graph(const QJsonObject &data)
         graph.setEnabled(row, object.value("enabled").toBool(true));
         const auto params = object.value("parameters").toObject().toVariantMap();
         for (auto it = params.begin(); it != params.end(); ++it) graph.setParameter(row, it.key(), it.value());
+        if (object.value("id") == "cube_lut" && params.contains("space") && !params.contains("manual_space"))
+            graph.setParameter(row, "manual_space", true);
     }
     return graph;
 }

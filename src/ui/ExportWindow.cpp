@@ -343,7 +343,8 @@ bool ExportWindow::addJob(const QString &command, const QString &output, const Q
     if (!file.open(QIODevice::WriteOnly) || file.write(code) != code.size())
         return fail(QStringLiteral("无法保存导出脚本。"));
     if(!file.commit())return fail(QStringLiteral("冻结脚本提交失败。"));
-    job->plan = ExportPipeline::buildPlan(command, source, output, file.fileName(), QCoreApplication::applicationDirPath());
+    job->plan = ExportPipeline::buildPlan(command, source, output, file.fileName(), QCoreApplication::applicationDirPath(),
+                                          QSettings().value("export/ffmpegExecutable").toString());
     if (!job->plan.error.isEmpty()) return fail(job->plan.error);
     for (const auto &input : compositionSources_)
         if (pathKey(input) == outputKey) return fail(QStringLiteral("输出不能覆盖任何对比源视频。"));

@@ -106,6 +106,19 @@ private slots:
         QVERIFY(pipeInput > 0);
         QCOMPARE(plan.ffmpegArguments.at(pipeInput + 1), QStringLiteral("-i"));
         QCOMPARE(plan.ffmpegArguments.at(pipeInput + 2), QStringLiteral("-"));
+
+        const auto custom = directory.filePath("other ffmpeg.exe");
+        QFile customFile(custom);
+        QVERIFY(customFile.open(QIODevice::WriteOnly));
+        customFile.close();
+        const auto selected = ExportPipeline::buildPlan(command, source, output, script, directory.path(), custom);
+        QVERIFY2(selected.error.isEmpty(), qPrintable(selected.error));
+        QCOMPARE(selected.ffmpegProgram, custom);
+        const auto explicitCommand = QStringLiteral("\"%1\"").arg(ffmpeg) + command.mid(QStringLiteral("ffmpeg.exe").size());
+        const auto explicitPlan = ExportPipeline::buildPlan(explicitCommand, source, output, script, directory.path(), custom);
+        QVERIFY2(explicitPlan.error.isEmpty(), qPrintable(explicitPlan.error));
+        QCOMPARE(explicitPlan.ffmpegProgram, ffmpeg);
+        QVERIFY(!ExportPipeline::buildPlan(command, source, output, script, directory.path(), custom + ".missing").error.isEmpty());
     }
 
     void addsVideoMapAndCudaUploadWhenNeeded()

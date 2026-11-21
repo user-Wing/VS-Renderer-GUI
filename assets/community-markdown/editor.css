@@ -1,0 +1,22 @@
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+.editor-shell { height: 100%; display: flex; flex-direction: column; gap: 5px; }
+.editor-label { font: 13px system-ui, sans-serif; }
+.editor-columns { min-height: 0; flex: 1; display: grid; grid-template-columns: minmax(0, var(--editor-width, 50%)) 7px minmax(0, 1fr); }
+#editor { margin: 0; font-size: .86rem; height: 100%; min-width: 0; min-height: 0; }
+#editor .vditor-toolbar { padding: 3px 5px; display: flex; align-items: center; flex-wrap: wrap; }
+#editor .vditor-toolbar__item { flex: none; }
+#editor .vditor-preview { display: none !important; }
+#editor .vditor-sv, #editor .vditor-ir, #editor .vditor-wysiwyg { min-width: 0; }
+#editor .vditor-content { min-height: 0; }
+#editor .vditor-reset { font-size: .94rem; line-height: 1.6; }
+#editor .vditor-input { font-size: .94rem; line-height: 1.6; }
+#rich-tools { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+#rich-tools[hidden] { display: none; }
+#rich-tools :is(button, label) { border: 1px solid currentColor; border-radius: 4px; background: transparent; color: inherit; padding: 2px 5px; font: inherit; font-size: 12px; cursor: pointer; }
+#divider { cursor: col-resize; touch-action: none; border-inline: 2px solid var(--border); }
+#editor-preview { min-height: 0; overflow: auto; background: var(--surface); border: 1px solid var(--border); }
+#editor-preview #document { padding: 10px 16px 24px; margin: 0; max-width: none; }
+dialog { color: var(--ink, inherit); background: var(--surface, Canvas); border: 1px solid var(--border); padding: 18px; }
+dialog textarea { display: block; width: min(360px, 60vw); min-height: 5em; }
+
+

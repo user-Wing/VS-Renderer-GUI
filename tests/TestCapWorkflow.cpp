@@ -7,6 +7,46 @@ class TestCapWorkflow : public QObject {
     Q_OBJECT
     QByteArray savedIni_;bool hadIni_=false;
 private slots:
+    void settingsAboutAndPixelFormats(){
+        CapApp controller;
+        QTimer::singleShot(0, qApp, [&] {
+            auto *dialog = qobject_cast<QDialog *>(qApp->activeModalWidget());
+            QVERIFY(dialog);
+            const auto close = qScopeGuard([&] { dialog->reject(); });
+            const auto *about = dialog->findChild<QLabel *>("aboutProject");
+            QVERIFY(about);
+            QVERIFY(about->alignment() & Qt::AlignTop);
+            const auto *formats = dialog->findChild<QComboBox *>("capAvifPixelFormat");
+            QVERIFY(formats);
+            QCOMPARE(formats->count(), 3);
+            QCOMPARE(formats->itemText(0), QStringLiteral("yuv444p12le"));
+            QCOMPARE(formats->itemText(1), QStringLiteral("yuv444p10le"));
+            QCOMPARE(formats->itemText(2), QStringLiteral("yuv420p10le"));
+            QCOMPARE(formats->currentData().toString(), cap::AvifOptions::load(controller.settings_).format);
+        });
+        controller.configure();
+    }
+
+    void frozenQueuedSave(){
+        QTemporaryDir dir;CapApp controller;controller.saveBusy_=true;
+        float pixels[]{1,2,3,1};QImage borrowed(reinterpret_cast<uchar*>(pixels),1,1,16,QImage::Format_RGBA32FPx4);
+        QVERIFY(controller.enqueueSave(borrowed,dir.filePath("queued.png"),"png"));pixels[0]=99;
+        QCOMPARE(reinterpret_cast<const float*>(controller.saveQueue_.first().image.constBits())[0],1.f);
+    }
+    void independentCaptureExports(){
+        const auto path=qEnvironmentVariable("VSR_COLOR_EVIDENCE"),encoder=qEnvironmentVariable("VSR_TEST_AWJ");
+        if(path.isEmpty() || encoder.isEmpty())QSKIP("Set VSR_COLOR_EVIDENCE and VSR_TEST_AWJ to retain current-format encoder evidence");
+        QVERIFY(QDir().mkpath(path));QImage image(64,32,QImage::Format_RGBA32FPx4);image.setColorSpace(QColorSpace::SRgbLinear);image.setText("capHdr","scRGB-FP16");image.setText("capSdrWhiteNits","203");
+        for(int y=0;y<32;++y){auto *p=reinterpret_cast<float*>(image.scanLine(y));for(int x=0;x<64;++x){p[x*4]=float(1+x/16.);p[x*4+1]=float(.5+y/16.);p[x*4+2]=float(.25+x/128.);p[x*4+3]=float((x*977+y*353+37)%65536)/65535;}}
+        QVERIFY(CapApp::saveCapture(image,path+"/capture.png","png"));QVERIFY(CapApp::saveCapture(image,path+"/capture.jxl","jxl"));
+        const auto expected=cap::pngPixels(image);QFile raw(path+"/capture.rgba64le");QVERIFY(raw.open(QIODevice::WriteOnly));for(int y=0;y<32;++y)QCOMPARE(raw.write(reinterpret_cast<const char*>(expected.constScanLine(y)),64*8),64*8);raw.close();
+        CapApp::SaveJob job{image,path+"/capture.avif","avif",encoder,{}};const auto error=CapApp::encodeAvif(job);QVERIFY2(error.isEmpty(),qPrintable(error));
+        job.path=path+"/capture-q100.avif";job.avif.quality=100;QVERIFY2(CapApp::encodeAvif(job).isEmpty(),"Quality 100 AVIF encoding failed");
+        auto facts=vsr::screenshot::evidence(image);facts.advancedSdr=true;facts.sdrWhiteNits=80;vsr::screenshot::attach(image,facts);
+        job.image=image;job.avif.quality=70;job.path=path+"/wide-sdr.avif";QVERIFY2(CapApp::encodeAvif(job).isEmpty(),"Wide SDR AVIF encoding failed");QVERIFY(cap::savePng(image,path+"/wide-sdr.png"));
+        job.path=path+"/wide-sdr-q100.avif";job.avif.quality=100;QVERIFY2(CapApp::encodeAvif(job).isEmpty(),"Wide SDR quality 100 AVIF encoding failed");
+        QVERIFY(CapApp::saveCapture(image,path+"/wide-sdr.jxl","jxl"));
+    }
     void oddAvifSaveHasNoConfirmation(){
         QTemporaryDir temp;CapApp controller;controller.saveBusy_=true;
         QImage source(101,80,QImage::Format_RGB32);source.fill(Qt::white);

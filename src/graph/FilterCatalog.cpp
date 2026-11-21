@@ -43,6 +43,9 @@ ParameterDefinition file(QString id, QString label, QString value)
 const QList<FilterDefinition> &catalog() {
     static const QList<FilterDefinition> result = [] {
     QList<FilterDefinition> catalog = {
+    {"cube_lut", "Cube 3D LUT 调色", "色彩与 LUT", "vsrsource", "从 Cube 标题、注释和文件名识别 SDR 工作色域，未标注时使用 sRGB。",
+     {file("file", "Cube 文件", ""), boolean("manual_space", "手动指定工作色域", false),
+      choice("space", "LUT 工作色域", "sRGB SDR", {"sRGB SDR", "Display P3 SDR"})}},
     {"trim", "截取 Trim", "基础操作", "std", "按闭区间保留帧。",
      {integer("first", "起始帧", 0, 0, 100000000), integer("last", "结束帧", 239, 0, 100000000)}},
     {"crop", "裁切 Crop", "基础操作", "std", "从四边裁掉像素。",

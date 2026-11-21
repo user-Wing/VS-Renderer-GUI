@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data: blob:; img-src data: blob: https://www1.arxchem.top https://modelscope.cn https://*.modelscope.cn https://modelscope.ai https://*.modelscope.ai https://*.aliyuncs.com https://img.alicdn.com https://*.hdslb.com; media-src https://www1.arxchem.top https://modelscope.cn https://*.modelscope.cn https://modelscope.ai https://*.modelscope.ai https://*.aliyuncs.com https://*.hdslb.com; connect-src 'self' https://www1.arxchem.top https://modelscope.cn https://*.modelscope.cn https://modelscope.ai https://*.modelscope.ai https://*.aliyuncs.com; worker-src 'self' blob:; frame-src https://player.bilibili.com https://www.youtube-nocookie.com; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="document.css"><link rel="stylesheet" href="vendor/vditor/dist/index.css"><link rel="stylesheet" href="editor.css">
+  <script id="vditorLuteScript" defer src="vendor/lute.min.js"></script>
+  <script defer src="vendor/purify.min.js"></script>
+  <script defer src="vendor/katex/katex.min.js"></script>
+  <script defer src="vendor/highlight.min.js"></script>
+  <script defer src="enhancements.js"></script>
+  <script defer src="document.js"></script><script id="vditorIconScript" defer src="vendor/vditor/dist/js/icons/ant.js"></script><script defer src="vendor/vditor/dist/index.min.js"></script><script defer src="editor.js"></script>
+</head>
+<body><div class="editor-shell">
+<div class="editor-label">Markdown 编辑与实时预览</div>
+<div class="editor-columns">
+<div id="editor"></div><div id="divider" aria-label="调整编辑和预览宽度"></div>
+<div id="editor-preview" aria-label="实时预览"><main id="document"></main></div>
+</div></div>
+<div id="rich-tools" hidden>
+<button id="wide" type="button">宽表横向拖动</button><button id="blackout" type="button">黑幕</button>
+<button id="color" type="button">颜色</button><button id="formula" type="button">公式</button>
+<label>导入<input id="import" type="file" accept=".md,.markdown,.txt" hidden></label>
+</div>
+<dialog><form method="dialog"><label><span></span> <input maxlength="120"></label>
+<textarea aria-label="所选文字"></textarea>
+<button value="cancel">取消</button><button value="ok">确定</button>
+</form></dialog>
+</body>
+</html>
+
+

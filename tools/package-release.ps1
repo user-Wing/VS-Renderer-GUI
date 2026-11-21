@@ -61,6 +61,14 @@ if (Test-Path -LiteralPath (Join-Path $BuildDirectory 'color/vsr-color.dll')) {
 New-Item -ItemType Directory -Force -Path (Join-Path $staging "runtime") | Out-Null
 Copy-Item -LiteralPath $pythonRuntime -Destination (Join-Path $staging "runtime\python") -Recurse
 $packagedFfmpeg = Join-Path $staging "runtime\ffmpeg"
+$communityMarkdown = Join-Path $BuildDirectory 'community-markdown'
+if (Test-Path -LiteralPath $communityMarkdown) {
+    Copy-Item -LiteralPath $communityMarkdown -Destination $staging -Recurse -Force
+}
+foreach ($name in @('WebView2Loader.dll', 'WebView2-LICENSE.txt')) {
+    $file = Join-Path $BuildDirectory $name
+    if (Test-Path -LiteralPath $file) { Copy-Item -LiteralPath $file -Destination $staging -Force }
+}
 New-Item -ItemType Directory -Force -Path $packagedFfmpeg | Out-Null
 Copy-Item -LiteralPath $FfmpegExecutable -Destination (Join-Path $staging "ffmpeg.exe") -Force
 Get-ChildItem -LiteralPath (Split-Path -Parent $FfmpegExecutable) -Filter "*.dll" -File |

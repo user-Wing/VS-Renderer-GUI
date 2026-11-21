@@ -6,7 +6,7 @@
 namespace vsr {
 QStringList playerVideoExtensions(){return {"mkv","mp4","mov","avi","webm","ts","m2ts","wmv","flv","mpg","mpeg","m4v","vob","ogv"};}
 QStringList playerAudioExtensions(){return {"mp3","flac","wav","m4a","ogg","opus","aac","wma","aiff","ape","ac3","dts","eac3","mka","aif","alac","weba"};}
-QStringList playerImageExtensions(){return playerRawExtensions()+QStringList{"jpg","jpeg","jpe","jfif","png","webp","avif","bmp","gif","tif","tiff","heic","heif","jxl","qoi","jp2","j2k","exr"};}
+QStringList playerImageExtensions(){return playerRawExtensions()+QStringList{"jpg","jpeg","jpe","jfif","png","webp","avif","bmp","gif","tif","tiff","heic","heif","jxl","qoi","jp2","j2k","j2c","jpf","jpm","jls","exr","tga","pcx","psd","psb","dds","hdr","wbmp","pbm","pgm","ppm","pnm"};}
 bool registerPlayerAssociations(const QStringList &extensions,const QString &executable,const QString &root) {
     const auto all=playerVideoExtensions()+playerAudioExtensions()+playerImageExtensions();for(const auto &extension:extensions)if(!all.contains(extension))return false;
     QSettings classes(root+"\\Classes",QSettings::NativeFormat),capabilities(root+"\\VSPlayer\\Capabilities",QSettings::NativeFormat),registered(root+"\\RegisteredApplications",QSettings::NativeFormat);

@@ -13,9 +13,13 @@ public:
     bool setHdrEnabled(bool enabled);
     bool hdrActive() const;
     QString status() const;
+    QSize presentationPixelSize() const;
     static bool validateShaders(QString *error = nullptr); // Runtime compiler smoke check; no HDR display required.
+    // Offscreen WARP probe uses the actual FP16 compositor; never opens a window.
+    static QImage compositionProbe(const QImage &native,const QImage &overlay,double paperWhiteNits,
+                                   bool absoluteScRgb,QString *error = nullptr);
     void present(const QImage &native, const QRectF &target, const QImage &overlay,
-                 double exposure = 0, double paperWhiteNits = 203);
+                 double exposure = 0, double paperWhiteNits = 203, bool absoluteScRgb = false);
     QPaintEngine *paintEngine() const override;
 protected:
     void paintEvent(QPaintEvent *) override;

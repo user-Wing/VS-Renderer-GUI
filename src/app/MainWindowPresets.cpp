@@ -1,7 +1,6 @@
 #include "app/MainWindow.h"
 #include "graph/PresetStore.h"
 #include "ui/PresetDialog.h"
-#include "ui/PresetCommunityDialog.h"
 #include <QComboBox>
 #include <QFileInfo>
 #include <QFile>
@@ -9,7 +8,6 @@
 #include <QLineEdit>
 
 namespace vsr {
-void MainWindow::showCommunity(){PresetCommunityDialog dialog([this](const QString &path,bool current){loadPreset(path,current);},this);dialog.exec();}
 ScriptBuildResult MainWindow::currentScript(const QString &source) const
 {
     const QString input = source.isEmpty() ? sourcePath_->text() : source;

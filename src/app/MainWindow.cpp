@@ -1,5 +1,7 @@
+#include "ui/ShortcutTable.h"
 #include "app/MainWindow.h"
 #include "ui/AgentPage.h"
+#include "ui/CommunityPage.h"
 #include "agent/AgentSession.h"
 #include "agent/AgentMcp.h"
 #include "agent/AgentInstructions.h"
@@ -28,6 +30,7 @@
 #include <QStyle>
 #include <QProgressBar>
 #include <QSettings>
+#include <QNetworkAccessManager>
 #include "update/PortableUpdater.h"
 #include <QCloseEvent>
 #include <QMessageBox>
@@ -87,6 +90,9 @@
 
 namespace vsr {
 namespace {
+
+constexpr int communityIndex = 5;
+const QStringList rendererThemeKeys{"VSR-Main", "VSR-Compare", "VSR-Settings", "VSR-BDRemux", "VSR-Agent", "VSR-Community"};
 
 class NavigationButton final : public QToolButton {
 public:
@@ -153,9 +159,9 @@ MainWindow::MainWindow(QWidget *parent)
     auto *routeRow=new QGridLayout;routeChoice_=new QComboBox(root);routeChoice_->setObjectName("rendererRouteChoice");routeRow->addWidget(routeChoice_,0,0,1,4);
     addRouteButton_=new QPushButton(QStringLiteral("加路"),root);addRouteButton_->setObjectName("rendererAddRoute");removeRouteButton_=new QPushButton(QStringLiteral("减路"),root);routeRow->addWidget(addRouteButton_,1,0);routeRow->addWidget(removeRouteButton_,1,1);
     auto *showRoute=new QPushButton(QStringLiteral("显示"),root),*hideRoute=new QPushButton(QStringLiteral("隐藏"),root);showRoute->setObjectName("rendererShowRoute");hideRoute->setObjectName("rendererHideRoute");routeRow->addWidget(showRoute,1,2);routeRow->addWidget(hideRoute,1,3);qobject_cast<QVBoxLayout*>(featureOne_->layout())->addLayout(routeRow);
-    connect(addRouteButton_,&QPushButton::clicked,this,[this]{addRoute();});connect(removeRouteButton_,&QPushButton::clicked,this,&MainWindow::removeRoute);connect(routeChoice_,&QComboBox::currentIndexChanged,this,&MainWindow::selectRoute);
-    const auto visibility=[this](bool visible){routes_[routeIndex_].visible=visible;compareView_->setRouteVisible(routeIndex_,visible);if(routeIndex_>0)additionalRoutes_[routeIndex_-1]->setVisible(visible);else if(!visible){frameServer_->unloadScript();processedPlayer_->stop();vsScriptReady_=false;}updateRouteChoices();};
-    connect(showRoute,&QPushButton::clicked,this,[visibility]{visibility(true);});connect(hideRoute,&QPushButton::clicked,this,[visibility]{visibility(false);});updateRouteChoices();
+    connect(addRouteButton_,&QPushButton::clicked,this,[this]{addRoute();});connect(removeRouteButton_,&QPushButton::clicked,this,&MainWindow::confirmRemoveRoute);connect(routeChoice_,&QComboBox::currentIndexChanged,this,&MainWindow::selectRoute);
+    connect(showRoute,&QPushButton::clicked,this,[this]{setRouteVisibility(true);});
+    connect(hideRoute,&QPushButton::clicked,this,[this]{setRouteVisibility(false);});updateRouteChoices();
 
 
     auto *shell = new QWidget(this);
@@ -167,6 +173,21 @@ MainWindow::MainWindow(QWidget *parent)
     navigation_->setFixedWidth(44);
     auto *navigationLayout = new QVBoxLayout(navigation_);
     navigationLayout->setContentsMargins(2, 4, 2, 4);
+    auto *navigationToggle = new QAction(navigationIcon(NavigationGlyph::Menu), QStringLiteral("页面导航"), navigation_);
+    navigationToggle->setObjectName(QStringLiteral("navigationToggle"));
+    navigationToggle->setToolTip(QStringLiteral("展开 / 收起页面导航"));
+    auto *toggleButton = new NavigationButton(navigation_);
+    toggleButton->setObjectName(QStringLiteral("navigationToggleButton"));
+    toggleButton->setDefaultAction(navigationToggle);
+    toggleButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    navigationLayout->addWidget(toggleButton);
+    connect(navigationToggle, &QAction::triggered, this, [this, toggleButton] {
+        const bool expand = navigation_->width() == 44;
+        const auto style = expand ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly;
+        navigation_->setFixedWidth(expand ? 180 : 44);
+        toggleButton->setToolButtonStyle(style);
+        for (auto *button : navigationButtons_) button->setToolButtonStyle(style);
+    });
     for (int i = 0; i < 2; ++i) {
         auto *button = new NavigationButton(navigation_);
         button->setText(i == 0 ? QStringLiteral("VS 实时渲染") : QStringLiteral("图像分析比对"));
@@ -203,7 +224,7 @@ MainWindow::MainWindow(QWidget *parent)
     bdButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     bdButton->setCheckable(true);
     navigationButtons_.append(bdButton);
-    navigationLayout->insertWidget(2, bdButton);
+    navigationLayout->insertWidget(3, bdButton);
     connect(bdButton, &QToolButton::clicked, this, [this] { selectPage(3); });
     initializeAgent();
     auto *agentButton = new NavigationButton(navigation_);
@@ -214,8 +235,20 @@ MainWindow::MainWindow(QWidget *parent)
     agentButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     agentButton->setCheckable(true);
     navigationButtons_.append(agentButton);
-    navigationLayout->insertWidget(3, agentButton);
+    navigationLayout->insertWidget(4, agentButton);
     connect(agentButton, &QToolButton::clicked, this, [this] { selectPage(4); });
+    communityPage_ = new CommunityPage([this](const QString &path, bool group) { loadPreset(path, group); }, pages_);
+    pages_->addWidget(communityPage_);
+    auto *community = new NavigationButton(navigation_);
+    community->setObjectName("rendererCommunityNavigation");
+    community->setText(QStringLiteral("论坛社区"));
+    community->setToolTip(community->text());
+    community->setIcon(navigationIcon(NavigationGlyph::Community));
+    community->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    community->setCheckable(true);
+    navigationButtons_.append(community);
+    navigationLayout->insertWidget(5, community);
+    connect(community, &QToolButton::clicked, this, [this] { selectPage(communityIndex); });
     connect(bluray, &BlurayWidget::playRequested, this, [this](const QVector<BlurayTitle> &titles, int index) {
         QString error;
         const auto playlist = BlurayCatalog::prepare(titles.at(index), &error);
@@ -351,23 +384,21 @@ MainWindow::~MainWindow()
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
-    if (pages_ && pages_->currentIndex() == 4)
+    if (!pages_ || !isActiveWindow() || QApplication::activeModalWidget() ||
+        QApplication::activePopupWidget() || isShortcutEditor(QApplication::focusWidget()) ||
+        isShortcutEditor(qobject_cast<QWidget *>(watched)) ||
+        (event->type() != QEvent::ShortcutOverride && event->type() != QEvent::KeyPress))
         return QMainWindow::eventFilter(watched, event);
-    if (isActiveWindow() && event->type() == QEvent::ShortcutOverride) {
-        auto *key = static_cast<QKeyEvent *>(event);
-        if (key->key() == Qt::Key_Space && key->modifiers() == Qt::NoModifier) {
-            event->accept();
-            return true;
-        }
+    auto *key = static_cast<QKeyEvent *>(event);
+    const bool execute = event->type() == QEvent::KeyPress;
+    if (pages_->currentIndex() == 0 && handleRendererShortcut(key, execute)) {
+        key->accept();
+        return true;
     }
-    if (isActiveWindow() && event->type() == QEvent::KeyPress) {
-        auto *key = static_cast<QKeyEvent *>(event);
-        if (key->key() == Qt::Key_Space && key->modifiers() == Qt::NoModifier) {
-            if (!key->isAutoRepeat())
-                togglePlayback();
-            event->accept();
-            return true;
-        }
+    if (pages_->currentIndex() == 1 && key->key() == Qt::Key_Space && key->modifiers() == Qt::NoModifier) {
+        if (execute && !key->isAutoRepeat()) togglePlayback();
+        key->accept();
+        return true;
     }
     return QMainWindow::eventFilter(watched, event);
 }
@@ -398,7 +429,13 @@ void MainWindow::dropEvent(QDropEvent *event)
 
 void MainWindow::selectPage(int index)
 {
-    QTimer::singleShot(0,this,[this,index]{if(index>=0 && index<pages_->count())applyPageTheme(pages_->widget(index),QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini"),QStringList{"VSR-Main","VSR-Compare","VSR-Settings","VSR-BDRemux","VSR-Agent"}.value(index));});
+    if (index == 2) {
+        if (auto *remember = pages_->widget(index)->findChild<QCheckBox *>("rendererForumRememberLogin")) {
+            const QSignalBlocker guard(remember);
+            remember->setChecked(QSettings().value("community/rememberLogin", false).toBool());
+        }
+    }
+    QTimer::singleShot(0,this,[this,index]{if(index>=0 && index<pages_->count())applyPageTheme(pages_->widget(index),QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini"),rendererThemeKeys.value(index));});
     if (index == 1 && !analysisPage_) {
         analysisPage_ = std::make_unique<AnalysisPage>(api_);
         auto *placeholder = pages_->widget(1);
@@ -415,7 +452,7 @@ void MainWindow::selectPage(int index)
     for (int i = 0; i < navigationButtons_.size(); ++i) navigationButtons_[i]->setChecked(i == index);
     for (auto *action : vsActions_) action->setVisible(index == 0);
     frameStatus_->setVisible(index == 0);
-    setStatus(index == 0 ? QStringLiteral("VS 实时渲染") : index == 1 ? QStringLiteral("图像分析比对 · 最大9路 ") : index == 3 ? QStringLiteral("BD 一键 Remux") : index == 4 ? QStringLiteral("Agent 智能体") : QStringLiteral("设置"));
+    setStatus(index == 1 ? QStringLiteral("图像分析比对 · 最大9路 ") : navigationButtons_.at(index)->text());
 }
 
 void MainWindow::showSettings()
@@ -425,69 +462,173 @@ void MainWindow::showSettings()
 
 QWidget *MainWindow::buildSettingsPage()
 {
-    auto *scroll = new QScrollArea(this);
-    scroll->setObjectName(QStringLiteral("rendererSettingsPage"));
-    scroll->setWidgetResizable(true);
-    auto *page = new QWidget(scroll);
-    scroll->setWidget(page);
-    page->setObjectName(QStringLiteral("rendererSettingsContent"));
-    auto *layout = new QVBoxLayout(page);
-    layout->setContentsMargins(20, 16, 20, 16);
-    layout->setAlignment(Qt::AlignTop);
-    layout->setSpacing(14);
-    layout->addWidget(new QLabel(QStringLiteral("设置"), page));
-    auto *label = new QLabel(QStringLiteral("VapourSynth 源滤镜"), page);
-    layout->addWidget(label);
+    auto *page = new QWidget(this);
+    page->setObjectName("rendererSettingsPage");
+    auto *layout = new QHBoxLayout(page);
+    layout->setContentsMargins(12, 12, 12, 12);
+    auto *categories = new QListWidget(page);
+    categories->setObjectName("rendererSettingsCategories");
+    categories->addItems({QStringLiteral("基本设置"), QStringLiteral("主题设置"), QStringLiteral("FFmpeg"),
+                          QStringLiteral("论坛设置"), QStringLiteral("版本与组件")});
+    categories->setFixedWidth(145);
+    layout->addWidget(categories);
+    auto *stack = new QStackedWidget(page);
+    layout->addWidget(stack, 1);
+    connect(categories, &QListWidget::currentRowChanged, stack, &QStackedWidget::setCurrentIndex);
+
+    const auto addCategory = [stack] {
+        auto *scroll = new QScrollArea(stack);
+        scroll->setWidgetResizable(true);
+        auto *content = new QWidget(scroll);
+        scroll->setWidget(content);
+        stack->addWidget(scroll);
+        auto *form = new QFormLayout(content);
+        form->setContentsMargins(18, 16, 18, 16);
+        form->setVerticalSpacing(14);
+        form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        return form;
+    };
+    const auto hint = [page](QFormLayout *form, const QString &text) {
+        auto *label = new QLabel(text, page);
+        label->setWordWrap(true);
+        form->addRow(label);
+    };
+
+    auto *basic = addCategory();
+    auto *language = new QComboBox(page);
+    language->setObjectName("rendererLanguage");
+    language->addItem(QStringLiteral("中文"), "zh_CN");
+    language->addItem("English", "en_US");
+    language->setCurrentIndex(qMax(0, language->findData(QSettings().value("appearance/language", "zh_CN"))));
+    basic->addRow(QStringLiteral("语言"), language);
+    connect(language, &QComboBox::currentIndexChanged, this, [this, language] {
+        const auto name = language->currentData().toString();
+        QSettings().setValue("appearance/language", name);
+        language_->setLanguage(name);
+        language_->updateWidgets(this);
+    });
     auto *source = new QComboBox(page);
-    source->setObjectName(QStringLiteral("rendererSettingsSource"));
+    source->setObjectName("rendererSettingsSource");
     source->addItems({QStringLiteral("L-SMASH Works"), QStringLiteral("FFMS2"), QStringLiteral("3FP 原生（色彩保留）")});
-    source->setItemData(2, QStringLiteral("保留解码像素、浮点与HDR元数据；首次打开会完整解码建立索引，耗时取决于片长。不支持的格式会明确报错。"), Qt::ToolTipRole);
+    source->setItemData(2, QStringLiteral("保留解码像素、浮点与 HDR 元数据。首次打开会完整解码建立索引。"), Qt::ToolTipRole);
     source->setCurrentIndex(sourceFilter_->currentIndex());
     connect(sourceFilter_, &QComboBox::currentIndexChanged, source, &QComboBox::setCurrentIndex);
-    layout->addWidget(source);
-    auto *hint = new QLabel(QStringLiteral("用于 VS 预览与导出。更改后重新生成并验证脚本生效。"), page);
-    hint->setWordWrap(true); layout->addWidget(hint);
-    layout->addWidget(new QLabel(QStringLiteral("语言和主题"), page));
-    const auto skinPath=QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini");
-    auto *skinButton=new QPushButton(QStringLiteral("多页面背景主题…"),page);skinButton->setObjectName("rendererPageThemes");layout->addWidget(skinButton);
-    connect(skinButton,&QPushButton::clicked,this,[this,skinPath]{if(editPageThemes(this,skinPath,{"VSR-Main","VSR-Compare","VSR-BDRemux","VSR-Settings","VSR-Agent","VSR-About"}))for(int i=0;i<pages_->count();++i)applyPageTheme(pages_->widget(i),skinPath,QStringList{"VSR-Main","VSR-Compare","VSR-Settings","VSR-BDRemux","VSR-Agent"}.value(i));});
-    auto *scanDepth=new QSpinBox(page);scanDepth->setObjectName("rendererScanDepth");scanDepth->setRange(0,16);scanDepth->setValue(QSettings().value("source/scanDepth",3).toInt());layout->addWidget(new QLabel(QStringLiteral("工作文件夹递归深度（0 仅当前目录）"),page));layout->addWidget(scanDepth);connect(scanDepth,&QSpinBox::valueChanged,this,[](int depth){QSettings().setValue("source/scanDepth",depth);});
-    auto *language=new QComboBox(page);language->setObjectName("rendererLanguage");language->addItem(QStringLiteral("中文"),"zh_CN");language->addItem("English","en_US");language->setCurrentIndex(qMax(0,language->findData(QSettings().value("appearance/language","zh_CN"))));layout->addWidget(language);
-    connect(language,&QComboBox::currentIndexChanged,this,[this,language]{const auto name=language->currentData().toString();QSettings().setValue("appearance/language",name);language_->setLanguage(name);language_->updateWidgets(this);});
-    auto *theme = new QComboBox(page);
-    theme->setObjectName("rendererTheme");
-    theme->addItems({QStringLiteral("浅色"),QStringLiteral("深色")});
-    theme->setCurrentIndex(QSettings().value("appearance/dark",false).toBool()?1:0);
-    layout->addWidget(theme);
-    connect(theme,&QComboBox::currentIndexChanged,page,[](int index){
-        QSettings().setValue("appearance/dark",index==1);
-        qApp->setStyleSheet(applicationStyleSheet(index==1));
-    });
+    basic->addRow(QStringLiteral("VapourSynth 源滤镜"), source);
+    auto *scanDepth = new QSpinBox(page);
+    scanDepth->setObjectName("rendererScanDepth");
+    scanDepth->setRange(0, 16);
+    scanDepth->setValue(QSettings().value("source/scanDepth", 3).toInt());
+    basic->addRow(QStringLiteral("工作文件夹递归深度（0 仅当前目录）"), scanDepth);
+    connect(scanDepth, &QSpinBox::valueChanged, page, [](int depth) { QSettings().setValue("source/scanDepth", depth); });
     auto *apply = new QPushButton(QStringLiteral("应用"), page);
-    apply->setObjectName(QStringLiteral("rendererApplySettings"));
-    layout->addWidget(apply);
-    layout->addWidget(new QLabel(QStringLiteral("预设下载源（ModelScope 公开目录链接或 JSON 清单）"),page));
-    auto *communitySource=new QLineEdit(page);communitySource->setMinimumWidth(650);communitySource->setObjectName("rendererCommunitySource");
-    auto communityUrl=QSettings().value("community/sourceUrl",PresetCommunityDialog::defaultSource()).toString();
-    if(communityUrl.contains("/api/v1/datasets/ARXChem/Software-List/repo/tree"))communityUrl=PresetCommunityDialog::defaultSource();
-    communitySource->setText(communityUrl);layout->addWidget(communitySource);
-    layout->removeWidget(apply);layout->addWidget(apply);
-    connect(apply, &QPushButton::clicked, this, [this, source,communitySource] {
-        const QUrl url(communitySource->text().trimmed());if(!url.isValid() || (url.scheme()!="http" && url.scheme()!="https")){setStatus(QStringLiteral("预设源必须是有效 HTTP / HTTPS 地址。"),true);return;}
-        QSettings().setValue("community/sourceUrl",url.toString());
+    apply->setObjectName("rendererApplySettings");
+    basic->addRow(apply);
+    connect(apply, &QPushButton::clicked, this, [this, source] {
         sourceFilter_->setCurrentIndex(source->currentIndex());
-        QSettings().setValue(QStringLiteral("sourceFilter"), source->currentIndex());
+        QSettings().setValue("sourceFilter", source->currentIndex());
         setStatus(QStringLiteral("设置已保存，重新生成并验证脚本后生效。"));
     });
-    layout->addWidget(new QLabel(QStringLiteral("当前版本：") + VSR_VERSION, page));
+
+    auto *appearance = addCategory();
+    auto *theme = new QComboBox(page);
+    theme->setObjectName("rendererTheme");
+    theme->addItems({QStringLiteral("浅色"), QStringLiteral("深色")});
+    theme->setCurrentIndex(QSettings().value("appearance/dark", false).toBool() ? 1 : 0);
+    appearance->addRow(QStringLiteral("外观"), theme);
+    connect(theme, &QComboBox::currentIndexChanged, page, [](int index) {
+        QSettings().setValue("appearance/dark", index == 1);
+        qApp->setStyleSheet(applicationStyleSheet(index == 1));
+    });
+    const auto skinPath = QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini");
+    appearance->addRow(buildPageThemeEditor(page, skinPath, rendererThemeKeys + QStringList{"VSR-About"}, [this](bool ok) {
+        setStatus(ok ? QStringLiteral("主题已保存。") : QStringLiteral("无法写入主题配置。"), !ok);
+    }));
+
+    auto *encoding = addCategory();
+    auto *ffmpegRow = new QWidget(page);
+    auto *ffmpegLayout = new QHBoxLayout(ffmpegRow);
+    ffmpegLayout->setContentsMargins(0, 0, 0, 0);
+    auto *ffmpeg = new QLineEdit(QSettings().value("export/ffmpegExecutable").toString(), ffmpegRow);
+    ffmpeg->setObjectName("rendererFfmpegExecutable");
+    ffmpeg->setPlaceholderText(QStringLiteral("留空自动查找"));
+    ffmpegLayout->addWidget(ffmpeg, 1);
+    auto *browse = new QPushButton(QStringLiteral("浏览"), ffmpegRow);
+    ffmpegLayout->addWidget(browse);
+    encoding->addRow(QStringLiteral("导出用 FFmpeg"), ffmpegRow);
+    hint(encoding, QStringLiteral("仅应用于 VSR 导出。导出命令以有效的绝对路径开头时，使用该路径。"));
+    auto *saveFfmpeg = new QPushButton(QStringLiteral("保存 FFmpeg 设置"), page);
+    encoding->addRow(saveFfmpeg);
+    connect(browse, &QPushButton::clicked, page, [page, ffmpeg] {
+        const auto path = QFileDialog::getOpenFileName(page, QStringLiteral("选择 FFmpeg"), ffmpeg->text(), "FFmpeg (*.exe)");
+        if (!path.isEmpty()) ffmpeg->setText(QDir::toNativeSeparators(path));
+    });
+    connect(saveFfmpeg, &QPushButton::clicked, this, [this, ffmpeg] {
+        const auto path = ffmpeg->text().trimmed();
+        const QFileInfo executable(path);
+        if (!path.isEmpty() && (!executable.isAbsolute() || !executable.isFile() ||
+            executable.suffix().compare("exe", Qt::CaseInsensitive) != 0)) {
+            setStatus(QStringLiteral("请选择存在的 FFmpeg 可执行文件。"), true);
+            return;
+        }
+        QSettings().setValue("export/ffmpegExecutable", path);
+        setStatus(QStringLiteral("FFmpeg 设置已保存。"));
+    });
+
+    auto *forum = addCategory();
+    auto *remember = new QCheckBox(QStringLiteral("记住论坛登录"), page);
+    remember->setObjectName("rendererForumRememberLogin");
+    remember->setChecked(QSettings().value("community/rememberLogin", false).toBool());
+    forum->addRow(remember);
+    hint(forum, QStringLiteral("Windows DPAPI 使用当前用户加密会话。密码由论坛网站处理。"));
+    connect(remember, &QCheckBox::toggled, this, [this](bool enabled) { communityPage_->setRememberLogin(enabled); });
+    auto *account = new QPushButton(QStringLiteral("打开论坛账号"), page);
+    forum->addRow(account);
+    connect(account, &QPushButton::clicked, this, [this] {
+        selectPage(communityIndex);
+        communityPage_->openAccount();
+    });
+    auto *forget = new QPushButton(QStringLiteral("清除本地论坛会话"), page);
+    forum->addRow(forget);
+    connect(forget, &QPushButton::clicked, this, [this] {
+        communityPage_->forgetSession();
+        setStatus(QStringLiteral("已清除本地论坛会话。"));
+    });
+    auto communityUrl = QSettings().value("community/sourceUrl", PresetCommunityDialog::defaultSource()).toString();
+    if (communityUrl.contains("/api/v1/datasets/ARXChem/Software-List/repo/tree"))
+        communityUrl = PresetCommunityDialog::defaultSource();
+    auto *communitySource = new QLineEdit(communityUrl, page);
+    communitySource->setObjectName("rendererCommunitySource");
+    forum->addRow(QStringLiteral("预设下载源"), communitySource);
+    hint(forum, QStringLiteral("支持 ModelScope 公开目录链接或 JSON 清单。"));
+    auto *saveSource = new QPushButton(QStringLiteral("保存预设下载源"), page);
+    forum->addRow(saveSource);
+    connect(saveSource, &QPushButton::clicked, this, [this, communitySource] {
+        const QUrl url(communitySource->text().trimmed());
+        if (!url.isValid() || url.host().isEmpty() || !url.userInfo().isEmpty() ||
+            (url.scheme() != "http" && url.scheme() != "https")) {
+            setStatus(QStringLiteral("预设源必须是有效的 HTTP / HTTPS 地址。"), true);
+            return;
+        }
+        QSettings().setValue("community/sourceUrl", url.toString());
+        communityPage_->resetPresetSource();
+        setStatus(QStringLiteral("预设下载源已保存。"));
+    });
+
+    auto *versions = addCategory();
+    versions->addRow(QStringLiteral("当前版本"), new QLabel(VSR_VERSION, page));
     auto *updates = new QPushButton(QStringLiteral("检查更新"), page);
-    layout->addWidget(updates);
+    versions->addRow(updates);
     connect(updates, &QPushButton::clicked, page, [page] { PortableUpdater updater(page); updater.check(); updater.exec(); });
-    layout->addWidget(new QLabel(QStringLiteral("组件更新"),page));
     auto *components = new ComponentDownloads(page);
     components->setMinimumHeight(360);
-    layout->addWidget(components);
-    return scroll;
+    versions->addRow(components);
+
+    categories->addItem(QStringLiteral("快捷键"));
+    stack->addWidget(buildShortcutSettings());
+    categories->addItem(QStringLiteral("右键设置"));
+    stack->addWidget(buildContextMenuSettings());
+    categories->setCurrentRow(0);
+    return page;
 }
 
 void MainWindow::buildToolbar()
@@ -498,21 +639,11 @@ void MainWindow::buildToolbar()
     bar->setFixedHeight(44);
     bar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
-    auto *menu = bar->addAction(QStringLiteral("☰"));
-    menu->setObjectName(QStringLiteral("navigationToggle"));
-    menu->setToolTip(QStringLiteral("展开 / 收起页面导航"));
-    connect(menu, &QAction::triggered, this, [this] {
-        const bool expand = navigation_->width() == 44;
-        navigation_->setFixedWidth(expand ? 180 : 44);
-        for (auto *button : navigationButtons_)
-            button->setToolButtonStyle(expand ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
-    });
     auto *openSourceAction = bar->addAction(QStringLiteral("打开源"));
     auto *openProjectAction = bar->addAction(QStringLiteral("打开项目"));
     auto *saveProjectAction = bar->addAction(QStringLiteral("保存项目"));
     auto *presetsAction = bar->addAction(QStringLiteral("预设管理"));
     presetsAction->setObjectName("presetManagement");
-    auto *communityAction=bar->addAction(QStringLiteral("预设社区"));connect(communityAction,&QAction::triggered,this,&MainWindow::showCommunity);
     auto *about = bar->addAction(QStringLiteral("关于"));
     connect(about,&QAction::triggered,this,[this]{
         QDialog dialog(this);dialog.setWindowTitle(QStringLiteral("关于 VS Renderer"));
@@ -547,7 +678,6 @@ void MainWindow::buildToolbar()
     bar->addWidget(spacer);
 
     vsActions_ = bar->actions();
-    vsActions_.removeFirst();
 
     connect(openSourceAction, &QAction::triggered, this, &MainWindow::openSource);
     connect(openProjectAction, &QAction::triggered, this, &MainWindow::openProject);
@@ -609,6 +739,7 @@ QWidget *MainWindow::buildSidebar()
     filtersLayout->setContentsMargins(8, 8, 8, 8);
     filtersLayout->setSpacing(4);
     catalogSearch_ = new QLineEdit(filters);
+    catalogSearch_->setObjectName("rendererCatalogSearch");
     catalogSearch_->setPlaceholderText(QStringLiteral("搜索滤镜"));
     catalogList_ = new QListWidget(filters);
     catalogList_->setObjectName(QStringLiteral("rendererCatalog"));
@@ -643,10 +774,7 @@ QWidget *MainWindow::buildSidebar()
         const auto *item = catalogList_->currentItem();
         if (!item || item->isHidden())
             return;
-        activePreset_.clear();
-        const int row = graph_.add(item->data(Qt::UserRole).toString());
-        refreshPipeline(row);
-        setStatus(QStringLiteral("已添加滤镜，VPY 待验证。"));
+        addFilterToRoute(item->data(Qt::UserRole).toString());
     });
     connect(catalogList_, &QListWidget::itemDoubleClicked, add, &QPushButton::click);
     connect(pipelineList_, &QListWidget::currentRowChanged, this, &MainWindow::selectPipelineRow);
@@ -744,6 +872,8 @@ QWidget *MainWindow::buildWorkspace()
     sourcePane_ = compareView_->sourcePane();
     processedPane_ = compareView_->processedPane();
     sourcePane_->setActive(true);
+    connectPreviewContextMenu(sourcePane_);
+    connectPreviewContextMenu(processedPane_);
 
     layout->addWidget(compareBar);
     layout->addWidget(compareView_, 1);
@@ -796,9 +926,21 @@ QWidget *MainWindow::buildTransport()
     mode->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Preferred);
     mode->addItems({QStringLiteral("并排"), QStringLiteral("A/B 滑块")});
     connect(compareView_,&CompareView::visiblePaneCountChanged,mode,[mode](int count){mode->setItemText(1,count==4?QStringLiteral("A/B/C/D 滑块"):count==3?QStringLiteral("A/B/C 滑块"):QStringLiteral("A/B 滑块"));});
+    auto *previousKey = compactButton(QStringLiteral("|◀"), transport);
+    previousKey->setObjectName("rendererPreviousKeyframe");
+    previousKey->setToolTip(QStringLiteral("上一个关键帧"));
+    previousKey->setAccessibleName(previousKey->toolTip());
+    previousKey->setFixedWidth(42);
     auto *previous = compactButton(QStringLiteral("◀ 帧"), transport);
+    previous->setObjectName("rendererPreviousFrame");
     playButton_ = compactButton(QStringLiteral("播放"), transport);
     auto *next = compactButton(QStringLiteral("帧 ▶"), transport);
+    next->setObjectName("rendererNextFrame");
+    auto *nextKey = compactButton(QStringLiteral("▶|"), transport);
+    nextKey->setObjectName("rendererNextKeyframe");
+    nextKey->setToolTip(QStringLiteral("下一个关键帧"));
+    nextKey->setAccessibleName(nextKey->toolTip());
+    nextKey->setFixedWidth(42);
     auto *scaler = new QComboBox(transport);
     scaler->setObjectName(QStringLiteral("rendererScaling"));
     scaler->addItem(QStringLiteral("放大：Nearest"), static_cast<int>(ThreeFpScalingAlgorithm::Nearest));
@@ -819,15 +961,20 @@ QWidget *MainWindow::buildTransport()
     auto *frames = new QHBoxLayout(frameControls);
     frames->setContentsMargins(0, 0, 0, 0);
     frameControls->setSizePolicy(QSizePolicy::Maximum,QSizePolicy::Preferred);
-    frames->addWidget(previous); frames->addWidget(playButton_); frames->addWidget(next);
+    frames->addWidget(previousKey); frames->addWidget(previous); frames->addWidget(playButton_);
+    frames->addWidget(next); frames->addWidget(nextKey);
     fileInput_->setFixedHeight(30);mode->setFixedHeight(30);scaler->setFixedHeight(30);frameControls->setFixedHeight(30);
-    controlRow->addWidget(fileInput_,1);
-    controlRow->addStretch(1);
-    controlRow->addWidget(frameControls);
-    controlRow->addWidget(mode);
+    auto *settings = new QWidget(transport);
+    auto *selectors = new QHBoxLayout(settings);
+    selectors->setContentsMargins(0, 0, 0, 0);
+    selectors->addStretch();
+    selectors->addWidget(mode);
     scaler->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     scaler->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Preferred);
-    controlRow->addWidget(scaler);
+    selectors->addWidget(scaler);
+    controlRow->addWidget(fileInput_, 1);
+    controlRow->addWidget(frameControls);
+    controlRow->addWidget(settings, 1);
 
     layout->addLayout(timelineRow);
     layout->addLayout(controlRow);
@@ -853,14 +1000,10 @@ QWidget *MainWindow::buildTransport()
         timelinePressed_ = false;
         seekTimeline(timeline_->value());
     });
-    connect(previous, &QPushButton::clicked, this, [this] {
-        if (sourcePlayer_) sourcePlayer_->stepFrame(-1);
-        playing_ = false;
-    });
-    connect(next, &QPushButton::clicked, this, [this] {
-        if (sourcePlayer_) sourcePlayer_->stepFrame(1);
-        playing_ = false;
-    });
+    connect(previousKey, &QPushButton::clicked, this, [this] { stepPreview(-1, true); });
+    connect(previous, &QPushButton::clicked, this, [this] { stepPreview(-1, false); });
+    connect(next, &QPushButton::clicked, this, [this] { stepPreview(1, false); });
+    connect(nextKey, &QPushButton::clicked, this, [this] { stepPreview(1, true); });
     connect(scaler, &QComboBox::currentIndexChanged, this, &MainWindow::applyPreviewScaling);
     return transport;
 }
@@ -1014,6 +1157,7 @@ bool MainWindow::loadSource(const QString &path)
         ? QStringLiteral("源已打开\n点击“渲染预览”生成右侧画面")
         : QStringLiteral("源视频打开失败"));
     processedPane_->setBadge(QStringLiteral("VS · 待渲染"));
+    for (auto &route : routes_) route.previewScript.clear();
     timelineSeekPending_ = false;
     pendingTimelineValue_ = -1;
     vsScriptReady_ = false;
