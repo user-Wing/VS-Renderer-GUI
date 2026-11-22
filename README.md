@@ -36,7 +36,7 @@ VS增强需使用配套Native内核；旧内核无法保留新增帧信息时会
 | Full | Renderer、Player、VSCap、VS 滤镜及完整编辑/可选后端；以所下载包的组件清单为准 |
 | 单文件 `VS-Player.exe` | 独立播放器，支持内置 MoeSR-50K、Anime4K A CNN、AFast CNN、AFast 1X 及各自的额外增强档、D3D11/Jinc、兼容 GLSL/HLSL 导入、音视频字幕及图片查看；在程序旁解包并保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
 
-Full 和单文件 Player 首次打开后会保留一个预热窗口，并默认登记登录待机。手动更新前可双击同目录的 `killvsp.exe` 结束待机。 [关闭待机与更新](docs/portable-updates.md)
+Full 和单文件 Player 首次打开后会保留一个预热窗口，并默认登记登录待机。单文件版启动时会在同目录释放 `killvsp.exe`，手动更新前可双击它结束待机。 [关闭待机与更新](docs/portable-updates.md)
 
 从 1.0.13 起仅提供 Full 目录与单文件播放器，不再生成 PlayerLite 发行目录。早期 Lite 包仍按其对应说明使用。
 

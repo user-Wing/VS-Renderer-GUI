@@ -24,6 +24,7 @@ $work = if ($WorkDirectory) { [IO.Path]::GetFullPath($WorkDirectory) } else { Jo
 $stage = Join-Path $work 'stage'
 $zip = Join-Path $work 'payload.7z'
 $runner = Join-Path $work 'launcher.exe'
+$stopUtility = Join-Path $work 'killvsp.exe'
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 $stage = [IO.Path]::GetFullPath($stage)
 $buildRoot = [IO.Path]::GetFullPath((Join-Path $root 'build')) + [IO.Path]::DirectorySeparatorChar
@@ -76,13 +77,17 @@ try {
 } finally { Pop-Location }
 & (Join-Path $env:SystemRoot 'System32/tar.exe') -tf $zip | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Windows tar cannot read the single-player payload.' }
+& $compiler -std=c11 -Os -s -municode -mwindows -static-libgcc (Join-Path $PSScriptRoot 'killvsp.c') -o $stopUtility -luser32
+if ($LASTEXITCODE -ne 0) { throw "PlayerLite stop utility compilation failed ($LASTEXITCODE)" }
 $resource = Join-Path $work 'launcher-icons.rc'
 $resourceObject = Join-Path $work 'launcher-icons.o'
 $iconPath = (Join-Path $root 'assets\icons\player.ico').Replace('\','/')
+$stopUtilityPath = $stopUtility.Replace('\','/')
 $numericVersion = $version.Replace('.', ',') + ',0'
 $resourceText = @"
 #include <windows.h>
 101 ICON "$iconPath"
+KILLVSP RCDATA "$stopUtilityPath"
 1 VERSIONINFO
 FILEVERSION $numericVersion
 PRODUCTVERSION $numericVersion
@@ -106,7 +111,7 @@ END
 "@
 [IO.File]::WriteAllText($resource, $resourceText, [Text.Encoding]::UTF8)
 & (Join-Path (Split-Path $compiler) 'windres.exe') -i $resource -o $resourceObject -O coff
-if ($LASTEXITCODE -ne 0) { throw 'Player icon resource compilation failed' }
+if ($LASTEXITCODE -ne 0) { throw 'Player launcher resource compilation failed' }
 & $compiler -std=c11 -Os -s -municode -mwindows -static-libgcc (Join-Path $PSScriptRoot 'playerlite-launcher.c') $resourceObject -o $runner -luser32 -lshell32
 if ($LASTEXITCODE -ne 0) { throw "PlayerLite launcher compilation failed ($LASTEXITCODE)" }
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant().Substring(0,24)

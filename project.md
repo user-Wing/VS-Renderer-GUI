@@ -35,7 +35,7 @@
 | 固定上游 + 完整 Native 补丁 | 保留本地扩展并可重新构建 | 不拼装 API14/18/20 不同版本 DLL 或补丁 |
 | 比对源像素与显示值分开 | `AnalysisPage::updatePixelReadouts` 按源坐标联动；`SourcePixelProbe.h` 和 Native 比对扩展提供转换前码值 | YUV 不由渲染 RGB 反算；交互重绘不继承静态图片媒体帧率；缩放移除固定倍率上限，Native 裁剪视口并映射 UV |
 | 启动期库预读 | `src/player/main.cpp` 用128KiB缓冲在低优先级线程读取FFmpeg；单文件解包后的Qt子进程共用 | 不照搬.NET图标和LakeUI设备预热，不额外提高进程优先级；首次解包单独计时 |
-| Player 待机 | 首次打开建立本次登录的待机，`PlayerStandbyWin.h` 转交请求，窗口被接管后立即补建，单文件复用解包目录 | 49 MB 工作集预算，`tools/killvsp.c` 用同一路径的退出信号关闭待机 |
+| Player 待机 | 首次打开建立本次登录的待机，`PlayerStandbyWin.h` 转交请求，窗口被接管后立即补建，单文件复用解包目录 | 49 MB 工作集预算，`tools/killvsp.c` 按路径关闭待机。Full 随包提供工具，单文件启动器将工具从 PE 资源释放到同目录 |
 | 软件播放同步与内存预算 | 上游线程/帧池/CPU 域按负载逐级调整；音频从60ms起按告警升至240ms，呈现允许最多250ms的平滑节奏容差；保留VSP的8K关键包参考帧追赶 | 不把显示器限帧记为解码丢帧；CPU预缩放仍默认关闭，8K逐帧实时按素材验收 |
 | AI 字幕外置推理 | 固定 main + #36/#37 Native 音频 tap；Qt 有界传 PCM 到外置 worker，跳转按 generation 隔离 | 模型独立打包并由组件下载器安装；保留旧 GGUF 配置兼容，不移植上游 VB 页面 |
 | Shader 平面输出 | `third_party/vsr-placebo` 直接回读 YUV 平面、合并增强 hooks，独立命名空间与 color 依赖 | 保留标准 placebo 插件作为缺少组件时的兼容路径；不把 VS 吞吐当作 Native 播放帧率 |

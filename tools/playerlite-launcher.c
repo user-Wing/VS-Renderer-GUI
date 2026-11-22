@@ -20,6 +20,25 @@ static int exists(const wchar_t *p) {
     DWORD a = GetFileAttributesW(p);
     return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
+
+static void releaseStopUtility(HINSTANCE module, const wchar_t *parent) {
+    wchar_t path[4096], pending[4096];
+    if (swprintf_s(path, 4096, L"%ls\\killvsp.exe", parent) < 0 || exists(path)) return;
+    const HRSRC resource = FindResourceW(module, L"KILLVSP", RT_RCDATA);
+    if (!resource) return;
+    const DWORD size = SizeofResource(module, resource);
+    const void *data = LockResource(LoadResource(module, resource));
+    if (!size || !data || swprintf_s(pending, 4096, L"%ls\\killvsp-%lu.tmp", parent, GetCurrentProcessId()) < 0)
+        return;
+
+    const HANDLE output = CreateFileW(pending, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (output == INVALID_HANDLE_VALUE) return;
+    DWORD written = 0;
+    const BOOL complete = WriteFile(output, data, size, &written, NULL) && written == size;
+    CloseHandle(output);
+    if (!complete || !MoveFileW(pending, path)) DeleteFileW(pending);
+}
+
 static const wchar_t *ffmpegFiles[] = {
     L"ffmpeg.exe", L"ffprobe.exe", L"avcodec-63.dll", L"avformat-63.dll",
     L"avutil-61.dll", L"swresample-7.dll", L"swscale-10.dll", L"avfilter-12.dll"
@@ -85,15 +104,17 @@ static void cleanStaleRuntimes(const wchar_t *parent){
 }
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show) {
-    (void)instance;(void)previous;(void)show;
+    (void)previous;(void)show;
     wchar_t self[4096],parent[4096],runtime[4096]={0},archive[4096],player[4096],command[8192],envPath[32768],lockPath[4096];
     HANDLE input=INVALID_HANDLE_VALUE,lock=INVALID_HANDLE_VALUE,stop=NULL;int result=1;
     const BOOL standby = args && !wcscmp(args, L"--standby");
     const DWORD selfLength=GetModuleFileNameW(NULL,self,4096);
     if(!selfLength || selfLength>=4096){if(!standby)fail(L"Cannot resolve executable path.");return 1;}
     if(args && !wcscmp(args, L"--stop-standby")){vspStopStandby(self);return 0;}
-    if(!standby && vspForwardToStandby(self,args ? args : L"",VSP_STANDBY_CLASS))return 0;
     wcscpy_s(parent,4096,self);wchar_t *last=wcsrchr(parent,L'\\');if(!last)return 1;*last=0;
+    // Restore the helper even when a prepared player can handle this launch.
+    releaseStopUtility(instance, parent);
+    if(!standby && vspForwardToStandby(self,args ? args : L"",VSP_STANDBY_CLASS))return 0;
     if(standby){stop=vspBeginStandby(self);if(!stop)return 0;}
     else if((!args || wcsncmp(args,L"--",2)) && vspKeepInSession(parent))stop=vspBeginStandby(self);
     wchar_t originalPath[28000]={0},externalPath[32768];GetEnvironmentVariableW(L"PATH",originalPath,28000);swprintf_s(externalPath,32768,L"%ls;%ls",parent,originalPath);
