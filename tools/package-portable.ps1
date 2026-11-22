@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $program = (Resolve-Path -LiteralPath $ProgramDirectory).Path
 if (-not (Test-Path -LiteralPath (Join-Path $program 'vs-export-worker.exe'))) { throw 'Deploy vs-export-worker.exe with VSRenderer before packaging' }
-foreach ($name in @('vsr-thumbnail.dll', 'vsr-thumbnail-worker.exe')) {
+foreach ($name in @('vsr-thumbnail.dll', 'vsr-thumbnail-worker.exe', 'killvsp.exe')) {
     if (-not (Test-Path -LiteralPath (Join-Path $program $name))) { throw "Deploy thumbnail component before packaging: $name" }
 }
 $editor = Join-Path $program 'runtime/photocraft'
@@ -50,7 +50,7 @@ foreach ($name in @('manifest.json','config.mak','build-full09.sh','build-full10
 if (Get-ChildItem -LiteralPath $payload -Recurse -File | Where-Object { $_.Name -like 'OpenNGU-*' }) { throw 'Private OpenNGU assets must be removed from the input staging directory before public packaging.' }
 & (Join-Path $PSScriptRoot 'stage-shaders.ps1') -OutputDirectory (Join-Path $payload 'shaders') -SevenZip $SevenZip -ExcludePrivate
 if (!(Test-Path -LiteralPath $Strip)) { throw 'MinGW strip.exe is required for release packaging' }
-foreach ($name in @('VSRenderer.exe','vs-player.exe','vs-cap.exe','vs-export-worker.exe')) {
+foreach ($name in @('VSRenderer.exe','vs-player.exe','vs-cap.exe','vs-export-worker.exe','killvsp.exe')) {
     & $Strip --strip-unneeded (Join-Path $payload $name)
     if ($LASTEXITCODE -ne 0) { throw "Release symbol stripping failed: $name" }
 }

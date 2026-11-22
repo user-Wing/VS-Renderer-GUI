@@ -1,4 +1,5 @@
 #include "update/SinglePlayerUpdater.h"
+#include "player/PlayerStandbyWin.h"
 #include <QApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -67,7 +68,10 @@ try {
 } catch { $_ | Out-File -LiteralPath (Join-Path $Work 'update-error.txt'); Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'VS Player 更新失败') }
 )PS");script.close();
             const auto powershell=QStandardPaths::findExecutable("powershell.exe");
-            if(QProcess::startDetached(powershell,{"-NoProfile","-NonInteractive","-WindowStyle","Hidden","-ExecutionPolicy","Bypass","-File",script.fileName(),target,file->fileName(),QString::number(QCoreApplication::applicationPid()),work->path()})){work->setAutoRemove(false);qApp->quit();}
+            if(QProcess::startDetached(powershell,{"-NoProfile","-NonInteractive","-WindowStyle","Hidden","-ExecutionPolicy","Bypass","-File",script.fileName(),target,file->fileName(),QString::number(QCoreApplication::applicationPid()),work->path()})){
+                vspStopStandby(QDir::toNativeSeparators(target).toStdWString().c_str());
+                work->setAutoRemove(false);qApp->quit();
+            }
             else QMessageBox::warning(window_,"VS Player",tr("无法启动单文件替换程序，当前程序未修改。"));
         });
     });

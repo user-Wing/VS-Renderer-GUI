@@ -1,7 +1,8 @@
 param(
     [string]$SourceDirectory = "",
     [string]$OutputFile = "",
-    [string]$WorkDirectory = ""
+    [string]$WorkDirectory = "",
+    [string]$SevenZip = 'C:/PortableSoft/7-Zip-Zstandard/7z.exe'
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -18,9 +19,10 @@ if (!(Test-Path -LiteralPath $built)) { throw "Rebuild VSPlayerLite first: $buil
 if (!(Test-Path -LiteralPath (Join-Path $SourceDirectory 'FFF.Native.dll'))) { throw "Missing FFF.Native.dll: $SourceDirectory" }
 $compiler = 'C:\Private\Soft\QT\Tools\mingw1310_64\bin\gcc.exe'
 if (!(Test-Path -LiteralPath $compiler)) { throw "Missing compiler: $compiler" }
+$SevenZip = (Resolve-Path -LiteralPath $SevenZip).Path
 $work = if ($WorkDirectory) { [IO.Path]::GetFullPath($WorkDirectory) } else { Join-Path $root 'build\playerlite-single' }
 $stage = Join-Path $work 'stage'
-$zip = Join-Path $work 'payload.tar.gz'
+$zip = Join-Path $work 'payload.7z'
 $runner = Join-Path $work 'launcher.exe'
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 $stage = [IO.Path]::GetFullPath($stage)
@@ -34,7 +36,7 @@ New-Item -ItemType Directory -Path $stage | Out-Null
 $ffmpegFiles = @((Get-Content -LiteralPath (Join-Path $SourceDirectory 'release.json') -Raw | ConvertFrom-Json).ffmpegOnlyFiles)
 $ffmpegPattern = '^(ffmpeg|ffprobe)\.exe$|^(avcodec|avdevice|avfilter|avformat|avutil|swresample|swscale)(-\d+)?\.dll$'
 Get-ChildItem -LiteralPath $SourceDirectory -Force | Where-Object {
-    $_.Name -notin @('player.ini','themes.ini','themes') -and $_.Name -notin $ffmpegFiles -and $_.Name -notmatch $ffmpegPattern
+    $_.Name -notin @('player.ini','themes.ini','themes','killvsp.exe') -and $_.Name -notin $ffmpegFiles -and $_.Name -notmatch $ffmpegPattern
 } | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
 }
@@ -65,16 +67,15 @@ Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $_.Name -ne 'r
 }
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'resource-manifest.json') -Encoding UTF8
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
-$compress = @'
-import pathlib, sys, tarfile
-source = pathlib.Path(sys.argv[1])
-with tarfile.open(sys.argv[2], 'w:gz', compresslevel=1) as archive:
-    for path in sorted(source.rglob('*')):
-        if path.is_file():
-            archive.add(path, arcname=path.relative_to(source).as_posix(), recursive=False)
-'@
-& python -c $compress $stage $zip
-if ($LASTEXITCODE -ne 0) { throw 'Cannot compress the single-player runtime' }
+Push-Location $stage
+try {
+    # FLZMA2 writes standard LZMA2 streams. Omit extra filters so Windows tar
+    # can unpack the 7z container using its built-in decoder.
+    & $SevenZip a -t7z $zip '*' -m0=FLZMA2:d=32m -mx=7 -mf=off -ms=on -mmt=4 -bb0
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot compress the single-player runtime. Use 7-Zip ZS with Fast LZMA2.' }
+} finally { Pop-Location }
+& (Join-Path $env:SystemRoot 'System32/tar.exe') -tf $zip | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Windows tar cannot read the single-player payload.' }
 $resource = Join-Path $work 'launcher-icons.rc'
 $resourceObject = Join-Path $work 'launcher-icons.o'
 $iconPath = (Join-Path $root 'assets\icons\player.ico').Replace('\','/')
@@ -106,7 +107,7 @@ END
 [IO.File]::WriteAllText($resource, $resourceText, [Text.Encoding]::UTF8)
 & (Join-Path (Split-Path $compiler) 'windres.exe') -i $resource -o $resourceObject -O coff
 if ($LASTEXITCODE -ne 0) { throw 'Player icon resource compilation failed' }
-& $compiler -std=c11 -Os -s -municode -mwindows -static-libgcc (Join-Path $PSScriptRoot 'playerlite-launcher.c') $resourceObject -o $runner -luser32
+& $compiler -std=c11 -Os -s -municode -mwindows -static-libgcc (Join-Path $PSScriptRoot 'playerlite-launcher.c') $resourceObject -o $runner -luser32 -lshell32
 if ($LASTEXITCODE -ne 0) { throw "PlayerLite launcher compilation failed ($LASTEXITCODE)" }
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant().Substring(0,24)
 $temp = Join-Path $work 'VS-Player.partial.exe'
@@ -115,7 +116,7 @@ $stream = [IO.File]::Open($temp,[IO.FileMode]::Append,[IO.FileAccess]::Write)
 try {
     $archive = [IO.File]::OpenRead($zip)
     try { $archive.CopyTo($stream) } finally { $archive.Dispose() }
-    $marker = [Text.Encoding]::ASCII.GetBytes('VSLITE03')
+    $marker = [Text.Encoding]::ASCII.GetBytes('VSLITE04')
     $stream.Write($marker,0,$marker.Length)
     $count = [BitConverter]::GetBytes([uint64](Get-Item -LiteralPath $zip).Length)
     $stream.Write($count,0,$count.Length)
@@ -127,5 +128,5 @@ $pending = $destination + '.new'
 Copy-Item -LiteralPath $temp -Destination $pending -Force
 Move-Item -LiteralPath $pending -Destination $destination -Force
 Write-Output ('Single EXE: {0} ({1:N2} MiB)' -f $OutputFile,((Get-Item -LiteralPath $OutputFile).Length / 1MB))
-Write-Output 'FFmpeg bundled: no; temporary runtime beside launcher, removed after player exits.'
+Write-Output 'FFmpeg bundled: no; temporary runtime beside launcher, shared while standby is enabled.'
 Write-Output 'Configuration: player.ini beside the launcher, preserved across updates.'

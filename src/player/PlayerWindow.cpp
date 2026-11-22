@@ -119,7 +119,7 @@ protected:
         }
     }
 };
-PlayerWindow::PlayerWindow() {
+PlayerWindow::PlayerWindow(bool standby) {
     auto darkPalette=palette();darkPalette.setColor(QPalette::Window,QColor("#202124"));
     darkPalette.setColor(QPalette::WindowText,QColor("#e8eaed"));setPalette(darkPalette);setAutoFillBackground(true);
     const QString configPath = qEnvironmentVariable("VSR_PLAYER_CONFIG", QDir(QCoreApplication::applicationDirPath()).filePath("player.ini"));
@@ -270,7 +270,7 @@ PlayerWindow::PlayerWindow() {
         updateInfo();
     });
     connect(imageLoader_.get(),&PlayerImage::failed,this,[this](const QString &error){if(imageMode_){imageAnimation_->stop();imagePagePending_=false;playing_=false;const auto message=tr("图片解码失败：%1").arg(error);setError(message);pane_->setPlaceholderText(message);}});
-    chromeTimer_=new QTimer(this);chromeTimer_->setInterval(100);connect(chromeTimer_,&QTimer::timeout,this,&PlayerWindow::updateChrome);chromeTimer_->start();
+    chromeTimer_=new QTimer(this);chromeTimer_->setInterval(100);connect(chromeTimer_,&QTimer::timeout,this,&PlayerWindow::updateChrome);
     connect(clock_.get(), &ThreeFpPlayer::errorOccurred, this, &PlayerWindow::setError);
     connect(output_.get(), &ThreeFpPlayer::errorOccurred, this, &PlayerWindow::setError);
     connect(server_.get(), &VapourSynthFrameServer::initialized, this, [this](bool ok) {
@@ -311,8 +311,8 @@ PlayerWindow::PlayerWindow() {
         const int target=frameAtPosition100ns(position(),clip_.totalFrames,clip_.fpsNumerator,clip_.fpsDenominator);
         if(playing_ && frame.frameIndex+1<clip_.totalFrames && frame.frameIndex<target)requestFrame(target);
     });
-    auto *bluetoothTimer=new QTimer(this);bluetoothTimer->setInterval(5000);
-    connect(bluetoothTimer,&QTimer::timeout,this,[this]{if(settings_->value("audio/bluetoothLowLatency",false).toBool() && ready_ && !imageMode_)applyAudioEffects();});bluetoothTimer->start();
+    bluetoothTimer_=new QTimer(this);bluetoothTimer_->setInterval(5000);
+    connect(bluetoothTimer_,&QTimer::timeout,this,[this]{if(settings_->value("audio/bluetoothLowLatency",false).toBool() && ready_ && !imageMode_)applyAudioEffects();});
     connect(pane_, &PreviewPane::viewChanged, this, [this](float z, float x, float y) { resetZoom_->setVisible(z!=1 || x!=0 || y!=0);if(resetZoom_->isVisible())resetZoom_->raise();if(imageMode_){pane_->adoptView(z,x,y);updateInfo();return;}suspendQualityCheck();if(!madvrMode()) (direct_?clock_:output_)->setView(z, x, y); });
     connect(pane_, &PreviewPane::redrawRequested, this, [this] { if(imageMode_){pane_->surface()->update();return;}if(madvrMode()) { if(lav_) { const auto size=pane_->surface()->size()*pane_->surface()->devicePixelRatioF();lav_->resizeVideo(size.width(),size.height()); } } else (direct_?clock_:output_)->redraw();
         if(ready_)suspendQualityCheck();if((!direct_ || (nativeAnime_ && qualityStage_!=4 && qualityStage_!=5)) && !profile().isEmpty() && interpolationStage()<0 && superInterpolationStage()<0 && ready_ && !networkSource())profileResize_->start(); });
@@ -332,7 +332,14 @@ PlayerWindow::PlayerWindow() {
     applySettings(false);
     if(overlayChrome_)resize(width(),height()+controls_->sizeHint().height());
     qApp->installEventFilter(this);
-    timer_ = new QTimer(this); timer_->setTimerType(Qt::PreciseTimer);timer_->setInterval(interpolationStage()>=0?4:10); connect(timer_, &QTimer::timeout, this, &PlayerWindow::updateState); timer_->start();
+    timer_ = new QTimer(this); timer_->setTimerType(Qt::PreciseTimer);timer_->setInterval(interpolationStage()>=0?4:10); connect(timer_, &QTimer::timeout, this, &PlayerWindow::updateState);
+    if (!standby) resumeStandby();
+}
+void PlayerWindow::resumeStandby() {
+    settings_->sync();
+    timer_->start();
+    chromeTimer_->start();
+    bluetoothTimer_->start();
 }
 PlayerWindow::~PlayerWindow() { if(bitrateProbe_){bitrateProbe_->disconnect(this);bitrateProbe_->kill();bitrateProbe_->waitForFinished(1000);delete bitrateProbe_;bitrateProbe_=nullptr;}if(aiSubtitles_)aiSubtitles_->stop();qApp->removeEventFilter(this); timer_->stop();stopDiscIndexing();timelinePreview_->stop();savePosition(); settings_->sync(); network_->cancel(); discMenu_.reset(); subtitles_.reset(); lav_.reset(); clock_->stop(); server_.reset(); network_.reset(); output_.reset(); clock_.reset(); }
 void PlayerWindow::moveEvent(QMoveEvent *event){QMainWindow::moveEvent(event);if(chromeTimer_){layoutChrome();layoutInfoPanels();}}

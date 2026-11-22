@@ -33,7 +33,6 @@ int main(int argc, char *argv[])
         bool validA=false,validB=false;a=parser.value("loop-in").toLongLong(&validA);b=parser.value("loop-out").toLongLong(&validB);
         if(!parser.isSet("source") || !validA || !validB || a<0 || b<=a)parser.showHelp(2);
     }
-    app.setProperty("playerHandoff",parser.isSet("source"));
     vsr::MainWindow window;
     window.show();
     if(parser.isSet("source"))QTimer::singleShot(0,&window,[&window,path=parser.value("source"),a,b]{window.openPlayerSource(path,a,b);});

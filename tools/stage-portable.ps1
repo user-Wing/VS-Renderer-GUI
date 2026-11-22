@@ -10,7 +10,7 @@ $output = Join-Path $projectRoot "dist/VS-Renderer-GUI-windows-x64"
 $version = [regex]::Match((Get-Content -LiteralPath (Join-Path $projectRoot 'CMakeLists.txt') -Raw), 'project\(VSRenderer VERSION ([0-9.]+)').Groups[1].Value
 if (-not $version) { throw 'Project version not found' }
 $buildRoot = (Resolve-Path $BuildDirectory).Path
-foreach ($exe in @("VSRenderer.exe", "vs-player.exe")) {
+foreach ($exe in @("VSRenderer.exe", "vs-player.exe", "killvsp.exe")) {
     if (-not (Test-Path (Join-Path $buildRoot $exe))) { throw "Missing build: $exe" }
 }
 $initialStage = -not (Test-Path -LiteralPath $output)
@@ -19,7 +19,7 @@ if ($initialStage) {
     $previousRoot = (Resolve-Path $PreviousDirectory).Path
     Get-ChildItem -LiteralPath $previousRoot | Copy-Item -Destination $output -Recurse -Force
 }
-foreach ($exe in @("VSRenderer.exe", "vs-player.exe", "FFF.Native.dll")) {
+foreach ($exe in @("VSRenderer.exe", "vs-player.exe", "killvsp.exe", "FFF.Native.dll")) {
     Copy-Item -LiteralPath (Join-Path $buildRoot $exe) -Destination $output -Force
 }
 Copy-Item -LiteralPath (Join-Path $buildRoot 'vsr-source.dll') -Destination $output -Force

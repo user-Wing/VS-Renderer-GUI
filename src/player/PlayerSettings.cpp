@@ -17,6 +17,8 @@
 #include "player/PlayerLanguage.h"
 #include "player/PlayerCache.h"
 #include "player/PlayerAssociations.h"
+#include "player/PlayerStandbyWin.h"
+#include "player/PlayerLoginStartup.h"
 #include "update/ComponentDownloads.h"
 #include <QColorDialog>
 #include <QFontComboBox>
@@ -50,6 +52,8 @@
 #include <QSlider>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QMessageBox>
+#include <QProcess>
 #include <QThread>
 #include <QSignalBlocker>
 #include <algorithm>
@@ -156,6 +160,78 @@ void PlayerWindow::showSettings() {
     auto *configInfo=new QLabel(tr("所有设置自动保存在同目录 player.ini。\n可将全部设置导出为一个 INI，或载入已有配置。\nEnter / F11: 无边框全屏; Esc或者划出顶栏退出全屏。"),&dialog);configInfo->setWordWrap(true);basic->addRow(configInfo);
     auto *language=new QComboBox(&dialog);language->setObjectName("playerLanguage");language->addItem(tr("中文"),"zh_CN");language->addItem("English","en_US");language->setCurrentIndex(qMax(0,language->findData(settings_->value("basic/language","zh_CN"))));basic->addRow(tr("语言"),language);
     auto *autoplay=new QCheckBox(tr("打开文件自动播放；关闭则准备首帧并暂停"),&dialog);autoplay->setObjectName("playerAutoplay");autoplay->setChecked(settings_->value("basic/autoplay",true).toBool());basic->addRow(autoplay);
+    auto *sessionStandby = new QCheckBox(tr("打开播放器后在本次登录中保持待机"), &dialog);
+    sessionStandby->setObjectName("playerSessionStandby");
+    sessionStandby->setToolTip(tr("关闭播放窗口后继续待机。关闭此选项会结束当前待机，已打开的媒体继续播放。"));
+    basic->addRow(sessionStandby);
+    auto *standby = new QCheckBox(tr("登录 Windows 后后台待机，加快打开媒体"), &dialog);
+    standby->setObjectName("playerLoginStandby");
+    standby->setToolTip(tr("首次打开时默认登记 Windows 登录启动项。关闭后仍可在本次登录中使用待机。"));
+    basic->addRow(standby);
+    QSettings startup(playerStartupRunKey, QSettings::NativeFormat);
+    const auto standbyExe = playerStartupExecutable();
+    const auto standbyCommand = playerStartupCommand(standbyExe);
+    sessionStandby->setEnabled(QFileInfo(standbyExe).isAbsolute() && QFileInfo(standbyExe).isFile());
+    sessionStandby->setChecked(sessionStandby->isEnabled() && settings_->value("basic/standbyInSession", true).toBool());
+    standby->setEnabled(sessionStandby->isEnabled() && standbyCommand.size() < MAX_PATH);
+    standby->setChecked(standby->isEnabled() && startup.value(playerStartupName).toString().compare(standbyCommand, Qt::CaseInsensitive) == 0);
+    const auto applyStandby = [&] {
+        startup.sync();
+        const auto previous = startup.value(playerStartupName).toString();
+        const bool loginChanged = standby->isEnabled() &&
+            standby->isChecked() != (previous.compare(standbyCommand, Qt::CaseInsensitive) == 0);
+        const bool sessionChanged = sessionStandby->isEnabled() &&
+            sessionStandby->isChecked() != settings_->value("basic/standbyInSession", true).toBool();
+        if (!loginChanged && !sessionChanged) return true;
+        const bool start = (sessionChanged && sessionStandby->isChecked()) || (loginChanged && standby->isChecked());
+        const auto nativeExe = QDir::toNativeSeparators(standbyExe).toStdWString();
+        if (loginChanged) {
+            QSettings state(playerStartupStateKey, QSettings::NativeFormat);
+            if (!rememberPlayerStartupChoice(state)) {
+                QMessageBox::warning(&dialog, tr("后台待机"), tr("无法更新后台待机设置。"));
+                return false;
+            }
+            if (standby->isChecked()) startup.setValue(playerStartupName, standbyCommand);
+            else startup.remove(playerStartupName);
+            startup.sync();
+        }
+        if (!loginChanged || startup.status() == QSettings::NoError) {
+            QProcess process;
+            process.setProgram(standbyExe);
+            process.setArguments({QStringLiteral("--standby")});
+            process.setWorkingDirectory(QFileInfo(standbyExe).absolutePath());
+            auto environment = QProcessEnvironment::systemEnvironment();
+            environment.remove("VSR_PLAYER_CONFIG");
+#ifdef VSR_LITE_PLAYER
+            auto paths = environment.value("PATH").split(';');
+            paths.removeAll(QDir::toNativeSeparators(QCoreApplication::applicationDirPath()));
+            environment.insert("PATH", paths.join(';'));
+            environment.remove("VSR_SINGLE_PLAYER_PATH");
+            environment.remove("VSR_PLAYER_NEW_CONFIG");
+#endif
+            process.setProcessEnvironment(environment);
+            if (!start || vspStandbyExists(nativeExe.c_str()) || process.startDetached()) {
+                if (sessionChanged) {
+                    settings_->setValue("basic/standbyInSession", sessionStandby->isChecked());
+                    settings_->sync();
+                }
+                if (!start && !sessionStandby->isChecked()) vspStopStandby(nativeExe.c_str());
+                const QString suffix = QStringLiteral("\" --standby");
+                if (loginChanged && standby->isChecked() && previous.startsWith('"') && previous.endsWith(suffix)) {
+                    const auto previousExe = previous.mid(1, previous.size() - suffix.size() - 1);
+                    vspStopStandby(previousExe.toStdWString().c_str());
+                }
+                return true;
+            }
+            if (loginChanged) {
+                if (previous.isEmpty()) startup.remove(playerStartupName);
+                else startup.setValue(playerStartupName, previous);
+                startup.sync();
+            }
+        }
+        QMessageBox::warning(&dialog, tr("后台待机"), tr("无法更新后台待机设置。"));
+        return false;
+    };
     auto *screenshotRow=new QWidget(&dialog);auto *screenshotLayout=new QHBoxLayout(screenshotRow);screenshotLayout->setContentsMargins(0,0,0,0);auto *screenshotPath=new QLineEdit(screenshotDirectory(),screenshotRow);screenshotPath->setObjectName("playerScreenshotPath");screenshotLayout->addWidget(screenshotPath,1);auto *screenshotBrowse=new QPushButton(tr("选择文件夹…"),screenshotRow);screenshotLayout->addWidget(screenshotBrowse);basic->addRow(tr("默认截图保存路径"),screenshotRow);connect(screenshotBrowse,&QPushButton::clicked,&dialog,[&]{const auto path=QFileDialog::getExistingDirectory(&dialog,tr("选择截图保存文件夹"),screenshotPath->text());if(!path.isEmpty())screenshotPath->setText(path);});
     basic->addRow(new QLabel(tr("当前版本：%1").arg(VSR_VERSION),&dialog));
     const auto skinPath=QDir(QFileInfo(settings_->fileName()).absolutePath()).filePath("themes.ini");applyPageTheme(&dialog,skinPath,"VSP-Settings");
@@ -382,12 +458,13 @@ void PlayerWindow::showSettings() {
 #endif
     };
     connect(apply,&QPushButton::clicked,&dialog,[&] {
+        if (!applyStandby()) return;
         storeStages();store();applySettings(true);language_->updateWidgets(&dialog);
         shortcuts->setActions(playerShortcutActions());
     });
     connect(save,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getSaveFileName(&dialog,tr("保存完整配置"),"vs-player.ini","INI (*.ini)");if(!file.isEmpty()){storeStages();store();if(!saveConfiguration(file))setError(tr("配置保存失败。"));}});
     connect(load,&QPushButton::clicked,&dialog,[&]{const auto file=QFileDialog::getOpenFileName(&dialog,tr("加载完整配置"),{},"INI (*.ini)");if(!file.isEmpty()){if(loadConfiguration(file))dialog.reject();else setError(tr("配置文件无效。"));}});
-    connect(ok,&QPushButton::clicked,&dialog,&QDialog::accept);connect(cancel,&QPushButton::clicked,&dialog,&QDialog::reject);
+    connect(ok,&QPushButton::clicked,&dialog,[&]{if (applyStandby()) dialog.accept();});connect(cancel,&QPushButton::clicked,&dialog,&QDialog::reject);
     language_->updateWidgets(&dialog);
     if(dialog.exec()==QDialog::Accepted){
 #ifndef VSR_LITE_PLAYER

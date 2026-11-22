@@ -21,6 +21,7 @@
 #include <QVersionNumber>
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include "player/PlayerStandbyWin.h"
 #endif
 namespace vsr {
 namespace {
@@ -156,6 +157,11 @@ void PortableUpdater::install() {
     installer.setProgram("powershell.exe");QStringList arguments{"-NoProfile","-ExecutionPolicy","Bypass","-WindowStyle","Hidden","-File",helper,"-ParentPid",QString::number(QCoreApplication::applicationPid()),"-Source",payload_,"-Target",QCoreApplication::applicationDirPath(),"-Launch",QFileInfo(QCoreApplication::applicationFilePath()).fileName()};
     if(!downloadedArchive_.isEmpty())arguments<<"-DownloadedArchive"<<downloadedArchive_<<"-ArchiveSha256"<<selected_.sha256;
     installer.setArguments(arguments);
-    installer.setWorkingDirectory(work_->path());if(!installer.startDetached()){fail(tr("无法启动更新安装。"));return;}work_->setAutoRemove(false);qApp->closeAllWindows();qApp->quit();
+    installer.setWorkingDirectory(work_->path());if(!installer.startDetached()){fail(tr("无法启动更新安装。"));return;}
+#ifdef Q_OS_WIN
+    const auto player = QDir(QCoreApplication::applicationDirPath()).filePath("vs-player.exe");
+    vspStopStandby(QDir::toNativeSeparators(player).toStdWString().c_str());
+#endif
+    work_->setAutoRemove(false);qApp->closeAllWindows();qApp->quit();
 }
 }

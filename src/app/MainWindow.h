@@ -79,6 +79,7 @@ private:
     QWidget *buildSettingsPage();
     QWidget *buildShortcutSettings();
     QWidget *buildContextMenuSettings();
+    QWidget *buildRecoverySettings();
     QWidget *buildWorkspace();
     QWidget *buildTransport();
     void applyPreviewScaling();
@@ -122,7 +123,7 @@ private:
     QStackedWidget *sourceInputStack_=nullptr;
     QPushButton *addRouteButton_=nullptr,*removeRouteButton_=nullptr;
 
-    bool loadSource(const QString &path);
+    bool loadSource(const QString &path, bool allowMissing = false);
     void showScript();
     void validateScript();
     void exportCurrentResult();
@@ -135,9 +136,10 @@ private:
     QVariantMap hlslPreviewParameters_;
     bool hlslPreviewRetryGlSl_ = false;
     QJsonObject projectSnapshot() const;
-    bool applyProjectSnapshot(const QJsonObject &root);
+    bool applyProjectSnapshot(const QJsonObject &root, bool reloadSource = false);
     bool confirmProjectReplacement();
     void initializeProjectProtection();
+    bool restoreProjectSnapshot(const QString &path);
     void checkpointProject();
     void stepProjectHistory(int direction);
     QString projectPath_, recoveryPath_;

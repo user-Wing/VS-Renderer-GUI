@@ -19,6 +19,7 @@
 | 决策 | 原因与适用范围 | 不采用的方案 / 重估条件 |
 | --- | --- | --- |
 | Qt Widgets + C++20 | 适配 Windows 控件、HWND 和 D3D11 | 不引入 QML；跨平台或场景图需求改变再评估 |
+| 社区、教程使用 Qt 界面和离线 Markdown | Qt 处理站点 API、目录和登录，正文与 Vditor 编辑预览复用 WebView2 中的本地渲染资源 | 注册和第三方登录沿用站点验证。缺少运行时或资源时使用基础 Markdown |
 | Agent Qt 核心 + 独立 MCP Node 桥 | Chat Completions/SSE、按需Skills、摘要投影、子会话；Qt异步本地文件/命令/图像；MCP用官方client v2 | 不引入.NET/LakeUI或网页壳；环境工具由模式及父权限统一拦截，原生非兼容模型协议需单独适配 |
 | MinGW GUI → Native 动态 C ABI | 隔离 MinGW/MSVC C++ ABI | 不跨工具链传 C++ 对象；升级必须核对结构版本和 DLL |
 | FilterGraph → VPY → VSScript → 3FP | 脚本可审查，预览与导出共用处理描述 | 不以离线 vspipe/Y4M 管道充当实时帧桥 |
@@ -30,9 +31,11 @@
 | 专用时间轴与请求代次 | 管理 seek、补帧和源/输出 FPS | 不使用 seek 后局部帧号直接推算全局源帧 |
 | 直通相对逐帧 | `PlayerWindow::stepFrame` 调用内核当前PTS逐帧；Native重新解码局部GOP确认相邻帧 | 不用绝对帧号逐帧，也不把稀疏缓存中的近邻当成真实相邻帧；VS仍按输出帧号定位 |
 | 查看与编辑解耦 | PhotoCraft 独立进程保留未保存工作 | 旧 Qt 编辑器仍有源码/测试，不作为生产编辑入口 |
+| 截图事实与颜色计划 | `color/ScreenshotColor.h` 区分显示模式、源存储/有效精度、绝对 scRGB 和相对白位；像素与标准声明共用计划 | 不按 HDR 开关或输出10位猜测源精度；WGC helper 缺失时尝试 DXGI，再以明确原因退回传统8位 |
 | 固定上游 + 完整 Native 补丁 | 保留本地扩展并可重新构建 | 不拼装 API14/18/20 不同版本 DLL 或补丁 |
 | 比对源像素与显示值分开 | `AnalysisPage::updatePixelReadouts` 按源坐标联动；`SourcePixelProbe.h` 和 Native 比对扩展提供转换前码值 | YUV 不由渲染 RGB 反算；交互重绘不继承静态图片媒体帧率；缩放移除固定倍率上限，Native 裁剪视口并映射 UV |
 | 启动期库预读 | `src/player/main.cpp` 用128KiB缓冲在低优先级线程读取FFmpeg；单文件解包后的Qt子进程共用 | 不照搬.NET图标和LakeUI设备预热，不额外提高进程优先级；首次解包单独计时 |
+| Player 待机 | 首次打开建立本次登录的待机，`PlayerStandbyWin.h` 转交请求，窗口被接管后立即补建，单文件复用解包目录 | 49 MB 工作集预算，`tools/killvsp.c` 用同一路径的退出信号关闭待机 |
 | 软件播放同步与内存预算 | 上游线程/帧池/CPU 域按负载逐级调整；音频从60ms起按告警升至240ms，呈现允许最多250ms的平滑节奏容差；保留VSP的8K关键包参考帧追赶 | 不把显示器限帧记为解码丢帧；CPU预缩放仍默认关闭，8K逐帧实时按素材验收 |
 | AI 字幕外置推理 | 固定 main + #36/#37 Native 音频 tap；Qt 有界传 PCM 到外置 worker，跳转按 generation 隔离 | 模型独立打包并由组件下载器安装；保留旧 GGUF 配置兼容，不移植上游 VB 页面 |
 | Shader 平面输出 | `third_party/vsr-placebo` 直接回读 YUV 平面、合并增强 hooks，独立命名空间与 color 依赖 | 保留标准 placebo 插件作为缺少组件时的兼容路径；不把 VS 吞吐当作 Native 播放帧率 |
@@ -54,7 +57,7 @@
 | `src/ui/` | `PreviewPane`、`CompareView`、`AnalysisPage`、参数、预设社区及导出窗口 |
 | `src/player/` | `PlayerWindow`、`PlayerControls`、`PlayerProfiles`、字幕/音频/设置/图片；`PhotoCraftEditor.*` 连接编辑器 |
 | `src/shell/` | `ThumbnailProvider.cpp` 对接现代缩略图及旧式 IExtractImage；文件/流入口共用 `ThumbnailWorker.cpp` / `ThumbnailDecode.h` 隔离解码 |
-| `src/cap/` | `main.cpp` 负责截图/标注/贴图，`DesktopCapture` 捕获，`UiAccess` 启动 |
+| `src/cap/` | `main.cpp` 负责截图/标注/贴图与 Qt chrome 合成；`DesktopCapture` 查询模式并冻结 WGC/DXGI 帧；`WgcBridge` 隔离 MSVC C++/WinRT；`UiAccess` 启动 |
 | `src/bluray/` | `BlurayCatalog` 解析节目，`BlurayWidget` 提供共用界面 |
 | `src/color/`、`src/image/` | 色彩桥、高精度图片、PSD/HDR/JXL 与保留的 Qt 编辑实现 |
 | `src/render/` | `Anime4KFast.h` 运行内置增强；`ShaderPackage.*` 负责自定义源解析、转换与缓存，`CustomShader.h` 负责原生多 pass；补丁及构建见 API20 指南 |
@@ -77,24 +80,31 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 
 | 入口与导航 | 文件 |
 | --- | --- |
-| Renderer：导入 → 时间组/处理链 → 参数/脚本 → 源与输出预览 → 预设/导出 | `src/app/MainWindow*.cpp`、`src/ui/ParameterEditor.cpp`、`CompareView.cpp` |
+| Renderer：左栏展开导航 → 工作台导入 → 时间组/处理链 → 参数/脚本 → 源与输出预览 | `src/app/MainWindow*.cpp`、`src/ui/NavigationIcons.h`、`ParameterEditor.cpp`、`CompareView.cpp` |
+| 社区：公开教程三栏、论坛阅读与发布 | `src/ui/CommunityPage.cpp` 管 API、教程树、章节树和账号窗口，`CommunityMarkdownEditor.cpp` 管草稿与上传，`CommunityWebView.cpp` 管 Vditor 本地消息及站点会话，背景键 `VSR-Community` |
+| Renderer 设置：基本、主题、FFmpeg、论坛、快捷键、右键、快照和恢复、版本与组件 | `MainWindow::buildSettingsPage` 组装；`PageTheme.h` 管主题；`MainWindowPreviewActions.cpp` 管按键和右键；`ProjectProtection.inc` 管自动保存与手动恢复；`ShortcutTable.h` 与 `PlayerMenu.cpp` 供两端复用 |
 | Agent：发送键旁来源/模型/思考 → 对话；功能 → Skills/AGENTS、MCP/npm；自动队列 → 子会话；Token → 上下文整理 | `AgentPage.*`/`AgentPageDialogs.cpp`组装页面；`AgentComposer`管输入预览/补全，`AgentChoicePopup`管三类圆角选择浮层，`AgentMarkdownView`管消息排版与轮次过程折叠；`MainWindowAgent.cpp`注册工具，`MainWindowAgentFeatures.cpp`连接服务，`MainWindowAgentInteractions.cpp`路由命令/引用/能力；索引4，背景键`VSR-Agent` |
 | 图像分析比对：多源 → 偏移/布局 → 同坐标 RGB/原始 YUV → 对比画布导出 | `src/ui/AnalysisPage.cpp`、`MultiCompareView.cpp`、`AnalysisExport.cpp`；OpenNGU 经 `ShaderPackage` 加载，缩小默认 D3D11；该核暂不支持一致的 VS 画布导出；Native 扩展见 `patches/3fp-api20-analysis-probe.patch` |
 | BD Remux：节目识别 → 轨道/输出 → 队列 | `src/bluray/BlurayWidget.cpp` |
-| Player：打开媒体 → 底栏/列表 → 右键音频/字幕/设置 → 图片工具 | `src/player/PlayerWindow.cpp`、`PlayerMenus.cpp`、`PlayerSettings.cpp` |
+| Player：打开媒体 → 底栏/列表 → 右键音频/字幕/设置 → 图片工具 | `src/player/PlayerWindow.cpp`、`PlayerMenus.cpp`、`PlayerSettings.cpp`，快捷键在 `PlayerShortcuts.h` 定义默认项与扩展行，`src/update/ComponentDownloads.cpp` 在展开组件时生成版本行 |
 | Player色彩：解码设置 → 3FP默认 / 手动libplacebo对照；旧自动档迁回原生 | `src/player/PlayerColor.cpp`、`PlayerWindow.cpp` |
 | PhotoCraft：图片工具栏 → 独立编辑工作区 | `src/player/PhotoCraftEditor.*`、`tools/build-photocraft.ps1` |
 | VSCap：热键 → 选区调整 → 标注 → 最终裁切/复制/保存/贴图 | `src/cap/main.cpp` |
+
+论坛格式扩展入口为 `assets/community-markdown/document.js` 的 `vsrRegisterFence(language, render)`。注册脚本接收围栏原文和文档基址，返回 DOM 节点。`editor.js` 管 Vditor 工具栏及左右实时预览，教程和论坛共用 `document.js` 与 `enhancements.js`。
+
+Cube 通过 Renderer 的普通滤镜节点和 Player 右键菜单使用。`CubeLut.h` 管理程序旁的 `luts/` 与自动工作色域识别。Full 共用此目录，单文件 Player 以启动器为基准。`VpyScriptBuilder.cpp` 生成 SDR 色域转换和调色图，`NativeVsCube.cpp` 通过 FFmpeg 的 `lut3d` 处理 VapourSynth RGB 浮点帧，`PlayerImageTools.cpp` 调用 FFmpeg 处理静态图。
 
 ## 6. 外部依赖
 
 | 依赖 | 固定版本 / 准备与调用 | 缺失行为 |
 | --- | --- | --- |
 | Qt | 6.8+；本地记录 6.10.2，MinGW；CMake 查找 | 编译或 GUI 启动失败 |
+| WebView2 / Markdown | NuGet SDK `Microsoft.Web.WebView2` 1.0.3719.77，可用 `VSR_WEBVIEW2_SDK` 指定。Evergreen Runtime 加载 `community-markdown/`，内含 Vditor、Lute、KaTeX、DOMPurify、Highlight.js 与按需 PDF.js | 密码登录、原生列表和基础 Markdown 仍可用 |
 | Agent Node/npm/MCP | Node 24.19.0、npm 11.17.0、MCP client/core 2.4.0；`stage-agent-runtime.ps1`固定生产包到`runtime/agent`，JSONL桥提供stdio/Streamable HTTP | 缺少组件时MCP设置可安装/修复；模型对话与内置软件工具独立，许可与完整性见运行时`components.json` |
 | VapourSynth / Python | VS API4 / R81；构建和 stage 脚本，`update-vapoursynth-runtime.py` 锁定哈希 | VS 链不可用；直通路径独立 |
 | VS 插件 | BM3D 11.0、BM3Dvk2 1.0、BestSource 22；其余随运行时保留 | 对应滤镜不可用；不能用 API3 DLL 替代 |
-| FFF.Native | API20 / 固定 `85f514b`；标准脚本应用 `3fp-vsp-upstream-20261115.patch` 并复制本库头文件；snapshot v23 / 608 字节、外部帧v2 / 240字节，动态 C ABI | 原生播放/呈现不可用；旧内核无法保留新增帧信息时明确返回不支持 |
+| FFF.Native | API20 / 固定 `85f514b`；标准脚本应用 `3fp-vsp-upstream-20261115.patch` 和 `3fp-vsr-preview.patch` 并复制本库头文件；snapshot v23 / 608 字节、外部帧v2 / 240字节，动态 C ABI | 原生播放/呈现不可用；旧内核缺少整帧布局时无法复制该画面 |
 | FFmpeg | full09＋SVT420修正发行版（2026-11-15），AVX2；shared ABI：63/63/61/7/10/12，来源哈希见 `tools/ffmpeg-source.json`；编译原生VS源需设置 `VSR_FFMPEG_ROOT` | 相应解码/导出失败，单文件启动器先检查组件；SDK缺失时CMake明确失败 |
 | GLSL / RIFE | 随包 shader 与 NCNN 模型，`stage-shaders.ps1` / `install-analysis-plugins.ps1` | 相应增强不可用；RIFE 需要 Vulkan |
 | GLSL 转换组件 | `runtime/shader-tools/` 中的 glslc、SPIRV-Cross 及配套依赖，由 `tools/stage-shader-tools.py` 整理；HLSL 用 D3DCompiler 编译 | 缺失时不能导入 GLSL；原生 HLSL 不调用 GLSL 转换工具，逐帧播放仅执行已编译字节码 |
@@ -113,6 +123,9 @@ Renderer手动预览入口为`MainWindow::validateScript`；加路、换源和�
 | Renderer 项目 | `*.vsr.json` / `MainWindow` | `schemaVersion=2`，保存各处理路、可见性与当前编辑路，兼容旧单路；未知节点不保证无损往返 |
 | VPY 预设 | 程序旁 `vpy/` / `PresetStore` | `# VSR_PRESET` Base64 JSON；时间组 metadata `schema=2`，兼容旧单链；不能与项目 schema 混淆 |
 | Player 配置 | `player.ini` / `PlayerSettings` | 保留用户显式选择；单文件放启动器旁 |
+| Player 待机 | `player.ini` 的 `basic/standbyInSession` 控制会话驻留。`PlayerLoginStartup.h` 首次正常打开时登记当前用户登录启动项 | 两版分别记录初始化状态，用户移除启动项后再次打开不会重建 |
+| 论坛与导出设置 | Renderer 的 QSettings 中 `community/rememberLogin`、`community/sessionDpapi`、`community/sourceUrl`、`export/ffmpegExecutable` | 论坛会话仅发送到固定源站，记住登录使用当前用户 DPAPI，WebView2 使用 InPrivate。导出为每个新任务解析 FFmpeg 路径 |
+| 论坛草稿 | `AppLocalDataLocation/community-post-draft.json` | 新话题草稿由 Qt 原子替换。管理员回收站会话仅保留在当前进程 |
 | 自定义 shader | 配置旁 `shaders/custom` 或 `render/shaderDirectory`，所选源为 `render/customShader`；子目录 `cache` 存 `.vsrhlsl` | 格式 1、语义版本 v8（参数默认值与 gather；兼容已验证的 v7 字节码）；源内容、扩展名、转换器及 D3DCompiler 标识参与缓存键，结构损坏重建；导入失败保持旧选择 |
 | Renderer / 社区设置 | QSettings；`community/sourceUrl`、`appearance/dark`、`appearance/language` | 源/主题/语言在同一滚动页；主题即时生效 |
 | Agent 来源/会话/工具组合 | `QStandardPaths::AppDataLocation/agent/` 中的`providers.json`、`conversations/`、`tools.json`；选择与禁用工具用QSettings | JSON schemaVersion=1；会话本地记录保存自定义名称与用户指定的分组，折叠状态存于 QSettings；工作目录不决定分组，旧记录归入未分组；显式新建只保留一条可复用的空白会话；启动或删除后自动准备的空白草稿不进入左侧历史；来源密钥DPAPI加密，导出来源省略密钥；会话导入检查工具配对 |
@@ -140,18 +153,22 @@ Native 高风险集中于 `.deps/fff-vsp-20261115/FFF.Native/3FP/Core/PlayerSess
 1. 明确变更范围，复现问题；修改相关模块，构建并运行对应测试。测试选择与结果写入 [版本测试台账](development/validation.md)，步骤见 [构建](docs/dependencies.md) / [测量](docs/performance-debugging.md)。
 2. Native 用 API20 固定脚本和补丁；历史 API14/18 脚本只用于对应基线。GUI 使用 CMake preset。
 3. 本轮更新现有 `dist/VS-GUI-Full`，保留用户预设与色彩文件；单文件仅更新运行时暂存，`dist/VS-Player.exe` 保留上一轮1.1.3成品，待明确打包指令再生成。精简播放器暂存在`build/playerlite-runtime-1.1.4`，不再生成PlayerLite发行目录。`tools/deploy-local-runtime.py`增量部署并核对INI/VPY/ICC/LUT哈希；它会修改运行目录，文档整理时不运行。
-4. 打包前明确Full、历史Lite或当前PlayerLite；`package-portable.ps1 -Edition Lite`是历史Full删减版，不能充当当前PlayerLite。单文件从当前版本暂存（本轮`build/playerlite-runtime-1.1.4`）用`package-playerlite-single.ps1`生成tar.gz level 1负载，启动后临时解包、退出清理；Full/Single均排除themes目录及用户主题INI。收到打包指令后，Full压缩包按当前CMake版本生成；本轮不生成1.1.4压缩包或单文件，不修改远端Release草稿。完整流程见 [便携更新](docs/portable-updates.md)。
+4. 使用 `package-portable.ps1` 生成 Full。单文件脚本 `package-playerlite-single.ps1` 从当前版本暂存生成 Fast LZMA2 压缩的 7z 载荷，`playerlite-launcher.c` 调用 Windows `tar.exe` 解包。两种发行均排除用户主题和配置。完整流程见 [便携更新](docs/portable-updates.md)。
 5. 解压、依赖、启动、配置和清单验证后才可报告包完成；源码推送、草稿、附件上传、正式发布分别记录，需要相应任务授权。
 
 文档纪律：结构/决策变化当天更新本地图；操作变化只改对应 docs 指南；用户可见变化写 changelog；测试按版本与轮次更新同一台账，不新建 `docs/update-版本.md`、`validation-版本.md`。原始日志留 `build/`，必要证据放 `development/evidence/`；不携带用户媒体。README、本地测试数据和开发记录不得混入上游 PR。
 
 ## 10. 当前状态
 
+当前源码版本 **1.1.6**。截图颜色入口为 `ScreenshotColor.h`、`DesktopCapture.cpp`、`ScreenshotPng.h` 和 `ImageHdrSurface.cpp`；视频源帧截图入口保持既有行为。WGC 编译需要 MSVC C++ 工具和 Windows SDK C++/WinRT（`tools/build-wgc.ps1`），运行仅依赖系统 Windows API；`VSR_BUILD_WGC_BRIDGE=OFF` 可仅构建 DXGI/传统回退。实际 HDR/ACM/DPI/多 GPU 覆盖需另行实机验收。
+
+本地 1.1.5 Full 已覆盖 `dist/VS-GUI-Full/`，这是桌面 Renderer 和 Player 快捷方式使用的目录。公开教程、论坛发布、Cube 和 Explorer 缩略图的验收见 [版本测试台账](development/validation.md)。
+
 本地内核基线更新至上游85f514b（#58–#62），RAW 图片经 LibRaw 原生开发成16位RGB；蓝牙补偿策略与设置见 `PlayerBluetooth.h` / `PlayerAudio.cpp`。1.1.4 发行目标为 Full 7z 与单文件 Player，构建、暂存和验收使用独立目录，不覆盖现有安装。
 
 VSP Native 的安全/生命周期修复、可恢复丢帧和预算策略在 `patches/3fp-vsp-upstream-20261115.patch`；GUI 预测与失败重试入口为 `src/player/PlayerDecodeBuffer.cpp`。预算零值、缩容驻留、旧 DLL 降级、可信外部帧契约及隔离回归命令见 [Native 构建指南](docs/native-api20-build.md#native-安全与缓冲契约)。构建候选不自动更新安装目录。
 
-当前源码版本 1.1.4；Anime4K 收敛为六档并迁移旧配置。生产 Native 必须关闭 `SecurityRegressionTests` 并检查不存在测试注入导出；公开发行不包含私有 OpenNGU 素材。实际发布状态以两端远端附件及哈希核验为准，流程见 [便携更新](docs/portable-updates.md)。
+Anime4K 收敛为六档并迁移旧配置。生产 Native 必须关闭 `SecurityRegressionTests` 并检查不存在测试注入导出；公开发行不包含私有 OpenNGU 素材。实际发布状态以两端远端附件及哈希核验为准，流程见 [便携更新](docs/portable-updates.md)。
 
 ## 11. 故障排查
 

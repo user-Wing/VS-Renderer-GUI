@@ -42,8 +42,9 @@ class PlayerAiSubtitles;
 class PlayerWindow final : public QMainWindow {
     Q_OBJECT
 public:
-    PlayerWindow();
+    explicit PlayerWindow(bool standby = false);
     ~PlayerWindow() override;
+    void resumeStandby();
     bool openFile(const QString &path);
     bool openFolder(const QString &path);
     void loadPreset(const QString &path);
@@ -257,6 +258,7 @@ private:
     QDoubleSpinBox *rate_ = nullptr;
     QTimer *timer_ = nullptr;
     QTimer *chromeTimer_ = nullptr;
+    QTimer *bluetoothTimer_ = nullptr;
     QWidget *controls_ = nullptr;
     QWidget *playlistPanel_ = nullptr;
     QSplitter *videoSplit_ = nullptr;

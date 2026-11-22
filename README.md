@@ -1,6 +1,6 @@
 # VS Renderer / VS Player / VS Cap
 
-![源码版本 1.1.4](https://img.shields.io/badge/source-1.1.5-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
+![源码版本 1.1.6](https://img.shields.io/badge/source-1.1.6-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
 
 Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片（含 LibRaw 相机 RAW），用 **VSCap** 截图与标注。
 
@@ -34,7 +34,9 @@ VS增强需使用配套Native内核；旧内核无法保留新增帧信息时会
 | 分发形式 | 功能与运行要求 |
 | --- | --- |
 | Full | Renderer、Player、VSCap、VS 滤镜及完整编辑/可选后端；以所下载包的组件清单为准 |
-| 单文件 `VS-Player.exe` | 独立播放器，支持内置 MoeSR-50K、Anime4K A CNN、AFast CNN、AFast 1X 及各自的额外增强档、D3D11/Jinc、兼容 GLSL/HLSL 导入、音视频字幕及图片查看；运行时在程序旁展开，退出后清理，同目录保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
+| 单文件 `VS-Player.exe` | 独立播放器，支持内置 MoeSR-50K、Anime4K A CNN、AFast CNN、AFast 1X 及各自的额外增强档、D3D11/Jinc、兼容 GLSL/HLSL 导入、音视频字幕及图片查看；在程序旁解包并保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
+
+Full 和单文件 Player 首次打开后会保留一个预热窗口，并默认登记登录待机。手动更新前可双击同目录的 `killvsp.exe` 结束待机。 [关闭待机与更新](docs/portable-updates.md)
 
 从 1.0.13 起仅提供 Full 目录与单文件播放器，不再生成 PlayerLite 发行目录。早期 Lite 包仍按其对应说明使用。
 
@@ -43,6 +45,14 @@ VS增强需使用配套Native内核；旧内核无法保留新增帧信息时会
 ## 快速上手
 
 **视频处理**：在 Renderer 打开视频 → 添加滤镜或加载预设 → 选中处理路并点击“渲染预览” → 比较画面 → 保存预设或加入导出队列。按段使用不同滤镜、社区预设和多路对比见 [Renderer 指南](docs/renderer.md)。
+
+**预览操作**：可自定义工作台快捷键，并从右键菜单给播放头所在的时间组添加滤镜。并排画面支持用 Player 打开源视频或处理结果，也可按各自分辨率复制整帧。 [Renderer 指南](docs/renderer.md#处理视频与时间组)
+
+**项目恢复**：从「设置 → 快照和恢复」打开快照目录，或选择快照恢复到当前工作台。 [Renderer 指南](docs/renderer.md#项目保护帧时间组与独立编码2026-11-10)
+
+**教程与社区**：从 Renderer 左侧进入。公开教程用目录树和章节树导航，论坛可在软件内登录、发帖和回复。Vditor 支持切换源码、即时渲染和所见即所得，右侧实时预览颜色、黑幕、公式与宽表。 [Renderer 指南](docs/renderer.md#论坛社区和设置)
+
+**Cube 调色**：在 Renderer 将“Cube 调色”加入处理链。Player 可从右键导入 LUT，并将其应用到 SDR 图片或 Full 版本地 SDR 视频。工作色域默认自动识别。
 
 **Agent 智能体**：从 Renderer 侧栏进入，发送按钮旁选择来源、模型与匹配的思考强度；执行过程默认折叠，正文集中呈现判断和结果。支持 Markdown 预览、运行中补充输入、`/` 命令、`@` 引用与 AI 自动协调子智能体，以及 Token / 上下文整理、Skills / 全局 AGENTS.md、MCP 和导入导出，见 [Agent 指南](docs/agent.md)。页面背景可独立设置。
 
@@ -71,6 +81,8 @@ VS增强需使用配套Native内核；旧内核无法保留新增帧信息时会
 页面背景支持即时应用、主题库及 ZIP/7z 导入、ZIP 导出，分发包不预装背景；三／四路预览可用同位置滑块比较。图片导出支持比例尺寸和内置HLSL重新采样，Full另可选内置GLSL；单文件版直接使用FFmpeg且不提供质量搜索。设置中的便携Pareto图入口和功耗显示要求见 [Player 指南](docs/player.md)。
 
 ## 数据与安全
+
+论坛可选择记住登录。应用将会话凭据用当前 Windows 用户的 DPAPI 加密保存，登录密码仅提交给论坛源站。
 
 Agent 来源密钥、MCP 环境变量与请求头保存在当前 Windows 用户的本地加密配置中；对话、技能、全局指令和子任务记录保存在应用数据目录，发送时会交给所选端点。MCP 通过用户连接的外部服务扩展能力，查询子任务与允许修改的子任务分别调度；来源及凭证导出范围见 [Agent 数据说明](docs/agent.md#数据与兼容边界)。
 

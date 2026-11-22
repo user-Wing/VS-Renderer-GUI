@@ -49,6 +49,7 @@
 #include <QSignalSpy>
 #include <QFile>
 #include <QFileDialog>
+#include <QDesktopServices>
 #include <QInputDialog>
 #include <QLabel>
 #include <QMenu>
@@ -224,6 +225,8 @@ public:
 
 class TestAnalysis final : public QObject {
     Q_OBJECT
+    QUrl openedRecoveryFolder_;
+    Q_INVOKABLE void recordRecoveryFolder(const QUrl &url) { openedRecoveryFolder_ = url; }
 private slots:
     void nativeCommunityPostListSplitterStability()
     {
@@ -633,6 +636,90 @@ private slots:
         auto *frames=window.findChild<QSpinBox*>("rendererTimeGroupFrame");QVERIFY(frames);QVERIFY(frames->isEnabled());frames->setValue(13);QCOMPARE(window.currentTimeGroups()[1].startFrame,qint64(13));window.checkpointProject();QVERIFY(window.isWindowModified());QVERIFY(QFileInfo::exists(window.recoveryPath_));
         const auto path=temp.filePath("project.vsr.json");QVERIFY(window.saveProjectTo(path));QVERIFY(!window.isWindowModified());window.graph_.add("resize");window.checkpointProject();QVERIFY(window.isWindowModified());window.stepProjectHistory(-1);QVERIFY(window.graph_.nodes().isEmpty());window.stepProjectHistory(1);QCOMPARE(window.graph_.nodes().size(),1);QVERIFY(window.saveProjectTo(path));QVERIFY(QFileInfo::exists(path+".bak"));
         QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));const auto data=QJsonDocument::fromJson(file.readAll()).object();QVERIFY(window.applyProjectSnapshot(data));QCOMPARE(window.currentTimeGroups()[0].startFrame,qint64(0));
+    }
+
+    void projectRecoveryIsManual()
+    {
+        QTemporaryDir directory;
+        const auto environment = qgetenv("VSR_RECOVERY_ROOT");
+        qputenv("VSR_RECOVERY_ROOT", directory.path().toUtf8());
+        const auto restoreEnvironment = qScopeGuard([&] {
+            if (environment.isNull()) qunsetenv("VSR_RECOVERY_ROOT");
+            else qputenv("VSR_RECOVERY_ROOT", environment);
+        });
+        FilterGraph graph;
+        graph.add("resize");
+        const QJsonObject project{{"schemaVersion", 3},
+            {"routes", QJsonArray{PresetStore::metadata(graph, SourceFilter::Ffms2, {}, {})}}};
+        const auto path = directory.filePath("session-0-fixture.json");
+        const auto contents = QJsonDocument(QJsonObject{{"project", project}, {"pid", 0},
+            {"path", directory.filePath("original.vsr.json")}}).toJson();
+        QFile fixture(path);
+        QVERIFY(fixture.open(QIODevice::WriteOnly));
+        QCOMPARE(fixture.write(contents), contents.size());
+        fixture.close();
+
+        MainWindow window;
+        QTimer duringStartup;
+        bool prompted = false;
+        connect(&duringStartup, &QTimer::timeout, &window, [&] {
+            if (auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+                prompted = true;
+                box->done(QMessageBox::No);
+            }
+        });
+        duringStartup.start(10);
+        window.show();
+        QTest::qWait(150);
+        duringStartup.stop();
+        QVERIFY(!prompted);
+        QVERIFY(window.graph_.nodes().isEmpty());
+
+        window.showSettings();
+        auto *categories = window.findChild<QListWidget *>("rendererSettingsCategories");
+        QVERIFY(categories);
+        auto *category = categories->findItems(QStringLiteral("快照和恢复"), Qt::MatchExactly).value(0);
+        QVERIFY(category);
+        categories->setCurrentItem(category);
+        auto *open = window.findChild<QPushButton *>("rendererOpenRecoveryFolder");
+        auto *restore = window.findChild<QPushButton *>("rendererRestoreSnapshot");
+        QVERIFY(open && open->isVisible() && restore && restore->isVisible());
+        openedRecoveryFolder_.clear();
+        QDesktopServices::setUrlHandler("file", this, "recordRecoveryFolder");
+        const auto clearHandler = qScopeGuard([] { QDesktopServices::unsetUrlHandler("file"); });
+        open->click();
+        QCOMPARE(QDir(openedRecoveryFolder_.toLocalFile()).absolutePath(), QDir(directory.path()).absolutePath());
+
+        window.graph_.add("crop");
+        QTimer::singleShot(100, &window, [] {
+            if (auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+                box->button(QMessageBox::Cancel)->click();
+        });
+        QVERIFY(!window.restoreProjectSnapshot(path));
+        QCOMPARE(window.graph_.nodes().first().definitionId, QStringLiteral("crop"));
+
+        const auto oldDialogs = QCoreApplication::testAttribute(Qt::AA_DontUseNativeDialogs);
+        QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        const auto restoreDialogs = qScopeGuard([&] { QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs, oldDialogs); });
+        QTimer select;
+        connect(&select, &QTimer::timeout, &window, [&] {
+            if (auto *chooser = qobject_cast<QFileDialog *>(QApplication::activeModalWidget())) {
+                chooser->selectFile(path);
+                if (auto *name = chooser->findChild<QLineEdit *>("fileNameEdit")) name->setText(path);
+                QMetaObject::invokeMethod(chooser, "accept");
+            } else if (auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+                box->button(QMessageBox::Discard)->click();
+            }
+        });
+        select.start(50);
+        restore->click();
+        select.stop();
+        QCOMPARE(window.pages_->currentIndex(), 0);
+        QCOMPARE(window.graph_.nodes().first().definitionId, QStringLiteral("resize"));
+        QVERIFY(window.isWindowModified());
+        QVERIFY(window.projectPath_.isEmpty());
+        QVERIFY(fixture.open(QIODevice::ReadOnly));
+        QCOMPARE(fixture.readAll(), contents);
     }
 
     void additionalRouteFallsBackToCompleteScript(){
@@ -1454,7 +1541,7 @@ private slots:
         button->click();QCOMPARE(pages->currentWidget(),page);QVERIFY(button->isChecked());QVERIFY(!QApplication::activeModalWidget());
         auto *categories=page->findChild<QListWidget*>("rendererSettingsCategories");
         QVERIFY(categories);
-        QCOMPARE(categories->count(),7);
+        QCOMPARE(categories->count(),8);
         QVERIFY(page->findChild<QComboBox*>("rendererLanguage")->isVisible());
         categories->setCurrentRow(1);
         auto *themeEditor=page->findChild<QWidget*>("pageThemeEditor");

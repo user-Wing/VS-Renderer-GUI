@@ -1,5 +1,5 @@
-// Single-file PlayerLite bootstrapper. Windows 10+ provides tar.exe for tar.gz extraction.
-// Each run unpacks beside the launcher, waits for the player, then removes its runtime.
+// Single-file PlayerLite bootstrapper. Windows tar.exe reads the embedded 7z archive.
+// A normal run cleans up after the player. Optional standby shares one runtime until stopped.
 // Qt/player dependencies are embedded; FFmpeg is external. player.ini lives beside this EXE.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <wchar.h>
 #include <string.h>
+#include "../src/player/PlayerStandbyWin.h"
 
 #pragma pack(push, 1)
 typedef struct { char marker[8]; uint64_t zipSize; char hash[24]; } PackageFooter;
@@ -23,11 +24,12 @@ static const wchar_t *ffmpegFiles[] = {
     L"ffmpeg.exe", L"ffprobe.exe", L"avcodec-63.dll", L"avformat-63.dll",
     L"avutil-61.dll", L"swresample-7.dll", L"swscale-10.dll", L"avfilter-12.dll"
 };
-static int checkFfmpeg(const wchar_t *searchPath) {
+static int checkFfmpeg(const wchar_t *searchPath, BOOL quiet) {
     wchar_t found[4096], message[2048];
     for (unsigned i = 0; i < sizeof(ffmpegFiles) / sizeof(ffmpegFiles[0]); ++i) {
         DWORD count = SearchPathW(searchPath, ffmpegFiles[i], NULL, 4096, found, NULL);
         if (count && count < 4096 && exists(found)) continue;
+        if (quiet) return 0;
         swprintf_s(message, 2048,
             L"需要 FFmpeg shared x64 组件，缺少：%ls\n\n"
             L"请将组件放在 VS-Player.exe 同目录，或将其 bin 目录加入 PATH 环境变量。\n"
@@ -85,39 +87,53 @@ static void cleanStaleRuntimes(const wchar_t *parent){
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show) {
     (void)instance;(void)previous;(void)show;
     wchar_t self[4096],parent[4096],runtime[4096]={0},archive[4096],player[4096],command[8192],envPath[32768],lockPath[4096];
-    HANDLE input=INVALID_HANDLE_VALUE,lock=INVALID_HANDLE_VALUE;int result=1;
-    if(!GetModuleFileNameW(NULL,self,4096)){fail(L"Cannot resolve executable path.");return 1;}
+    HANDLE input=INVALID_HANDLE_VALUE,lock=INVALID_HANDLE_VALUE,stop=NULL;int result=1;
+    const BOOL standby = args && !wcscmp(args, L"--standby");
+    const DWORD selfLength=GetModuleFileNameW(NULL,self,4096);
+    if(!selfLength || selfLength>=4096){if(!standby)fail(L"Cannot resolve executable path.");return 1;}
+    if(args && !wcscmp(args, L"--stop-standby")){vspStopStandby(self);return 0;}
+    if(!standby && vspForwardToStandby(self,args ? args : L"",VSP_STANDBY_CLASS))return 0;
     wcscpy_s(parent,4096,self);wchar_t *last=wcsrchr(parent,L'\\');if(!last)return 1;*last=0;
+    if(standby){stop=vspBeginStandby(self);if(!stop)return 0;}
+    else if((!args || wcsncmp(args,L"--",2)) && vspKeepInSession(parent))stop=vspBeginStandby(self);
     wchar_t originalPath[28000]={0},externalPath[32768];GetEnvironmentVariableW(L"PATH",originalPath,28000);swprintf_s(externalPath,32768,L"%ls;%ls",parent,originalPath);
-    if(!checkFfmpeg(externalPath))return 2;
+    if(!checkFfmpeg(externalPath,standby)){result=2;goto done;}
     input=CreateFileW(self,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
-    if(input==INVALID_HANDLE_VALUE){fail(L"Cannot open single-file package.");return 1;}
+    if(input==INVALID_HANDLE_VALUE){if(!standby)fail(L"Cannot open single-file package.");goto done;}
     LARGE_INTEGER size,pos;PackageFooter footer={0};DWORD bytes=0;
     if(!GetFileSizeEx(input,&size) || size.QuadPart<=(LONGLONG)sizeof(footer))goto invalid;
     pos.QuadPart=size.QuadPart-sizeof(footer);
-    if(!SetFilePointerEx(input,pos,NULL,FILE_BEGIN) || !ReadFile(input,&footer,sizeof(footer),&bytes,NULL) || bytes!=sizeof(footer) || memcmp(footer.marker,"VSLITE03",8) || footer.zipSize>=(uint64_t)pos.QuadPart)goto invalid;
+    if(!SetFilePointerEx(input,pos,NULL,FILE_BEGIN) || !ReadFile(input,&footer,sizeof(footer),&bytes,NULL) || bytes!=sizeof(footer) || memcmp(footer.marker,"VSLITE04",8) || !footer.zipSize || footer.zipSize>=(uint64_t)pos.QuadPart)goto invalid;
     wchar_t hash[25];for(int i=0;i<24;++i){if(!((footer.hash[i]>='0' && footer.hash[i]<='9') || (footer.hash[i]>='a' && footer.hash[i]<='f')))goto invalid;hash[i]=footer.hash[i];}hash[24]=0;
     cleanStaleRuntimes(parent);
     swprintf_s(runtime,4096,L"%ls\\.vs-player-run-%ls-%lu",parent,hash,GetCurrentProcessId());
-    if(!CreateDirectoryW(runtime,NULL)){runtime[0]=0;fail(L"Cannot create temporary runtime beside VS-Player.exe. Check folder permissions.");goto done;}
+    if(!CreateDirectoryW(runtime,NULL)){runtime[0]=0;if(!standby)fail(L"Cannot create temporary runtime beside VS-Player.exe. Check folder permissions.");goto done;}
     swprintf_s(lockPath,4096,L"%ls\\.vsp-runtime-lock",runtime);
     SECURITY_ATTRIBUTES lockAttributes={sizeof(SECURITY_ATTRIBUTES),NULL,TRUE};
     lock=CreateFileW(lockPath,GENERIC_READ|GENERIC_WRITE,0,&lockAttributes,CREATE_NEW,FILE_ATTRIBUTE_HIDDEN,NULL);
     if(lock==INVALID_HANDLE_VALUE)goto done;
-    swprintf_s(archive,4096,L"%ls\\payload.tar.gz",runtime);swprintf_s(player,4096,L"%ls\\vs-player.exe",runtime);
+    swprintf_s(archive,4096,L"%ls\\payload.7z",runtime);swprintf_s(player,4096,L"%ls\\vs-player.exe",runtime);
     HANDLE output=CreateFileW(archive,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
-    if(output==INVALID_HANDLE_VALUE){fail(L"Cannot write runtime archive.");goto done;}
+    if(output==INVALID_HANDLE_VALUE){if(!standby)fail(L"Cannot write runtime archive.");goto done;}
     pos.QuadPart=size.QuadPart-sizeof(footer)-(LONGLONG)footer.zipSize;
     int copied=!!SetFilePointerEx(input,pos,NULL,FILE_BEGIN);char buffer[131072];uint64_t remaining=footer.zipSize;
     while(copied && remaining){DWORD chunk=remaining>sizeof(buffer)?sizeof(buffer):(DWORD)remaining,read=0,written=0;
         copied=!!ReadFile(input,buffer,chunk,&read,NULL) && read==chunk && !!WriteFile(output,buffer,read,&written,NULL) && written==read;remaining-=read;}
-    CloseHandle(output);if(!copied){fail(L"Cannot read runtime payload.");goto done;}
+    CloseHandle(output);if(!copied){if(!standby)fail(L"Cannot read runtime payload.");goto done;}
+    CloseHandle(input);input=INVALID_HANDLE_VALUE;
     wchar_t tar[4096];GetSystemDirectoryW(tar,4000);wcscat_s(tar,4096,L"\\tar.exe");
     swprintf_s(command,8192,L"\"%ls\" -xf \"%ls\" -C \"%ls\"",tar,archive,runtime);
     int unpacked=launchAndWait(tar,command,parent);DeleteFileW(archive);
-    if(!unpacked || !exists(player)){fail(L"Cannot unpack PlayerLite. Windows tar.exe with gzip support is required.");goto done;}
+    if(!unpacked || !exists(player)){if(!standby)fail(L"Cannot unpack PlayerLite. Windows tar.exe with 7z support is required.");goto done;}
     swprintf_s(envPath,32768,L"%ls;%ls",runtime,externalPath);SetEnvironmentVariableW(L"PATH",envPath);
     wchar_t config[4096];swprintf_s(config,4096,L"%ls\\player.ini",parent);SetEnvironmentVariableW(L"VSR_PLAYER_CONFIG",config);SetEnvironmentVariableW(L"VSR_SINGLE_PLAYER_PATH",self);
+    SetEnvironmentVariableW(L"VSR_PLAYER_NEW_CONFIG",NULL);
+    if(stop){
+        VspStandbyLaunch launch={player,parent,TRUE,FALSE};
+        result=vspRunStandby(self,stop,&launch,standby ? NULL : (args ? args : L""))?0:1;
+        if(result && !standby)fail(L"Cannot start VS Player. Check FFmpeg shared x64 dependencies.");
+        goto done;
+    }
     if(!exists(config))SetEnvironmentVariableW(L"VSR_PLAYER_NEW_CONFIG",L"1");
     swprintf_s(command,8192,L"\"%ls\" %ls",player,args?args:L"");STARTUPINFOW startup={0};PROCESS_INFORMATION process={0};startup.cb=sizeof(startup);
     // The child retains the lock if the bootstrapper crashes; another launch must
@@ -125,10 +141,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show
     if(!CreateProcessW(player,command,NULL,NULL,TRUE,0,NULL,parent,&startup,&process)){fail(L"Cannot start VS Player. Check FFmpeg shared x64 dependencies.");goto done;}
     CloseHandle(process.hThread);WaitForSingleObject(process.hProcess,INFINITE);DWORD exitCode=1;GetExitCodeProcess(process.hProcess,&exitCode);CloseHandle(process.hProcess);result=(int)exitCode;goto done;
 invalid:
-    fail(L"Invalid single-file package.");
+    if(!standby)fail(L"Invalid single-file package.");
 done:
     if(input!=INVALID_HANDLE_VALUE)CloseHandle(input);
     if(lock!=INVALID_HANDLE_VALUE)CloseHandle(lock);
-    if(runtime[0])removeRuntime(runtime);
+    if(runtime[0]){
+        if(stop)cleanStaleRuntimes(parent);
+        else removeRuntime(runtime);
+    }
+    if(stop)CloseHandle(stop);
     return result;
 }

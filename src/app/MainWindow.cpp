@@ -627,6 +627,8 @@ QWidget *MainWindow::buildSettingsPage()
     stack->addWidget(buildShortcutSettings());
     categories->addItem(QStringLiteral("右键设置"));
     stack->addWidget(buildContextMenuSettings());
+    categories->addItem(QStringLiteral("快照和恢复"));
+    stack->addWidget(buildRecoverySettings());
     categories->setCurrentRow(0);
     return page;
 }
@@ -1132,13 +1134,15 @@ void MainWindow::openSource()
         loadSource(path);
 }
 
-bool MainWindow::loadSource(const QString &path)
+bool MainWindow::loadSource(const QString &path, bool allowMissing)
 {
     playerRangeIn_=playerRangeOut_=-1;
     ++folderScanGeneration_;
     const int folderIndex=sourceChoice_->findData(path);const QSignalBlocker sourceBlocker(sourceChoice_);sourceInputStack_->setCurrentIndex(folderIndex<0?0:1);if(folderIndex>=0)sourceChoice_->setCurrentIndex(folderIndex);
-    if (QFileInfo(path).suffix().compare("vpy", Qt::CaseInsensitive) == 0) { loadPreset(path); return true; }
-    if (!QFileInfo(path).isFile()) {
+    const QFileInfo file(path);
+    const bool available = file.isFile();
+    if ((available || !allowMissing) && file.suffix().compare("vpy", Qt::CaseInsensitive) == 0) { loadPreset(path); return true; }
+    if (!available && !allowMissing) {
         setStatus(QStringLiteral("源文件不存在：%1").arg(path), true);
         return false;
     }
@@ -1150,12 +1154,20 @@ bool MainWindow::loadSource(const QString &path)
         return false;
     }
     pendingPreview_=false;frameServer_->unloadScript();processedPlayer_->stop();
-    const bool left = sourcePlayer_->openFile(path);
+    if (!available) {
+        sourcePlayer_->stop();
+        const QSignalBlocker blockTimeline(timeline_);
+        timeline_->setValue(0);
+        positionLabel_->setText(formatTime(0));
+        durationLabel_->setText(formatTime(0));
+    }
+    const bool left = available && sourcePlayer_->openFile(path);
     sourcePane_->setSurfaceActive(left);
     processedPane_->setSurfaceActive(false);
-    processedPane_->setPlaceholderText(left
+    const auto hint = left
         ? QStringLiteral("源已打开\n点击“渲染预览”生成右侧画面")
-        : QStringLiteral("源视频打开失败"));
+        : path.isEmpty() ? QStringLiteral("等待视频") : QStringLiteral("源视频打开失败");
+    processedPane_->setPlaceholderText(hint);
     processedPane_->setBadge(QStringLiteral("VS · 待渲染"));
     for (auto &route : routes_) route.previewScript.clear();
     timelineSeekPending_ = false;
@@ -1174,7 +1186,7 @@ bool MainWindow::loadSource(const QString &path)
     sourcePrimeStarted_ = false;
     setStatus(left ? QStringLiteral("源已打开；正在预取首帧，点击“渲染预览”可生成右侧 VS 输出。")
                    : QStringLiteral("3FP 打开源失败。"), !left);
-    for(auto &route:additionalRoutes_)route->reset(left?QStringLiteral("源已打开\n点击“渲染预览”生成右侧画面"):QStringLiteral("源视频打开失败"));
+    for(auto &route:additionalRoutes_)route->reset(hint);
     return left;
 }
 

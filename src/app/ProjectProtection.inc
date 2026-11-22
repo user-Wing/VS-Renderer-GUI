@@ -6,25 +6,44 @@
 #include <QCryptographicHash>
 #include <QComboBox>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
+#include <QFormLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QUrl>
 #include <QUuid>
-#ifdef Q_OS_WIN
-#include <windows.h>
-#endif
 namespace vsr {
+namespace {
+QDir recoveryDirectory()
+{
+    const auto override = qEnvironmentVariable("VSR_RECOVERY_ROOT");
+    return QDir(override.isEmpty()
+        ? QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)).filePath("VSRenderer/recovery")
+        : override);
+}
+
+bool hasProjectSnapshot(const QJsonObject &root)
+{
+    const int version = root.value("schemaVersion").toInt();
+    return version >= 1 && version <= 3 &&
+        (root.value("routes").isArray() || root.value("nodes").isArray() || root.value("timeGroups").isArray());
+}
+}
+
 QJsonObject MainWindow::projectSnapshot() const {
     QJsonObject root{{"schemaVersion",3},{"sourcePath",sourcePath_->text()},{"sourceFilter",sourceFilter_->currentData().toInt()},{"editingRoute",routeIndex_},{"editingTimeGroup",timeGroupIndex_}};
     QJsonArray routes;for(int i=0;i<routes_.size();++i){const auto &r=routes_[i];auto row=PresetStore::metadata(i==routeIndex_?currentTimeGroups():r.groups,static_cast<SourceFilter>(sourceFilter_->currentData().toInt()),{},{});row["visible"]=r.visible;row["preset"]=i==routeIndex_?activePreset_:r.preset;const auto preset=row["preset"].toString();if(!preset.isEmpty()){QFile file(preset);if(file.open(QIODevice::ReadOnly)&&file.size()<=8*1024*1024)row["presetScript"]=QString::fromUtf8(file.readAll());}routes.append(row);}root["routes"]=routes;return root;
 }
-bool MainWindow::applyProjectSnapshot(const QJsonObject &root){
+bool MainWindow::applyProjectSnapshot(const QJsonObject &root, bool reloadSource){
     const auto error=PresetStore::compatibilityError(root);if(!error.isEmpty()){QMessageBox::warning(this,QStringLiteral("请更新 VS Renderer"),error);return false;}
     auto entries=root.value("routes").toArray();if(entries.isEmpty())entries.append(root);if(entries.size()>3)return false;
     QList<RouteState> prepared;
@@ -36,7 +55,9 @@ bool MainWindow::applyProjectSnapshot(const QJsonObject &root){
     routeIndex_=qBound(0,root.value("editingRoute").toInt(),int(routes_.size())-1);activePreset_=routes_[routeIndex_].preset;replaceTimeGroups(routes_[routeIndex_].groups);refreshTimeGroups(qBound(0,root.value("editingTimeGroup").toInt(),int(timeGroups_.size())-1));
     for(int i=0;i<routes_.size();++i)compareView_->setRouteVisible(i,routes_[i].visible);updateRouteChoices();
     sourceFilter_->setCurrentIndex(qMax(0,sourceFilter_->findData(root.value("sourceFilter").toInt())));
-    const auto source=root.value("sourcePath").toString();if(source!=sourcePath_->text()){if(QFileInfo::exists(source))loadSource(source);else sourcePath_->setText(source);}
+    const auto source=root.value("sourcePath").toString();
+    if(reloadSource)loadSource(source,true);
+    else if(source!=sourcePath_->text()){if(QFileInfo::exists(source))loadSource(source);else sourcePath_->setText(source);}
     refreshPipeline(graph_.nodes().isEmpty()?-1:0);projectApplying_=false;return true;
 }
 bool MainWindow::saveProjectTo(const QString &path, QString *error){
@@ -62,11 +83,71 @@ bool MainWindow::openProjectFrom(const QString &path, QString *error){
     QFile file(path);if(!file.open(QIODevice::ReadOnly)||file.size()>16*1024*1024){if(error)*error=QStringLiteral("项目不可读或过大。");return false;}
     QJsonParseError parse;const auto document=QJsonDocument::fromJson(file.readAll(),&parse);
     if(parse.error!=QJsonParseError::NoError||!document.isObject()){if(error)*error=QStringLiteral("项目JSON无效。");return false;}
-    const auto root=document.object();const int version=root.value("schemaVersion").toInt();
-    if(version<1||version>3||(!root.value("routes").isArray()&&!root.value("nodes").isArray()&&!root.value("timeGroups").isArray())){if(error)*error=QStringLiteral("不是有效的 VS Renderer 项目。");return false;}
+    const auto root=document.object();
+    if(!hasProjectSnapshot(root)){if(error)*error=QStringLiteral("不是有效的 VS Renderer 项目。");return false;}
     const auto compatibility=PresetStore::compatibilityError(root);if(!compatibility.isEmpty()){if(error)*error=compatibility;return false;}
     if(!applyProjectSnapshot(root)){if(error)*error=QStringLiteral("项目恢复失败。");return false;}
     projectPath_=path;savedProject_=projectSnapshot();projectHistory_={savedProject_};projectHistoryIndex_=0;setWindowModified(false);QFile::remove(recoveryPath_);return true;
+}
+
+QWidget *MainWindow::buildRecoverySettings()
+{
+    auto *page = new QWidget;
+    auto *layout = new QFormLayout(page);
+    const auto directory = recoveryDirectory().absolutePath();
+    auto *path = new QLabel(QDir::toNativeSeparators(directory), page);
+    path->setWordWrap(true);
+    path->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    layout->addRow(QStringLiteral("快照目录"), path);
+    auto *note = new QLabel(QStringLiteral("未保存的项目会自动生成快照。选择一份快照可恢复到当前工作台，并另存为项目。"), page);
+    note->setWordWrap(true);
+    layout->addRow(note);
+    auto *open = new QPushButton(QStringLiteral("打开快照文件夹"), page);
+    open->setObjectName("rendererOpenRecoveryFolder");
+    layout->addRow(open);
+    connect(open, &QPushButton::clicked, this, [this, directory] {
+        if (!QDir().mkpath(directory) || !QDesktopServices::openUrl(QUrl::fromLocalFile(directory)))
+            setStatus(QStringLiteral("无法打开快照文件夹。"), true);
+    });
+    auto *restore = new QPushButton(QStringLiteral("选择快照并恢复…"), page);
+    restore->setObjectName("rendererRestoreSnapshot");
+    layout->addRow(restore);
+    connect(restore, &QPushButton::clicked, this, [this, directory] {
+        const auto file = QFileDialog::getOpenFileName(this, QStringLiteral("选择恢复快照"), directory,
+            QStringLiteral("恢复快照 (session-*.json);;JSON (*.json)"));
+        if (!file.isEmpty()) restoreProjectSnapshot(file);
+    });
+    return page;
+}
+
+bool MainWindow::restoreProjectSnapshot(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        setStatus(QStringLiteral("无法读取快照。"), true);
+        return false;
+    }
+    const auto snapshot = QJsonDocument::fromJson(file.readAll()).object().value("project").toObject();
+    file.close();
+    if (!hasProjectSnapshot(snapshot)) {
+        setStatus(QStringLiteral("这不是可恢复的 VS Renderer 快照。"), true);
+        return false;
+    }
+    if (!confirmProjectReplacement() || !applyProjectSnapshot(snapshot, true))
+        return false;
+
+    projectPath_.clear();
+    savedProject_ = {};
+    projectHistory_ = {projectSnapshot()};
+    projectHistoryIndex_ = 0;
+    checkpointProject();
+    selectPage(0);
+    const auto source = snapshot.value("sourcePath").toString();
+    if (!source.isEmpty() && !QFileInfo(source).isFile())
+        setStatus(QStringLiteral("已恢复快照。源文件不存在，请重新选择源。"), true);
+    else
+        setStatus(QStringLiteral("已恢复快照，可将当前工作台另存为项目。"));
+    return true;
 }
 
 void MainWindow::checkpointProject(){
@@ -80,21 +161,13 @@ void MainWindow::checkpointProject(){
 }
 void MainWindow::stepProjectHistory(int direction){checkpointProject();const int target=projectHistoryIndex_+direction;if(target<0||target>=projectHistory_.size())return;if(applyProjectSnapshot(projectHistory_[target])){projectHistoryIndex_=target;checkpointProject();}}
 void MainWindow::initializeProjectProtection(){
-    const auto override=qEnvironmentVariable("VSR_RECOVERY_ROOT");const auto base=override.isEmpty()?QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)).filePath("VSRenderer/recovery"):override;QDir().mkpath(base);
-    recoveryPath_=QDir(base).filePath("session-"+QString::number(QCoreApplication::applicationPid())+"-"+QUuid::createUuid().toString(QUuid::WithoutBraces)+".json");
+    const auto directory = recoveryDirectory();
+    QDir().mkpath(directory.absolutePath());
+    recoveryPath_=directory.absoluteFilePath("session-"+QString::number(QCoreApplication::applicationPid())+"-"+QUuid::createUuid().toString(QUuid::WithoutBraces)+".json");
     savedProject_=projectSnapshot();projectHistory_={savedProject_};projectProtectionReady_=true;setWindowTitle(windowTitle()+"[*]");
     auto *poll=new QTimer(this);poll->setInterval(1200);connect(poll,&QTimer::timeout,this,&MainWindow::checkpointProject);poll->start();
     auto *save=new QAction(QStringLiteral("保存项目"),this);save->setShortcut(QKeySequence::Save);addAction(save);connect(save,&QAction::triggered,this,&MainWindow::saveProject);
     auto *saveAs=new QAction(QStringLiteral("项目另存为"),this);saveAs->setShortcut(QKeySequence::SaveAs);addAction(saveAs);connect(saveAs,&QAction::triggered,this,[this]{const auto p=QFileDialog::getSaveFileName(this,QStringLiteral("项目另存为"),projectPath_,"VS Renderer Project (*.vsr.json)");if(!p.isEmpty())saveProjectTo(p);});
     for(const auto &entry:QList<QPair<QKeySequence,int>>{{QKeySequence::Undo,-1},{QKeySequence::Redo,1}}){auto *a=new QAction(this);a->setShortcut(entry.first);addAction(a);connect(a,&QAction::triggered,this,[this,d=entry.second]{stepProjectHistory(d);});}
-    QTimer::singleShot(0,this,[this,base]{
-        if(!isVisible() || QCoreApplication::instance()->property("playerHandoff").toBool())return;const auto files=QDir(base).entryList({"session-*.json"},QDir::Files,QDir::Time);
-        for(const auto &name:files){const auto path=QDir(base).filePath(name);if(path==recoveryPath_)continue;QFile f(path);if(!f.open(QIODevice::ReadOnly))continue;const auto o=QJsonDocument::fromJson(f.readAll()).object();f.close();
-#ifdef Q_OS_WIN
-            HANDLE process=OpenProcess(SYNCHRONIZE,FALSE,DWORD(o["pid"].toDouble()));if(process){const bool alive=WaitForSingleObject(process,0)==WAIT_TIMEOUT;CloseHandle(process);if(alive)continue;}
-#endif
-            const auto result=QMessageBox::question(this,QStringLiteral("恢复未保存项目"),QStringLiteral("发现恢复快照 %1。是否恢复？选择否只保留快照，不覆盖任何项目。").arg(o["updated"].toString()),QMessageBox::Yes|QMessageBox::No);if(result==QMessageBox::Yes&&applyProjectSnapshot(o["project"].toObject())){projectPath_=o["path"].toString();checkpointProject();}break;
-        }
-    });
 }
 }
