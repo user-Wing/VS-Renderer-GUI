@@ -263,6 +263,10 @@ public:
     ThreeFpResult setRenderBackend(void *handle, bool enabled) const;
     ThreeFpResult setSoftwarePreScale(void *handle, int height) const;
     ThreeFpResult stop(void *handle) const;
+    std::optional<bool> keyframeStepsPending(void *handle) const {
+        if (!keyframeStepsPending_) return std::nullopt;
+        return keyframeStepsPending_(handle)!=0;
+    }
     std::optional<std::uint64_t> completedSeekTimeline(void *handle, std::int64_t target) const;
     ThreeFpResult seek(void *handle, std::int64_t position100ns) const;
     ThreeFpResult seekFrame(void *handle, std::int64_t frame) const;
@@ -362,6 +366,8 @@ private:
     HandleFn stop_ = nullptr;
     using SeekTimelineFn = std::uint64_t (*)(void *, std::int64_t);
     SeekTimelineFn completedSeekTimeline_ = nullptr;
+    using PendingStepsFn = int (*)(void *);
+    PendingStepsFn keyframeStepsPending_ = nullptr;
     SeekFn seek_ = nullptr;
     SeekFn seekFrame_ = nullptr;
     StepFn stepFrame_ = nullptr;

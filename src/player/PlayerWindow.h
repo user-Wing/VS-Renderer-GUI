@@ -53,7 +53,7 @@ public:
     void setInterpolation(int stage, bool automatic = false, int renderer = 0);
     int interpolationStage() const;
     void togglePlayback();
-    void seekTime(qint64 time);
+    void seekTime(qint64 time, bool relative = false);
     void seekFrame(qint64 frame);
     void stepFrame(int direction);
     void stepKeyframe(int direction);
@@ -76,6 +76,11 @@ protected:
     void dragLeaveEvent(QDragLeaveEvent *) override;
 private:
     friend class ::TestPlayer;
+    void seekRelative(qint64 delta);
+    void drainRelativeSeeks();
+    struct RelativeSeek { int keyDirection; qint64 timeDelta; };
+    QList<RelativeSeek> relativeSeeks_;
+    bool keyframeClockPending_ = false;
     bool handleShortcut(QKeyEvent *event,bool tracksOnly=false);
     void setMinimalMode(bool enabled);
     void updateMinimalControls();

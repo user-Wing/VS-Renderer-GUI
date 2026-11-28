@@ -382,7 +382,7 @@ bool PlayerWindow::openFile(const QString &input) {
     imageAnimation_->stop();imagePages_=image && (suffix=="tif" || suffix=="tiff")?qMax(1,imageProbe.imageCount()):1;imagePage_=0;imagePagePending_=false;
     pendingMediaOpen_.clear();
     timelinePreview_->stop();timelineTarget_=timelineSeekTarget_=-1;timelineDragging_=timelineResume_=timelineWaiting_=false;
-    seekUiTarget_=queuedSeek_=-1;
+    seekUiTarget_=queuedSeek_=-1;relativeSeeks_.clear();keyframeClockPending_=lavKeyPending_=false;
     if (suffix!="mpls" && !playerAudioExtensions().contains(suffix) && !image && !remote && !madvrMode() && !preset_.isEmpty() && !nativeBuiltinCompatible() && customShaderPackage_.isEmpty() && profile()!="Realistic" && fixedAnimeStage()<4 && server_->initializing()) { deferred_ = path; deferredSubtitle_.clear();deferredAudio_.clear(); showStatus(tr("正在初始化 VS，完成后自动打开。")); return true; }
     if(bitrateProbe_){bitrateProbe_->disconnect(this);bitrateProbe_->kill();bitrateProbe_->deleteLater();bitrateProbe_=nullptr;}decodeBurstFrom_=decodeBurstUntil_=0;decodePoolBytes_=decodePoolFrames_=0;bitrateTimer_.invalidate();
     stopDiscIndexing();discIndexParts_.clear();
@@ -665,7 +665,9 @@ void PlayerWindow::togglePlayback() {
 qint64 PlayerWindow::position() const { if(discMenu_ && discMenu_->active())return discMenu_->position(); if (!playing_ && manualFrame_ >= 0 && clip_.fpsNumerator > 0) return static_cast<qint64>(std::llround(manualFrame_ * 10000000.0 * clip_.fpsDenominator / clip_.fpsNumerator)); return lav_ ? lav_->position() : clock_->snapshot().position100ns; }
 ThreeFpSnapshot PlayerWindow::snapshot() const { return clock_->snapshot(); }
 ThreeFpSnapshot PlayerWindow::outputSnapshot() const { return direct_?clock_->snapshot():output_->snapshot(); }
-void PlayerWindow::seekTime(qint64 time) {
+void PlayerWindow::seekTime(qint64 time, bool relative) {
+    if(!relative)relativeSeeks_.clear();
+    keyframeClockPending_=false;
     if(discMenu_ && discMenu_->active()){if(!discMenu_->programme().value("menu").toBool())discMenu_->seek(time);return;}
     if(imageMode_)return;
     frameJumpTarget_=-1;
@@ -687,6 +689,7 @@ void PlayerWindow::seekTime(qint64 time) {
 void PlayerWindow::seekFrame(qint64 frame) {
     if (clip_.fpsNumerator <= 0 || !ready_) return;
     if (playing_) togglePlayback();
+    relativeSeeks_.clear();keyframeClockPending_=false;
     const auto bounded = std::clamp<qint64>(frame, 0, clip_.totalFrames - 1);
     if(direct_){resumeAt_=queuedSeek_=seekUiTarget_=-1;suspendQualityCheck();generation_=clock_->snapshot().timelineGeneration;seekPresented_=outputSnapshot().presentedVideoFrames;seekPending_=clock_->seekFrame(bounded);}
     else seekTime(static_cast<qint64>(std::llround(bounded * 10000000.0 * clip_.fpsDenominator / clip_.fpsNumerator)));
@@ -694,6 +697,7 @@ void PlayerWindow::seekFrame(qint64 frame) {
 }
 void PlayerWindow::stepFrame(int direction) {
     if (clip_.fpsNumerator <= 0 || !ready_) return;
+    relativeSeeks_.clear();keyframeClockPending_=false;
     if (!direct_) { seekFrame(lastFrame_ + direction); return; }
     if (imageMode_ || (discMenu_ && discMenu_->active())) return;
     if (playing_) togglePlayback();
@@ -709,15 +713,37 @@ void PlayerWindow::stepFrame(int direction) {
     }
 }
 void PlayerWindow::stepKeyframe(int direction) {
-    suspendQualityCheck();
-    manualFrame_ = -1;
-    if (playing_) togglePlayback();
-    if (lav_) { clock_->seek(position()); lavKeyPending_ = true; }
-    if (direct_ && !lav_) {
-        clock_->stepKeyframe(direction);
-    } else {
-        generation_ = clock_->snapshot().timelineGeneration;
-        seekPending_ = clock_->stepKeyframe(direction);
+    relativeSeeks_.append({direction,0});
+    drainRelativeSeeks();
+}
+
+void PlayerWindow::seekRelative(qint64 delta) {
+    relativeSeeks_.append({0,delta});
+    drainRelativeSeeks();
+}
+
+void PlayerWindow::drainRelativeSeeks() {
+    while(!relativeSeeks_.isEmpty()){
+        const auto next=relativeSeeks_.front();
+        if(next.keyDirection){
+            if(seekPending_)return;
+            relativeSeeks_.removeFirst();
+            suspendQualityCheck();
+            manualFrame_=frameJumpTarget_=seekUiTarget_=-1;
+            if(lav_)clock_->seek(position());
+            generation_=clock_->snapshot().timelineGeneration;
+            const bool accepted=clock_->stepKeyframe(next.keyDirection);
+            if(!direct_ || lav_){
+                seekPending_=accepted;
+                keyframeClockPending_=accepted && clock_->keyframeStepsPending().has_value();
+            }
+            if(lav_)lavKeyPending_=accepted;
+        }else{
+            // A time offset following a keyframe is relative to the picture it lands on.
+            if(keyframeClockPending_ || lavKeyPending_ || clock_->keyframeStepsPending().value_or(false))return;
+            relativeSeeks_.removeFirst();
+            seekTime((seekUiTarget_>=0?seekUiTarget_:position())+next.timeDelta,true);
+        }
     }
 }
 bool PlayerWindow::commitFrameEdit() {
@@ -789,6 +815,8 @@ void PlayerWindow::updateState() {
     if(!direct_ && profile()=="Anime" && fixedAnimeStage()<0 && lastFrame_<0 && profileStartup_.isValid() && profileStartup_.elapsed()>=8000){
         profileStartup_.invalidate();profileFallback_=true;qualityStage_=4;refreshScript();showStatus(tr("VS 首帧等待超过 8 秒：已切换 Jinc 直通。"));
     }
+    const bool keyCompleted=keyframeClockPending_ && !clock_->keyframeStepsPending().value_or(true);
+    if(keyCompleted)keyframeClockPending_=false;
     const auto snap = clock_->snapshot();
     if(snap.state==ThreeFpState::Failed && direct_ && !customShaderPackage_.isEmpty() && !hlslFailed_){
         const auto at=qMax<qint64>(0,snap.position100ns);const bool resume=playing_ || autoPlay_;
@@ -847,8 +875,9 @@ void PlayerWindow::updateState() {
     const auto completed = seekPending_ && direct_ && !lav_ && seekUiTarget_>=0
         ? clock_->completedSeekTimeline(seekUiTarget_) : std::nullopt;
     const bool seekCompleted = completed ? *completed!=0 && *completed==snap.timelineGeneration : snap.timelineGeneration!=generation_;
-    if (seekPending_ && seekCompleted && (!direct_ || autoPlay_ || minimalMode_ || audioMode_ || snap.selectedVideoStream<0 || (snap.presentedVideoFrames>seekPresented_ && snap.frameIndex>=0))) { seekPending_ = false; requested_ = lastFrame_ = -1;
-        if(queuedSeek_>=0){const auto next=queuedSeek_;queuedSeek_=-1;seekTime(next);return;}
+    const bool presented=!direct_ || autoPlay_ || minimalMode_ || audioMode_ || snap.selectedVideoStream<0 || (snap.presentedVideoFrames>seekPresented_ && snap.frameIndex>=0);
+    if (seekPending_ && (keyCompleted || (!keyframeClockPending_ && seekCompleted && presented))) { seekPending_ = false; requested_ = lastFrame_ = -1;
+        if(queuedSeek_>=0){const auto next=queuedSeek_;queuedSeek_=-1;seekTime(next,true);return;}
         if(direct_){
             seekUiTarget_=-1;
             if(frameJumpTarget_>=0 && manualFrame_>=0 && snap.frameIndex>=0 && snap.frameIndex!=manualFrame_){
@@ -858,6 +887,7 @@ void PlayerWindow::updateState() {
         }
         if (lavKeyPending_ && lav_) { lavKeyPending_ = false; lav_->seek(snap.position100ns); } }
     if(!direct_ && !seekPending_ && seekUiTarget_>=0){const auto rendered=outputSnapshot();if(rendered.presentedVideoFrames>seekPresented_ && rendered.frameIndex==frameAtPosition100ns(seekUiTarget_,clip_.totalFrames,clip_.fpsNumerator,clip_.fpsDenominator))seekUiTarget_=-1;}
+    drainRelativeSeeks();
     const auto at = position(); const auto duration = snap.duration100ns;
     if(updateLoop(at,snap.state==ThreeFpState::Ended))return;
     timeline_->setProperty("duration", duration);
@@ -1004,7 +1034,7 @@ bool PlayerWindow::handleShortcut(QKeyEvent *event,bool tracksOnly){
             const auto directory=choose?QFileDialog::getExistingDirectory(this,tr("选择截图保存文件夹"),screenshotDirectory()):screenshotDirectory();
             if(!directory.isEmpty())captureImage(false,directory,choose?action.chopped(6):action,true);
         }
-        else if(action=="seek"){if(imageMode_)nextFile(value<0?-1:1);else seekTime((seekUiTarget_>=0?seekUiTarget_:position())+qRound64(value*1e7));}
+        else if(action=="seek"){if(imageMode_)nextFile(value<0?-1:1);else seekRelative(qRound64(value*1e7));}
         else if(action=="frame")stepFrame(value<0?-1:1);
         else if(action=="keyframe")stepKeyframe(value<0?-1:1);
         else if(action=="chapter"){
@@ -1045,7 +1075,7 @@ void PlayerWindow::setMinimalMode(bool enabled){
         output_->stop();
         clock_->resetVideoOutput();
         playing_ = seekPending_ = rateApplied_ = false;
-        seekUiTarget_ = queuedSeek_ = -1;
+        seekUiTarget_ = queuedSeek_ = -1;relativeSeeks_.clear();keyframeClockPending_=lavKeyPending_=false;
         resumeAt_ = at;
         autoPlay_ = resume;
         openMedia();

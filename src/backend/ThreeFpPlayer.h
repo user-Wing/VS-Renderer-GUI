@@ -38,6 +38,7 @@ public:
     void setMuted(bool muted);
     void setVolume(float volume);
     bool stepKeyframe(int direction);
+    std::optional<bool> keyframeStepsPending() const { return api_.keyframeStepsPending(handle_); }
     bool setPlaybackRate(double rate);
     bool setDecodeMode(unsigned mode);
     void setAutomaticHdr(bool enabled);

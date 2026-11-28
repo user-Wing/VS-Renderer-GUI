@@ -125,6 +125,8 @@ private:
 #include "PlayerShortcutAcceptance.inc"
 private slots:
     void shortcutCatalogAndMigration(){checkShortcutCatalogAndMigration();}
+    void keyTransport_data(){keyTransportData();}
+    void keyTransport(){checkKeyTransport();}
     void exactSeekTargets_data(){exactSeekTargetsData();}
     void exactSeekTargets(){checkExactSeekTargets();}
     void pausedTransport_data(){QTest::addColumn<int>("mode");QTest::newRow("SW")<<1;QTest::newRow("HW")<<2;}

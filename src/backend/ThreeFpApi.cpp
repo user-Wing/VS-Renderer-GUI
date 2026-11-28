@@ -36,6 +36,7 @@ void ThreeFpApi::initialize()
     ok &= resolve(pause_, "FFF3FP_Pause");
     ok &= resolve(stop_, "FFF3FP_Stop");
     ok &= resolve(seek_, "FFF3FP_Seek");
+    keyframeStepsPending_ = reinterpret_cast<PendingStepsFn>(library_.resolve("VSR3FP_KeyframeStepsPending"));
     completedSeekTimeline_ = reinterpret_cast<SeekTimelineFn>(library_.resolve("VSR3FP_CompletedSeekTimeline"));
     ok &= resolve(seekFrame_, "FFF3FP_SeekFrame");
     ok &= resolve(stepFrame_, "FFF3FP_StepFrame");

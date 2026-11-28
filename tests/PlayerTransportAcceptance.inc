@@ -193,3 +193,101 @@ void checkExactSeekTargets() {
         QCOMPARE(player.snapshot().presentedVideoFrames-after.presentedVideoFrames,quint64(1));
     }
 }
+
+void keyTransportData() {
+    QTest::addColumn<QString>("operation");
+    QTest::addColumn<int>("mode");
+    for(int mode:{1,2})for(const QString operation:{"playing","pausedKeys","seconds","playingSeconds","keyThenSecond","resume"})
+        QTest::newRow(qPrintable(operation+(mode==1?"-SW":"-HW")))<<operation<<mode;
+}
+
+void checkKeyTransport() {
+    QFETCH(QString,operation);
+    QFETCH(int,mode);
+    QTemporaryDir dir;
+    auto source=qEnvironmentVariable("VSR_TRANSPORT_MEDIA");
+    qint64 first=2000,second=4000;
+    if(source.isEmpty()){
+        source=dir.filePath("keys.mkv");
+        QProcess encode;
+        encode.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),
+            {"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=30:duration=9",
+             "-c:v","libx264","-threads","2","-g","60","-sc_threshold","0","-y",source});
+        QVERIFY(encode.waitForFinished(20000));QCOMPARE(encode.exitCode(),0);
+    }else{
+        first=qEnvironmentVariableIntValue("VSR_KEY_FIRST_MS");second=qEnvironmentVariableIntValue("VSR_KEY_SECOND_MS");
+        QVERIFY(first>0 && second>first);
+    }
+    QSettings settings(configPath(),QSettings::IniFormat);
+    settings.setValue("decode/mode",mode);settings.setValue("basic/autoplay",true);
+    settings.setValue("player/preset",QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));
+    settings.setValue("playback/remember",false);settings.sync();
+    PlayerWindow player;player.resize(1440,810);player.show();
+    QVERIFY(player.openFile(source));
+    QTRY_VERIFY_WITH_TIMEOUT(player.playing_ && player.snapshot().presentedVideoFrames>2,12000);
+    const QFileInfo video(source);
+    if(operation=="resume" && QFileInfo::exists(video.dir().filePath(video.completeBaseName()+".mka")))
+        QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().isExternalAudio,3000);
+    const bool playing=operation=="playing" || operation=="playingSeconds";
+    if(!playing){
+        QTest::keyClick(&player,Qt::Key_Space);
+        QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
+    }
+    const bool seconds=operation=="seconds" || operation=="playingSeconds";
+    auto* button=player.findChild<QPushButton*>(seconds?"playerForwardSecond":"playerNextKeyframe");
+    QVERIFY(button && button->isVisible());
+    auto* window=button->window()->windowHandle();
+    const auto point=window->mapFromGlobal(button->mapToGlobal(button->rect().center()));
+    int clicks=0;connect(button,&QPushButton::clicked,&player,[&]{++clicks;});
+    const auto before=player.snapshot();
+    const bool singleKey=operation=="resume" || operation=="keyThenSecond";
+    if(singleKey)QTest::mouseClick(window,Qt::LeftButton,{},point);
+    else QTest::mouseDClick(window,Qt::LeftButton,{},point);
+    QCOMPARE(clicks,singleKey?1:2);
+    if(operation=="keyThenSecond"){
+        QTest::mouseClick(player.findChild<QPushButton*>("playerForwardSecond"),Qt::LeftButton);
+        QTRY_VERIFY2_WITH_TIMEOUT(!player.seekPending_ && qAbs(player.snapshot().framePts-first-1000)<50,
+            qPrintable(QString("key+1s actual=%1").arg(player.snapshot().framePts)),4000);
+        return;
+    }
+    if(seconds){
+        const auto target=before.position100ns+20000000;
+        QTRY_VERIFY2_WITH_TIMEOUT(!player.seekPending_ && player.snapshot().framePts*10000>=target-500000 &&
+            player.snapshot().framePts*10000<target+(playing?8000000:500000),
+            qPrintable(QString("second target=%1 actual=%2").arg(target).arg(player.snapshot().framePts)),5000);
+        QCOMPARE(player.playing_,playing);
+        if(!playing){
+            auto* back=player.findChild<QPushButton*>("playerBackwardSecond");
+            QVERIFY(back && back->isVisible());
+            QTest::mouseDClick(window,Qt::LeftButton,{},window->mapFromGlobal(back->mapToGlobal(back->rect().center())));
+            QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && qAbs(player.snapshot().position100ns-before.position100ns)<1000000,4000);
+            QCOMPARE(player.snapshot().state,ThreeFpState::Paused);
+        }
+        return;
+    }
+    if(operation=="playing")QVERIFY(player.playing_);
+    const auto expected=operation=="resume"?first:second;
+    QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().framePts>=expected && player.snapshot().framePts<expected+1000,
+        qPrintable(QString("expected=%1 actual=%2").arg(expected).arg(player.snapshot().framePts)),4000);
+    if(operation=="playing"){
+        QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Playing && player.snapshot().framePts>expected+150,2000);
+        return;
+    }
+    QCOMPARE(player.snapshot().state,ThreeFpState::Paused);
+    QCOMPARE(player.snapshot().framePts,expected);
+    if(operation=="pausedKeys"){
+        auto* previous=player.findChild<QPushButton*>("playerPreviousKeyframe");
+        QVERIFY(previous);
+        QTest::mouseClick(previous,Qt::LeftButton);
+        QTRY_COMPARE_WITH_TIMEOUT(player.snapshot().framePts,first,3000);
+        QCOMPARE(player.snapshot().state,ThreeFpState::Paused);
+    }
+    if(operation=="resume"){
+        const auto displayed=player.snapshot().presentedVideoFrames;
+        QElapsedTimer timer;timer.start();QTest::keyClick(&player,Qt::Key_Space);
+        QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>displayed && player.snapshot().framePts>expected,4000);
+        qInfo()<<"resume after keyframe ms"<<timer.elapsed()<<"pts"<<player.snapshot().framePts<<"from"<<expected;
+        QVERIFY(player.snapshot().framePts<expected+900);
+        QVERIFY2(timer.elapsed()<1200,"Playback did not resume promptly after the keyframe was visible");
+    }
+}
