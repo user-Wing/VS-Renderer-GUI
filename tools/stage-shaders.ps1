@@ -23,22 +23,15 @@ if (!$IncludeOptional) {
         Where-Object { $_.Extension -in @('.glsl', '.hlsl', '.vsrhlsl', '.json') } |
         Copy-Item -Destination $output -Force
     $backup = Join-Path $projectRoot ('build/shader-backups/' + [guid]::NewGuid().ToString('N'))
-    foreach ($name in @('mpv-shaders', 'mpv-shaders.7z')) {
+    $curated = @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'assets/builtin-shaders') -File | ForEach-Object Name)
+    $obsolete = @(Get-ChildItem -LiteralPath $output -File | Where-Object { $_.Name -like 'anime4k*' -and $_.Name -notin $curated } | ForEach-Object Name)
+    foreach ($name in (@('mpv-shaders', 'mpv-shaders.7z') + $obsolete)) {
         $existing = Join-Path $output $name
         if (Test-Path -LiteralPath $existing) {
             New-Item -ItemType Directory -Path $backup -Force | Out-Null
             Move-Item -LiteralPath $existing -Destination (Join-Path $backup $name)
         }
     }
-    $destination = Join-Path $output 'mpv-shaders/bloc97--Anime4K'
-    New-Item -ItemType Directory -Path $destination -Force | Out-Null
-    Get-ChildItem -LiteralPath (Join-Path $source 'bloc97--Anime4K') -Force | Copy-Item -Destination $destination -Recurse -Force
-    $compiledAnime = Join-Path $CompiledDirectory 'bloc97--Anime4K'
-    if (Test-Path -LiteralPath $compiledAnime) { Get-ChildItem -LiteralPath $compiledAnime -Force | Copy-Item -Destination $destination -Recurse -Force }
-    $manifest = Get-Content -LiteralPath (Join-Path $source 'manifest.json') -Raw | ConvertFrom-Json
-    $manifest.files = @($manifest.files | Where-Object { $_.path.StartsWith('bloc97--Anime4K/') })
-    $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $output 'mpv-shaders/manifest.json') -Encoding UTF8
-    Write-Host "Default shader library: complete Anime4K; optional library omitted. Backup: $backup"
     return
 }
 if (Test-Path -LiteralPath (Join-Path $output 'mpv-shaders')) {

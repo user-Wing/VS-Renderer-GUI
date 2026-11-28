@@ -1,6 +1,6 @@
 ﻿param(
     [string]$SourceDirectory='C:/PortableSoft/Mkvtoolnix',
-    [string]$OutputDirectory='build/mingw-release/runtime',
+    [string]$OutputDirectory='build/mingw-release/tools/mkvtoolnix',
     [string]$SevenZip='C:/PortableSoft/7-Zip-Zstandard/7z.exe'
 )
 $ErrorActionPreference='Stop'

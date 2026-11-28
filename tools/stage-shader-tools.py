@@ -13,7 +13,7 @@ files = ('glslc.exe', 'spirv-cross.exe', 'libgcc_s_seh-1.dll', 'libstdc++-6.dll'
 if not all((source / 'bin' / name).is_file() for name in files):
     print('GLSL import tools are not installed; native HLSL and cached shaders remain available.')
 else:
-    target = args.output / 'runtime/shader-tools'
+    target = args.output / 'tools/shader-tools'
     target.mkdir(parents=True, exist_ok=True)
     for name in files:
         if not (target / name).is_file() or not filecmp.cmp(source / 'bin' / name, target / name, shallow=False):

@@ -25,7 +25,7 @@
 #endif
 namespace vsr {
 namespace {
-QString tool(const QString &name) { return QDir(QCoreApplication::applicationDirPath()).filePath("runtime/tools/"+name); }
+QString tool(const QString &name) { return QDir(QCoreApplication::applicationDirPath()).filePath("tools/"+QString(name.startsWith("7z")?"7z/":name.startsWith("aria2")?"aria2-next/":"update/")+name); }
 bool validVersion(const QString &v) { return QRegularExpression("^\\d+(?:\\.\\d+){1,3}$").match(v).hasMatch(); }
 }
 PortableUpdater::PortableUpdater(QWidget *parent) : QDialog(parent), network_(new QNetworkAccessManager(this)), process_(new QProcess(this)) {
@@ -135,7 +135,7 @@ QString PortableUpdater::payloadDirectory(const QString &directory) {
     for(const auto &child:folder.entryList(QDir::Dirs|QDir::NoDotAndDotDot|QDir::Hidden))candidates.append(folder.filePath(child));
     for(const auto &candidate:candidates) {
         const QDir payload(candidate);bool complete=true;
-        for(const auto &name:QStringList{"VSRenderer.exe","vs-player.exe","FFF.Native.dll","Qt6Core.dll","runtime/python/python.exe","runtime/tools/aria2-next.exe","runtime/tools/7z.exe","runtime/tools/7z.dll","runtime/tools/apply-update.ps1","languages/en_US.json","languages/zh_CN.json","release.json"})if(!QFileInfo(payload.filePath(name)).isFile()){complete=false;break;}
+        for(const auto &name:QStringList{"VSRenderer.exe","vs-player.exe","FFF.Native.dll","Qt6Core.dll","tools/vapoursynth/python.exe","tools/aria2-next/aria2-next.exe","tools/7z/7z.exe","tools/7z/7z.dll","tools/update/apply-update.ps1","config/languages/en_US.json","config/languages/zh_CN.json","release.json"})if(!QFileInfo(payload.filePath(name)).isFile()){complete=false;break;}
         if(complete)valid.append(payload.absolutePath());
     }
     return valid.size()==1?valid.first():QString();

@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "player/PhotoCraftEditor.h"
 #include <QCoreApplication>
 #include <QDir>
@@ -16,7 +17,7 @@ PhotoCraftEditor *PhotoCraftEditor::instance() {
     return editor;
 }
 QString PhotoCraftEditor::executablePath() {
-    return QDir(QCoreApplication::applicationDirPath()).filePath("runtime/photocraft/photocraft.exe");
+    return QDir(QCoreApplication::applicationDirPath()).filePath("tools/photocraft/photocraft.exe");
 }
 PhotoCraftEditor::PhotoCraftEditor(QObject *parent) : QObject(parent) {
     server_.setSocketOptions(QLocalServer::UserAccessOption);
@@ -48,7 +49,7 @@ void PhotoCraftEditor::open(const QString &path) {
     auto environment=QProcessEnvironment::systemEnvironment();
     environment.insert("PHOTOCRAFT_CONFIG_DIR",QFileInfo(program).absolutePath()+"/PhotoCraftData");
     environment.insert("VSP_IMAGE_IMPORTER",QDir(QCoreApplication::applicationDirPath()).filePath("vs-player.exe"));
-    const QSettings settings(QDir(QCoreApplication::applicationDirPath()).filePath("player.ini"),QSettings::IniFormat);
+    const QSettings settings(vsr::playerConfigFile(),QSettings::IniFormat);
     const auto locale=settings.value("basic/language","zh_CN").toString();
     environment.insert("LC_ALL",locale);environment.insert("PHOTOCRAFT_LOCALE",locale);
     process.setProcessEnvironment(environment);

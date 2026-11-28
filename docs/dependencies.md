@@ -25,7 +25,7 @@ cmake --build --preset windows-mingw-release
 | 高精度图片/色彩 | `image-runtime.cmake`、`jxl-runtime.cmake`、`color-runtime.cmake`、`awj-runtime.cmake`；依赖来源与哈希在脚本中 |
 | PhotoCraft | `tools/photocraft-source.json`、`build-photocraft.ps1`；按固定源码和补丁构建 |
 | BD/更新/Remux | `stage-bd-menu.ps1`、`stage-update-tools.ps1`、`stage-mkvtoolnix.ps1` |
-| Agent MCP | `tools/stage-agent-runtime.ps1`；Node 20+，锁定的官方 client v2；便携 Node/npm/生产依赖与许可位于 `runtime/agent`，缺失时可在 MCP 设置安装 |
+| Agent MCP | `tools/stage-agent-runtime.ps1`；Node 20+，锁定的官方 client v2；便携 Node/npm/生产依赖与许可位于 `tools/agent`，缺失时可在 MCP 设置安装 |
 
 固定运行时更新不得删除已有插件或覆盖用户配置。组件许可见 [第三方声明](../THIRD_PARTY_NOTICES.md)。
 

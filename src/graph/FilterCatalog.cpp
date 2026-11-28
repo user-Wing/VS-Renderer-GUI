@@ -64,7 +64,7 @@ const QList<FilterDefinition> &catalog() {
      {choice("model", "模型", "AnimeJaNai-V2-2x-Compact-36K", {"AnimeJaNai-V2-2x-Compact-36K"}), integer("gpu", "Vulkan GPU 编号", 0, 0, 15)}},
     {"anime4k", "mpv GLSL/HLSL 着色器", "GPU 超分与着色器", "placebo",
      "按功能选择 GLSL/HLSL；GLSL 支持 VS 编码导出，原生 HLSL 放在处理链末尾用于 D3D11 预览。NIS 标明 NVIDIA 来源但并非 N 卡独占；DP4A 版本需要整数点积支持。补帧请使用 RIFE / MVTools 节点。",
-     {choice("category", "功能分类", "全部", FilterCatalog::shaderCategories()), choice("mode", "着色器", "anime4k-v4-a.glsl", {"OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl", "anime4k-v4-a.glsl", "anime4k-a-fast.glsl", "anime4k-no-cnn.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-b.glsl", "anime4k-v4-b+b.glsl", "anime4k-v4-c.glsl", "anime4k-v4-c+a.glsl", "anime4k-v4.1-gan.glsl", "Anime4K_ModeA.glsl", "Anime4K_ModeA_A.glsl", "Anime4K_ModeB.glsl", "Anime4K_ModeB_B.glsl", "Anime4K_ModeC.glsl", "Anime4K_ModeC_A.glsl", "Anime4K_SRGAN.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL/HLSL 位置", ""),
+     {choice("category", "功能分类", "全部", FilterCatalog::shaderCategories()), choice("mode", "着色器", "anime4k-mode-a.glsl", {"OpenNGU-AA-Medium-BestMatch-2x-SDR.glsl", "anime4k-mode-a.glsl", "anime4k-a-fast.glsl", "anime4k-1x.glsl", "anime4k-v4-a+a.glsl", "anime4k-v4-c+a.glsl", "moesr-50k.glsl", "自定义 GLSL"}), file("shader", "自定义 GLSL/HLSL 位置", ""),
       choice("output_mode", "输出方式", "倍率", {"倍率", "指定分辨率"}),
       choice("scale", "输出倍率", "2×", {"0.5×", "1×", "2×", "3×", "4×"}),
       integer("width", "输出宽度", 1920, 2, 65536), integer("height", "输出高度", 1080, 2, 65536),
@@ -193,7 +193,7 @@ const QList<FilterDefinition> &catalog() {
       integer("gpu", "Vulkan GPU 编号", 0, 0, 15), integer("threads", "GPU 工作线程", 1, 1, 4), boolean("scene", "镜头切换检测", true),
       choice("inference_scale", "推理分辨率(仅影响中间帧)", "1 - 原始", {"1 - 原始", "2 - 半宽半高", "4 - 四分之一宽高"})}},
     });
-    QFile ncnnModels(QDir(QCoreApplication::applicationDirPath()).filePath("runtime/ncnn/models.json"));
+    QFile ncnnModels(QDir(QCoreApplication::applicationDirPath()).filePath("tools/ncnn/models.json"));
     if(ncnnModels.open(QIODevice::ReadOnly))for(auto &definition:catalog)if(definition.id=="ncnn_still")for(auto &parameter:definition.parameters)if(parameter.id=="model"){
         parameter.choices.clear();for(const auto &item:QJsonDocument::fromJson(ncnnModels.readAll()).array())parameter.choices.append(item.toObject().value("name").toString());
     }

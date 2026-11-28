@@ -49,7 +49,9 @@ void ThreeFpApi::initialize()
     ok &= resolve(redraw_, "FFF3FP_Redraw");
     ok &= resolve(destroy_, "FFF3FP_Destroy");
     selectAudio_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SelectAudioStream"));
+    selectVideo_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SelectVideoStream"));
     setClockOnly_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SetClockOnly"));
+    setRenderBackend_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SetVideoRenderBackend"));
     setSoftwarePreScale_ = reinterpret_cast<StepFn>(library_.resolve("FFF3FP_SetSoftwarePreScale"));
     loadExternalAudio_ = reinterpret_cast<ExternalAudioFn>(library_.resolve("FFF3FP_LoadExternalAudio"));
     clearExternalAudio_ = reinterpret_cast<HandleFn>(library_.resolve("FFF3FP_ClearExternalAudio"));
@@ -116,6 +118,7 @@ ThreeFpResult ThreeFpApi::open(void *h, const char *p) const { return available(
 ThreeFpResult ThreeFpApi::play(void *h) const { return available() ? play_(h) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::pause(void *h) const { return available() ? pause_(h) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::setClockOnly(void *h,bool enabled) const { return setClockOnly_?setClockOnly_(h,enabled?1:0):ThreeFpResult::NotSupported; }
+ThreeFpResult ThreeFpApi::setRenderBackend(void *h,bool enabled) const { return setRenderBackend_?setRenderBackend_(h,enabled?1:0):ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setSoftwarePreScale(void *h,int height) const { return setSoftwarePreScale_?setSoftwarePreScale_(h,height):ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::stop(void *h) const { return available() ? stop_(h) : ThreeFpResult::NativeFailure; }
 ThreeFpResult ThreeFpApi::seek(void *h, std::int64_t p) const { return available() ? seek_(h, p) : ThreeFpResult::NativeFailure; }
@@ -221,6 +224,7 @@ void ThreeFpApi::destroy(void *h) const { if (available() && h) destroy_(h); }
 ThreeFpResult ThreeFpApi::stepKeyframe(void *h, int d) const { return stepKeyframe_ ? stepKeyframe_(h, d) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setPlaybackRate(void *h, double rate) const { return setPlaybackRate_ ? setPlaybackRate_(h, rate) : ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::selectAudio(void *h,int stream) const {return selectAudio_?selectAudio_(h,stream):ThreeFpResult::NotSupported;}
+ThreeFpResult ThreeFpApi::selectVideo(void *h,int stream) const {return selectVideo_?selectVideo_(h,stream):ThreeFpResult::NotSupported;}
 ThreeFpResult ThreeFpApi::loadExternalAudio(void *h,const char *path) const {return loadExternalAudio_?loadExternalAudio_(h,path,-1,0):ThreeFpResult::NotSupported;}
 ThreeFpResult ThreeFpApi::clearExternalAudio(void *h) const {return clearExternalAudio_?clearExternalAudio_(h):ThreeFpResult::NotSupported;}
 ThreeFpResult ThreeFpApi::setAudioEffects(void *h,bool enabled,const float *gains,float wave,qint64 delay) const {return setAudioEffects_?setAudioEffects_(h,enabled?1u:0u,gains,wave,delay):ThreeFpResult::NotSupported;}

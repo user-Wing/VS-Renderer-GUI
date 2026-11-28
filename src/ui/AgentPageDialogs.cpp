@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "ui/AgentPage.h"
 #include "ui/AgentProviderDialog.h"
 #include "ui/AgentChoicePopup.h"
@@ -98,7 +99,7 @@ void AgentPage::showTools()
             connect(check, &QCheckBox::toggled, &dialog, [this, name](bool enabled) {
                 session_->setToolEnabled(name, enabled); QStringList disabled;
                 for (const auto &tool : session_->allTools()) { const auto key = tool.toObject().value("function").toObject().value("name").toString(); if (!session_->toolEnabled(key)) disabled.append(key); }
-                QSettings().setValue("agent/disabledTools", disabled);
+                vsr::rendererSettings().setValue("agent/disabledTools", disabled);
             });
         }
         list->addStretch();

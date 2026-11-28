@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "ui/ExportWindow.h"
 #include "backend/DetachedExport.h"
 #include <QLockFile>
@@ -24,9 +25,6 @@
 #include <QTimer>
 #include <QSet>
 #include <QSettings>
-#include <QLocalServer>
-#include <QLocalSocket>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -34,10 +32,22 @@
 namespace vsr {
 void ExportWindow::rememberCommand(){
     const auto command=command_->toPlainText().trimmed();if(command.isEmpty())return;
-    auto commands=QSettings().value("export/commandHistory").toStringList();commands.removeAll(command);commands.prepend(command);
-    while(commands.size()>50)commands.removeLast();QSettings().setValue("export/commandHistory",commands);
+    auto commands=vsr::rendererSettings().value("export/commandHistory").toStringList();commands.removeAll(command);commands.prepend(command);
+    while(commands.size()>50)commands.removeLast();vsr::rendererSettings().setValue("export/commandHistory",commands);
     history_->clear();history_->addItems(commands);
 }
+
+void ExportWindow::receiveExternalCommand(const QString &command)
+{
+    command_->setPlainText(command);
+    command_->setToolTip(QStringLiteral("此命令来自本机外部程序，导出前请核对可执行文件、参数和输出路径。"));
+    rememberCommand();
+    tabs_->setCurrentIndex(0);
+    if (isMinimized()) showNormal();
+    raise();
+    activateWindow();
+}
+
 namespace {
 QString pathKey(const QString &path)
 {
@@ -74,28 +84,11 @@ ExportWindow::ExportWindow() : QWidget(nullptr, Qt::Window)
     form->addWidget(command_, 1);
     auto *historyRow=new QHBoxLayout;
     history_=new QComboBox(settings);history_->setObjectName("exportCommandHistory");history_->setMinimumContentsLength(20);history_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    history_->addItems(QSettings().value("export/commandHistory").toStringList());historyRow->addWidget(history_,1);
+    history_->addItems(vsr::rendererSettings().value("export/commandHistory").toStringList());historyRow->addWidget(history_,1);
     auto *recall=new QPushButton(QStringLiteral("调用历史命令"),settings);historyRow->addWidget(recall);
     connect(recall,&QPushButton::clicked,this,[this]{if(history_->currentIndex()>=0)command_->setPlainText(history_->currentText());});
     auto *saveCommand=new QPushButton(QStringLiteral("保存命令"),settings);historyRow->addWidget(saveCommand);
     connect(saveCommand,&QPushButton::clicked,this,&ExportWindow::rememberCommand);form->addLayout(historyRow);
-    auto *server=new QLocalServer(this);server->setSocketOptions(QLocalServer::UserAccessOption);
-    server->listen("VSRenderer.ExportCommand");
-    connect(server,&QLocalServer::newConnection,this,[this,server]{
-        while(auto *socket=server->nextPendingConnection()){
-            auto *timeout=new QTimer(socket);timeout->setSingleShot(true);timeout->start(3000);connect(timeout,&QTimer::timeout,socket,&QLocalSocket::abort);
-            connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
-            connect(socket,&QLocalSocket::readyRead,this,[this,socket]{
-                auto buffer=socket->property("commandBuffer").toByteArray()+socket->readAll();
-                if(buffer.size()>65536){socket->abort();return;}
-                if(!buffer.contains('\n')){socket->setProperty("commandBuffer",buffer);return;}
-                const auto command=QJsonDocument::fromJson(buffer.left(buffer.indexOf('\n'))).object().value("command").toString();
-                if(!isVisible() || command.trimmed().isEmpty()){socket->write("ERROR: open the export window first\n");socket->disconnectFromServer();return;}
-                command_->setPlainText(command);command_->setToolTip(QStringLiteral("此命令来自本机外部程序；导出前请核对可执行文件、参数和输出路径。"));rememberCommand();tabs_->setCurrentIndex(0);raise();activateWindow();
-                socket->write("OK\n");socket->disconnectFromServer();
-            });
-        }
-    });
     sourceLabel_ = new QLabel(QStringLiteral("当前文件：未导入"), settings);
     sourceLabel_->setWordWrap(true);
     form->addWidget(sourceLabel_);
@@ -344,7 +337,7 @@ bool ExportWindow::addJob(const QString &command, const QString &output, const Q
         return fail(QStringLiteral("无法保存导出脚本。"));
     if(!file.commit())return fail(QStringLiteral("冻结脚本提交失败。"));
     job->plan = ExportPipeline::buildPlan(command, source, output, file.fileName(), QCoreApplication::applicationDirPath(),
-                                          QSettings().value("export/ffmpegExecutable").toString());
+                                          vsr::rendererSettings().value("export/ffmpegExecutable").toString());
     if (!job->plan.error.isEmpty()) return fail(job->plan.error);
     for (const auto &input : compositionSources_)
         if (pathKey(input) == outputKey) return fail(QStringLiteral("输出不能覆盖任何对比源视频。"));

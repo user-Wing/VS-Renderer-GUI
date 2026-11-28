@@ -101,7 +101,7 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
     const auto safeName = [=] {
         const QString n = name->text().trimmed();
         if (n.isEmpty() || n == "." || n == ".." || n.contains(QRegularExpression("[<>:\"/\\\\|?*]")) || n.endsWith('.') || n.endsWith(' ')) return QString();
-        return QDir(selected().isEmpty()?PresetStore::directory():QFileInfo(selected()).absolutePath()).filePath(n + ".vpy");
+        return QDir(QDir(PresetStore::directory()).filePath("user")).filePath(n + ".vpy");
     };
     const auto confirmOverwrite = [this](const QString &path) {
         return !QFileInfo::exists(path) || QMessageBox::question(this, QStringLiteral("覆盖预设"), QStringLiteral("覆盖 %1？").arg(QFileInfo(path).fileName())) == QMessageBox::Yes;
@@ -119,7 +119,7 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
     button(QStringLiteral("导入"), [=] {
         const auto files = QFileDialog::getOpenFileNames(this, QStringLiteral("导入 VPY"), {}, "VapourSynth (*.vpy)");
         for (const auto &source : files) {
-            const QString target = QDir(PresetStore::directory()).filePath(QFileInfo(source).fileName());
+            const QString target = QDir(PresetStore::directory()).filePath("user/"+QFileInfo(source).fileName());
             if (!confirmOverwrite(target)) continue;
             QFile f(source); QString message;
             if (!f.open(QIODevice::ReadOnly) || !PresetStore::write(target, QString::fromUtf8(f.readAll()), &message)) error(message);
@@ -133,7 +133,8 @@ PresetDialog::PresetDialog(std::function<QString(const QString &)> saveCurrent, 
         QFile f(selected()); QString message;
         if (!f.open(QIODevice::ReadOnly) || !PresetStore::write(target, QString::fromUtf8(f.readAll()), &message)) error(message);
     });
-    button(QStringLiteral("变更名称"), [=] { const auto target = safeName(); if (target.isEmpty() || selected().isEmpty() || target == selected()) return;
+    button(QStringLiteral("变更名称"), [=] { const auto name = safeName(); if (name.isEmpty() || selected().isEmpty()) return;
+        const auto target = QFileInfo(selected()).dir().filePath(QFileInfo(name).fileName()); if(target==selected())return;
         if (QFileInfo::exists(target)) { error(QStringLiteral("名称已存在。")); return; }
         if (!QFile::rename(selected(), target)) error(QStringLiteral("重命名失败。")); else { refresh(); selectPath(target); } });
     button(QStringLiteral("变更备注"), [=] {

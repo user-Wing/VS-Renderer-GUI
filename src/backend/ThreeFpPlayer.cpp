@@ -50,6 +50,7 @@ bool ThreeFpPlayer::createSession()
 
     if (!check(api_.create(&configuration, &handle_), QStringLiteral("创建 3FP 会话")))
         return false;
+    if (d3d12_ && !check(api_.setRenderBackend(handle_, true), QStringLiteral("D3D12"))) return false;
     audioOutputPending_=true;
     if(clockOnly_)api_.setClockOnly(handle_,true);
     if(softwarePreScaleHeight_)check(api_.setSoftwarePreScale(handle_,softwarePreScaleHeight_),QStringLiteral("CPU pre-scale"));
@@ -105,6 +106,11 @@ bool ThreeFpPlayer::setVideoEnhancement(bool hdr,bool enabled){
     return !handle_ || api_.setVideoEnhancement(handle_,hdr,enabled)==ThreeFpResult::Success;
 }
 VideoEnhancementStatus ThreeFpPlayer::videoEnhancementStatus(bool hdr) const{return handle_?api_.videoEnhancementStatus(handle_,hdr):VideoEnhancementStatus{};}
+bool ThreeFpPlayer::setD3D12(bool enabled) {
+    if (enabled == d3d12_) return true;
+    d3d12_ = enabled;
+    return resetVideoOutput();
+}
 bool ThreeFpPlayer::setSoftwarePreScale(int height) { if(height!=0 && height!=720 && height!=1080 && height!=2160)return false;softwarePreScaleHeight_=height;return !handle_ || api_.setSoftwarePreScale(handle_,height)==ThreeFpResult::Success; }
 
 bool ThreeFpPlayer::ready() const { return const_cast<ThreeFpPlayer *>(this)->createSession(); }
@@ -193,6 +199,7 @@ bool ThreeFpPlayer::setPlaybackRate(double rate) { return handle_ && check(api_.
 bool ThreeFpPlayer::setDecodeMode(unsigned mode) { if(decodeMode_==mode)return true;decodeMode_ = mode; return resetVideoOutput(); }
 void ThreeFpPlayer::setAutomaticHdr(bool enabled) { if(automaticHdr_==enabled)return;automaticHdr_ = enabled; resetVideoOutput(); }
 bool ThreeFpPlayer::selectAudio(int stream) {return handle_ && check(api_.selectAudio(handle_,stream),QStringLiteral("Select audio track"));}
+bool ThreeFpPlayer::selectVideo(int stream) {return handle_ && check(api_.selectVideo(handle_,stream),QStringLiteral("Select video track"));}
 bool ThreeFpPlayer::loadExternalAudio(const QString &path) {return handle_ && check(api_.loadExternalAudio(handle_,path.toUtf8().constData()),QStringLiteral("Load external audio"));}
 bool ThreeFpPlayer::clearExternalAudio() {return handle_ && check(api_.clearExternalAudio(handle_),QStringLiteral("Clear external audio"));}
 bool ThreeFpPlayer::setAudioEffects(bool enabled,const float *gains,float wave,qint64 delay) {return handle_ && check(api_.setAudioEffects(handle_,enabled,gains,wave,delay),QStringLiteral("Audio effects"));}

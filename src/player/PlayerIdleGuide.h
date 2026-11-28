@@ -51,8 +51,22 @@ private:
     void reload(bool initialize) {
         QJsonObject root;QFile file(path_);
         if(file.exists()) {if(!file.open(QIODevice::ReadOnly))return;const auto bytes=file.readAll();file.close();const auto doc=QJsonDocument::fromJson(bytes);if(!doc.isObject())return;root=doc.object();}
-        if(root.value("playerGuide").isObject())config_=root.value("playerGuide").toObject();
-        else if(initialize) {root.insert("playerGuide",config_);QSaveFile output(path_);if(output.open(QIODevice::WriteOnly)){output.write(QJsonDocument(root).toJson(QJsonDocument::Indented));output.commit();}}
+        bool save=initialize && !root.value("playerGuide").isObject();
+        if(root.value("playerGuide").isObject()){
+            config_=root.value("playerGuide").toObject();
+            auto guides=config_.value("guides").toArray();
+            for(int i=0;i<guides.size();++i){
+                auto guide=guides[i].toObject();
+                auto targets=guide.value("targets").toArray();
+                const int obsolete=targets.toVariantList().indexOf(QStringLiteral("playerSpeedPopupButton"));
+                if(obsolete<0)continue;
+                targets.removeAt(obsolete);
+                if(!targets.contains(QStringLiteral("playerSpeed")))targets.append(QStringLiteral("playerSpeed"));
+                guide.insert("targets",targets);guides[i]=guide;
+                config_.insert("guides",guides);save=initialize;
+            }
+        }
+        if(save) {root.insert("playerGuide",config_);QSaveFile output(path_);if(output.open(QIODevice::WriteOnly)){output.write(QJsonDocument(root).toJson(QJsonDocument::Indented));output.commit();}}
         update();
     }
     QWidget *controls_,*timeline_;

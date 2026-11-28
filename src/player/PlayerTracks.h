@@ -11,7 +11,7 @@ inline QString playerTrackLabel(const QJsonObject &stream, int ordinal) {
     QString name=tags.value("title").toString();if(name.isEmpty())name=stream.value("codec").toString();
     QString language=tags.value("language-ietf").toString();if(language.isEmpty())language=tags.value("language").toString();if(language.isEmpty())language="und";
     QStringList flags;if(stream.value("default").toBool())flags<<"Default";if(stream.value("forced").toBool())flags<<"Forced";
-    return QString("Track 0:%1:%2 - %3 - %4 - %5").arg(stream.value("type").toString()=="audio"?"a":"s").arg(ordinal).arg(name,language,flags.isEmpty()?QString("None"):flags.join('+'));
+    return QString("Track 0:%1:%2 - %3 - %4 - %5").arg(stream.value("type").toString()=="audio"?"a":stream.value("type").toString()=="video"?"v":"s").arg(ordinal).arg(name,language,flags.isEmpty()?QString("None"):flags.join('+'));
 }
 inline int playerDefaultTrack(const QJsonArray &streams, const QString &type) {
     int first=std::numeric_limits<int>::max(),selected=first;

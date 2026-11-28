@@ -14,7 +14,7 @@ inline constexpr qint64 cubeFileLimit = 32 * 1024 * 1024;
 
 inline QDir cubeLibrary(const QString &programDirectory = QCoreApplication::applicationDirPath())
 {
-    return QDir(QDir(programDirectory).filePath("luts"));
+    return QDir(QDir(programDirectory).filePath("config/LUT"));
 }
 
 inline QDir playerCubeLibrary()

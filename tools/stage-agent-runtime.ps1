@@ -1,7 +1,7 @@
 param(
     [string]$NodeDirectory = 'C:/Program Files/nodejs',
     [string]$SourceDirectory = (Join-Path $PSScriptRoot 'agent-runtime'),
-    [string]$OutputDirectory = 'build/mingw-release/runtime/agent'
+    [string]$OutputDirectory = 'build/mingw-release/tools/agent'
 )
 $ErrorActionPreference = 'Stop'
 $nodeRoot = (Resolve-Path -LiteralPath $NodeDirectory).Path

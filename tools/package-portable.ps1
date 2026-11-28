@@ -6,6 +6,7 @@ param(
     [string]$Strip = 'C:/Private/Soft/QT/Tools/mingw1310_64/bin/strip.exe',
     [string]$StageDirectory = '',
     [string]$OutputFile = '',
+    [switch]$IncludeOpenNgu,
     [ValidateRange(1,2)][int]$CompressionThreads = 2
 )
 $ErrorActionPreference = 'Stop'
@@ -15,7 +16,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $program 'vs-export-worker.exe'))) {
 foreach ($name in @('vsr-thumbnail.dll', 'vsr-thumbnail-worker.exe', 'killvsp.exe')) {
     if (-not (Test-Path -LiteralPath (Join-Path $program $name))) { throw "Deploy thumbnail component before packaging: $name" }
 }
-$editor = Join-Path $program 'runtime/photocraft'
+$editor = Join-Path $program 'tools/photocraft'
+if (!(Test-Path $editor)) { $editor=Join-Path $program 'runtime/photocraft' }
 if (-not (Test-Path -LiteralPath (Join-Path $editor 'photocraft.exe'))) { throw 'Build and deploy the pinned PhotoCraft runtime before packaging' }
 $builtinSource = if ($BuiltinDirectory) { (Resolve-Path -LiteralPath $BuiltinDirectory).Path } else { Join-Path $program 'vpy/builtin' }
 $version = [regex]::Match((Get-Content -LiteralPath (Join-Path $root 'CMakeLists.txt') -Raw), 'project\(VSRenderer VERSION ([0-9.]+)').Groups[1].Value
@@ -31,45 +33,51 @@ if (Test-Path -LiteralPath $archive) { throw 'Archive already exists; do not sil
 New-Item -ItemType Directory -Path $payload -Force | Out-Null
 # Construct a clean distribution, retaining the live installation's settings and user files.
 $excludedDirectories = @((Join-Path $program 'cache'), (Join-Path $program 'data'), 'PhotoCraftData', 'shader-cache', 'screenshots', 'vpy', '__pycache__', '.git', '.deps', 'temp', 'logs')
-$excludedDirectories += (Join-Path $program 'docs')
+$excludedDirectories += @('ncnn',(Join-Path $program 'config'),(Join-Path $program 'docs'))
 $excludedDirectories += (Join-Path $program 'themes')
 $excludedDirectories += (Join-Path $program 'shaders/custom')
-$excludedDirectories += (Join-Path $program 'runtime/ffmpeg/build-info')
+$excludedDirectories += @((Join-Path $program 'runtime/ffmpeg/build-info'),(Join-Path $program 'tools/ffmpeg/build-info'),(Join-Path $program 'tools/lav'),(Join-Path $program 'tools/madvr09217'))
 $excludedDirectories += @((Join-Path $program 'LAVFilters64'), (Join-Path $program 'madVR09217'), (Join-Path $program 'shaders/mpv-shaders'))
 if ($Edition -eq 'Lite') {
-    $excludedDirectories += (Join-Path $program 'runtime/mkvtoolnix')
+    $excludedDirectories += @((Join-Path $program 'runtime/mkvtoolnix'),(Join-Path $program 'tools/mkvtoolnix'))
 }
 & robocopy.exe $program $payload /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP /XD $excludedDirectories /XF '*.ini' '*.lwi' '*.ffindex' '*.pyc' '*.pdb' '*test*.exe' Qt6Test.dll '*.log' '*.before-*' '*.tmp' '*.autosave' '.awj-update-security-state*' settings.bin resource-manifest.json local-resource-sha256.json mpv-shaders.7z | Out-Null
 if ($LASTEXITCODE -ge 8) { throw 'Clean payload copy failed' }
-$ffInfo = Join-Path $payload 'runtime/ffmpeg/build-info'
+$ffInfo = Join-Path $payload 'tools/ffmpeg/build-info'
 New-Item -ItemType Directory -Path $ffInfo -Force | Out-Null
 foreach ($name in @('manifest.json','config.mak','build-full09.sh','build-full10.sh','resume-ffmpeg.sh','subsampling-initialization.patch','source-identity.json','package_release.py','result.json','release-size-and-pe.json')) {
-    $source = Join-Path $program "runtime/ffmpeg/build-info/$name"
+    $source = Join-Path $program "tools/ffmpeg/build-info/$name"
+    if (!(Test-Path $source)) { $source=Join-Path $program "runtime/ffmpeg/build-info/$name" }
     if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $ffInfo -Force }
 }
-if (Get-ChildItem -LiteralPath $payload -Recurse -File | Where-Object { $_.Name -like 'OpenNGU-*' }) { throw 'Private OpenNGU assets must be removed from the input staging directory before public packaging.' }
-& (Join-Path $PSScriptRoot 'stage-shaders.ps1') -OutputDirectory (Join-Path $payload 'shaders') -SevenZip $SevenZip -ExcludePrivate
+if (!$IncludeOpenNgu -and (Get-ChildItem -LiteralPath $payload -Recurse -File -Filter 'OpenNGU-*')) { throw 'Private OpenNGU assets must be removed from the input staging directory before public packaging.' }
+& (Join-Path $PSScriptRoot 'stage-shaders.ps1') -OutputDirectory (Join-Path $payload 'shaders') -SevenZip $SevenZip -ExcludePrivate:(!$IncludeOpenNgu)
 if (!(Test-Path -LiteralPath $Strip)) { throw 'MinGW strip.exe is required for release packaging' }
 foreach ($name in @('VSRenderer.exe','vs-player.exe','vs-cap.exe','vs-export-worker.exe','killvsp.exe')) {
     & $Strip --strip-unneeded (Join-Path $payload $name)
     if ($LASTEXITCODE -ne 0) { throw "Release symbol stripping failed: $name" }
 }
-$editor = Join-Path $payload 'runtime/photocraft'
+$editor = Join-Path $payload 'tools/photocraft'
+if (!(Test-Path $editor)) { $editor=Join-Path $payload 'runtime/photocraft' }
 $editorSize = (Get-ChildItem -LiteralPath $editor -File | Measure-Object Length -Sum).Sum
 $editorLimit = (Get-Content -LiteralPath (Join-Path $root 'tools/photocraft-source.json') -Raw | ConvertFrom-Json).maximumComponentBytes
 if ($editorSize -gt $editorLimit) { throw "PhotoCraft runtime exceeds its pinned size budget: $editorSize > $editorLimit bytes" }
 foreach ($name in @('README.md', 'project.md', 'changelog.md')) {
-    Copy-Item -LiteralPath (Join-Path $program $name) -Destination $payload -Force
+    Copy-Item -LiteralPath (Join-Path $root $name) -Destination $payload -Force
 }
 Copy-Item -LiteralPath (Join-Path $root 'docs') -Destination $payload -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $root 'plugins/3fui-export-bridge/README.md') -Destination (Join-Path $payload 'docs/3fui-install.md') -Force
 New-Item -ItemType Directory -Path (Join-Path $payload 'licenses') -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $payload 'licenses/PawnIO-Modules') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'assets/pawnio/COPYING'),(Join-Path $root 'assets/pawnio/NOTICE.md') -Destination (Join-Path $payload 'licenses/PawnIO-Modules') -Force
 Get-ChildItem -LiteralPath (Join-Path $root 'third_party/runtime-notices') -File | Copy-Item -Destination (Join-Path $payload 'licenses') -Force
 Copy-Item -LiteralPath (Join-Path $root 'third_party/image-zlib/LICENSE') -Destination (Join-Path $payload 'licenses/image-zlib-LICENSE.txt') -Force
+New-Item -ItemType Directory -Path (Join-Path $payload 'languages') -Force | Out-Null
 foreach ($name in @('zh_CN.json', 'en_US.json')) {
     Copy-Item -LiteralPath (Join-Path $root "assets/languages/$name") -Destination (Join-Path $payload "languages/$name") -Force
 }
+& python (Join-Path $PSScriptRoot 'layout-portable.py') $payload
+if ($LASTEXITCODE -ne 0) { throw 'Portable layout migration failed' }
 $componentsPath = Join-Path $payload 'components.json'
 $components = Get-Content -LiteralPath $componentsPath -Raw | ConvertFrom-Json
 foreach ($name in @('MadVR', 'LAV-Filters', 'mpv-shaders')) { $components.PSObject.Properties.Remove($name) }

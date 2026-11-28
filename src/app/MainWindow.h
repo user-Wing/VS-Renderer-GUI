@@ -57,6 +57,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
     bool openPlayerSource(const QString &path,qint64 loopIn=-1,qint64 loopOut=-1);
+    void receiveExportCommand(const QString &command);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;

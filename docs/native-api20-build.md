@@ -4,7 +4,11 @@ Qt构建新原生VS源时，用 `cmake -S . -B build/mingw-release -DVSR_FFMPEG_
 
 2026-11-14 色彩续修沿用固定248cb9b及更新的汇总补丁，标准脚本额外复制`FrameColorMetadata.h`；通用/SDR字节码必须完整重生成。外部帧v2为240字节，v1的112字节前缀保留，通过可选查询协商版本。GUI同时构建`vsr-source.dll`，Full部署不可遗漏；验证与限制见 [色彩修复](../development/color-fix-20261114.md)。
 
-## 当前基线：2026-11-15 上游合并
+## 1.2.0 当前基线
+
+使用上游 IO PR #77 的 `2fb8f25b3f69f3a6cddd1d5ab8c98d748e6d22e9` 和 `patches/3fp-vsp-1.2.0.patch` 构建。脚本会重新生成普通及 SDR 专用着色器。默认呈现后端为 D3D11，在播放器实验设置中可切换为 D3D12。
+
+## 1.1.6 历史基线
 
 固定 `85f514be34cdbcef17ba5c44b90cd9bbe4c2526d`（已合并 #58–#62）。标准脚本应用 `patches/3fp-vsp-upstream-20261115.patch`，保留 VSP 帧桥、缩放和 AVIF 预算扩展；不再叠加旧汇总补丁或单独 AVIF 预算补丁。DependenciesRoot 除 ffmpeg/vcpkg_installed 外须提供 `libraw/include/libraw`、`libraw/lib/x64/libraw.lib`、`libraw/bin/x64/libraw.dll`，本轮由 LibRaw 0.21.4 的 `Makefile.msvc bin\libraw.dll` 构建。运行目录须携带 libraw.dll 与许可。RAW 使用上游原生开发器，VSP 可选扩展 `VSR3FP_DecodeRawImage` 将完整尺寸 RGB48 复制到图片浏览器，避免显示截图和8位中间文件。
 

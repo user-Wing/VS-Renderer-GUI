@@ -53,7 +53,13 @@ void PlayerWindow::selectAudio(int stream) {
     if(imageMode_ || source_.isEmpty())return;
     useNativeAudio();
     if(!externalAudio_.isEmpty() && !clock_->clearExternalAudio())return;
-    if(clock_->selectAudio(stream)){externalAudio_.clear();applyAudioEffects();}
+    if(clock_->selectAudio(stream)){
+        externalAudio_.clear();applyAudioEffects();
+        if(seekPending_ && seekUiTarget_>=0) {
+            const auto target=queuedSeek_>=0 ? queuedSeek_ : seekUiTarget_;
+            seekPending_=false; queuedSeek_=-1; seekTime(target);
+        }
+    }
 }
 void PlayerWindow::attachAudio(const QString &path) {
     if(!deferred_.isEmpty()){deferredAudio_=path;return;}

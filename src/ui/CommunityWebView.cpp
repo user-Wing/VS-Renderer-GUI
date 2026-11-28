@@ -396,7 +396,7 @@ struct CommunityWebView::Impl {
     void attachDocument()
     {
         auto local = query<ICoreWebView2_3>(view, IID_ICoreWebView2_3);
-        const auto root = QDir(QCoreApplication::applicationDirPath()).filePath("community-markdown");
+        const auto root = QDir(QCoreApplication::applicationDirPath()).filePath("tools/vditor");
         if (!local || !QFileInfo(QDir(root).filePath("index.html")).isFile() ||
             FAILED(local->SetVirtualHostNameToFolderMapping(L"vsr-markdown.invalid",
                 reinterpret_cast<LPCWSTR>(QDir::toNativeSeparators(root).utf16()), COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY))) {

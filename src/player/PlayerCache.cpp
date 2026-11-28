@@ -9,7 +9,7 @@
 namespace vsr {
 QString playerCacheDirectory(const QSettings &settings) {
     const auto custom=settings.value("cache/path").toString().trimmed();
-    return QDir::cleanPath(custom.isEmpty()?QDir(QCoreApplication::applicationDirPath()).filePath("cache/indexes"):QFileInfo(custom).absoluteFilePath());
+    return QDir::cleanPath(custom.isEmpty()?QFileInfo(settings.fileName()).dir().filePath("cache"):QFileInfo(custom).absoluteFilePath());
 }
 QString playerIndexPath(const QSettings &settings,const QString &source,const QString &extension) {
     const QFileInfo info(source);

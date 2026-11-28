@@ -1,6 +1,6 @@
 ﻿param(
     [Parameter(Mandatory = $true)][string]$SourceDirectory,
-    [string]$OutputDirectory = 'build/mingw-release/runtime/vlc'
+    [string]$OutputDirectory = 'build/mingw-release/tools/vlc'
 )
 $ErrorActionPreference = 'Stop'
 $source = (Resolve-Path -LiteralPath $SourceDirectory).Path

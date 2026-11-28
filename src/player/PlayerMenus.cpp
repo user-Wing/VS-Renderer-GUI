@@ -1,3 +1,9 @@
+#include <QClipboard>
+#include <QApplication>
+#include <QScreen>
+#include <QInputDialog>
+#include <QRegularExpression>
+#include "runtime/PortableLayout.h"
 #include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
 #include "player/PlayerImageTools.h"
@@ -81,7 +87,7 @@ void PlayerWindow::addCubeMenu(QMenu *menu)
     auto *cube = PlayerMenu::add(menu, tr("Cube 调色"));
     cube->setObjectName("playerCubeLuts");
     const bool canApply = canApplyCube();
-    cube->addAction(tr("导入 Cube…"), this, &PlayerWindow::loadCube);
+    cube->addAction(tr("导入 Cube…"), this, &PlayerWindow::loadCube)->setObjectName("playerImportCube");
     if (!canApply) cube->addAction(tr("适用于 SDR 图片或 Full 版本地 SDR 视频"))->setEnabled(false);
     auto *manual = cube->addAction(tr("手动指定工作色域"));
     manual->setCheckable(true);
@@ -107,46 +113,99 @@ void PlayerWindow::addCubeMenu(QMenu *menu)
     const auto library = playerCubeLibrary();
     for (const auto &name : library.entryList({"*.cube"}, QDir::Files | QDir::NoSymLinks, QDir::Name)) {
         const auto path = library.absoluteFilePath(name);
-        auto *action = cube->addAction(cubeLabel(path), this, [this, path] { applyCube(path); });
+        auto *action = cube->addAction(cubeLabel(path), this, [this, path] { applyCube(path); });action->setObjectName("playerCube/"+name);
         action->setCheckable(true);
         action->setChecked(QFileInfo(active) == QFileInfo(path));
         action->setToolTip(path);
         action->setEnabled(canApply);
     }
-    if (!active.isEmpty()) cube->addAction(tr("移除 Cube 调色"), this, [this] {
+    auto *clearCube=cube->addAction(tr("移除 Cube 调色"), this, [this] {
         if (imageMode_) imageTools_->clearCube();
         else { videoCubePath_.clear(); refreshScript(); }
     });
+    clearCube->setObjectName("playerClearCube");clearCube->setVisible(!active.isEmpty());
 }
 
 void PlayerWindow::showContextMenu(const QPoint &position) {
+    auto *menu=buildPlayerMenu(false);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->popup(position);
+}
+
+void PlayerWindow::triggerMenuShortcut(const QString &id) {
+    std::unique_ptr<QMenu> menu(buildPlayerMenu(false));
+    auto *action=menu->findChild<QAction*>(id);
+    if(!action || !action->isEnabled() || !action->isVisible())return;
+    for(auto *parent=action->parent();parent && parent!=menu.get();parent=parent->parent()) {
+        auto *folder=qobject_cast<QMenu*>(parent);
+        if(folder && (!folder->isEnabled() || !folder->menuAction()->isVisible()))return;
+    }
+    action->trigger();
+}
+
+QMenu *PlayerWindow::buildPlayerMenu(bool catalog) {
     if(!imageMode_){const auto refreshed=QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();if(!refreshed.isEmpty())media_=refreshed;}
     applyBlurayMetadata();
-    auto *menu=new PlayerMenu(this);menu->setObjectName("playerContextMenu");menu->setAttribute(Qt::WA_DeleteOnClose);
-    menu->addAction(tr("打开文件…"),this,&PlayerWindow::chooseFiles);
-    menu->addAction(tr("打开文件夹…"),this,&PlayerWindow::chooseFolder);
-    menu->addAction(tr("打开 BD 文件夹…"),this,&PlayerWindow::chooseBluRay);
-    menu->addAction(tr("打开 BD 光盘镜像…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("打开 BD 光盘镜像用于播放"),{},"Disc image (*.iso *.img *.vhd *.vhdx)");if(!path.isEmpty())openBluRay(path);});
-    menu->addAction(tr("打开链接…"),this,&PlayerWindow::chooseLink);
+    auto *menu=new PlayerMenu(this);menu->setObjectName("playerContextMenu");
+    menu->addAction(tr("打开文件…"),this,&PlayerWindow::chooseFiles)->setObjectName("playerOpenFile");
+    menu->addAction(tr("打开文件夹…"),this,&PlayerWindow::chooseFolder)->setObjectName("playerOpenFolder");
+    menu->addAction(tr("打开 BD 文件夹…"),this,&PlayerWindow::chooseBluRay)->setObjectName("playerOpenBD");
+    menu->addAction(tr("打开 BD 光盘镜像…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("打开 BD 光盘镜像用于播放"),{},"Disc image (*.iso *.img *.vhd *.vhdx)");if(!path.isEmpty())openBluRay(path);})->setObjectName("playerOpenDiscImage");
+    menu->addAction(tr("打开链接…"),this,&PlayerWindow::chooseLink)->setObjectName("playerOpenLink");
+    auto *resolution=PlayerMenu::add(menu,tr("分辨率"));
+    resolution->addAction(tr("自定义屏幕呈现…"),this,[this]{
+        bool ok=false;
+        const auto dpr=pane_->surface()->devicePixelRatioF();
+        const auto current=pane_->surface()->size()*dpr;
+        const auto text=QInputDialog::getText(this,tr("自定义屏幕呈现"),tr("输出像素（宽 × 高）"),QLineEdit::Normal,
+            QString("%1 × %2").arg(current.width()).arg(current.height()),&ok);
+        if(!ok)return;
+        const auto match=QRegularExpression(QStringLiteral("^\\s*(\\d{1,5})\\s*[xX×*]\\s*(\\d{1,5})\\s*$")).match(text);
+        const QSize pixels(match.captured(1).toInt(),match.captured(2).toInt());
+        if(!match.hasMatch() || pixels.isEmpty() || pixels.width()>16384 || pixels.height()>16384){setError(tr("请输入 1 到 16384 范围内的宽和高。"));return;}
+        if(isFullScreen())toggleFullscreen();
+        if(minimalMode_)setMinimalMode(false);
+        const QRect area=screen()->availableGeometry();
+        const QSize frame=frameGeometry().size()-size();
+        const QSize target=(pixels/dpr+size()-pane_->surface()->size()).expandedTo(QSize(540,160));
+        const QSize outer=target+frame;
+        if(!settings_->value("experimental/oversize",false).toBool() && (outer.width()>area.width() || outer.height()>area.height())){
+            setError(tr("尺寸超过当前屏幕，可在实验性功能中允许超屏呈现。"));return;
+        }
+        resize(target);
+        if(outer.width()>area.width() || outer.height()>area.height())move(area.right()-outer.width()+1,area.top());
+        layoutChrome();
+    })->setObjectName("playerResolution");
     addLoopMenu(menu);
-    if(!discRoot_.isEmpty())menu->addAction(tr("BD 主菜单 / 弹出菜单"),this,&PlayerWindow::returnToDiscMenu);
-    if(discMenu_ && discMenu_->active()){menu->addAction(tr("切回节目列表模式 (3FP)"),this,[this]{if(!files_.isEmpty())openFile(files_.first());});
+    if(catalog || !discRoot_.isEmpty())menu->addAction(tr("BD 主菜单 / 弹出菜单"),this,&PlayerWindow::returnToDiscMenu)->setObjectName("playerDiscMenu");
+    const bool discActive=discMenu_ && discMenu_->active();
+    if(catalog || discActive)menu->addAction(tr("切回节目列表模式 (3FP)"),this,[this]{if(!files_.isEmpty())openFile(files_.first());})->setObjectName("playerDiscProgramme");
+    if(discActive && !catalog){
         for(bool audio:{true,false}){auto *tracks=PlayerMenu::add(menu,audio?tr("音轨"):tr("字幕"));for(const auto &track:discMenu_->tracks(audio))tracks->addAction(track.second,this,[this,audio,id=track.first]{discMenu_->selectTrack(audio,id);});}
         addCubeMenu(menu);
-        menu->addAction(tr("设置…"),this,&PlayerWindow::showSettings);menu->addAction(tr("全屏 / 退出全屏"),this,&PlayerWindow::toggleFullscreen);menu->popup(position);return;
+        menu->addAction(tr("设置…"),this,&PlayerWindow::showSettings);menu->addAction(tr("全屏 / 退出全屏"),this,&PlayerWindow::toggleFullscreen);return menu;
     }
     auto *playlist=menu->addAction(tr("播放列表"));playlist->setCheckable(true);playlist->setChecked(playlistPinned_);connect(playlist,&QAction::toggled,this,&PlayerWindow::setPlaylistPinned);
     auto *wheel=PlayerMenu::add(menu,tr("鼠标滚轮"));auto *wheelGroup=new QActionGroup(wheel);for(const auto &mode:QStringList{"volume","zoom"}){auto *action=wheel->addAction(mode=="volume"?tr("音量调节"):imageMode_?tr("放大图片"):tr("放大视频"));action->setCheckable(true);action->setChecked((imageMode_?QString("zoom"):settings_->value("player/wheel","volume").toString())==mode);action->setEnabled(!imageMode_ || mode=="zoom");wheelGroup->addAction(action);connect(action,&QAction::triggered,this,[this,mode]{settings_->setValue("player/wheel",mode);});}
     menu->addSeparator();
     addCubeMenu(menu);
     auto *shaders=PlayerMenu::add(menu,tr("自定义 GLSL/HLSL 着色器"));shaders->setObjectName("playerCustomShaders");
-    shaders->addAction(tr("导入着色器…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("导入 GLSL/HLSL 着色器"),customShaderDirectory(),"Shaders (*.hlsl *.glsl *.hook)");if(!path.isEmpty())importCustomShader(path);});
+    shaders->addAction(tr("导入着色器…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("导入 GLSL/HLSL 着色器"),customShaderDirectory(),"Shaders (*.hlsl *.glsl *.hook *.vsrhlsl)");if(!path.isEmpty())importCustomShader(path);})->setObjectName("playerImportShader");
     shaders->addAction(tr("存储路径（浏览）…"),this,[this]{const auto directory=QFileDialog::getExistingDirectory(this,tr("着色器存储路径"),customShaderDirectory());if(!directory.isEmpty())settings_->setValue("render/shaderDirectory",directory);});
-    const QDir shaderDirectory(customShaderDirectory());
-    for(const auto &name:shaderDirectory.entryList({"*.hlsl","*.glsl","*.hook"},QDir::Files,QDir::Name)){
-        const auto path=shaderDirectory.filePath(name);auto *action=shaders->addAction(name,this,[this,path]{importCustomShader(path);});action->setCheckable(true);action->setChecked(QFileInfo(settings_->value("render/customShader").toString())==QFileInfo(path));
+    const QDir bundled(QDir(QCoreApplication::applicationDirPath()).filePath("shaders"));
+    const auto files=bundled.entryList({"*.hlsl"},QDir::Files,QDir::Name);
+    if(!files.isEmpty()) {
+        auto *library=PlayerMenu::add(shaders,tr("随附着色器"));
+        for(const auto &name:files) {
+            auto *action=library->addAction(QFileInfo(name).completeBaseName(),this,[this,bundled,name]{importCustomShader(bundled.filePath(name));});
+            action->setObjectName("playerBundledShader/"+name);
+        }
     }
-    shaders->addSeparator();shaders->addAction(tr("关闭自定义着色器"),this,[this]{settings_->remove("render/customShader");customShaderPackage_.clear();hlslParameters_.clear();clock_->setCustomShader({});output_->setCustomShader({});if(!source_.isEmpty())refreshScript();else applyScaling();});
+    const QDir shaderDirectory(customShaderDirectory());
+    for(const auto &name:shaderDirectory.entryList({"*.hlsl","*.glsl","*.hook","*.vsrhlsl"},QDir::Files,QDir::Name)){
+        const auto path=shaderDirectory.filePath(name);auto *action=shaders->addAction(name,this,[this,path]{importCustomShader(path);});action->setObjectName("playerShader/"+name);action->setCheckable(true);action->setChecked(QFileInfo(settings_->value("render/customShader").toString())==QFileInfo(path));
+    }
+    shaders->addSeparator();shaders->addAction(tr("关闭自定义着色器"),this,[this]{settings_->remove("render/customShader");customShaderPackage_.clear();hlslParameters_.clear();clock_->setCustomShader({});output_->setCustomShader({});if(!source_.isEmpty())refreshScript();else applyScaling();})->setObjectName("playerClearShader");
     shaders->setEnabled(!imageMode_ && !audioMode_ && !madvrMode() && !networkSource());
 #ifndef VSR_LITE_PLAYER
     auto *presets=PlayerMenu::add(menu,tr("VapourSynth 预设"));
@@ -156,18 +215,18 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
         while(files.hasNext()) {
             const auto path=files.next();const auto relative=QDir(directory).relativeFilePath(path);
             if(relative.startsWith("builtin/") || relative.startsWith("Community/",Qt::CaseInsensitive))continue;
-            auto *action=list->addAction(relative,this,[this,path]{loadPreset(path);});
+            auto *action=list->addAction(relative,this,[this,path]{loadPreset(path);});action->setObjectName("playerVpy/"+QDir(PresetStore::directory()).relativeFilePath(path));
             action->setToolTip(PresetStore::description(path));
             action->setCheckable(true);action->setChecked(QFileInfo(preset_)==QFileInfo(path));
         }
         if(list->isEmpty())list->addAction(tr("暂无预设"))->setEnabled(false);
         return list;
     };
-    auto *user=presetMenu(tr("用户自定义"),PresetStore::directory());
-    presetMenu(tr("社区下载"),QDir(PresetStore::directory()).filePath("Community"));
+    auto *user=presetMenu(tr("用户自定义"),QDir(PresetStore::directory()).filePath("user"));
+    presetMenu(tr("社区下载"),QDir(PresetStore::directory()).filePath("community"));
     user->addSeparator();auto *hlsl=user->addAction(tr("以 HLSL 执行"));hlsl->setObjectName("playerVpyHlsl");hlsl->setCheckable(true);hlsl->setChecked(settings_->value("render/hlsl",true).toBool());
     connect(hlsl,&QAction::toggled,this,[this](bool enabled){settings_->setValue("render/hlsl",enabled);hlslFailed_=false;hlslFallback_.clear();if(!source_.isEmpty())refreshScript();});
-    user->addAction(tr("加载 VPY 文件…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("加载 VPY"),PresetStore::directory(),"VapourSynth (*.vpy)");if(!path.isEmpty())loadPreset(path);});
+    user->addAction(tr("加载 VPY 文件…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("加载 VPY"),PresetStore::directory(),"VapourSynth (*.vpy)");if(!path.isEmpty())loadPreset(path);})->setObjectName("playerLoadVpy");
     presets->setEnabled(!imageMode_);
 #endif
     QFile descriptions(
@@ -211,7 +270,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
             action->setCheckable(true);action->setChecked(settings_->value(key,primary?15:4).toInt()==algorithm && (!primary || direct_ && (!nativeAnime_ || qualityStage_==4 || qualityStage_==5)));group->addAction(action);
             connect(action,&QAction::triggered,this,[this,key,algorithm,primary]{
                 if(primary)loadPreset(QDir(PresetStore::directory()).filePath(algorithm==4?"builtin/Anime-4-Jinc.vpy":"builtin/Anime-5-D3D11.vpy"));
-                settings_->setValue(key,algorithm);applyScaling();(direct_?clock_:output_)->redraw();
+                settings_->setValue(key,algorithm);applyScaling();updateAlgorithmBadges();(direct_?clock_:output_)->redraw();
             });
         }
     };
@@ -232,16 +291,16 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     auto *autoInterpolation=PlayerMenu::add(interpolation,tr("自动切换"));autoInterpolation->setObjectName("playerInterpolationAuto");describeCategory(autoInterpolation,"menu/interpolationAuto");
     for(int renderer=0;renderer<2;++renderer)interpolationChoice(autoInterpolation,renderer?tr("D3D11 模式"):tr("Jinc 模式"),0,true,renderer)->setEnabled(!interpolationStages(renderer).isEmpty());
     for(int renderer=0;renderer<2;++renderer){interpolation->addSeparator();auto *folder=PlayerMenu::add(interpolation,renderer?tr("D3D11 模式"):tr("Jinc 模式"));folder->setObjectName(renderer?"playerInterpolationD3D11":"playerInterpolationJinc");describeCategory(folder,renderer?"menu/interpolationD3D11":"menu/interpolationJinc");for(int stage=0;stage<4;++stage)interpolationChoice(folder,interpolationNames().at(stage),stage,false,renderer);}
-    interpolation->addSeparator();interpolation->addAction(tr("关闭"),this,[this]{setInterpolation(-1,false);});
+    interpolation->addSeparator();interpolation->addAction(tr("关闭"),this,[this]{setInterpolation(-1,false);})->setObjectName("playerInterpolationOff");
     auto *super=PlayerMenu::add(processing,tr("超分补帧组合"));super->setObjectName("playerSuperInterpolation");describeCategory(super,"menu/superInterpolation");
     const QStringList superFiles{"Super-0-A4K-RIFE-A4K.vpy","Super-1-A4K-RIFE-Jinc.vpy","Super-2-A4K-RIFE-D3D11.vpy","Super-3-RIFE-A4K.vpy"};
     const QStringList superNames{tr("Anime4K 2160 → RIFE 整帧540p → Anime4K 2160"),tr("Anime4K 2160 → RIFE 整帧540p → Jinc 2160"),tr("Anime4K 2160 → RIFE 整帧540p → D3D11 2160"),tr("1080 → RIFE 半尺寸推理/保留原帧 → Anime4K 2160")};
-    for(int stage=0;stage<superFiles.size();++stage){const auto path=QDir(PresetStore::directory()).filePath("builtin/"+superFiles[stage]);auto *action=super->addAction(superNames[stage],this,[this,path]{loadPreset(path);});action->setCheckable(true);action->setChecked(superInterpolationStage()==stage);action->setToolTip(PresetStore::description(path));}
+    for(int stage=0;stage<superFiles.size();++stage){const auto path=QDir(PresetStore::directory()).filePath("builtin/"+superFiles[stage]);auto *action=super->addAction(superNames[stage],this,[this,path]{loadPreset(path);});action->setObjectName("playerSuper/"+superFiles[stage]);action->setCheckable(true);action->setChecked(superInterpolationStage()==stage);action->setToolTip(PresetStore::description(path));}
 #endif
     bool hasVideo=false;for(const auto &entry:media_.value("streams").toArray())if(entry.toObject().value("type").toString()=="video")hasVideo=true;
     processing->setEnabled(!imageMode_ && !madvrMode() && !networkSource() && (source_.isEmpty() || hasVideo));
     auto *hdrMapping=PlayerMenu::add(processing,tr("HDR 映射"));
-    auto *hdrEnable=hdrMapping->addAction(tr("RTX TrueHDR · SDR→HDR"));hdrEnable->setCheckable(true);hdrEnable->setChecked(settings_->value("render/trueHdr",false).toBool());
+    auto *hdrEnable=hdrMapping->addAction(tr("RTX TrueHDR · SDR→HDR"));hdrEnable->setObjectName("playerTrueHdr");hdrEnable->setCheckable(true);hdrEnable->setChecked(settings_->value("render/trueHdr",false).toBool());
     connect(hdrEnable,&QAction::triggered,this,[this](bool enabled){
         if(enabled && (!direct_ || scalingAlgorithm()!=7)){QMessageBox::information(this,tr("HDR 映射"),tr("请切换到d3d11模式"));return;}
         settings_->setValue("render/trueHdr",enabled);applyScaling();(direct_?clock_:output_)->redraw();
@@ -250,22 +309,24 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     const QStringList hdrReasons{tr("已就绪"),tr("尚未请求"),tr("当前显卡不是 NVIDIA"),tr("驱动不支持"),tr("源视频不是 SDR"),tr("当前输出不是 HDR"),tr("源像素格式不支持"),tr("驱动拒绝处理")};
     auto *hdrStatus=hdrMapping->addAction(hdrState.active?tr("状态：内核已启用"):tr("状态：未生效 · %1").arg(hdrReasons.value(int(hdrState.reason),tr("未知状态"))));hdrStatus->setEnabled(false);
     hdrMapping->addAction(tr("详细配置…"),this,[this]{setProperty("settingsPage",5);showSettings();});
-    auto *vsr=processing->addAction(tr("RTX Video Super Resolution"));vsr->setCheckable(true);vsr->setChecked(settings_->value("render/rtxVsr",false).toBool());
+    auto *vsr=processing->addAction(tr("RTX Video Super Resolution"));vsr->setObjectName("playerRtxVsr");vsr->setCheckable(true);vsr->setChecked(settings_->value("render/rtxVsr",false).toBool());
     connect(vsr,&QAction::triggered,this,[this](bool enabled){if(enabled){QMessageBox::information(this,tr("RTX Super Resolution"),tr("将禁用内置滤镜，切换至 D3D11 直通。"));settings_->setValue("render/upscale",7);settings_->remove("render/customShader");customShaderPackage_.clear();loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));}settings_->setValue("render/rtxVsr",enabled);applyScaling();(direct_?clock_:output_)->redraw();});
     auto *audio=PlayerMenu::add(menu,tr("音频设置"));audio->setEnabled(!imageMode_ && !source_.isEmpty());
     auto *audioTracks=PlayerMenu::add(audio,tr("声音轨道"));auto *audioGroup=new QActionGroup(audioTracks);
     const auto selected=clock_->snapshot().selectedAudioStream;
     int audioOrdinal=0;
     for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()!="audio")continue;const int index=stream.value("index").toInt();auto *action=audioTracks->addAction(playerTrackLabel(stream,audioOrdinal++),this,[this,index]{selectAudio(index);});action->setToolTip(QString("%1 · %2 ch · stream 0:%3").arg(stream.value("codec").toString()).arg(stream.value("channels").toInt()).arg(index));action->setCheckable(true);action->setChecked(externalAudio_.isEmpty() && selected==index);audioGroup->addAction(action);}
-    if(!externalAudio_.isEmpty()){auto *mounted=audioTracks->addAction(tr("挂载：%1").arg(QFileInfo(externalAudio_).fileName()));mounted->setCheckable(true);mounted->setChecked(true);audioGroup->addAction(mounted);audioTracks->addAction(tr("卸载外部音频"),this,[this]{if(clock_->clearExternalAudio())externalAudio_.clear();});}
-    audioTracks->addSeparator();audioTracks->addAction(tr("挂载音频文件…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("挂载音频"),{},"Audio (*.mka *.aac *.ac3 *.dts *.eac3 *.flac *.m4a *.mp3 *.ogg *.opus *.wav *.wma)");if(!path.isEmpty())attachAudio(path);})->setEnabled(!audioMode_);
-    auto *sync=PlayerMenu::add(audio,tr("声音同步"));sync->addAction(tr("复位"),this,[this]{audioDelay_=0;applyAudioEffects();});sync->addAction(tr("滞后 0.1s"),this,[this]{audioDelay_+=1000000;applyAudioEffects();});sync->addAction(tr("提前 0.1s"),this,[this]{audioDelay_-=1000000;applyAudioEffects();});auto *offset=sync->addAction(tr("当前偏移：%1 s").arg(audioDelay_/10000000.0,0,'f',1));offset->setEnabled(false);
+    if(!externalAudio_.isEmpty()){auto *mounted=audioTracks->addAction(tr("挂载：%1").arg(QFileInfo(externalAudio_).fileName()));mounted->setCheckable(true);mounted->setChecked(true);audioGroup->addAction(mounted);}
+    auto *detachAudio=audioTracks->addAction(tr("卸载外部音频"),this,[this]{if(clock_->clearExternalAudio())externalAudio_.clear();});
+    detachAudio->setObjectName("playerDetachAudio");detachAudio->setVisible(!externalAudio_.isEmpty());
+    audioTracks->addSeparator();auto *attachAudioFile=audioTracks->addAction(tr("挂载音频文件…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("挂载音频"),{},"Audio (*.mka *.aac *.ac3 *.dts *.eac3 *.flac *.m4a *.mp3 *.ogg *.opus *.wav *.wma)");if(!path.isEmpty())attachAudio(path);});attachAudioFile->setObjectName("playerAttachAudio");attachAudioFile->setEnabled(!audioMode_);
+    auto *sync=PlayerMenu::add(audio,tr("声音同步"));sync->addAction(tr("复位"),this,[this]{audioDelay_=0;applyAudioEffects();})->setObjectName("playerAudioSyncReset");sync->addAction(tr("滞后 0.1s"),this,[this]{audioDelay_+=1000000;applyAudioEffects();})->setObjectName("playerAudioDelay");sync->addAction(tr("提前 0.1s"),this,[this]{audioDelay_-=1000000;applyAudioEffects();})->setObjectName("playerAudioAdvance");auto *offset=sync->addAction(tr("当前偏移：%1 s").arg(audioDelay_/10000000.0,0,'f',1));offset->setEnabled(false);
     auto *muted=audio->addAction(tr("静音"));muted->setCheckable(true);muted->setChecked(mute_->isChecked());connect(muted,&QAction::toggled,mute_,&QPushButton::setChecked);
     audio->addAction(tr("均衡器…"),this,&PlayerWindow::showEqualizer);
     auto *normalize=audio->addAction(tr("动态响度标准化（低延迟）"));normalize->setObjectName("playerLoudnessNormalization");normalize->setCheckable(true);normalize->setChecked(settings_->value("audio/normalize",false).toBool());connect(normalize,&QAction::toggled,this,[this](bool enabled){settings_->setValue("audio/normalize",enabled);applyAudioEffects();});
     auto *subtitles=PlayerMenu::add(menu,tr("字幕设置"));
 #ifndef VSR_LITE_PLAYER
-    auto *ai=subtitles->addAction(tr("AI 实时字幕"));ai->setCheckable(true);ai->setChecked(aiSubtitles_ && aiSubtitles_->active());
+    auto *ai=subtitles->addAction(tr("AI 实时字幕"));ai->setObjectName("playerAiSubtitles");ai->setCheckable(true);ai->setChecked(aiSubtitles_ && aiSubtitles_->active());
     ai->setEnabled(!source_.isEmpty() && !madvrMode());
     connect(ai,&QAction::triggered,this,[this](bool enabled){
         if(!aiSubtitles_){
@@ -275,7 +336,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
             connect(aiSubtitles_,&PlayerAiSubtitles::caption,this,[this](const QString &text){const auto size=pane_->surface()->size();aiCaption_->setGeometry(24,qMax(0,size.height()-180),qMax(1,size.width()-48),120);aiCaption_->setText(text);aiCaption_->setVisible(!text.isEmpty() && subtitleVisible_);aiCaption_->raise();});
         }
         if(!enabled){aiSubtitles_->stop();return;}
-        const auto package=settings_->value("ai/package",QDir(QCoreApplication::applicationDirPath()).filePath("runtime/ai-subtitles/ai-subtitles.json")).toString();
+        const auto package=settings_->value("ai/package",QDir(QCoreApplication::applicationDirPath()).filePath("tools/ai-subtitles/ai-subtitles.json")).toString();
         QJsonObject data;const auto validation=PlayerAiSubtitles::validatePackage(package,&data);if(!validation.isEmpty()){setError(validation);return;}
         const auto fingerprint=data.value("executableFingerprint").toString();
         if(settings_->value("ai/trustedExecutableFingerprint").toString()!=fingerprint){
@@ -287,7 +348,7 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
     });
 #endif
     const auto matchedSubtitles=networkSource() || imageMode_ || audioMode_ || source_.isEmpty()?QStringList{}:playerMatchingSubtitles(source_);
-    const auto tracks=[&](const QString &title,int slot) {auto *list=PlayerMenu::add(subtitles,title);auto *group=new QActionGroup(list);group->setExclusive(true);auto *off=list->addAction(tr("无"),this,[this,slot]{selectSubtitle(slot,-1);});off->setCheckable(true);off->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==-1);group->addAction(off);
+    const auto tracks=[&](const QString &title,int slot) {auto *list=PlayerMenu::add(subtitles,title);auto *group=new QActionGroup(list);group->setExclusive(true);auto *off=list->addAction(tr("无"),this,[this,slot]{selectSubtitle(slot,-1);});off->setObjectName(slot?"playerSecondarySubtitleOff":"playerPrimarySubtitleOff");off->setCheckable(true);off->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==-1);group->addAction(off);
         const auto external=slot==0?externalSubtitle_:externalSecondarySubtitle_;
         if(!external.isEmpty()) {auto *mounted=list->addAction(tr("挂载：%1").arg(QFileInfo(external).fileName()),this,[this,slot]{selectSubtitle(slot,-2);});mounted->setCheckable(true);mounted->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==-2);group->addAction(mounted);}
         for(const auto &path:matchedSubtitles)if(path!=external){auto *action=list->addAction(QFileInfo(path).fileName(),this,[this,path,slot]{attachSubtitle(path,slot);});action->setToolTip(path);action->setCheckable(true);group->addAction(action);}
@@ -296,11 +357,11 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
         for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()!="subtitle")continue;const int index=stream.value("index").toInt();auto *action=list->addAction(playerTrackLabel(stream,ordinal++),this,[this,slot,index]{selectSubtitle(slot,index);});action->setToolTip(QString("%1 · stream 0:%2").arg(stream.value("codec").toString()).arg(index));action->setCheckable(true);action->setChecked((slot==0?primarySubtitle_:secondarySubtitle_)==index);group->addAction(action);}
     };
     tracks(tr("选择字幕 · 底部"),0);tracks(tr("选择次字幕 · 顶部"),1);
-    auto *visible=subtitles->addAction(tr("显示字幕"));visible->setCheckable(true);visible->setChecked(subtitleVisible_);connect(visible,&QAction::toggled,this,[this](bool on){subtitleVisible_=on;settings_->setValue("subtitle/visible",on);if(aiCaption_)aiCaption_->setVisible(on && !aiCaption_->text().isEmpty());});
-    subtitles->addAction(tr("切换首 / 次字幕"),this,[this]{{const auto primary=primarySubtitle_;std::swap(externalSubtitle_,externalSecondarySubtitle_);std::swap(externalSubtitleTracks_[0],externalSubtitleTracks_[1]);std::swap(externalSubtitleIndex_[0],externalSubtitleIndex_[1]);selectSubtitle(0,secondarySubtitle_);selectSubtitle(1,primary);}});
-    subtitles->addAction(tr("挂载字幕文件…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("挂载字幕"),{},"Subtitles (*.ass *.ssa *.srt *.sup *.mks)");if(!path.isEmpty())attachSubtitle(path);});
-    subtitles->addAction(tr("卸载挂载字幕，恢复内置选择"),this,[this]{externalSubtitle_.clear();externalSecondarySubtitle_.clear();externalSubtitleTracks_[0]={};externalSubtitleTracks_[1]={};externalSubtitleIndex_[0]=externalSubtitleIndex_[1]=-1;externalChapters_={};media_=QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();applyBlurayMetadata();timeline_->setProperty("chapters",media_.value("chapters").toArray());audioSubtitle_->hide();selectSubtitle(0,-1);selectSubtitle(1,-1);})->setEnabled(!externalSubtitle_.isEmpty() || !externalSecondarySubtitle_.isEmpty());
-    subtitles->addAction(tr("字幕样式设置…(SRT)"),this,&PlayerWindow::showSubtitleStyle);
+    auto *visible=subtitles->addAction(tr("显示字幕"));visible->setObjectName("playerSubtitleVisible");visible->setCheckable(true);visible->setChecked(subtitleVisible_);connect(visible,&QAction::toggled,this,[this](bool on){subtitleVisible_=on;settings_->setValue("subtitle/visible",on);if(aiCaption_)aiCaption_->setVisible(on && !aiCaption_->text().isEmpty());});
+    subtitles->addAction(tr("切换首 / 次字幕"),this,[this]{{const auto primary=primarySubtitle_;std::swap(externalSubtitle_,externalSecondarySubtitle_);std::swap(externalSubtitleTracks_[0],externalSubtitleTracks_[1]);std::swap(externalSubtitleIndex_[0],externalSubtitleIndex_[1]);selectSubtitle(0,secondarySubtitle_);selectSubtitle(1,primary);}})->setObjectName("playerSwapSubtitles");
+    subtitles->addAction(tr("挂载字幕文件…"),this,[this]{const auto path=QFileDialog::getOpenFileName(this,tr("挂载字幕"),{},"Subtitles (*.ass *.ssa *.srt *.sup *.mks)");if(!path.isEmpty())attachSubtitle(path);})->setObjectName("playerAttachSubtitle");
+    auto *detachSubtitles=subtitles->addAction(tr("卸载挂载字幕，恢复内置选择"),this,[this]{externalSubtitle_.clear();externalSecondarySubtitle_.clear();externalSubtitleTracks_[0]={};externalSubtitleTracks_[1]={};externalSubtitleIndex_[0]=externalSubtitleIndex_[1]=-1;externalChapters_={};media_=QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();applyBlurayMetadata();timeline_->setProperty("chapters",media_.value("chapters").toArray());audioSubtitle_->hide();selectSubtitle(0,-1);selectSubtitle(1,-1);});detachSubtitles->setObjectName("playerDetachSubtitles");detachSubtitles->setEnabled(!externalSubtitle_.isEmpty() || !externalSecondarySubtitle_.isEmpty());
+    subtitles->addAction(tr("字幕样式设置…(SRT)"),this,&PlayerWindow::showSubtitleStyle)->setObjectName("playerSubtitleStyle");
     subtitles->setEnabled(!imageMode_);
     if(!media_.value("chapters").toArray().isEmpty()){auto *chapters=PlayerMenu::add(menu,tr("章节"));for(const auto &value:media_.value("chapters").toArray()){const auto chapter=value.toObject();const auto at=qint64(chapter.value("start100ns").toDouble());chapters->addAction(chapter.value("title").toString()+QString(" · %1 s").arg(at/10000000.,0,'f',3),this,[this,at]{seekTime(at);});}}
     auto *capture=PlayerMenu::add(menu,tr("图像截取"));
@@ -310,11 +371,13 @@ void PlayerWindow::showContextMenu(const QPoint &position) {
         auto *normal=PlayerMenu::add(capture,label),*specified=PlayerMenu::add(captureTo,label);
         for(bool source:{true,false}) {
             const auto text=source?(imageMode_?tr("图片原始像素"):direct_?tr("当前源画面"):tr("当前源画面 · VS 处理后")):tr("实画面 · 含字幕及显示效果");
-            normal->addAction(text,this,[this,source,format]{captureImage(source,{},format);})->setEnabled(!source || !madvrMode() || imageMode_);
-            specified->addAction(text,this,[this,source,format]{const auto directory=QFileDialog::getExistingDirectory(this,tr("选择截图保存文件夹"),screenshotDirectory());if(!directory.isEmpty())captureImage(source,directory,format);})->setEnabled(!source || !madvrMode() || imageMode_);
+            auto *captureAction=normal->addAction(text,this,[this,source,format]{captureImage(source,{},format);});
+            captureAction->setObjectName("playerCapture/"+format+(source?"/source":"/display"));captureAction->setEnabled(!source || !madvrMode() || imageMode_);
+            auto *saveAction=specified->addAction(text,this,[this,source,format]{const auto directory=QFileDialog::getExistingDirectory(this,tr("选择截图保存文件夹"),screenshotDirectory());if(!directory.isEmpty())captureImage(source,directory,format);});
+            saveAction->setObjectName("playerCaptureTo/"+format+(source?"/source":"/display"));saveAction->setEnabled(!source || !madvrMode() || imageMode_);
         }
     }
-    menu->addSeparator();menu->addAction(isFullScreen()?tr("退出全屏 · Enter / Esc"):tr("全屏 · Enter"),this,&PlayerWindow::toggleFullscreen);menu->addAction(tr("设置…"),this,&PlayerWindow::showSettings);menu->popup(position);
+    menu->addSeparator();menu->addAction(isFullScreen()?tr("退出全屏 · Enter / Esc"):tr("全屏 · Enter"),this,&PlayerWindow::toggleFullscreen);menu->addAction(tr("设置…"),this,&PlayerWindow::showSettings);return menu;
 }
 void PlayerWindow::showSubtitleStyle() {
     QDialog dialog(this);dialog.setObjectName("playerSubtitleStyle");dialog.setWindowTitle(tr("字幕样式 · 仅 SRT"));dialog.resize(720,550);auto *outer=new QVBoxLayout(&dialog);outer->addWidget(new QLabel(tr("SRT 使用以下样式；ASS/SSA 保留原始高级样式与特效，SUP 保留位图。"),&dialog));auto *body=new QHBoxLayout;outer->addLayout(body);
@@ -334,15 +397,15 @@ void PlayerWindow::showSubtitleStyle() {
     if(dialog.exec()==QDialog::Accepted){settings_->setValue("subtitle/style/font",font->currentFont().family());settings_->setValue("subtitle/style/bold",bold->isChecked());settings_->setValue("subtitle/style/italic",italic->isChecked());settings_->setValue("subtitle/style/alignment",alignment->currentData());settings_->setValue("subtitle/style/box",box->isChecked());for(auto it=numbers.begin();it!=numbers.end();++it)settings_->setValue("subtitle/style/"+it.key(),it.value()->value());for(auto it=choices.begin();it!=choices.end();++it)settings_->setValue("subtitle/style/"+it.key(),it.value()->property("color"));selectSubtitle(0,primarySubtitle_);selectSubtitle(1,secondarySubtitle_);settings_->sync();}
 }
 void PlayerWindow::saveScreenshot(const QString &path,const QImage &image,const QJsonObject &metadata){
-    auto *watcher=new QFutureWatcher<QString>(this);connect(watcher,&QFutureWatcher<QString>::finished,this,[this,watcher,path]{const auto error=watcher->result();watcher->deleteLater();screenshotPending_=false;setError(error.isEmpty()?tr("已保存 %1 截图：%2").arg(QFileInfo(path).suffix().toUpper(),path):tr("截图失败：%1").arg(error));});
+    auto *watcher=new QFutureWatcher<QString>(this);connect(watcher,&QFutureWatcher<QString>::finished,this,[this,watcher,path,image,copy=metadata.value("copyToClipboard").toBool()]{const auto error=watcher->result();if(error.isEmpty() && copy) QApplication::clipboard()->setImage(image);watcher->deleteLater();screenshotPending_=false;setError(error.isEmpty()?tr("已保存 %1 截图：%2").arg(QFileInfo(path).suffix().toUpper(),path):tr("截图失败：%1").arg(error));});
     watcher->setFuture(QtConcurrent::run([path,image,metadata]{return writeScreenshot(path,image,metadata);}));
 }
-QString PlayerWindow::screenshotDirectory() const {const auto path=settings_->value("screenshot/path").toString().trimmed();return path.isEmpty()?QDir(QCoreApplication::applicationDirPath()).filePath("screenshots"):QFileInfo(path).absoluteFilePath();}
-void PlayerWindow::captureImage(bool source,const QString &directory,const QString &extension) {
+QString PlayerWindow::screenshotDirectory() const {const auto path=settings_->value("screenshot/path").toString().trimmed();return path.isEmpty()?QDir(programRoot()).filePath("screenshots"):QFileInfo(path).absoluteFilePath();}
+void PlayerWindow::captureImage(bool source,const QString &directory,const QString &extension,bool copy) {
     if(screenshotPending_){setError(tr("正在保存截图，请稍候。"));return;}
     if(source && !imageMode_ && !direct_ && displayedFrame_.planes[0].isEmpty()) {setError(tr("还没有可截取的 VS 帧。"));return;}
     const QDir dir(directory.isEmpty()?screenshotDirectory():directory);QDir().mkpath(dir.absolutePath());const auto name=QString("%1-%2-%3.%4").arg(QFileInfo(source_).completeBaseName(),QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz"),source?(imageMode_ || direct_?"source":"VS"):"display",extension);const QString file=dir.filePath(name);
-    QJsonObject metadata{{"sourceFile",source_},{"stage",source?"source":"display"},{"position100ns",double(position())},{"hdr",false},{"encoding","encoded-RGB"}};
+    QJsonObject metadata{{"copyToClipboard",copy},{"sourceFile",source_},{"stage",source?"source":"display"},{"position100ns",double(position())},{"hdr",false},{"encoding","encoded-RGB"}};
     if(imageMode_){const auto image=source?pane_->image():pane_->captureImage();if(image.isNull()){setError(tr("没有可截取画面。"));return;}const auto transfer=image.colorSpace().transferFunction();const auto format=image.format();const bool floating=format==QImage::Format_RGBA32FPx4 || format==QImage::Format_RGBA16FPx4 || format==QImage::Format_RGBX32FPx4 || format==QImage::Format_RGBX16FPx4;metadata["hdr"]=floating || transfer==QColorSpace::TransferFunction::St2084 || transfer==QColorSpace::TransferFunction::Hlg;if(transfer==QColorSpace::TransferFunction::Linear)metadata["encoding"]="linear-RGB";metadata["inputBitDepthPerChannel"]=image.pixelFormat().bitsPerPixel()/std::max(1,int(image.pixelFormat().channelCount()));screenshotPending_=true;saveScreenshot(file,image,metadata);return;}
     if(!source){auto *renderer=direct_?clock_.get():output_.get();const auto status=renderer->colorStatus();auto image=madvrMode()&&lav_?lav_->capture():renderer->captureFloat();if(image.isNull()){setError(tr("当前渲染器未返回可截取画面。"));return;}
         metadata["hdr"]=!madvrMode() && status.outputHdr;metadata["inputBitDepthPerChannel"]=madvrMode()?8:int(status.outputBits);metadata["renderer"]=madvrMode()?"madVR 8-bit capture interface":QString::fromUtf8(status.engine);metadata["qtInfoOverlay"]=infoVisible_;metadata["readbackBitDepth"]=image.text("readbackBitDepth").toInt();metadata["captureStorageBits"]=madvrMode()?8:image.text("readbackBitDepth").toInt();metadata["outputHdr"]=bool(status.outputHdr);metadata["tone"]=int(status.tone);metadata["gamut"]=int(status.gamut);metadata["dither"]=int(status.dither);metadata["targetPeakNits"]=status.targetPeak;metadata["iccProfile"]=QString::fromUtf8(status.profile);metadata["lutActive"]=bool(status.lutActive);

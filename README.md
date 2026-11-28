@@ -1,10 +1,12 @@
 # VS Renderer / VS Player / VS Cap
 
-![源码版本 1.1.6](https://img.shields.io/badge/source-1.1.6-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
+![源码版本 1.2.0](https://img.shields.io/badge/source-1.2.0-blue) ![Windows x64](https://img.shields.io/badge/platform-Windows_x64-blue) ![MIT](https://img.shields.io/badge/license-MIT-green)
 
 Windows 上的视频处理与播放工具，基于 C++20 / Qt Widgets：用 **VS Renderer** 编排 VapourSynth 滤镜、比较画面并导出，用 **VS Player** 播放视频、音频和图片（含 LibRaw 相机 RAW），用 **VSCap** 截图与标注。
 
 [下载便携包](https://github.com/user-Wing/VS-Renderer-GUI/releases) · [ModelScope 下载源](https://modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI) · [操作指南](docs/README.md) · [更新日志](changelog.md)
+
+缩小窗口可进入极简控制栏，拉宽后恢复视频。按 Z、X、C 可打开或切换视频、音频、字幕选轨菜单，再按同一键关闭。也可点击对应标签选轨，字幕菜单内按 Ctrl 加数字可选择次字幕。在播放器「设置 → 快捷键」中可搜索功能名或文件名，给滤镜或「在 VS Renderer 中打开当前视频」分配按键。NCNN 增强组件可在组件管理中按需下载。
 
 ## 功能介绍
 
@@ -34,7 +36,7 @@ VS增强需使用配套Native内核；旧内核无法保留新增帧信息时会
 | 分发形式 | 功能与运行要求 |
 | --- | --- |
 | Full | Renderer、Player、VSCap、VS 滤镜及完整编辑/可选后端；以所下载包的组件清单为准 |
-| 单文件 `VS-Player.exe` | 独立播放器，支持内置 MoeSR-50K、Anime4K A CNN、AFast CNN、AFast 1X 及各自的额外增强档、D3D11/Jinc、兼容 GLSL/HLSL 导入、音视频字幕及图片查看；在程序旁解包并保存 `player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
+| 单文件 `VS-Player.exe` | 独立播放器，支持内置 MoeSR-50K、Anime4K A CNN、AFast CNN、AFast 1X 及各自的额外增强档、D3D11/Jinc、兼容 GLSL/HLSL 导入、音视频字幕及图片查看；在程序旁临时解包，设置保存在外置 `config/player.ini`；需要外置 FFmpeg shared x64，配置方法见 [安装与更新](docs/portable-updates.md) |
 
 Full 和单文件 Player 首次打开后会保留一个预热窗口，并默认登记登录待机。单文件版启动时会在同目录释放 `killvsp.exe`，手动更新前可双击它结束待机。 [关闭待机与更新](docs/portable-updates.md)
 
@@ -44,7 +46,7 @@ Full 和单文件 Player 首次打开后会保留一个预热窗口，并默认�
 
 ## 快速上手
 
-**视频处理**：在 Renderer 打开视频 → 添加滤镜或加载预设 → 选中处理路并点击“渲染预览” → 比较画面 → 保存预设或加入导出队列。按段使用不同滤镜、社区预设和多路对比见 [Renderer 指南](docs/renderer.md)。
+**视频处理**：在 Renderer 打开视频 → 添加滤镜或加载预设 → 选中处理路并点击“渲染预览” → 比较画面 → 保存预设或加入导出队列。可从 3FUI 插件将 FFmpeg 参数发送到已打开的 Renderer。 [Renderer 指南](docs/renderer.md)
 
 **预览操作**：可自定义工作台快捷键，并从右键菜单给播放头所在的时间组添加滤镜。并排画面支持用 Player 打开源视频或处理结果，也可按各自分辨率复制整帧。 [Renderer 指南](docs/renderer.md#处理视频与时间组)
 
@@ -76,7 +78,7 @@ Full 和单文件 Player 首次打开后会保留一个预热窗口，并默认�
 - 默认使用3FP原生色彩处理；Full中的libplacebo仅供手动对照mpv，见 [色彩设置](docs/color-management.md)。
 - 当前开发内核已同步3FP的自适应调度、硬解回退和音频缓冲优化；AI 字幕通过独立 Qwen3-ASR 组件启用；本轮已准备上传包，远端下载仍等待维护者上传。适用范围与验证见[内核说明](docs/performance-debugging.md#上游内核优化)。
 - 图片使用 CPU 解码，动图当前显示首帧；过深或超出合成预算的 PSD 图层组会明确拒绝；复杂 PSD/RAW 支持以编辑器实际能力为准。
-- Player 配置保存在程序旁 `player.ini`；Renderer 使用独立设置。更新前保留自定义 VPY、项目、截图及配置，按 [更新说明](docs/portable-updates.md) 操作。
+- Player、Renderer 和 Cap 的设置分别保存在程序旁的 `config/player.ini`、`config/renderer.ini` 和 `config/cap.ini`。更新前保留自定义 VPY、项目、截图及配置，按 [更新说明](docs/portable-updates.md) 操作。
 
 页面背景支持即时应用、主题库及 ZIP/7z 导入、ZIP 导出，分发包不预装背景；三／四路预览可用同位置滑块比较。图片导出支持比例尺寸和内置HLSL重新采样，Full另可选内置GLSL；单文件版直接使用FFmpeg且不提供质量搜索。设置中的便携Pareto图入口和功耗显示要求见 [Player 指南](docs/player.md)。
 
@@ -86,7 +88,7 @@ Full 和单文件 Player 首次打开后会保留一个预热窗口，并默认�
 
 Agent 来源密钥、MCP 环境变量与请求头保存在当前 Windows 用户的本地加密配置中；对话、技能、全局指令和子任务记录保存在应用数据目录，发送时会交给所选端点。MCP 通过用户连接的外部服务扩展能力，查询子任务与允许修改的子任务分别调度；来源及凭证导出范围见 [Agent 数据说明](docs/agent.md#数据与兼容边界)。
 
-OpenNGU 本地模型支持 BT.709 SDR 上采样，主直通优先 OpenNGU，第二上采样默认 Jinc；Renderer 主预览与图像分析比对页也可选择 OpenNGU 放大，缩小默认回退 D3D11 原生直通。使用方法见 [Player](docs/player.md) 与 [Renderer](docs/renderer.md)。模型参数由用户另行提供。
+OpenNGU 本地模型支持 BT.709 SDR 上采样，主直通优先 OpenNGU，第二上采样默认 Jinc；Renderer 主预览与图像分析比对页也可选择 OpenNGU 放大，缩小默认回退 D3D11 原生直通。使用方法见 [Player](docs/player.md) 与 [Renderer](docs/renderer.md)。1.2.0 的 Full 压缩包和单文件播放器均随附 OpenNGU。
 
 ## 开发与反馈
 

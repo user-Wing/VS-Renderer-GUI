@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "player/PlayerLanguage.h"
 #include <QApplication>
 #include <QCoreApplication>
@@ -13,7 +14,7 @@
 #include <QListWidget>
 namespace vsr {
 PlayerLanguage::PlayerLanguage(const QString &language) {
-    const QDir directory(QDir(QCoreApplication::applicationDirPath()).filePath("languages"));QDir().mkpath(directory.path());
+    const QDir directory(vsr::configFile("languages"));QDir().mkpath(directory.path());
     for(const auto &name:QStringList{"zh_CN","en_US"})if(!QFile::exists(directory.filePath(name+".json")))QFile::copy(":/languages/"+name+".json",directory.filePath(name+".json"));
     QFile defaults(":/languages/en_US.json");if(defaults.open(QIODevice::ReadOnly)){const auto entries=QJsonDocument::fromJson(defaults.readAll()).object();for(auto it=entries.begin();it!=entries.end();++it)english_.insert(it.key(),it.value().toString());}
     QFile file(directory.filePath("en_US.json"));if(file.open(QIODevice::ReadOnly)){const auto entries=QJsonDocument::fromJson(file.readAll()).object();for(auto it=entries.begin();it!=entries.end();++it)english_.insert(it.key(),it.value().toString());}

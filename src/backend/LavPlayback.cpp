@@ -45,21 +45,21 @@ struct LavPlayback::Impl {
         if (SUCCEEDED(result)) return true;
         error = operation + QStringLiteral(" (0x%1)").arg(static_cast<quint32>(result), 8, 16, QChar('0')); return false;
     }
-    IBaseFilter *filter(const QString &file, const wchar_t *clsid, const QString &folder = "LAVFilters64") {
+    IBaseFilter *filter(const QString &file, const wchar_t *clsid, const QString &folder = "tools/lav") {
         const QString path = QDir(QCoreApplication::applicationDirPath()).filePath(folder + "/" + file);
         if (!QFileInfo::exists(path)) { error = QCoreApplication::translate("LavPlayback","组件未安装：%1。请在设置 → 组件下载中下载 LAV-Filters / MadVR，应用后重启。").arg(path); return nullptr; }
         static QHash<QString,HMODULE> madModules;
-        if(folder=="madVR09217") for(const auto &dependency:QStringList{"madHcNet64.dll","mvrSettings64.dll"}) {
+        if(folder=="tools/madvr09217") for(const auto &dependency:QStringList{"madHcNet64.dll","mvrSettings64.dll"}) {
             const auto dependencyPath=QDir(QFileInfo(path).absolutePath()).filePath(dependency);
             if(madModules.contains(dependencyPath))continue;
             HMODULE loaded=LoadLibraryExW(reinterpret_cast<LPCWSTR>(dependencyPath.utf16()),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
             if(!loaded) {error=QCoreApplication::translate("LavPlayback","madVR 依赖加载失败：%1(Windows 错误 %2)").arg(dependencyPath).arg(GetLastError());return nullptr;}// madVR keeps global worker callbacks; its helper DLLs stay loaded for this process.
             madModules.insert(dependencyPath,loaded);
         }
-        HMODULE module = folder=="madVR09217"?madModules.value(path):nullptr;
+        HMODULE module = folder=="tools/madvr09217"?madModules.value(path):nullptr;
         if(!module)module = LoadLibraryExW(reinterpret_cast<LPCWSTR>(path.utf16()), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
         if (!module) { error = QCoreApplication::translate("LavPlayback","无法加载随附组件：%1(Windows 错误 %2)").arg(path).arg(GetLastError()); return nullptr; }
-        if(folder!="madVR09217") modules.push_back(module);
+        if(folder!="tools/madvr09217") modules.push_back(module);
         else madModules.insert(path,module);
         using Factory = HRESULT (WINAPI *)(REFCLSID, REFIID, void **);
         auto factory = reinterpret_cast<Factory>(GetProcAddress(module, "DllGetClassObject"));
@@ -80,7 +80,7 @@ bool LavPlayback::open(const QString &path, void *videoWindow, bool enableVideo,
     if (!source || (enableVideo && !video) || (enableAudio && !audio)) { release(source); release(video); release(audio); return false; }
     i.graph->AddFilter(source, L"Bundled LAV Splitter Source"); if(video)i.graph->AddFilter(video, L"Bundled LAV Video Decoder"); if(audio)i.graph->AddFilter(audio, L"Bundled LAV Audio Decoder");
     if (videoWindow) {
-        i.renderer = i.filter("madVR64.ax", L"{E1A8B82A-32CE-4B0D-BE0D-AA68C772E423}", "madVR09217");
+        i.renderer = i.filter("madVR64.ax", L"{E1A8B82A-32CE-4B0D-BE0D-AA68C772E423}", "tools/madvr09217");
         if (!i.renderer || !i.check(i.graph->AddFilter(i.renderer, L"madshi video renderer"), "madVR filter")) { release(source); release(video); release(audio); return false; }
     }
     IFileSourceFilter *input = nullptr;
@@ -115,7 +115,7 @@ bool LavPlayback::open(const QString &path, void *videoWindow, bool enableVideo,
         i.window->put_Owner(reinterpret_cast<OAHWND>(videoWindow)); i.window->put_MessageDrain(reinterpret_cast<OAHWND>(videoWindow));
         i.window->put_WindowStyle(WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN); i.window->put_AutoShow(OAFALSE); i.window->put_Visible(OATRUE);
         i.renderer->QueryInterface(guid(L"{3AE03A88-F613-4BBA-AD3E-EE236976BF9A}"),reinterpret_cast<void **>(&i.osd));
-        const auto controller = QDir(QCoreApplication::applicationDirPath()).filePath("madVR09217/madHcCtrl.exe");
+        const auto controller = QDir(QCoreApplication::applicationDirPath()).filePath("tools/madvr09217/madHcCtrl.exe");
         static bool controllerStarted=false; if(!controllerStarted)controllerStarted=QProcess::startDetached(controller, {}, QFileInfo(controller).absolutePath());
     } else {
         IVideoWindow *window = nullptr;

@@ -619,7 +619,7 @@ private slots:
         if(choice==QMessageBox::Save){QVERIFY(!window.isWindowModified());QVERIFY(QFileInfo::exists(window.projectPath_));}else QVERIFY(window.isWindowModified());
     }
     void startupTheme(){
-        const auto path=QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini");QFile original(path);const bool existed=original.exists();QByteArray bytes;if(original.open(QIODevice::ReadOnly))bytes=original.readAll();original.close();
+        const auto path=QDir(QCoreApplication::applicationDirPath()).filePath("config/themes.ini");QFile original(path);const bool existed=original.exists();QByteArray bytes;if(original.open(QIODevice::ReadOnly))bytes=original.readAll();original.close();
         const auto restore=qScopeGuard([&]{if(existed){QFile file(path);if(file.open(QIODevice::WriteOnly))file.write(bytes);}else QFile::remove(path);});
         QSettings skin(path,QSettings::IniFormat);skin.clear();skin.setValue("VSR-Main/color","#0fe621");skin.sync();
         MainWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));QTest::qWait(100);
@@ -738,7 +738,7 @@ private slots:
     }
     void suppliedThemeAllPagesAndPreviewIsolation(){
         const auto image=qEnvironmentVariable("VSR_THEME_TEST_IMAGE");if(image.isEmpty())QSKIP("Set VSR_THEME_TEST_IMAGE");QVERIFY(QFileInfo::exists(image));
-        const auto ini=QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini");QFile original(ini);const bool existed=original.exists();QByteArray saved;if(original.open(QIODevice::ReadOnly))saved=original.readAll();original.close();const auto restore=qScopeGuard([&]{QFile file(ini);if(existed){file.open(QIODevice::WriteOnly);file.write(saved);}else file.remove();});
+        const auto ini=QDir(QCoreApplication::applicationDirPath()).filePath("config/themes.ini");QFile original(ini);const bool existed=original.exists();QByteArray saved;if(original.open(QIODevice::ReadOnly))saved=original.readAll();original.close();const auto restore=qScopeGuard([&]{QFile file(ini);if(existed){file.open(QIODevice::WriteOnly);file.write(saved);}else file.remove();});
         QSettings settings(ini,QSettings::IniFormat);settings.clear();settings.sync();MainWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));const QStringList keys{"VSR-Main","VSR-Compare","VSR-Settings","VSR-BDRemux"};
         for(int i=0;i<keys.size();++i){window.selectPage(i);QTest::qWait(80);auto *page=window.pages_->widget(i);const auto before=page->grab().toImage();settings.setValue(keys[i]+"/image",image);settings.setValue(keys[i]+"/transparency",15);settings.setValue(keys[i]+"/brightness",80);settings.sync();applyPageTheme(page,ini,keys[i]);QTest::qWait(80);const auto after=page->grab().toImage();int changed=0,total=0;for(int y=0;y<before.height();y+=7)for(int x=0;x<before.width();x+=7){++total;if(before.pixel(x,y)!=after.pixel(x,y))++changed;}QVERIFY2(changed>total/50,qPrintable(keys[i]));
             for(auto *pane:page->findChildren<PreviewPane*>())QVERIFY(!pane->property("pageThemeContainer").toBool());
@@ -928,7 +928,7 @@ private slots:
         fileEdit->setText(cube);
         QVERIFY(QMetaObject::invokeMethod(fileEdit, "editingFinished"));
         const auto imported = window.graph_.at(0)->parameters.value("file").toString();
-        QVERIFY(imported.startsWith("luts/"));
+        QVERIFY(imported.startsWith("config/LUT/"));
         QVERIFY(QFileInfo(QDir(QCoreApplication::applicationDirPath()).filePath(imported)).isFile());
         QVERIFY(!window.graph_.at(0)->parameters.value("manual_space").toBool());
         auto *server = window.findChild<VapourSynthFrameServer *>();
@@ -1388,7 +1388,7 @@ private slots:
         QVERIFY(row->text(2)!=QStringLiteral("未下载"));
         QTRY_COMPARE_WITH_TIMEOUT(row->text(2),QStringLiteral("已安装"),5000);
         for(auto *button:dialog.findChildren<QPushButton*>())if(button->text()==QStringLiteral("导入当前时间组"))button->click();
-        QVERIFY(current);QVERIFY(imported.contains("/Community/Builtin/"));QVERIFY(!PresetStore::metadata(PresetStore::load(imported).script).isEmpty());
+        QVERIFY(current);QVERIFY(imported.contains("/community/Builtin/"));QVERIFY(!PresetStore::metadata(PresetStore::load(imported).script).isEmpty());
         dialog.grab().save("build/audit-20261017/preset-community.png");
     }
     void rendererStartupBudget() {
@@ -1541,7 +1541,7 @@ private slots:
         button->click();QCOMPARE(pages->currentWidget(),page);QVERIFY(button->isChecked());QVERIFY(!QApplication::activeModalWidget());
         auto *categories=page->findChild<QListWidget*>("rendererSettingsCategories");
         QVERIFY(categories);
-        QCOMPARE(categories->count(),8);
+        QCOMPARE(categories->count(),9);
         QVERIFY(page->findChild<QComboBox*>("rendererLanguage")->isVisible());
         categories->setCurrentRow(1);
         auto *themeEditor=page->findChild<QWidget*>("pageThemeEditor");
@@ -1597,8 +1597,8 @@ private slots:
     void presetManagementActions()
     {
         const QString name = "__test_" + QUuid::createUuid().toString(QUuid::Id128);
-        const QString target = QDir(PresetStore::directory()).filePath(name + ".vpy");
-        const QString renamed = QDir(PresetStore::directory()).filePath(name + "_renamed.vpy");
+        const QString target = QDir(PresetStore::directory()).filePath("user/" + name + ".vpy");
+        const QString renamed = QDir(PresetStore::directory()).filePath("user/" + name + "_renamed.vpy");
         QString loaded;
         PresetDialog dialog([](const QString &note) { return PresetStore::create(FilterGraph(), SourceFilter::Ffms2, "Z:/missing.mkv", note); },
                             [&loaded](const QString &path) { loaded = path; }, [] {});
@@ -1867,9 +1867,40 @@ private slots:
             }
         }
     }
+    void installs3fuiBridgeInSelectedHost(){
+        QFile bridge(QDir(QCoreApplication::applicationDirPath()).filePath("tools/3fui-export/VsrExportBridge.3fui.dll"));
+        if(!bridge.exists())QSKIP("Build the 3FUI export bridge first");
+        QVERIFY(bridge.open(QIODevice::ReadOnly));
+        QTemporaryDir host;QFile exe(host.filePath("3FUI.exe"));
+        QVERIFY(exe.open(QIODevice::WriteOnly));exe.close();
+        const bool nativeDisabled=qApp->testAttribute(Qt::AA_DontUseNativeDialogs);
+        qApp->setAttribute(Qt::AA_DontUseNativeDialogs);
+        const auto restore=qScopeGuard([&]{qApp->setAttribute(Qt::AA_DontUseNativeDialogs,nativeDisabled);});
+        MainWindow window;window.show();window.showSettings();
+        auto *categories=window.findChild<QListWidget *>("rendererSettingsCategories");
+        QVERIFY(categories);auto *category=categories->findItems("3FUI",Qt::MatchExactly).value(0);QVERIFY(category);
+        categories->setCurrentItem(category);
+        QPushButton *install=nullptr;
+        for(auto *button:window.findChildren<QPushButton *>())if(button->text().contains("3FUI") && button->isVisible())install=button;
+        QVERIFY(install);
+        QTimer dialogs;connect(&dialogs,&QTimer::timeout,&window,[&]{
+            if(auto *dialog=qobject_cast<QFileDialog *>(qApp->activeModalWidget())){
+                dialog->selectFile(exe.fileName());QMetaObject::invokeMethod(dialog,"accept");
+            }else if(auto *box=qobject_cast<QMessageBox *>(qApp->activeModalWidget()))box->accept();
+        });
+        dialogs.start(50);install->click();dialogs.stop();
+        QFile installed(host.filePath("plugin/VsrExportBridge.3fui.dll"));QVERIFY(installed.open(QIODevice::ReadOnly));
+        QCOMPARE(installed.readAll(),bridge.readAll());
+    }
     void compositionExportsCanvas()
     {
         QTemporaryDir dir; QStringList paths;
+        const auto previousRoot=qgetenv("VSR_EXPORT_ROOT");
+        qputenv("VSR_EXPORT_ROOT",dir.filePath("jobs").toUtf8());
+        const auto restoreRoot=qScopeGuard([&]{
+            if(previousRoot.isNull())qunsetenv("VSR_EXPORT_ROOT");
+            else qputenv("VSR_EXPORT_ROOT",previousRoot);
+        });
         const QString ffmpeg=QStringLiteral("C:/PortableSoft/FFmpegFreeUI ReadyToRun x64/ffmpeg.exe");
         const QStringList colors{"red","lime","blue","white"};
         for(int i=0;i<4;++i) {
@@ -1888,7 +1919,7 @@ private slots:
         QComboBox *scaler=nullptr;for(auto *combo:page.findChildren<QComboBox*>())if(combo->findText(QStringLiteral("放大：Lanczos 4"))>=0)scaler=combo;QVERIFY(scaler);scaler->setCurrentIndex(7); // Lanczos 4 must map to a supported export kernel.
         const auto script=page.compositionScript();QVERIFY2(script.errors.isEmpty(),qPrintable(script.errors.join(";")));
         QFile saved(dir.filePath("composition.vpy"));QVERIFY(saved.open(QIODevice::WriteOnly));saved.write(script.script.toUtf8());saved.close();
-        QProcess pipe;pipe.start(QCoreApplication::applicationDirPath()+"/runtime/python/Lib/site-packages/vapoursynth/vspipe.exe",{"--info",saved.fileName(),"-"});
+        QProcess pipe;pipe.start(QCoreApplication::applicationDirPath()+"/tools/vapoursynth/Lib/site-packages/vapoursynth/vspipe.exe",{"--info",saved.fileName(),"-"});
         QVERIFY(pipe.waitForFinished(15000));QVERIFY2(pipe.exitCode()==0,pipe.readAllStandardError().constData());
         QVERIFY(pipe.readAllStandardOutput().contains("Width: 320"));
         QTest::mouseClick(page.findChild<QPushButton *>("exportComparison"),Qt::LeftButton);

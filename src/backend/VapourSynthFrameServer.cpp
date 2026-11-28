@@ -30,7 +30,7 @@ QString findVSScript()
 {
     const QDir appDir(QCoreApplication::applicationDirPath());
     const QString bundled = appDir.filePath(
-        QStringLiteral("runtime/python/Lib/site-packages/vapoursynth/vsscript.dll"));
+        QStringLiteral("tools/vapoursynth/Lib/site-packages/vapoursynth/vsscript.dll"));
     if (QFileInfo::exists(bundled))
         return QFileInfo(bundled).absoluteFilePath();
 

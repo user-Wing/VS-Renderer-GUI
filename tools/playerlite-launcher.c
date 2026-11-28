@@ -1,6 +1,6 @@
 // Single-file PlayerLite bootstrapper. Windows tar.exe reads the embedded 7z archive.
 // A normal run cleans up after the player. Optional standby shares one runtime until stopped.
-// Qt/player dependencies are embedded; FFmpeg is external. player.ini lives beside this EXE.
+// Qt/player dependencies are embedded; FFmpeg is external. config/player.ini lives beside this EXE.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
@@ -147,7 +147,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show
     int unpacked=launchAndWait(tar,command,parent);DeleteFileW(archive);
     if(!unpacked || !exists(player)){if(!standby)fail(L"Cannot unpack PlayerLite. Windows tar.exe with 7z support is required.");goto done;}
     swprintf_s(envPath,32768,L"%ls;%ls",runtime,externalPath);SetEnvironmentVariableW(L"PATH",envPath);
-    wchar_t config[4096];swprintf_s(config,4096,L"%ls\\player.ini",parent);SetEnvironmentVariableW(L"VSR_PLAYER_CONFIG",config);SetEnvironmentVariableW(L"VSR_SINGLE_PLAYER_PATH",self);
+    wchar_t config[4096];swprintf_s(config,4096,L"%ls\\config\\player.ini",parent);SetEnvironmentVariableW(L"VSR_PLAYER_CONFIG",config);SetEnvironmentVariableW(L"VSR_SINGLE_PLAYER_PATH",self);
     SetEnvironmentVariableW(L"VSR_PLAYER_NEW_CONFIG",NULL);
     if(stop){
         VspStandbyLaunch launch={player,parent,TRUE,FALSE};
@@ -155,7 +155,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR args, int show
         if(result && !standby)fail(L"Cannot start VS Player. Check FFmpeg shared x64 dependencies.");
         goto done;
     }
-    if(!exists(config))SetEnvironmentVariableW(L"VSR_PLAYER_NEW_CONFIG",L"1");
+
     swprintf_s(command,8192,L"\"%ls\" %ls",player,args?args:L"");STARTUPINFOW startup={0};PROCESS_INFORMATION process={0};startup.cb=sizeof(startup);
     // The child retains the lock if the bootstrapper crashes; another launch must
     // not remove resources while that player is still running.

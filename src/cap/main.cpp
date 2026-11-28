@@ -1,3 +1,5 @@
+#include "runtime/PortableQtPlugins.h"
+#include "runtime/PortableLayout.h"
 #include "runtime/OptionalRuntime.h"
 #include <QtWidgets>
 #include <QtGui/qscreen_platform.h>
@@ -168,7 +170,7 @@ class CaptureOverlay final : public QWidget {
 public:
     CaptureOverlay(QScreen *screen, QImage shot, std::function<bool(QImage,bool,QString,bool)> output, bool embedded=false)
         : canvas_(std::move(shot)), embedded_(embedded), output_(std::move(output)) {
-        QSettings settings(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);
+        QSettings settings(vsr::configFile("cap.ini"),QSettings::IniFormat);
         color_=QColor(settings.value("editor/color","#ff0000").toString());
         lineMode_=qBound(0,settings.value("editor/lineMode",0).toInt(),2);
         penWidth_=qBound(1,settings.value("editor/penWidth",3).toInt(),512);
@@ -256,7 +258,7 @@ public:
         undoButton_=add(QStringLiteral("撤销"),[this]{undo();});undoButton_->setEnabled(false);
         if(!embedded_){auto *undoShortcut=new QShortcut(QKeySequence::Undo,this);connect(undoShortcut,&QShortcut::activated,this,[this]{undo();});}
         add(QStringLiteral("保存"), [this] {
-            QSettings preferences(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);
+            QSettings preferences(vsr::configFile("cap.ini"),QSettings::IniFormat);
             deliver(false,preferences.value("save/format","jxl").toString());
         })->setToolTip(QStringLiteral("使用设置中的默认格式保存"));
         add(QStringLiteral("JXL"), [this] {deliver(false,"jxl");});
@@ -312,7 +314,7 @@ private:
         box->show();box->raise();bar_->raise();selectText(box);box->editor->setFocus();
     }
     void updateColor(){colorButton_->setStyleSheet(QString("border-bottom:3px solid %1;").arg(color_.name()));saveBrush();}
-    void saveBrush(){QSettings settings(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);settings.setValue("editor/color",color_.name(QColor::HexArgb));settings.setValue("editor/lineMode",lineMode_);settings.setValue("editor/penWidth",penWidth_);}
+    void saveBrush(){QSettings settings(vsr::configFile("cap.ini"),QSettings::IniFormat);settings.setValue("editor/color",color_.name(QColor::HexArgb));settings.setValue("editor/lineMode",lineMode_);settings.setValue("editor/penWidth",penWidth_);}
     void updateOptions(){
         for(auto *box:texts_)box->setAttribute(Qt::WA_TransparentForMouseEvents,tool_==Selection || tool_==Pan);
         const QSignalBlocker block(options_);options_->clear();
@@ -652,7 +654,7 @@ class CapApp final : public QObject, public QAbstractNativeEventFilter {
     QList<QPointer<PinWindow>> pins_;
     int hotA_ = 0, hotT_ = 0;
 public:
-    CapApp() : settings_(QCoreApplication::applicationDirPath()+"/vs-cap.ini", QSettings::IniFormat) {
+    CapApp() : settings_(vsr::configFile("cap.ini"), QSettings::IniFormat) {
         auto icon=QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
         tray_.setIcon(icon);tray_.setToolTip("VS Cap");
         auto *menu=new QMenu;
@@ -927,7 +929,9 @@ private:
     }
 };
 int main(int argc,char **argv) {
+    vsr::registerPortableQtPlugins();
     QApplication app(argc,argv);
+    vsr::migratePortableLayout();
     if(app.arguments().contains("--capture-test")) {
         QString error;const auto image=cap::captureScreen(app.primaryScreen(),&error);
         qInfo()<<"CAPTURE"<<image.size()<<image.depth()<<image.text("capHdr")<<error;
@@ -952,7 +956,7 @@ int main(int argc,char **argv) {
     if(startupArgument>=0)return cap::runStartupTaskCommand(app.arguments().value(startupArgument+1)=="enable",app.arguments().value(startupArgument+2));
     const int waitArgument=app.arguments().indexOf("--wait-parent");
     if(waitArgument>=0){const auto parent=OpenProcess(SYNCHRONIZE,FALSE,app.arguments().value(waitArgument+1).toULong());if(parent){WaitForSingleObject(parent,10000);CloseHandle(parent);}}
-    QSettings preferences(QCoreApplication::applicationDirPath()+"/vs-cap.ini",QSettings::IniFormat);
+    QSettings preferences(vsr::configFile("cap.ini"),QSettings::IniFormat);
     if((preferences.value("general/uiAccess",false).toBool() || app.arguments().contains("--uiaccess-launch")) && !cap::hasUiAccess()){
         QString error;if(cap::restartWithUiAccess(&error))return 0;
         QMessageBox::warning(nullptr,"VS Cap",QStringLiteral("UIAccess 启动失败，继续使用普通置顶。\n")+error);

@@ -30,6 +30,7 @@ public:
     void setRoutes(int count,int selected);
     int selectedRoute() const;
     void setCurrentSource(const QString &source);
+    void receiveExternalCommand(const QString &command);
     void setScriptBuilder(std::function<ScriptBuildResult(const QString &)> builder);
     bool addJob(const QString &command, const QString &output, const QString &source,
                 const QString &script, double durationSeconds, QString *error = nullptr);

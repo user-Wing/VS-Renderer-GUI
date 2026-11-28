@@ -21,3 +21,4 @@ assets/builtin-shaders/source/*.hlsl -text -whitespace
 
 patches/3fp-vsp-audio-unc.patch text eol=lf -whitespace
 patches/3fp-vsp-upstream-20261113.patch text eol=lf -whitespace
+patches/3fp-vsp-1.2.0.patch text eol=lf -whitespace

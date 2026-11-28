@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "app/MainWindow.h"
 #include "app/RenderRoute.h"
 #include "graph/FilterCatalog.h"
@@ -56,7 +57,7 @@ QList<ShortcutAction> rendererActions()
 
 QList<ShortcutBinding> rendererBindings()
 {
-    QSettings settings;
+    auto settings = vsr::rendererSettings();
     if (!settings.contains(shortcutKey))
         return {{"1","area1"},{"2","area2"},{"A","add"},{"S","remove"},{"D","visibility"},
                 {"O","export"},{"P","presets"},{"Space","play"}};
@@ -70,7 +71,7 @@ QList<ShortcutBinding> rendererBindings()
 
 QJsonArray configuredMenus()
 {
-    return QJsonDocument::fromJson(QSettings().value(menuKey).toByteArray()).array();
+    return QJsonDocument::fromJson(vsr::rendererSettings().value(menuKey).toByteArray()).array();
 }
 
 class PreviewMenuItemDelegate final : public QStyledItemDelegate {
@@ -125,7 +126,7 @@ QWidget *MainWindow::buildShortcutSettings()
             const auto binding = table->binding(row);
             bindings.append(QVariantMap{{"key", binding.key}, {"action", binding.action}});
         }
-        QSettings().setValue(shortcutKey, bindings);
+        vsr::rendererSettings().setValue(shortcutKey, bindings);
         setStatus(QStringLiteral("快捷键已保存。"));
     });
     return page;
@@ -203,7 +204,7 @@ QWidget *MainWindow::buildContextMenuSettings()
         return menus;
     };
     const auto persist = [serialize] {
-        QSettings().setValue(menuKey, QJsonDocument(serialize()).toJson(QJsonDocument::Compact));
+        vsr::rendererSettings().setValue(menuKey, QJsonDocument(serialize()).toJson(QJsonDocument::Compact));
     };
     load(configuredMenus());
 

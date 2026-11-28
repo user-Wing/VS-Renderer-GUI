@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "ui/ShortcutTable.h"
 #include "app/MainWindow.h"
 #include "ui/AgentPage.h"
@@ -134,7 +135,7 @@ QPushButton *compactButton(const QString &text, QWidget *parent)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    language_=std::make_unique<PlayerLanguage>(QSettings().value("appearance/language","zh_CN").toString());
+    language_=std::make_unique<PlayerLanguage>(vsr::rendererSettings().value("appearance/language","zh_CN").toString());
     setWindowTitle(QStringLiteral("VS Renderer — VapourSynth 实时滤镜工作台"));
     setAcceptDrops(true);
     resize(1800, 900);
@@ -432,10 +433,10 @@ void MainWindow::selectPage(int index)
     if (index == 2) {
         if (auto *remember = pages_->widget(index)->findChild<QCheckBox *>("rendererForumRememberLogin")) {
             const QSignalBlocker guard(remember);
-            remember->setChecked(QSettings().value("community/rememberLogin", false).toBool());
+            remember->setChecked(vsr::rendererSettings().value("community/rememberLogin", false).toBool());
         }
     }
-    QTimer::singleShot(0,this,[this,index]{if(index>=0 && index<pages_->count())applyPageTheme(pages_->widget(index),QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini"),rendererThemeKeys.value(index));});
+    QTimer::singleShot(0,this,[this,index]{if(index>=0 && index<pages_->count())applyPageTheme(pages_->widget(index),vsr::configFile("themes.ini"),rendererThemeKeys.value(index));});
     if (index == 1 && !analysisPage_) {
         analysisPage_ = std::make_unique<AnalysisPage>(api_);
         auto *placeholder = pages_->widget(1);
@@ -499,11 +500,11 @@ QWidget *MainWindow::buildSettingsPage()
     language->setObjectName("rendererLanguage");
     language->addItem(QStringLiteral("中文"), "zh_CN");
     language->addItem("English", "en_US");
-    language->setCurrentIndex(qMax(0, language->findData(QSettings().value("appearance/language", "zh_CN"))));
+    language->setCurrentIndex(qMax(0, language->findData(vsr::rendererSettings().value("appearance/language", "zh_CN"))));
     basic->addRow(QStringLiteral("语言"), language);
     connect(language, &QComboBox::currentIndexChanged, this, [this, language] {
         const auto name = language->currentData().toString();
-        QSettings().setValue("appearance/language", name);
+        vsr::rendererSettings().setValue("appearance/language", name);
         language_->setLanguage(name);
         language_->updateWidgets(this);
     });
@@ -517,15 +518,15 @@ QWidget *MainWindow::buildSettingsPage()
     auto *scanDepth = new QSpinBox(page);
     scanDepth->setObjectName("rendererScanDepth");
     scanDepth->setRange(0, 16);
-    scanDepth->setValue(QSettings().value("source/scanDepth", 3).toInt());
+    scanDepth->setValue(vsr::rendererSettings().value("source/scanDepth", 3).toInt());
     basic->addRow(QStringLiteral("工作文件夹递归深度（0 仅当前目录）"), scanDepth);
-    connect(scanDepth, &QSpinBox::valueChanged, page, [](int depth) { QSettings().setValue("source/scanDepth", depth); });
+    connect(scanDepth, &QSpinBox::valueChanged, page, [](int depth) { vsr::rendererSettings().setValue("source/scanDepth", depth); });
     auto *apply = new QPushButton(QStringLiteral("应用"), page);
     apply->setObjectName("rendererApplySettings");
     basic->addRow(apply);
     connect(apply, &QPushButton::clicked, this, [this, source] {
         sourceFilter_->setCurrentIndex(source->currentIndex());
-        QSettings().setValue("sourceFilter", source->currentIndex());
+        vsr::rendererSettings().setValue("sourceFilter", source->currentIndex());
         setStatus(QStringLiteral("设置已保存，重新生成并验证脚本后生效。"));
     });
 
@@ -533,13 +534,13 @@ QWidget *MainWindow::buildSettingsPage()
     auto *theme = new QComboBox(page);
     theme->setObjectName("rendererTheme");
     theme->addItems({QStringLiteral("浅色"), QStringLiteral("深色")});
-    theme->setCurrentIndex(QSettings().value("appearance/dark", false).toBool() ? 1 : 0);
+    theme->setCurrentIndex(vsr::rendererSettings().value("appearance/dark", false).toBool() ? 1 : 0);
     appearance->addRow(QStringLiteral("外观"), theme);
     connect(theme, &QComboBox::currentIndexChanged, page, [](int index) {
-        QSettings().setValue("appearance/dark", index == 1);
+        vsr::rendererSettings().setValue("appearance/dark", index == 1);
         qApp->setStyleSheet(applicationStyleSheet(index == 1));
     });
-    const auto skinPath = QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini");
+    const auto skinPath = vsr::configFile("themes.ini");
     appearance->addRow(buildPageThemeEditor(page, skinPath, rendererThemeKeys + QStringList{"VSR-About"}, [this](bool ok) {
         setStatus(ok ? QStringLiteral("主题已保存。") : QStringLiteral("无法写入主题配置。"), !ok);
     }));
@@ -548,7 +549,7 @@ QWidget *MainWindow::buildSettingsPage()
     auto *ffmpegRow = new QWidget(page);
     auto *ffmpegLayout = new QHBoxLayout(ffmpegRow);
     ffmpegLayout->setContentsMargins(0, 0, 0, 0);
-    auto *ffmpeg = new QLineEdit(QSettings().value("export/ffmpegExecutable").toString(), ffmpegRow);
+    auto *ffmpeg = new QLineEdit(vsr::rendererSettings().value("export/ffmpegExecutable").toString(), ffmpegRow);
     ffmpeg->setObjectName("rendererFfmpegExecutable");
     ffmpeg->setPlaceholderText(QStringLiteral("留空自动查找"));
     ffmpegLayout->addWidget(ffmpeg, 1);
@@ -570,14 +571,14 @@ QWidget *MainWindow::buildSettingsPage()
             setStatus(QStringLiteral("请选择存在的 FFmpeg 可执行文件。"), true);
             return;
         }
-        QSettings().setValue("export/ffmpegExecutable", path);
+        vsr::rendererSettings().setValue("export/ffmpegExecutable", path);
         setStatus(QStringLiteral("FFmpeg 设置已保存。"));
     });
 
     auto *forum = addCategory();
     auto *remember = new QCheckBox(QStringLiteral("记住论坛登录"), page);
     remember->setObjectName("rendererForumRememberLogin");
-    remember->setChecked(QSettings().value("community/rememberLogin", false).toBool());
+    remember->setChecked(vsr::rendererSettings().value("community/rememberLogin", false).toBool());
     forum->addRow(remember);
     hint(forum, QStringLiteral("Windows DPAPI 使用当前用户加密会话。密码由论坛网站处理。"));
     connect(remember, &QCheckBox::toggled, this, [this](bool enabled) { communityPage_->setRememberLogin(enabled); });
@@ -593,7 +594,7 @@ QWidget *MainWindow::buildSettingsPage()
         communityPage_->forgetSession();
         setStatus(QStringLiteral("已清除本地论坛会话。"));
     });
-    auto communityUrl = QSettings().value("community/sourceUrl", PresetCommunityDialog::defaultSource()).toString();
+    auto communityUrl = vsr::rendererSettings().value("community/sourceUrl", PresetCommunityDialog::defaultSource()).toString();
     if (communityUrl.contains("/api/v1/datasets/ARXChem/Software-List/repo/tree"))
         communityUrl = PresetCommunityDialog::defaultSource();
     auto *communitySource = new QLineEdit(communityUrl, page);
@@ -609,7 +610,7 @@ QWidget *MainWindow::buildSettingsPage()
             setStatus(QStringLiteral("预设源必须是有效的 HTTP / HTTPS 地址。"), true);
             return;
         }
-        QSettings().setValue("community/sourceUrl", url.toString());
+        vsr::rendererSettings().setValue("community/sourceUrl", url.toString());
         communityPage_->resetPresetSource();
         setStatus(QStringLiteral("预设下载源已保存。"));
     });
@@ -629,6 +630,23 @@ QWidget *MainWindow::buildSettingsPage()
     stack->addWidget(buildContextMenuSettings());
     categories->addItem(QStringLiteral("快照和恢复"));
     stack->addWidget(buildRecoverySettings());
+    categories->addItem(QStringLiteral("3FUI"));
+    auto *integration=addCategory();
+    auto *install=new QPushButton(QStringLiteral("安装 3FUI 导出插件…"));
+    integration->addRow(install);
+    connect(install,&QPushButton::clicked,this,[this]{
+        const auto exe=QFileDialog::getOpenFileName(this,QStringLiteral("选择 3FUI 主程序"),{},"Windows (*.exe)");
+        if(exe.isEmpty())return;
+        const QString name="VsrExportBridge.3fui.dll";
+        QFile source(QDir(QCoreApplication::applicationDirPath()).filePath("tools/3fui-export/"+name));
+        QDir root=QFileInfo(exe).dir();
+        QSaveFile out(root.filePath("plugin/"+name));
+        if(!source.open(QIODevice::ReadOnly) || !root.mkpath("plugin") || !out.open(QIODevice::WriteOnly) ||
+           out.write(source.readAll())!=source.size() || !out.commit()){
+            QMessageBox::warning(this,QStringLiteral("3FUI"),QStringLiteral("无法安装导出插件，请检查插件文件及目标目录写权限。"));return;
+        }
+        QMessageBox::information(this,QStringLiteral("3FUI"),QStringLiteral("导出插件已安装。请重新启动 3FUI。"));
+    });
     categories->setCurrentRow(0);
     return page;
 }
@@ -649,7 +667,7 @@ void MainWindow::buildToolbar()
     auto *about = bar->addAction(QStringLiteral("关于"));
     connect(about,&QAction::triggered,this,[this]{
         QDialog dialog(this);dialog.setWindowTitle(QStringLiteral("关于 VS Renderer"));
-        QVBoxLayout layout(&dialog);layout.addWidget(aboutLabel("VS Renderer",&dialog));applyPageTheme(&dialog,QDir(QCoreApplication::applicationDirPath()).filePath("themes.ini"),"VSR-About");dialog.exec();
+        QVBoxLayout layout(&dialog);layout.addWidget(aboutLabel("VS Renderer",&dialog));applyPageTheme(&dialog,vsr::configFile("themes.ini"),"VSR-About");dialog.exec();
     });
     for(int index=0;index<2;++index){
         auto *toggle=bar->addAction(QStringLiteral("隐藏功能区%1").arg(index+1));toggle->setCheckable(true);toggle->setChecked(true);toggle->setObjectName(QString("rendererToggleArea%1").arg(index+1));
@@ -723,7 +741,7 @@ QWidget *MainWindow::buildSidebar()
     sourceFilter_->setItemData(2, QStringLiteral("保留解码像素、浮点与HDR元数据；首次打开会完整解码建立索引，耗时取决于片长。不支持的格式会明确报错。"), Qt::ToolTipRole);
     auto *browse = compactButton(QStringLiteral("浏览…"), input);
     browse->setObjectName(QStringLiteral("rendererBrowse"));
-    sourceFilter_->setCurrentIndex(QSettings().value(QStringLiteral("sourceFilter"),static_cast<int>(SourceFilter::Native)).toInt());
+    sourceFilter_->setCurrentIndex(vsr::rendererSettings().value(QStringLiteral("sourceFilter"),static_cast<int>(SourceFilter::Native)).toInt());
     sourceInputStack_=new QStackedWidget(input);sourceInputStack_->setMinimumWidth(0);sourceInputStack_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);sourceInputStack_->addWidget(sourcePath_);
     sourceChoice_=new WrappedFileCombo(input);sourceChoice_->setObjectName("rendererSourceChoice");sourceChoice_->setMinimumContentsLength(6);sourceChoice_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);sourceInputStack_->addWidget(sourceChoice_);
     inputRow->addWidget(sourceInputStack_,1);
@@ -1294,6 +1312,12 @@ void MainWindow::exportCurrentResult()
     exportWindow_->showNormal();
     exportWindow_->raise();
     exportWindow_->activateWindow();
+}
+
+void MainWindow::receiveExportCommand(const QString &command)
+{
+    if (!exportWindow_ || !exportWindow_->isVisible()) exportCurrentResult();
+    exportWindow_->receiveExternalCommand(command);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)

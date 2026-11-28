@@ -13,7 +13,7 @@
 #include <QTemporaryDir>
 namespace vsr::ThemePackage {
 inline bool archive(const QStringList &arguments,const QString &directory,QByteArray &output,QString &error){
-    auto tool=QDir(QCoreApplication::applicationDirPath()).filePath("runtime/tools/7z.exe");
+    auto tool=QDir(QCoreApplication::applicationDirPath()).filePath("tools/7z/7z.exe");
     if(!QFileInfo::exists(tool))tool=QStandardPaths::findExecutable("7z.exe");
     if(tool.isEmpty()){error=QObject::tr("找不到主题压缩工具 7z.exe");return false;}
     QProcess process;process.setWorkingDirectory(directory);process.start(tool,arguments);
@@ -57,7 +57,7 @@ inline bool importPack(const QString &input,const QString &configuration,QString
         }
         values.insert(key,value);
     }
-    const auto relative="themes/"+QString::fromLatin1(hash.result().toHex().left(16));
+    const auto relative="skin/"+QString::fromLatin1(hash.result().toHex().left(16));
     const auto target=QDir(QFileInfo(configuration).absolutePath()).filePath(relative);
     if(!QDir().mkpath(target)){error=QObject::tr("无法创建主题目录");return false;}
     for(auto it=images.cbegin();it!=images.cend();++it){const auto file=QDir(target).filePath(it.key());if(!QFileInfo::exists(file) && !QFile::copy(it.value(),file)){error=QObject::tr("无法保存主题图片");return false;}}

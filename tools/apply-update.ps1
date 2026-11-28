@@ -32,7 +32,7 @@ try {
     foreach ($path in @($incoming,$backup)) {
         if ((Split-Path -Parent ([IO.Path]::GetFullPath($path))) -ne $parentRoot -or (Test-Path -LiteralPath $path)) { throw 'Invalid update sibling path' }
     }
-    foreach ($name in @('VSRenderer.exe','vs-player.exe','FFF.Native.dll','runtime\python\python.exe','release.json')) {
+    foreach ($name in @('VSRenderer.exe','vs-player.exe','FFF.Native.dll','tools\vapoursynth\python.exe','release.json')) {
         if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $name) -PathType Leaf)) { throw "Incomplete update: $name" }
     }
     if (-not (Test-Path -LiteralPath (Join-Path $targetRoot $Launch) -PathType Leaf)) { throw 'Target is not the running portable installation' }
@@ -72,9 +72,13 @@ try {
         # New built-ins replace old built-ins. The complete old directory remains in the backup.
         Get-ChildItem -LiteralPath $oldPresets -Force | Where-Object { $_.Name -ne 'builtin' } | Copy-Item -Destination $newPresets -Recurse -Force
     }
-    foreach ($name in @('screenshots','projects','presets','PhotoCraftData','data','themes')) {
+    foreach ($name in @('screenshots','projects','presets','PhotoCraftData','data','themes','config','LAVFilters64','madVR09217','tools/lav','tools/madvr09217')) {
         $userPath = Join-Path $targetRoot $name
-        if (Test-Path -LiteralPath $userPath) { Copy-Item -LiteralPath $userPath -Destination $incoming -Recurse -Force }
+        if (Test-Path -LiteralPath $userPath) {
+            $destination = Join-Path $incoming $name
+            New-Item -ItemType Directory -Force -Path $destination | Out-Null
+            Get-ChildItem -LiteralPath $userPath -Force | Copy-Item -Destination $destination -Recurse -Force
+        }
     }
     $customShaders = Join-Path $targetRoot 'shaders/custom'
     if (Test-Path -LiteralPath $customShaders) {

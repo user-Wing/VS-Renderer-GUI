@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "app/MainWindow.h"
 #include "app/RenderRoute.h"
 #include "app/AgentVideoFrames.h"
@@ -46,7 +47,7 @@ bool writablePath(const QString &path, QString *error) {
 void MainWindow::initializeAgent()
 {
     agentSession_ = new AgentSession(this);
-    auto id=QSettings().value("agent/lastConversation").toString();if(QUuid(id).isNull())id=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto id=vsr::rendererSettings().value("agent/lastConversation").toString();if(QUuid(id).isNull())id=QUuid::createUuid().toString(QUuid::WithoutBraces);
     agentSession_->setProperty("agentConversationId",id);
     registerAgentWorkspace(agentSession_);initializeAgentFeatures();
 }

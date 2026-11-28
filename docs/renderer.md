@@ -114,7 +114,7 @@ mpv GLSL 节点可按功能分类、名称搜索或加载兼容 `.glsl`。输出
 
 打开导出窗口，粘贴 3FUI FFmpeg 命令，保留输入/输出位置并选择 MKV 输出，加入编码队列。批量输入先加入“准备文件”，再统一排队。
 
-也可将 `plugins/3FUI/VsrExportBridge.3fui.dll` 复制到 3FUI 的 `plugin` 目录，由用户重启宿主加载；先打开 Renderer 导出窗口，再点击插件发送当前参数面板命令。接收只填入命令并保存历史，不启动编码；可保存或调用历史命令。构建与宿主边界见 [插件说明](../plugins/3fui-export-bridge/README.md)。
+也可将 `plugins/3FUI/VsrExportBridge.3fui.dll` 复制到 3FUI 的 `plugin` 目录，再重启 3FUI。Renderer 启动后，在 3FUI 的「VS Renderer 导出」页发送当前参数，Renderer 会自动打开导出窗口、填入命令并保存历史。核对路径和参数后手动开始编码。 [插件说明](../plugins/3fui-export-bridge/README.md)
 
 队列支持暂停/恢复、移除等待项、停止保留输出及从头重做。导出前检查冻结的源、滤镜、尺寸和音轨/字幕/章节映射；不要将输出指向原文件。具体编码器必须由当前 FFmpeg 提供。
 
@@ -135,3 +135,5 @@ mpv GLSL/HLSL共用节点和自定义入口；“以HLSL执行”位于保持宽
 可用 `python tools/precompile-shader-library.py --compiler build/mingw-release/vsr_shader_precompile.exe --source assets/mpv-shaders --output .deps/compiled-shaders110` 离线编译逐个文件；每文件默认限30秒，失败与超时保留在shader-batch-report.json，成功包包含源哈希与语义标记。离线编译不等于实际画面验证。
 
 本轮离线库为266/915份可编译包，其中35份为本轮补齐；其余649份仍不兼容（包含计算pass、OFFSET、CHROMA/NATIVE阶段、超过8纹理绑定等），不作为可用HLSL打包。未进行新增shader的实际像素验证。
+
+从源码构建 3FUI 插件时，先运行 `dotnet build plugins/3fui-export-bridge/VsrExportBridge.vbproj -c Release`，再配置 Renderer 的 CMake 构建目录。设置页会从 `tools/3fui-export` 安装编译出的 DLL。

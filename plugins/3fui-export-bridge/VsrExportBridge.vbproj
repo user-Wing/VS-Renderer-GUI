@@ -6,7 +6,11 @@
     <Version>1.1.4</Version>
     <RootNamespace />
     <OptionStrict>On</OptionStrict>
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="LakeUI" Version="5.110.0" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
   <Target Name="StagePlugin" AfterTargets="Build">
     <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(TargetDir)VsrExportBridge.3fui.dll" />
   </Target>

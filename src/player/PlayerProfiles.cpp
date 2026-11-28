@@ -66,14 +66,14 @@ int PlayerWindow::superInterpolationStage() const {
 }
 void PlayerWindow::updateAlgorithmBadges(){
     message_->show();
-    const bool video=!minimalMode_ && !imageMode_ && !audioMode_ && !madvrMode() && !(discMenu_ && discMenu_->active());algorithmBadge_->setVisible(video);interpolationBadge_->hide();if(!video)return;
+    const bool video=!minimalMode_ && !imageMode_ && !audioMode_ && !madvrMode() && !(discMenu_ && discMenu_->active());interpolationBadge_->clear();if(!video){algorithmBadge_->clear();fitTransportControls();return;}
     const int interpolation=interpolationStage();
-    if(superInterpolationStage()>=0 && !direct_){algorithmBadge_->setText(superInterpolationStage()==2?"D3D11":superInterpolationStage()==1?"Jinc":"A4K");interpolationBadge_->setText("RIFE 960×540");interpolationBadge_->show();}
-    else if(interpolation>=0 && !direct_){algorithmBadge_->setText(interpolationRenderer()?"D3D11":"Jinc");interpolationBadge_->setText(QStringList{"RIFE+","RIFE","MVT+","MVT"}.at(interpolation));interpolationBadge_->show();}
+    if(superInterpolationStage()>=0 && !direct_){algorithmBadge_->setText(superInterpolationStage()==2?"D3D11":superInterpolationStage()==1?"Jinc":"A4K");interpolationBadge_->setText("RIFE 960×540");}
+    else if(interpolation>=0 && !direct_){algorithmBadge_->setText(interpolationRenderer()?"D3D11":"Jinc");interpolationBadge_->setText(QStringList{"RIFE+","RIFE","MVT+","MVT"}.at(interpolation));}
     else if(profile()=="Anime" && (nativeAnime_ || !direct_) && qualityStage_!=4 && qualityStage_!=5)algorithmBadge_->setText(QStringList{"A4K-AFast-CNN+","A4K-AFast-CNN",{}, {},"Jinc","D3D11","A4K-AFast-1X+","A4K-AFast-1X","A4K-A-CNN+","A4K-A-CNN","MoeSR-50K"}.at(std::clamp(qualityStage_,0,10)));
     else if(!customShaderPackage_.isEmpty() && !hlslFailed_ && hlslFallback_.isEmpty())algorithmBadge_->setText("HLSL");
     else algorithmBadge_->setText(QStringList{"Nearest","Bilinear","Bicubic","Lanczos3","Jinc","Spline36","SuperXbr","D3D11","Lanczos4","A4KCNN","A4KCNN+","A4K+","A4K","A4K-1X-Jinc","A4K-1X-D3D11",openNguActive_?"OpenNGU":"Jinc"}.value(scalingAlgorithm(),"Jinc"));
-    if(algorithmBadge_->text()=="HLSL")algorithmBadge_->hide();
+    fitTransportControls();
 }
 int PlayerWindow::interpolationStage() const {
     const QFileInfo file(preset_);
@@ -284,7 +284,7 @@ bool PlayerWindow::importCustomShader(const QString &path) {
     if(!hlslColorCompatible()){setError(tr("自定义 HLSL 当前仅支持原生 SDR 色彩路径。"));return false;}
     QFile source(path);if(!source.open(QIODevice::ReadOnly)){setError(source.errorString());return false;}
     const auto bytes=source.readAll();const auto suffix=QFileInfo(path).suffix().toLower();
-    if(!QStringList{"hlsl","glsl","hook"}.contains(suffix)){setError(tr("请选择 GLSL 或 HLSL 着色器。"));return false;}
+    if(!QStringList{"hlsl","glsl","hook","vsrhlsl"}.contains(suffix)){setError(tr("请选择 GLSL 或 HLSL 着色器。"));return false;}
     const QDir directory(customShaderDirectory());if(!QDir().mkpath(directory.path())){setError(tr("无法创建着色器存储目录。"));return false;}
     const auto name=QFileInfo(path).completeBaseName()+"-"+QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex().left(12))+'.'+suffix;
     const auto stored=QFileInfo(path).absolutePath()==directory.absolutePath()?QFileInfo(path).absoluteFilePath():directory.filePath(name);
@@ -292,8 +292,9 @@ bool PlayerWindow::importCustomShader(const QString &path) {
     if(package.packagePath.isEmpty()){setError(tr("HLSL 导入失败：%1").arg(package.error));return false;}
     if(!QFileInfo::exists(stored)){QSaveFile copy(stored);if(!copy.open(QIODevice::WriteOnly) || copy.write(bytes)!=bytes.size() || !copy.commit()){setError(copy.errorString());return false;}}
     // Validate before changing the selected preset or the remembered shader.
-    if(!clock_->setCustomShader(package.packagePath)){setError(clock_->lastError());return false;}
-    customShaderPackage_=package.packagePath;hlslParameters_.clear();hlslFallback_.clear();hlslFailed_=false;nativeAnime_=false;
+    const auto activePackage=suffix=="vsrhlsl"?stored:package.packagePath;
+    if(!clock_->setCustomShader(activePackage)){setError(clock_->lastError());return false;}
+    customShaderPackage_=activePackage;hlslParameters_.clear();hlslFallback_.clear();hlslFailed_=false;nativeAnime_=false;
     settings_->setValue("render/customShader",stored);settings_->setValue("render/shaderDirectory",directory.absolutePath());
     preset_.clear();settings_->setValue("player/preset",QString());interpolationAuto_=false;settings_->setValue("player/interpolationAuto",false);
     qualityStage_=5;if(!source_.isEmpty() && !imageMode_)refreshScript();else applyScaling();
@@ -303,7 +304,7 @@ QSize PlayerWindow::profileTarget() const {
     QSize source(clip_.width,clip_.height);
     for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()=="video"){source=QSize(stream.value("width").toInt(),stream.value("height").toInt());break;}}
     if(source.isEmpty())return QSize(1920,1080);
-    const auto available=(pane_->surface()->size()*pane_->surface()->devicePixelRatioF()).boundedTo(QSize(3840,2160));
+    const auto available=(pane_->surface()->size()*pane_->surface()->devicePixelRatioF()) .boundedTo(settings_->value("experimental/oversize",false).toBool()?QSize(16384,16384):QSize(3840,2160));
     const auto fitted=source.scaled(available,Qt::KeepAspectRatio);
     const int divisor=std::gcd(source.width(),source.height()),w=source.width()/divisor,h=source.height()/divisor;
     int multiple=qMin(fitted.width()/w,fitted.height()/h);if(w%2 || h%2)multiple=multiple/2*2;
@@ -350,11 +351,11 @@ void PlayerWindow::suspendQualityCheck() {qualityTimer_.invalidate();qualitySett
 int PlayerWindow::scalingAlgorithm(bool downscale) const {
     if(downscale)return std::clamp(settings_->value("render/downscale",4).toInt(),0,8);
     if(!customShaderPackage_.isEmpty() && !hlslFailed_)return 7;
+    if(direct_ && (superInterpolationStage()==2 || (interpolationStage()>=0 && interpolationRenderer()==1)))return 7;
     if(direct_ && nativeAnime_ && qualityStage_<8){const int algorithms[]{10,9,7,7,4,7,13,13};if(qualityStage_!=4 && qualityStage_!=5)return algorithms[std::clamp(qualityStage_,0,7)];}
     if(direct_ && (qualityStage_==5 || preset_.isEmpty()))return std::clamp(settings_->value("render/upscale",settings_->value("render/d3d11Upscale",15)).toInt(),0,15);
     if(direct_ && qualityStage_==4)return std::clamp(settings_->value("render/upscale",15).toInt(),0,15);
     if(!direct_)return std::clamp(settings_->value("render/secondUpscale",4).toInt(),0,15);
-    if(superInterpolationStage()==2 || (interpolationStage()>=0 && interpolationRenderer()==1))return 7;
     return 4;
 }
 void PlayerWindow::applyScaling() {

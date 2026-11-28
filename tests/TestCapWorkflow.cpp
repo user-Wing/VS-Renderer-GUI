@@ -98,8 +98,8 @@ private slots:
         const auto even=cap::evenImage(source);QCOMPARE(even.size(),QSize(4,6));QCOMPARE(even.format(),source.format());QCOMPARE(even.text("capSdrWhiteNits"),QString("203"));for(int y=0;y<5;++y)QVERIFY(std::memcmp(source.constScanLine(y),even.constScanLine(y),48)==0);QVERIFY(std::memcmp(even.constScanLine(5),even.constScanLine(4),64)==0);
     }
 
-    void init(){QFile file(QCoreApplication::applicationDirPath()+"/vs-cap.ini");hadIni_=file.exists();savedIni_.clear();if(file.open(QIODevice::ReadOnly)){savedIni_=file.readAll();file.close();}if(hadIni_)QVERIFY(file.remove());}
-    void cleanup(){QFile file(QCoreApplication::applicationDirPath()+"/vs-cap.ini");if(hadIni_){QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));QCOMPARE(file.write(savedIni_),savedIni_.size());}else if(file.exists())QVERIFY(file.remove());}
+    void init(){QFile file(QCoreApplication::applicationDirPath()+"/config/cap.ini");hadIni_=file.exists();savedIni_.clear();if(file.open(QIODevice::ReadOnly)){savedIni_=file.readAll();file.close();}if(hadIni_)QVERIFY(file.remove());}
+    void cleanup(){QFile file(QCoreApplication::applicationDirPath()+"/config/cap.ini");if(hadIni_){QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));QCOMPARE(file.write(savedIni_),savedIni_.size());}else if(file.exists())QVERIFY(file.remove());}
     void hotkeyConfirmationAndReservedKeys(){
         QVERIFY(!cap::allowedHotkey(QKeySequence("Ctrl+C")));QVERIFY(!cap::allowedHotkey(QKeySequence("Ctrl+V")));QVERIFY(!cap::allowedHotkey(QKeySequence("Ctrl+S")));
         cap::HotkeyEdit editor(QKeySequence("Alt+A"));editor.show();
@@ -111,7 +111,7 @@ private slots:
         QVERIFY(editor.keySequence().isEmpty());
     }
     void brushSettingsSurviveOverlay(){
-        const auto path=QCoreApplication::applicationDirPath()+"/vs-cap.ini";QFile before(path);const bool existed=before.exists();QByteArray saved;if(before.open(QIODevice::ReadOnly)){saved=before.readAll();before.close();}
+        const auto path=QCoreApplication::applicationDirPath()+"/config/cap.ini";QFile before(path);const bool existed=before.exists();QByteArray saved;if(before.open(QIODevice::ReadOnly)){saved=before.readAll();before.close();}
         const auto restore=qScopeGuard([&]{if(existed){QFile f(path);if(f.open(QIODevice::WriteOnly|QIODevice::Truncate))f.write(saved);}else QFile::remove(path);});
         {QSettings settings(path,QSettings::IniFormat);settings.setValue("editor/color","#ff336699");settings.setValue("editor/lineMode",2);settings.setValue("editor/penWidth",7);}
         QImage image(640,480,QImage::Format_RGB32);image.fill(Qt::white);
@@ -159,7 +159,7 @@ private slots:
         canvas->exportImage(false,"png");QVERIFY(!delivered.isNull());QCOMPARE(delivered.pixelColor(pin?150:130,pin?100:80),QColor(Qt::blue));
     }
     void defaultJxlCaptureAndPin(){
-        const auto path=QCoreApplication::applicationDirPath()+"/vs-cap.ini";QFile originalFile(path);const bool existed=originalFile.exists();QByteArray original;
+        const auto path=QCoreApplication::applicationDirPath()+"/config/cap.ini";QFile originalFile(path);const bool existed=originalFile.exists();QByteArray original;
         if(existed){QVERIFY(originalFile.open(QIODevice::ReadOnly));original=originalFile.readAll();originalFile.close();}
         const auto restore=qScopeGuard([&]{if(existed){QFile file(path);if(file.open(QIODevice::WriteOnly|QIODevice::Truncate))file.write(original);}else QFile::remove(path);});
         QTemporaryDir directory;{QSettings settings(path,QSettings::IniFormat);settings.clear();settings.setValue("save/defaultDirectory",directory.path());settings.setValue("hotkeys/capture","Ctrl+Alt+Shift+F11");settings.setValue("hotkeys/pin","Ctrl+Alt+Shift+F12");}
@@ -273,6 +273,7 @@ private slots:
             const auto color=delivered.pixelColor(x,y);ink|=color.redF()>.9f && color.greenF()<.1f;original|=color.greenF()>.9f;
         }
         QVERIFY(ink && original);
+        QTRY_VERIFY_WITH_TIMEOUT(QApplication::clipboard()->mimeData()->hasFormat("image/png"),5000);
         const auto png=QImage::fromData(QApplication::clipboard()->mimeData()->data("image/png"));
         QCOMPARE(png.depth(),64);QCOMPARE(png.size(),delivered.size());QCOMPARE(png.pixelColor(10,10),cap::preview(delivered).pixelColor(10,10));QVERIFY(png.text("capHdr").isEmpty());
         QTRY_VERIFY(!overlay);
@@ -323,7 +324,7 @@ private slots:
         bool textInk=false;for(int y=106;y<145;++y)for(int x=16;x<120;++x)textInk|=delivered.pixelColor(x,y).green()<100;QVERIFY(textInk);
     }
     void clipboardAndSaveDirectories() {
-        const auto settingsPath=QCoreApplication::applicationDirPath()+"/vs-cap.ini";
+        const auto settingsPath=QCoreApplication::applicationDirPath()+"/config/cap.ini";
         QFile settingsFile(settingsPath);const bool existed=settingsFile.exists();QByteArray original;
         if(existed){QVERIFY(settingsFile.open(QIODevice::ReadOnly));original=settingsFile.readAll();settingsFile.close();}
         const auto restore=qScopeGuard([&]{if(existed){QFile file(settingsPath);if(file.open(QIODevice::WriteOnly|QIODevice::Truncate))file.write(original);}else QFile::remove(settingsPath);});

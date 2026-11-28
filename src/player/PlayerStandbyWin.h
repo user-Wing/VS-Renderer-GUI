@@ -58,7 +58,9 @@ static BOOL vspStandbyExists(const wchar_t *exe) {
 
 static BOOL vspKeepInSession(const wchar_t *directory) {
     wchar_t config[8192], value[16];
-    if (swprintf_s(config, 8192, L"%ls\\player.ini", directory) < 0) return FALSE;
+    if (swprintf_s(config, 8192, L"%ls\\config\\player.ini", directory) < 0) return FALSE;
+    if (GetFileAttributesW(config) == INVALID_FILE_ATTRIBUTES &&
+        swprintf_s(config, 8192, L"%ls\\player.ini", directory) < 0) return FALSE;
     GetPrivateProfileStringW(L"basic", L"standbyInSession", L"true", value, 16, config);
     return _wcsicmp(value, L"false") && wcscmp(value, L"0");
 }

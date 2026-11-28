@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "ui/CommunityMarkdownEditor.h"
 #include "ui/CommunityWebView.h"
 
@@ -367,7 +368,7 @@ void CommunityMarkdownEditor::preview()
         {"blocks", QJsonArray{QJsonObject{{"markdown", markdown()}}}},
         {"base", CommunityWebView::home().toString()},
         {"key", "preview"},
-        {"dark", QSettings().value("appearance/dark", false).toBool()}
+        {"dark", vsr::rendererSettings().value("appearance/dark", false).toBool()}
     });
 }
 
@@ -386,7 +387,7 @@ void CommunityMarkdownEditor::showEvent(QShowEvent *event)
             const auto previous = markdown();
             richReady_ = ready;
             if (ready) {
-                rich_->editorCommand({{"type", "theme"}, {"dark", QSettings().value("appearance/dark", false).toBool()}});
+                rich_->editorCommand({{"type", "theme"}, {"dark", vsr::rendererSettings().value("appearance/dark", false).toBool()}});
                 rich_->editorCommand({{"type", "lock"}, {"locked", locked_}});
                 setMarkdown(previous);
                 views_->setCurrentWidget(rich_);
@@ -432,7 +433,7 @@ void CommunityMarkdownEditor::changeEvent(QEvent *event)
 {
     QWidget::changeEvent(event);
     if (preview_ && event->type() == QEvent::StyleChange) {
-        const auto dark = QSettings().value("appearance/dark", false).toBool();
+        const auto dark = vsr::rendererSettings().value("appearance/dark", false).toBool();
         preview_->documentTheme(dark);
         if (richReady_) rich_->editorCommand({{"type", "theme"}, {"dark", dark}});
     }

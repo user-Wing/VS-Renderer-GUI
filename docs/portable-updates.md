@@ -12,12 +12,14 @@ Renderer 设置或 Player“设置 → 基本设置”中检查更新。完整�
 
 从1.0.13起只提供Full目录与单文件播放器，范围见 [README](../README.md)。不要把Full更新包覆盖到独立播放器；单文件按其分发方式替换。
 
-单文件展开到启动器旁的 `.vs-player-run-<payload-hash>-<PID>/`。普通启动独立解包并在正常退出后删除，启用登录待机时则在同一次待机期间共用一份解包目录。异常退出遗留的目录在下次启动时清理，仍被运行中子进程持锁的目录保留。`player.ini` 留在启动器旁。它内置 Qt/Native 等播放器依赖，FFmpeg 从 EXE 同目录或 PATH 查找。所需组件如下。
+Windows 平台与网络状态插件 `qwindows.dll`、`qnetworklistmanager.dll` 直接放在运行目录根部。
+
+单文件展开到启动器旁的 `.vs-player-run-<payload-hash>-<PID>/`。普通启动独立解包并在正常退出后删除，启用登录待机时则在同一次待机期间共用一份解包目录。异常退出遗留的目录在下次启动时清理，仍被运行中子进程持锁的目录保留。设置保存在启动器旁的 `config/player.ini`，皮肤、语言、历史和缓存也保存在外置 `config/`。首次运行会迁移旧配置。它内置 Qt/Native 等播放器依赖，FFmpeg 从 EXE 同目录或 PATH 查找。所需组件如下。
 
 - `ffmpeg.exe`、`ffprobe.exe`；
 - 匹配的 shared x64 DLL：`avcodec-63`、`avformat-63`、`avutil-61`、`swresample-7`、`swscale-10`、`avfilter-12` 及其依赖。
 
-只有静态版 `ffmpeg.exe` 不够。缺少时按启动提示补齐同一套组件，不混搭不同 major ABI。启动器所在目录必须可写。1.1.6 的单文件载荷用 Fast LZMA2 压缩成标准 7z，由 Windows 自带的 `tar.exe` 解包。
+只有静态版 `ffmpeg.exe` 不够。缺少时按启动提示补齐同一套组件，不混搭不同 major ABI。启动器所在目录必须可写。单文件载荷用 Fast LZMA2 压缩成标准 7z，由 Windows 自带的 `tar.exe` 解包。
 
 手动替换播放器前，关闭正在播放的窗口，再双击播放器旁的 `killvsp.exe`。Full 包自带此工具，单文件版启动时会在 `VS-Player.exe` 旁释放它。目录里已有同名文件时会保留。该工具只结束该目录的后台待机。登录启动项和待机设置可在播放器的「基本设置」中管理。
 
@@ -42,8 +44,8 @@ Full打包时调用 `tools/trim-full-runtime.py`：压缩上述工具、移除�
 ## 打包与交付
 
 1. 按 [构建指南](dependencies.md) 完成相关构建/测试，核对最终产物哈希和配置保护。
-2. Full 使用 `tools/package-portable.ps1 -ProgramDirectory <干净运行目录> -Edition Full -StageDirectory <全新暂存目录>`，默认输出到项目根目录的 `dist/<版本>.7z`，压缩默认限制为两线程。该脚本的 `-Edition Lite` 是历史删减 Full，仍要求 PhotoCraft，不能用来生成当前 PlayerLite。
-3. 单文件构建使用 `tools/package-playerlite-single.ps1`，读取当前版本的暂存目录 `build/playerlite-runtime-1.1.6`。用 `-SevenZip` 指定支持 FLZMA2 的 7-Zip ZS。脚本将 `killvsp.exe` 作为启动器的 PE 资源嵌入。
+2. Full 使用 `tools/package-portable.ps1 -ProgramDirectory <干净运行目录> -Edition Full -StageDirectory <全新暂存目录>`，默认输出到项目根目录的 `dist/<版本>.7z`，压缩默认限制为两线程。有 OpenNGU 分发授权时，可用 `-IncludeOpenNgu` 将其本机着色器随包分发。该脚本的 `-Edition Lite` 是历史删减 Full，仍要求 PhotoCraft，不能用来生成当前 PlayerLite。
+3. 单文件构建使用 `tools/package-playerlite-single.ps1`，读取当前版本的暂存目录 `build/playerlite-runtime-1.2.0`。用 `-SevenZip` 指定支持 FLZMA2 的 7-Zip ZS。脚本将 `killvsp.exe` 作为启动器的 PE 资源嵌入。
 4. 发布包使用干净暂存，排除INI、主题背景目录、用户VPY、缓存、截图、测试程序和日志，包含许可证及重新生成的资源哈希。Full包含六档Anime4K、MoeSR、Jinc/D3D11及四项超分补帧组合的内置脚本；手改的 `vpy/preset-descriptions.json` 一并复制，保持悬停说明。兼容旧更新器时保持单个带版本号顶层目录；新更新器可识别唯一完整目录，拒绝路径穿越、链接和多候选。
 5. 检查压缩完整性、独立解压后的清单/版本/依赖、主程序启动与配置保留。源码推送、Release 草稿、附件上传和正式发布分别确认，不由版本号或构建成功推断。Full 更新元数据来自 ModelScope 仓库树中的 `VS-GUI/<版本>.7z`、`Size` 和 `Sha256`；单文件来自 GitHub 正式 latest Release 的 `VS-Player.exe`、`size` 和 `digest`，不另建未被客户端读取的 latest 清单。
 

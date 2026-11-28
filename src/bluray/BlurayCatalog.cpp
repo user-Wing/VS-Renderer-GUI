@@ -267,7 +267,7 @@ QJsonObject BlurayCatalog::feedback(const BlurayScan &scan) {
 QString BlurayCatalog::mkvmerge(bool extract) {
     const QDir app(QCoreApplication::applicationDirPath());
     const auto bundled=optionalRuntimeExecutable("mkvtoolnix","mkvmerge.exe",extract);if(!bundled.isEmpty())return bundled;
-    for(const auto &file:QStringList{app.filePath("runtime/mkvtoolnix/mkvmerge.exe"),app.filePath("mkvmerge.exe"),QStandardPaths::findExecutable("mkvmerge"),QStringLiteral("C:/PortableSoft/Mkvtoolnix/mkvmerge.exe")})if(QFileInfo(file).isFile())return file;
+    for(const auto &file:QStringList{app.filePath("tools/mkvtoolnix/mkvmerge.exe"),app.filePath("mkvmerge.exe"),QStandardPaths::findExecutable("mkvmerge"),QStringLiteral("C:/PortableSoft/Mkvtoolnix/mkvmerge.exe")})if(QFileInfo(file).isFile())return file;
     return {};
 }
 QString BlurayCatalog::clipPlaybackIssue(const QString &path) {

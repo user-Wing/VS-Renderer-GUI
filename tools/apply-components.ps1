@@ -22,8 +22,8 @@ function Test-DownloadedArchive([string]$Path,[string]$Expected) {
 try {
     if ($installRoot -eq [IO.Path]::GetPathRoot($installRoot).TrimEnd('\') -or !(Test-Path -LiteralPath (Join-Path $installRoot $Launch))) {throw 'Invalid portable installation'}
     $entries=Get-Content -LiteralPath $Plan -Raw | ConvertFrom-Json
-    $destinations=@{'ffmpeg'='.';'mkvtoolnix'='runtime\mkvtoolnix';'MadVR'='madVR09217';'LAV-Filters'='LAVFilters64';'aria2-next'='runtime\tools';'AI-Subtitles'='runtime\ai-subtitles';'mpv-shaders'='shaders'}
-    $programs=@{'ffmpeg'='ffmpeg.exe';'mkvtoolnix'='mkvmerge.exe';'MadVR'='madVR64.ax';'LAV-Filters'='LAVVideo.ax';'aria2-next'='aria2-next.exe';'AI-Subtitles'='ai-subtitles.json';'mpv-shaders'='mpv-shaders.7z'}
+    $destinations=@{'NCNN'='tools\ncnn';'ffmpeg'='.';'mkvtoolnix'='tools\mkvtoolnix';'MadVR'='tools\madvr09217';'LAV-Filters'='tools\lav';'aria2-next'='tools\aria2-next';'AI-Subtitles'='tools\ai-subtitles';'mpv-shaders'='shaders'}
+    $programs=@{'NCNN'='models.json';'ffmpeg'='ffmpeg.exe';'mkvtoolnix'='mkvmerge.exe';'MadVR'='madVR64.ax';'LAV-Filters'='LAVVideo.ax';'aria2-next'='aria2-next.exe';'AI-Subtitles'='ai-subtitles.json';'mpv-shaders'='mpv-shaders.7z'}
     if (!$entries.Count) {throw 'Empty component plan'}
     foreach($entry in $entries){
         if (!$destinations.ContainsKey($entry.id) -or $entry.version -notmatch '^\d+(\.\d+){0,3}$') {throw 'Invalid component identity/version'}
@@ -41,8 +41,8 @@ try {
     if($busy.Count){Start-Sleep -Milliseconds 500}
     foreach($process in $busy){if(!$process.HasExited){Stop-Process -Id $process.Id -Force -ErrorAction Stop};if(!$process.WaitForExit(5000)){throw 'Could not stop installation process'}}
     foreach($entry in $entries){
-        $solidMkv=Test-Path -LiteralPath (Join-Path $installRoot 'runtime/mkvtoolnix.7z')
-        if($entry.id -eq 'mkvtoolnix' -and ($solidMkv -or (Test-Path -LiteralPath (Join-Path $installRoot 'runtime/mkvtoolnix.zip')))){
+        $solidMkv=Test-Path -LiteralPath (Join-Path $installRoot 'tools/mkvtoolnix/mkvtoolnix.7z')
+        if($entry.id -eq 'mkvtoolnix' -and ($solidMkv -or (Test-Path -LiteralPath (Join-Path $installRoot 'tools/mkvtoolnix/mkvtoolnix.zip')))){
             $packed=Join-Path $planRoot ('packed-'+[guid]::NewGuid().ToString('N'));$packedRoots+=,$packed
             $files=Join-Path $packed 'files';$ready=Join-Path $packed 'install'
             New-Item -ItemType Directory -Path $files,$ready -Force | Out-Null
@@ -52,14 +52,14 @@ try {
             if($solidMkv){
                 Push-Location $files
                 try {
-                    & (Join-Path $installRoot 'runtime/tools/7z.exe') a -t7z (Join-Path $ready 'mkvtoolnix.7z') . -mx=9 -md=64m -ms=on -mmt=2 -bb0 | Out-Null
+                    & (Join-Path $installRoot 'tools/7z/7z.exe') a -t7z (Join-Path $ready 'mkvtoolnix.7z') . -mx=9 -md=64m -ms=on -mmt=2 -bb0 | Out-Null
                     if($LASTEXITCODE -ne 0){throw 'MKVToolNix archive compression failed'}
                 } finally { Pop-Location }
             }else{
                 Compress-Archive -Path (Join-Path $files '*') -DestinationPath (Join-Path $ready 'mkvtoolnix.zip') -CompressionLevel Optimal
             }
             [IO.File]::WriteAllText((Join-Path $ready 'mkvtoolnix.version'),$entry.version)
-            $entry.ResolvedSource=$ready;$destinations['mkvtoolnix']='runtime'
+            $entry.ResolvedSource=$ready;$destinations['mkvtoolnix']='tools/mkvtoolnix'
         }
         $componentRoot=[IO.Path]::GetFullPath((Join-Path $installRoot $destinations[$entry.id])).TrimEnd('\')
         if($componentRoot -ne $installRoot -and !$componentRoot.StartsWith($installRoot+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Component target escapes installation'}

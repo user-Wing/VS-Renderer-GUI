@@ -61,6 +61,8 @@ void PlayerWindow::updateInfo() {
         if (stream.value("type").toString() == "video" && (selectedVideo>=0?stream.value("index").toInt()==selectedVideo:video.isEmpty())) video = stream;
         if (stream.value("type").toString() == "audio" && stream.value("index").toInt()==selectedAudio) audio = stream;
     }
+    audioBadge_->setStyleSheet(externalAudio_.isEmpty()?QString():QStringLiteral("color:#80caff;"));
+    subtitleBadge_->setStyleSheet(primarySubtitle_==-2 || secondarySubtitle_==-2?QStringLiteral("color:#80caff;"):QString());
     videoBadge_->setText(audioMode_?tr("音频"):video.value("codec").toString("—")); audioBadge_->setText(audio.value("codec").toString("—"));
     const auto source = clock_->snapshot(); const auto rendered = outputSnapshot();
     const auto decoder = source_.isEmpty() ? (settings_->value("decode/mode",2).toUInt()==2?QStringLiteral("3FP-HW"):QStringLiteral("3FP-SW")) : lavVideo_ ? QStringLiteral("LAV") : !direct_ ? QStringLiteral("VS / VPY") : source.decodeMode == 2 ? QStringLiteral("3FP-HW") : QStringLiteral("3FP-SW");

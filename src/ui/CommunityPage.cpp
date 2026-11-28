@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "ui/CommunityPage.h"
 #include "ui/CommunityMarkdownEditor.h"
 #include "ui/CommunityWebView.h"
@@ -185,8 +186,8 @@ struct CommunityPage::Impl {
         : page(owner), importPreset(std::move(import)),
           network(transport ? std::move(transport) : std::make_unique<QNetworkAccessManager>())
     {
-        if (QSettings().value(rememberLogin, false).toBool())
-            cookie = checkedSession(protectSession(QSettings().value(rememberedSession).toByteArray(), false));
+        if (vsr::rendererSettings().value(rememberLogin, false).toBool())
+            cookie = checkedSession(protectSession(vsr::rendererSettings().value(rememberedSession).toByteArray(), false));
 
         auto *layout = new QVBoxLayout(page);
         auto *top = new QHBoxLayout;
@@ -558,7 +559,7 @@ struct CommunityPage::Impl {
                 const auto slug = item->data(0, Qt::UserRole + 1).toString();
                 if (slug.isEmpty()) return;
                 const auto id = item->data(0, Qt::UserRole).toString();
-                QSettings().setValue("community/lastTutorial", id);
+                vsr::rendererSettings().setValue("community/lastTutorial", id);
                 const auto generation = ++tutorialRequest;
                 tutorialOutline->clear();
                 tutorialBody->hide();
@@ -577,14 +578,14 @@ struct CommunityPage::Impl {
                         tutorialBody->showDocument({
                             {"blocks", QJsonArray{QJsonObject{{"title", article.value("title")}, {"markdown", article.value("content")}}}},
                             {"base", siteUrl("/docs/" + id).toString()}, {"key", id},
-                            {"dark", QSettings().value("appearance/dark", false).toBool()}
+                            {"dark", vsr::rendererSettings().value("appearance/dark", false).toBool()}
                         });
                     });
             });
         }
         screens->setCurrentWidget(tutorials);
         const auto openRequested = [this] {
-            const auto id = requestedTutorial.isEmpty() ? QSettings().value("community/lastTutorial").toString() : requestedTutorial;
+            const auto id = requestedTutorial.isEmpty() ? vsr::rendererSettings().value("community/lastTutorial").toString() : requestedTutorial;
             requestedTutorial.clear();
             QTreeWidgetItem *first = nullptr;
             for (QTreeWidgetItemIterator it(tutorialTree); *it; ++it) {
@@ -676,7 +677,7 @@ struct CommunityPage::Impl {
         }
         postPreview->setCurrentWidget(body);
         body->showDocument({{"blocks", blocks}, {"base", postUrl().toString()}, {"key", QString::number(postId)},
-                            {"dark", QSettings().value("appearance/dark", false).toBool()}});
+                            {"dark", vsr::rendererSettings().value("appearance/dark", false).toBool()}});
     }
 
     void closePost()
@@ -1014,7 +1015,7 @@ struct CommunityPage::Impl {
 
     void saveSession()
     {
-        QSettings settings;
+        auto settings = vsr::rendererSettings();
         if (!loggedIn || !settings.value(rememberLogin, false).toBool() || cookie.isEmpty()) {
             settings.remove(rememberedSession);
             return;
@@ -1101,7 +1102,7 @@ struct CommunityPage::Impl {
             visibility->setText(show ? QStringLiteral("隐藏密码") : QStringLiteral("显示密码"));
         });
         auto *remember = new QCheckBox(QStringLiteral("记住论坛登录"), formWidget);
-        remember->setChecked(QSettings().value(rememberLogin, false).toBool());
+        remember->setChecked(vsr::rendererSettings().value(rememberLogin, false).toBool());
         form->addRow(remember);
         auto *feedback = label(formWidget);
         feedback->setObjectName("communityLoginStatus");
@@ -1145,7 +1146,7 @@ struct CommunityPage::Impl {
                     ++accountRequest;
                     cookie = session;
                     web->setSession(cookie);
-                    QSettings().setValue(rememberLogin, remember->isChecked());
+                    vsr::rendererSettings().setValue(rememberLogin, remember->isChecked());
                     setUser({{"authenticated", true}, {"user", data.value("user")}, {"csrf", data.value("csrf")}});
                     saveSession();
                     guard->accept();
@@ -1163,7 +1164,7 @@ struct CommunityPage::Impl {
             layout->setContentsMargins(0, 0, 0, 0);
             loginWeb = new CommunityWebView([this, keep](const QByteArray &session) {
                 if (checkedSession(session).isEmpty()) return;
-                QSettings().setValue(rememberLogin, keep);
+                vsr::rendererSettings().setValue(rememberLogin, keep);
                 acceptWebSession(session);
             }, alternate);
             layout->addWidget(loginWeb, 1);
@@ -1192,7 +1193,7 @@ struct CommunityPage::Impl {
         cookie = value;
         setUser({});
         web->setSession(cookie);
-        QSettings().remove(rememberedSession);
+        vsr::rendererSettings().remove(rememberedSession);
         checkSession();
     }
 
@@ -1328,7 +1329,7 @@ void CommunityPage::changeEvent(QEvent *event)
 {
     QWidget::changeEvent(event);
     if (impl_ && event->type() == QEvent::StyleChange) {
-        const auto dark = QSettings().value("appearance/dark", false).toBool();
+        const auto dark = vsr::rendererSettings().value("appearance/dark", false).toBool();
         impl_->body->documentTheme(dark);
         if (impl_->tutorialBody) impl_->tutorialBody->documentTheme(dark);
     }
@@ -1336,13 +1337,13 @@ void CommunityPage::changeEvent(QEvent *event)
 
 void CommunityPage::setRememberLogin(bool enabled)
 {
-    QSettings().setValue(rememberLogin, enabled);
+    vsr::rendererSettings().setValue(rememberLogin, enabled);
     impl_->saveSession();
 }
 
 void CommunityPage::forgetSession()
 {
-    QSettings().remove(rememberedSession);
+    vsr::rendererSettings().remove(rememberedSession);
     ++impl_->accountRequest;
     impl_->cookie.clear();
     impl_->web->clearSession();

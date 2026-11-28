@@ -259,6 +259,7 @@ public:
     QSize processingSize(void *handle) const;
     ThreeFpResult setDecodeBuffer(void *handle,quint64 bytes,unsigned frames) const;
     ThreeFpResult setClockOnly(void *handle, bool enabled) const;
+    ThreeFpResult setRenderBackend(void *handle, bool enabled) const;
     ThreeFpResult setSoftwarePreScale(void *handle, int height) const;
     ThreeFpResult stop(void *handle) const;
     ThreeFpResult seek(void *handle, std::int64_t position100ns) const;
@@ -269,6 +270,7 @@ public:
     QString mediaInfo(void *handle) const;
     QString sessionError(void *handle) const;
     ThreeFpResult selectAudio(void *handle, int stream) const;
+    ThreeFpResult selectVideo(void *handle, int stream) const;
     ThreeFpResult loadExternalAudio(void *handle, const char *path) const;
     ThreeFpResult clearExternalAudio(void *handle) const;
     ThreeFpResult setAudioEffects(void *handle, bool enabled, const float *gains, float wave, qint64 delay) const;
@@ -323,7 +325,9 @@ private:
     using ExternalAudioFn = ThreeFpResult (*)(void *, const char *, int, std::int64_t);
     using EffectsFn = ThreeFpResult (*)(void *, std::uint32_t, const float *, float, std::int64_t);
     StepFn selectAudio_ = nullptr;
+    StepFn selectVideo_ = nullptr;
     StepFn setClockOnly_ = nullptr;
+    StepFn setRenderBackend_ = nullptr;
     StepFn setSoftwarePreScale_ = nullptr;
     ExternalAudioFn loadExternalAudio_ = nullptr;
     HandleFn clearExternalAudio_ = nullptr;

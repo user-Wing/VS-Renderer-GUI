@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "ui/PresetCommunityDialog.h"
 #include "graph/PresetStore.h"
 #include <QCryptographicHash>
@@ -24,10 +25,10 @@
 
 namespace vsr {
 QString PresetCommunityDialog::defaultSource(){return QStringLiteral("https://www.modelscope.cn/datasets/ARXChem/Software-List/tree/master/VS-GUI/PresetCommunity");}
-QString PresetCommunityDialog::directory() const{return QDir(PresetStore::directory()).filePath("Community");}
+QString PresetCommunityDialog::directory() const{return QDir(PresetStore::directory()).filePath("community");}
 PresetCommunityDialog::PresetCommunityDialog(std::function<void(const QString &,bool)> import,QWidget *parent):QWidget(parent),import_(std::move(import)){
     setObjectName("rendererPresetCommunity");
-    source_=QSettings().value("community/sourceUrl",defaultSource()).toString();
+    source_=vsr::rendererSettings().value("community/sourceUrl",defaultSource()).toString();
     if(source_.contains("Root=ffmpegfreeui%2FPreset") || source_.contains("Root=VS-GUI%2FPresetCommunity"))source_=defaultSource();
     listingUrl_=QUrl(source_);
     // Accept the repository browser link used in settings as well as the API URL.

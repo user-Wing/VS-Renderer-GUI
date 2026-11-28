@@ -27,6 +27,7 @@ public:
     QSize processingSize() const;
     bool setDecodeBuffer(quint64 bytes,unsigned frames);
     bool setAudioOutput(const QString &endpoint, bool exclusive);
+    bool setD3D12(bool enabled);
     bool setClockOnly(bool enabled);
     bool setSoftwarePreScale(int height);
     void stop();
@@ -41,6 +42,7 @@ public:
     void setAutomaticHdr(bool enabled);
     QString mediaInfo() const;
     bool selectAudio(int stream);
+    bool selectVideo(int stream);
     bool loadExternalAudio(const QString &path);
     bool clearExternalAudio();
     bool setAudioEffects(bool enabled, const float *gains, float wave, qint64 delay);
@@ -89,6 +91,7 @@ private:
     bool audioOutputPending_ = true;
     int chromaAlgorithm_ = 1;
     bool muted_ = false;
+    bool d3d12_ = false;
     bool clockOnly_ = false;
     int softwarePreScaleHeight_ = 0;
     float volume_ = 1.0f;

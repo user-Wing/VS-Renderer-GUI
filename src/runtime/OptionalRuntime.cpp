@@ -14,10 +14,11 @@
 namespace vsr {
 QString optionalRuntimeExecutable(const QString &component, const QString &program, bool extract, QString *error) {
     const QDir app(QCoreApplication::applicationDirPath());
-    const auto loose=app.filePath("runtime/"+component+"/"+program);
+    const auto folder="tools/"+(component=="awj"?QString("awj-s"):component)+"/";
+    const auto loose=app.filePath(folder+program);
     if(QFileInfo::exists(loose))return loose;
-    const auto packed=app.filePath("runtime/"+component+".7z");
-    const auto archive=QFileInfo::exists(packed)?packed:app.filePath("runtime/"+component+".zip");
+    const auto packed=app.filePath(folder+component+".7z");
+    const auto archive=QFileInfo::exists(packed)?packed:app.filePath(folder+component+".zip");
     QFile input(archive);if(!input.open(QIODevice::ReadOnly))return {};
     QCryptographicHash hash(QCryptographicHash::Sha256);if(!hash.addData(&input))return {};
     const auto parent=QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation)+"/VSRenderer/runtime/"+component;
@@ -33,7 +34,7 @@ QString optionalRuntimeExecutable(const QString &component, const QString &progr
 #ifdef Q_OS_WIN
     process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args){args->flags|=CREATE_NO_WINDOW;});
 #endif
-    process.start(app.filePath("runtime/tools/7z.exe"),{"x",archive,"-o"+staging.path(),"-y","-bb0"});
+    process.start(app.filePath("tools/7z/7z.exe"),{"x",archive,"-o"+staging.path(),"-y","-bb0"});
     if(!process.waitForStarted() || !process.waitForFinished(120000)){
         process.kill();process.waitForFinished();return fail("Cannot unpack optional runtime: "+process.errorString());
     }

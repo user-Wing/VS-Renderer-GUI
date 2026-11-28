@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "ui/AgentPage.h"
 #include "ui/AgentComposer.h"
 #include "ui/AgentChoicePopup.h"
@@ -163,10 +164,10 @@ AgentPage::AgentPage(AgentSession *session, QWidget *parent)
     });
     connect(conversations_, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
         if (!item->data(Qt::UserRole + 1).isValid()) return;
-        auto collapsed = QSettings().value("agent/collapsedProjects").toStringList();
+        auto collapsed = vsr::rendererSettings().value("agent/collapsedProjects").toStringList();
         const auto project = item->data(Qt::UserRole + 1).toString();
         if (collapsed.contains(project)) collapsed.removeAll(project); else collapsed.append(project);
-        QSettings().setValue("agent/collapsedProjects", collapsed); refreshConversations();
+        vsr::rendererSettings().setValue("agent/collapsedProjects", collapsed); refreshConversations();
     });
     conversations_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(conversations_, &QListWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
@@ -221,14 +222,14 @@ AgentPage::AgentPage(AgentSession *session, QWidget *parent)
     QString error;
     providers_ = AgentProviderStore::load(QDir(directory_).filePath("providers.json"), &error);
     if (!error.isEmpty()) report(error, true);
-    refreshProviders(QSettings().value("agent/providerId").toString());
+    refreshProviders(vsr::rendererSettings().value("agent/providerId").toString());
     const auto toolsPath = QDir(directory_).filePath("tools.json");
     if (QFile::exists(toolsPath)) { error.clear(); const auto document = readJson(toolsPath, error); if (!error.isEmpty() || !toolLibrary_->importTools(document, &error)) report(error, true); }
-    for (const auto &name : QSettings().value("agent/disabledTools").toStringList()) session_->setToolEnabled(name, false);
-    session_->setAccessMode(QSettings().value("agent/accessMode","software").toString()=="full"?AgentAccessMode::FullEnvironment:AgentAccessMode::SoftwareOnly);
-    const auto workingDirectory=QSettings().value("agent/workingDirectory").toString();if(!workingDirectory.isEmpty())session_->setWorkingDirectory(workingDirectory);
+    for (const auto &name : vsr::rendererSettings().value("agent/disabledTools").toStringList()) session_->setToolEnabled(name, false);
+    session_->setAccessMode(vsr::rendererSettings().value("agent/accessMode","software").toString()=="full"?AgentAccessMode::FullEnvironment:AgentAccessMode::SoftwareOnly);
+    const auto workingDirectory=vsr::rendererSettings().value("agent/workingDirectory").toString();if(!workingDirectory.isEmpty())session_->setWorkingDirectory(workingDirectory);
     refreshConversations();
-    const auto last = QSettings().value("agent/lastConversation").toString();
+    const auto last = vsr::rendererSettings().value("agent/lastConversation").toString();
     bool restored = false;
     for (int i = 0; i < conversations_->count(); ++i) if (!last.isEmpty() && conversations_->item(i)->data(Qt::UserRole).toString() == last) { loadConversation(last); restored = true; break; }
     if (!restored) newConversation(false);
@@ -252,7 +253,7 @@ void AgentPage::refreshProviders(const QString &selected)
 
 void AgentPage::selectProviderId(const QString &id)
 {
-    int index=-1;for(int i=0;i<providers_.size();++i)if(providers_[i].id==id){index=i;break;}if(index<0)return;providerIndex_=index;auto &source=providers_[index];source.modelCapability={};provider_->setText(source.name);provider_->setToolTip(source.name+"\n"+source.baseUrl);session_->setProvider(source);QSettings().setValue("agent/providerId",source.id);updateModelButtons();updateUsage();emit providerModelChanged(source);
+    int index=-1;for(int i=0;i<providers_.size();++i)if(providers_[i].id==id){index=i;break;}if(index<0)return;providerIndex_=index;auto &source=providers_[index];source.modelCapability={};provider_->setText(source.name);provider_->setToolTip(source.name+"\n"+source.baseUrl);session_->setProvider(source);vsr::rendererSettings().setValue("agent/providerId",source.id);updateModelButtons();updateUsage();emit providerModelChanged(source);
 }
 
 void AgentPage::openProviderMenu()
@@ -300,12 +301,12 @@ void AgentPage::updateModelButtons()
 void AgentPage::selectModel(const QString &model)
 {
     const int index=providerIndex_;if(index<0 || model.trimmed().isEmpty())return;auto &source=providers_[index];if(source.model==model.trimmed())return;source.model=model.trimmed();source.modelCapability={};
-    auto history=QSettings().value("agent/models/"+source.id).toStringList();history.removeAll(source.model);history.prepend(source.model);while(history.size()>20)history.removeLast();QSettings().setValue("agent/models/"+source.id,history);saveProviders();session_->setProvider(source);updateModelButtons();emit providerModelChanged(source);
+    auto history=vsr::rendererSettings().value("agent/models/"+source.id).toStringList();history.removeAll(source.model);history.prepend(source.model);while(history.size()>20)history.removeLast();vsr::rendererSettings().setValue("agent/models/"+source.id,history);saveProviders();session_->setProvider(source);updateModelButtons();emit providerModelChanged(source);
 }
 
 void AgentPage::openModelMenu()
 {
-    const int index=providerIndex_;if(index<0){showProviderSettings();return;}const auto source=providers_[index];QStringList models{source.model};for(const auto &value:source.modelCapability.value("models").toArray())if(!value.toString().isEmpty() && !models.contains(value.toString()))models.append(value.toString());for(const auto &model:QSettings().value("agent/models/"+source.id).toStringList())if(!models.contains(model))models.append(model);
+    const int index=providerIndex_;if(index<0){showProviderSettings();return;}const auto source=providers_[index];QStringList models{source.model};for(const auto &value:source.modelCapability.value("models").toArray())if(!value.toString().isEmpty() && !models.contains(value.toString()))models.append(value.toString());for(const auto &model:vsr::rendererSettings().value("agent/models/"+source.id).toStringList())if(!models.contains(model))models.append(model);
     QList<AgentChoice> choices;for(const auto &model:models)choices.append({model,model,imageLabel(source.modelCapability,model)});choices.append({"__custom_model__",QStringLiteral("填写模型 ID…"),QStringLiteral("使用端点支持的其他模型")});
     auto *popup=new AgentChoicePopup(QStringLiteral("选择模型"),source.name,choices,source.model,this);popup->setObjectName("agentModelPopup");connect(popup,&AgentChoicePopup::chosen,this,[this,source](const QString &model){if(model!="__custom_model__"){selectModel(model);return;}bool ok=false;const auto custom=QInputDialog::getText(this,QStringLiteral("选择模型"),QStringLiteral("模型 ID"),QLineEdit::Normal,source.model,&ok);if(ok)selectModel(custom);});popup->openFor(modelButton_);
 }
@@ -348,8 +349,8 @@ void AgentPage::updateUsage()
 void AgentPage::watchSession(AgentSession *session)
 {
     connect(session,&AgentSession::usageChanged,this,[this,session](const QJsonObject &){if(session_==session)updateUsage();});
-    connect(session,&AgentSession::accessModeChanged,this,[this,session](AgentAccessMode mode){if(session_==session){QSettings().setValue("agent/accessMode",mode==AgentAccessMode::FullEnvironment?"full":"software");updateAccessControls();}});
-    connect(session,&AgentSession::workingDirectoryChanged,this,[this,session](const QString &path){if(session_==session){QSettings().setValue("agent/workingDirectory",path);updateAccessControls();}});
+    connect(session,&AgentSession::accessModeChanged,this,[this,session](AgentAccessMode mode){if(session_==session){vsr::rendererSettings().setValue("agent/accessMode",mode==AgentAccessMode::FullEnvironment?"full":"software");updateAccessControls();}});
+    connect(session,&AgentSession::workingDirectoryChanged,this,[this,session](const QString &path){if(session_==session){vsr::rendererSettings().setValue("agent/workingDirectory",path);updateAccessControls();}});
     connect(session,&AgentSession::pendingMessagesChanged,this,[this,session](const QJsonArray &){if(session_==session){updatePendingMessages();renderConversation();}});
     connect(session,&AgentSession::textDelta,this,[this,session](const QString &text){
         for(auto &entry:liveConversations_)if(entry.session==session)entry.pending+=text;
@@ -384,11 +385,11 @@ void AgentPage::activateConversation(const QString &id,AgentSession *session)
         const auto library=session==session_?toolLibrary_:std::make_shared<AgentToolLibrary>(session);
         liveConversations_.insert(id,{session,library,QStringLiteral("新对话"),{}, {},{},false});
         if(session!=session_){QString error;const auto path=QDir(directory_).filePath("tools.json");if(QFile::exists(path)){const auto document=readJson(path,error);if(error.isEmpty())library->importTools(document,&error);}if(!error.isEmpty())report(error,true);}
-        for(const auto &name:QSettings().value("agent/disabledTools").toStringList())session->setToolEnabled(name,false);
+        for(const auto &name:vsr::rendererSettings().value("agent/disabledTools").toStringList())session->setToolEnabled(name,false);
     }
     auto &entry=liveConversations_[id];session_=session;toolLibrary_=entry.tools;conversationId_=id;conversationTitle_=entry.title;pendingText_=entry.pending;input_->setPlainText(entry.draft);
     const auto provider=session_->provider();for(int i=0;i<providers_.size();++i)if(providers_[i].id==provider.id){providerIndex_=i;providers_[i]=provider;provider_->setText(provider.name);provider_->setToolTip(provider.name+"\n"+provider.baseUrl);break;}
-    QSettings().setValue("agent/lastConversation",id);emit activeSessionChanged(session_);
+    vsr::rendererSettings().setValue("agent/lastConversation",id);emit activeSessionChanged(session_);
     updateModelButtons();updateUsage();updatePendingMessages();updateBusy(session_->isBusy());refreshConversations();renderConversation();
     emit providerModelChanged(session_->provider());
 }
@@ -408,7 +409,7 @@ void AgentPage::refreshConversations()
         titles.insert(it.key(),it->title); projects.insert(it.key(),it->project);
     }
     QStringList groups; for(const auto &id:order)if(!groups.contains(projects[id]))groups.append(projects[id]);
-    const auto collapsed=QSettings().value("agent/collapsedProjects").toStringList();
+    const auto collapsed=vsr::rendererSettings().value("agent/collapsedProjects").toStringList();
     for(const auto &project:groups) {
         const bool closed=collapsed.contains(project); const auto name=project.isEmpty()?QStringLiteral("未分组"):project;
         auto *header=new QListWidgetItem((closed?QStringLiteral("▸  "):QStringLiteral("▾  "))+name,conversations_);
@@ -431,7 +432,7 @@ void AgentPage::newConversation(bool showDraft)
         else if(liveConversations_.contains(conversationId_) && isBlank(liveConversations_[conversationId_]))id=conversationId_;
         if(id.isEmpty())id=newId();
         draftConversationId_=id;
-        auto collapsed=QSettings().value("agent/collapsedProjects").toStringList(); collapsed.removeAll(QString()); QSettings().setValue("agent/collapsedProjects",collapsed);
+        auto collapsed=vsr::rendererSettings().value("agent/collapsedProjects").toStringList(); collapsed.removeAll(QString()); vsr::rendererSettings().setValue("agent/collapsedProjects",collapsed);
     } else id=conversationId_.isEmpty()?session_->property("agentConversationId").toString():newId();
     if(id.isEmpty())id=newId();
     auto *target=liveConversations_.contains(id)?liveConversations_[id].session.data():(conversationId_.isEmpty()?session_:createSession(id));

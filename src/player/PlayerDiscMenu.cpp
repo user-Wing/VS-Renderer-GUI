@@ -87,10 +87,10 @@ struct PlayerDiscMenu::Impl {
 #undef VLC_FUNCTION
     bool load(){
         if(instance)return true;
-        const auto root=QDir(QCoreApplication::applicationDirPath()).filePath("runtime/vlc");
+        const auto root=QDir(QCoreApplication::applicationDirPath()).filePath("tools/vlc");
         core.setFileName(root+"/libvlccore.dll");library.setFileName(root+"/libvlc.dll");
         core.setLoadHints(QLibrary::PreventUnloadHint);library.setLoadHints(QLibrary::PreventUnloadHint);
-        if(!core.load() || !library.load()){failure=QStringLiteral("缺少 BD 菜单组件 runtime/vlc (libVLC 与 plugins)：")+library.errorString();return false;}
+        if(!core.load() || !library.load()){failure=QStringLiteral("缺少 BD 菜单组件 tools/vlc (libVLC 与 plugins)：")+library.errorString();return false;}
 #define VLC_LOAD(name) name=reinterpret_cast<name##Type>(library.resolve(#name));if(!name){failure=QStringLiteral("BD 菜单组件缺少接口：")+QStringLiteral(#name);return false;}
         VLC_LOAD(libvlc_new) VLC_LOAD(libvlc_release) VLC_LOAD(libvlc_media_new_location)
         VLC_LOAD(libvlc_media_add_option) VLC_LOAD(libvlc_media_release) VLC_LOAD(libvlc_media_player_new_from_media)

@@ -11,14 +11,14 @@ Imports System.Windows.Forms
 Namespace VsrExportBridge
     Public Class Entry
         Private Shared addPanel As Action(Of String, Control)
-        Public Shared Sub SetHost_AddCustomWinformPanel(callback As Object)
-            addPanel = DirectCast(callback, Action(Of String, Control))
+        Public Shared Sub SetHost_AddCustomWinformPanel(callback As Action(Of String, Control))
+            addPanel = callback
         End Sub
         Public Shared Sub Entry()
-            Dim panel As New UserControl With {.Dock = DockStyle.Fill, .AutoScaleMode = AutoScaleMode.Dpi, .Padding = New Padding(20)}
-            Dim send As New Button With {.Text = "发送当前 FFmpeg 命令到 VS Renderer", .AutoSize = True, .Dock = DockStyle.Top, .Height = 44}
-            Dim status As New Label With {.Text = "先打开 Renderer 的导出页面，再点击发送。", .AutoSize = True, .Dock = DockStyle.Top, .Padding = New Padding(0, 16, 0, 16)}
-            panel.Controls.Add(status) : panel.Controls.Add(send)
+            If addPanel Is Nothing Then Throw New InvalidOperationException("宿主未注入面板回调")
+            Dim panel As New ExportBridgePanel()
+            Dim send = panel.SendButton
+            Dim status = panel.StatusLabel
             AddHandler send.Click, Async Sub(sender, args)
                 send.Enabled = False
                 Try
@@ -30,13 +30,14 @@ Namespace VsrExportBridge
                     Dim command = CStr(manager.GetMethod("生成命令行展示文本", BindingFlags.Public Or BindingFlags.Static).Invoke(Nothing, {preset, "<输入文件>", "<输出文件>"}))
                     Await SendCommand(command)
                     status.Text = "已发送并保存到命令历史，请在 Renderer 检查后导出。"
+                Catch ex As OperationCanceledException
+                    status.Text = "VS Renderer 未响应。请确认当前版本已启动。"
                 Catch ex As Exception
                     status.Text = If(ex.InnerException, ex).Message
                 Finally
                     send.Enabled = True
                 End Try
             End Sub
-            If addPanel Is Nothing Then Throw New InvalidOperationException("宿主未注入面板回调")
             addPanel("VS Renderer 导出", panel)
         End Sub
         Private Shared Iterator Function Descendants(root As Control) As IEnumerable(Of Control)
@@ -55,7 +56,9 @@ Namespace VsrExportBridge
                 Await pipe.WriteAsync(packet, timeout.Token)
                 Await pipe.FlushAsync(timeout.Token)
                 Using reader As New StreamReader(pipe, Encoding.UTF8)
-                    If Await reader.ReadLineAsync(timeout.Token) <> "OK" Then Throw New InvalidOperationException("请先打开 VS Renderer 的导出页面。")
+                    Dim response = Await reader.ReadLineAsync(timeout.Token)
+                    If response = "ERROR: open the export window first" Then Throw New InvalidOperationException("当前 VS Renderer 版本需要先打开导出窗口。")
+                    If response <> "OK" Then Throw New InvalidOperationException("VS Renderer 没有接受这条导出命令。")
                 End Using
             End Using
         End Function

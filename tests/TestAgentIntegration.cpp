@@ -94,7 +94,7 @@ private slots:
     void toolsOperateActualWorkspace() {
         QTemporaryDir dir; MainWindow window; window.show();
         window.agentSession_->setAccessMode(AgentAccessMode::SoftwareOnly);
-        QVERIFY(window.agentPage_); QCOMPARE(window.pages_->count(), 5);
+        QVERIFY(window.agentPage_); QCOMPARE(window.pages_->count(), 6);
         const auto source = fixture(dir.path()); QVERIFY(!source.isEmpty());
         QVERIFY(call(window, "open_source", {{"path", source}}).value("ok").toBool());
         QTRY_COMPARE_WITH_TIMEOUT(call(window, "get_state").value("sourceWidth").toInt(), 128, 10000);
@@ -310,8 +310,8 @@ private slots:
         MainWindow window; window.show(); window.selectPage(4); QVERIFY(QTest::qWaitForWindowExposed(&window));
         auto *session = window.agentSession_; session->clear(); session->setAccessMode(AgentAccessMode::SoftwareOnly);
         for (const auto &name : {"read_file", "write_file", "edit_file", "exec_command", "write_stdin", "list_processes"}) session->setToolEnabled(name, true);
-        const auto node = QFileInfo::exists(QDir(QCoreApplication::applicationDirPath()).filePath("runtime/agent/node.exe"))
-            ? QDir(QCoreApplication::applicationDirPath()).filePath("runtime/agent/node.exe") : QStandardPaths::findExecutable("node");
+        const auto node = QFileInfo::exists(QDir(QCoreApplication::applicationDirPath()).filePath("tools/agent/node.exe"))
+            ? QDir(QCoreApplication::applicationDirPath()).filePath("tools/agent/node.exe") : QStandardPaths::findExecutable("node");
         QVERIFY2(!node.isEmpty(), "Node is required for the local environment integration test.");
         const QList<QPair<QString, QJsonObject>> denied{
             {"read_file", {{"path", source}}},

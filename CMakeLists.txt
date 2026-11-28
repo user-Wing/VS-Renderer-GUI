@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(VSRenderer VERSION 1.1.6 LANGUAGES C CXX)
+project(VSRenderer VERSION 1.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -232,7 +232,7 @@ if(WIN32)
                 "$<TARGET_FILE_DIR:VSRenderer>/WebView2-LICENSE.txt"
             COMMAND "${CMAKE_COMMAND}" -E copy_directory
                 "${CMAKE_CURRENT_SOURCE_DIR}/assets/community-markdown"
-                "$<TARGET_FILE_DIR:VSRenderer>/community-markdown"
+                "$<TARGET_FILE_DIR:VSRenderer>/tools/vditor"
             VERBATIM)
     else()
         message(STATUS "WebView2 SDK absent: community webpages will use the system-browser fallback")
@@ -245,7 +245,7 @@ if(WIN32)
     add_custom_command(TARGET VSRenderer POST_BUILD
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_SOURCE_DIR}/tools/stage-vapoursynth-runtime.ps1"
-            -OutputDirectory "$<TARGET_FILE_DIR:VSRenderer>/runtime/python"
+            -OutputDirectory "$<TARGET_FILE_DIR:VSRenderer>/tools/vapoursynth"
         COMMENT "Staging bundled Python and VapourSynth runtime"
         VERBATIM
     )
@@ -286,21 +286,25 @@ foreach(program VSRenderer VSPlayer)
         add_custom_command(TARGET ${program} POST_BUILD
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/stage-planar-shader.py"
                 --source "$<TARGET_FILE:vsr_planar_shader>"
-                --output "$<TARGET_FILE_DIR:${program}>/runtime/python/Lib/site-packages/vapoursynth/plugins/vsrplacebo.dll"
+                --output "$<TARGET_FILE_DIR:${program}>/tools/vapoursynth/Lib/site-packages/vapoursynth/plugins/vsrplacebo.dll"
                 --color "${CMAKE_BINARY_DIR}/color" VERBATIM)
     endif()
 endforeach()
 foreach(ai_asset asr_worker.py qwen3_ort.py README.md UPSTREAM-LICENSE.txt ai-subtitles.example.json)
-    configure_file("assets/ai-subtitles/${ai_asset}" "runtime/ai-subtitles/${ai_asset}" COPYONLY)
+    configure_file("assets/ai-subtitles/${ai_asset}" "tools/ai-subtitles/${ai_asset}" COPYONLY)
 endforeach()
+set(bridge_dll "${CMAKE_SOURCE_DIR}/plugins/3fui-export-bridge/bin/Release/net10.0-windows10.0.17763.0/VsrExportBridge.3fui.dll")
+if(EXISTS "${bridge_dll}")
+    configure_file("${bridge_dll}" "tools/3fui-export/VsrExportBridge.3fui.dll" COPYONLY)
+endif()
 foreach(program VSRenderer VSPlayer)
     target_link_libraries(${program} PRIVATE vsr_components)
     add_custom_command(TARGET ${program} POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:Qt6::Concurrent>" "$<TARGET_FILE_DIR:${program}>"
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${program}>/tools"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_SOURCE_DIR}/tools/download-bd.py" "$<TARGET_FILE_DIR:${program}>/tools"
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${program}>/runtime/tools"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_SOURCE_DIR}/tools/apply-components.ps1" "$<TARGET_FILE_DIR:${program}>/runtime/tools"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${program}>/tools/bd-download"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_SOURCE_DIR}/tools/download-bd.py" "$<TARGET_FILE_DIR:${program}>/tools/bd-download"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${program}>/tools/update"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_SOURCE_DIR}/tools/apply-components.ps1" "$<TARGET_FILE_DIR:${program}>/tools/update"
         VERBATIM)
 endforeach()
 if(TARGET vsr_native_source)
@@ -638,7 +642,7 @@ if(BUILD_TESTING)
         ole32 oleaut32 strmiids uuid dxgi psapi pdh gdi32 shell32)
     target_compile_definitions(vsr_player_lite_tests PRIVATE VSR_VERSION="${PROJECT_VERSION}" VSR_LITE_PLAYER=1)
     add_test(NAME lite-native-playback COMMAND vsr_player_lite_tests -o player-lite-results.txt,txt)
-    add_test(NAME player-language-packs COMMAND "${CMAKE_BINARY_DIR}/runtime/python/python.exe" "${CMAKE_SOURCE_DIR}/tools/check-player-languages.py")
+    add_test(NAME player-language-packs COMMAND "${CMAKE_BINARY_DIR}/tools/vapoursynth/python.exe" "${CMAKE_SOURCE_DIR}/tools/check-player-languages.py")
 
     qt_add_executable(vsr_update_tests tests/TestUpdates.cpp src/app/Style.cpp)
     target_include_directories(vsr_update_tests PRIVATE src)
@@ -676,8 +680,8 @@ if(BUILD_TESTING)
     target_include_directories(vsr_audio_path_tests PRIVATE src)
     add_test(NAME audio-path-policy COMMAND vsr_audio_path_tests)
     add_executable(vsr_export_pipe_fixture tests/ExportPipeFixture.cpp)
-    add_test(NAME detached-export-worker COMMAND "${CMAKE_BINARY_DIR}/runtime/python/python.exe" "${CMAKE_SOURCE_DIR}/tests/test-detached-worker.py" $<TARGET_FILE:VSExportWorker> $<TARGET_FILE:vsr_export_pipe_fixture>)
-    add_test(NAME detached-export-gui-survival COMMAND "${CMAKE_BINARY_DIR}/runtime/python/python.exe" "${CMAKE_SOURCE_DIR}/tests/test-gui-worker-survival.py" $<TARGET_FILE:vsr_export_tests> $<TARGET_FILE:VSExportWorker> $<TARGET_FILE:vsr_export_pipe_fixture>)
+    add_test(NAME detached-export-worker COMMAND "${CMAKE_BINARY_DIR}/tools/vapoursynth/python.exe" "${CMAKE_SOURCE_DIR}/tests/test-detached-worker.py" $<TARGET_FILE:VSExportWorker> $<TARGET_FILE:vsr_export_pipe_fixture>)
+    add_test(NAME detached-export-gui-survival COMMAND "${CMAKE_BINARY_DIR}/tools/vapoursynth/python.exe" "${CMAKE_SOURCE_DIR}/tests/test-gui-worker-survival.py" $<TARGET_FILE:vsr_export_tests> $<TARGET_FILE:VSExportWorker> $<TARGET_FILE:vsr_export_pipe_fixture>)
     qt_add_executable(vsr_thumbnail_tests tests/TestTimelineThumbnail.cpp)
     target_include_directories(vsr_thumbnail_tests PRIVATE src)
     target_link_libraries(vsr_thumbnail_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)

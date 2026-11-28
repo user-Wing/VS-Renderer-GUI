@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "ui/ShortcutTable.h"
 #include "player/PlayerBuiltinProfiles.h"
 #include "player/PlayerWindow.h"
@@ -57,6 +58,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QToolButton>
 #include <QMimeData>
 #include <QPainter>
 #include <QPushButton>
@@ -122,13 +124,22 @@ protected:
 PlayerWindow::PlayerWindow(bool standby) {
     auto darkPalette=palette();darkPalette.setColor(QPalette::Window,QColor("#202124"));
     darkPalette.setColor(QPalette::WindowText,QColor("#e8eaed"));setPalette(darkPalette);setAutoFillBackground(true);
-    const QString configPath = qEnvironmentVariable("VSR_PLAYER_CONFIG", QDir(QCoreApplication::applicationDirPath()).filePath("player.ini"));
+    const QString configPath = vsr::playerConfigFile();
 #ifdef VSR_LITE_PLAYER
     const bool newConfiguration = qEnvironmentVariableIntValue("VSR_PLAYER_NEW_CONFIG") == 1 || !QFileInfo::exists(configPath);
     const auto descriptions=QDir(QFileInfo(configPath).absolutePath()).filePath("preset-descriptions.json");
     if(!QFileInfo::exists(descriptions))QFile::copy(QDir(QCoreApplication::applicationDirPath()).filePath("preset-descriptions.json"),descriptions);
 #endif
     settings_ = std::make_unique<QSettings>(configPath, QSettings::IniFormat);
+    history_ = std::make_unique<QSettings>(QFileInfo(configPath).dir().filePath("history/playback.ini"), QSettings::IniFormat);
+    if (!settings_->value("history/migrated",false).toBool()) {
+        for (const auto &key : settings_->allKeys())
+            if ((key.startsWith("positions/") || key.startsWith("tracks/")) && !history_->contains(key))
+                history_->setValue(key, settings_->value(key));
+        history_->sync();
+        if (history_->status()==QSettings::NoError) settings_->setValue("history/migrated",true);
+    }
+    migratePlayerShortcuts(*settings_);
     language_=std::make_unique<PlayerLanguage>(settings_->value("basic/language","zh_CN").toString());
     if (!settings_->contains("player/core")) settings_->setValue("player/core",
 #ifdef VSR_LITE_PLAYER
@@ -243,7 +254,7 @@ PlayerWindow::PlayerWindow(bool standby) {
     timeline_ = new ChapterTimeline(this); timeline_->setObjectName("playerTimeline");
     new TimelineThumbnail(timeline_,[this]{return source_;},[this]{return timeline_->property("duration").toLongLong();},[this]{return !imageMode_&&!audioMode_&&!networkSource()&&settings_->value("playback/thumbnails",true).toBool();},this);
     controls_=new PlayerChromePanel(central);controls_->setObjectName("playerControls");auto *transport=new QVBoxLayout(controls_);transport->setContentsMargins(0,0,0,0);transport->setSpacing(4);layout->addWidget(controls_);buildTransport(transport);
-    message_ = new QLabel(controls_); message_->setObjectName("playerStatus"); message_->setContentsMargins(8, 0, 8, 0); message_->setFixedHeight(message_->fontMetrics().height()+4);message_->setProperty("minimalControl",true);transport->addWidget(message_);statusTimer_=new QTimer(this);statusTimer_->setSingleShot(true);statusTimer_->setInterval(3000);connect(statusTimer_,&QTimer::timeout,this,[this]{message_->clear();message_->setToolTip({});});
+    message_ = new QLabel(controls_); message_->setObjectName("playerStatus"); message_->setContentsMargins(8, 0, 8, 0); message_->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed); message_->setFixedHeight(message_->fontMetrics().height()+4);message_->setProperty("minimalControl",true);transport->addWidget(message_);statusTimer_=new QTimer(this);statusTimer_->setSingleShot(true);statusTimer_->setInterval(3000);connect(statusTimer_,&QTimer::timeout,this,[this]{message_->clear();message_->setToolTip({});});
     buildPlaylist(central);
     imageTools_=new PlayerImageTools(pane_,central);layout->insertWidget(0,imageTools_);
     connect(imageTools_,&PlayerImageTools::errorOccurred,this,&PlayerWindow::setError);
@@ -328,7 +339,7 @@ PlayerWindow::PlayerWindow(bool standby) {
     const auto customShader=settings_->value("render/customShader").toString();
     if(!customShader.isEmpty()){const auto package=ShaderPackage::prepare(customShader,QDir(customShaderDirectory()).filePath("cache"));customShaderPackage_=package.packagePath;if(!package.error.isEmpty())setError(package.error);else {preset_.clear();nativeAnime_=false;qualityStage_=5;}}
     profileResize_=new QTimer(this);profileResize_->setSingleShot(true);profileResize_->setInterval(350);
-    connect(profileResize_,&QTimer::timeout,this,[this]{if((!direct_ || (nativeAnime_ && qualityStage_!=4 && qualityStage_!=5)) && !source_.isEmpty() && !profile().isEmpty() && !media_.isEmpty() && (nativeAnime_ || profileTarget()!=profileSize_)) {resumeAt_=position();autoPlay_=playing_ || autoPlay_;refreshScript();}});
+    connect(profileResize_,&QTimer::timeout,this,[this]{if((!direct_ || (nativeAnime_ && qualityStage_!=4 && qualityStage_!=5)) && !source_.isEmpty() && !profile().isEmpty() && !media_.isEmpty() && (nativeAnime_ || profileTarget()!=profileSize_)) {refreshScript();}});
     applySettings(false);
     if(overlayChrome_)resize(width(),height()+controls_->sizeHint().height());
     qApp->installEventFilter(this);
@@ -379,9 +390,9 @@ bool PlayerWindow::openFile(const QString &input) {
     videoCubePath_.clear();
     savePosition(); imageLoader_->cancel();deferred_.clear();deferredAudio_.clear();network_->cancel(); server_->unloadScript();
     imageMode_=image;audioMode_=!image && playerAudioExtensions().contains(suffix);audioMetadataLoaded_=false;audioMetadata_={};setProperty("audioOnly",audioMode_);setProperty("lyricCount",0);lyricLabel_->clear();lyricLabel_->hide();pane_->setImage({});pane_->adoptView(1,0,0);resetZoom_->hide();
-    minimalMode_=audioMode_ || (!isFullScreen() && width()<950);updateMinimalControls();
+    minimalMode_=audioMode_ || (!isFullScreen() && width()<500);updateMinimalControls();
     imageTools_->setSource(image?QFileInfo(path).absoluteFilePath():QString());
-    for(auto *control:QList<QWidget *>{timeline_,play_,time_,frame_,rate_,speedButton_})control->setEnabled(!image || control==play_ && imagePages_>1);
+    for(auto *control:QList<QWidget *>{timeline_,play_,time_,frame_,rate_})control->setEnabled(!image || control==play_ && imagePages_>1);
     loopIn_=loopOut_=-1;loopEnabled_=false;
     lav_.reset(); clock_->pause(); playing_ = false; autoPlay_ = settings_->value("basic/autoplay",true).toBool(); ready_ = pending_ = seekPending_ = rateApplied_ = false;
     if(interpolationAuto_ && interpolationStages(settings_->value("player/interpolationRenderer",0).toInt()).isEmpty())interpolationAuto_=false;
@@ -389,6 +400,7 @@ bool PlayerWindow::openFile(const QString &input) {
     frameEditPending_=false;frameJumpTarget_=-1;profileFallback_=false;profileStartup_.invalidate();
     hlslFailed_=false;nativeAnime_=nativeBuiltinCompatible();
     manualFrame_ = -1;clip_={};positionRestored_=false;qualityStage_=initialQualityStage();resumeAt_=settingsPosition_=-1;profileSize_={};resetStatistics(); displayedFrame_={};
+    reopeningDecoder_=false;
     const auto actual=remote?path:QFileInfo(path).absoluteFilePath();
     const auto mounted=actual==source_?externalSubtitle_:QString();
     externalSubtitle_.clear();externalSecondarySubtitle_.clear();externalAudio_.clear();pendingExternalAudio_.clear();pendingAudioStream_=-2;matchedTracks_=false;audioDelay_=0; primarySubtitle_=secondarySubtitle_=-1;
@@ -432,6 +444,7 @@ bool PlayerWindow::openMedia() {
         playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower()))), false);
 #endif
     applyScaling();
+    if(!clock_->setD3D12(direct_ && !minimalMode_ && settings_->value("experimental/d3d12",false).toBool())) {setError(clock_->lastError());return false;}
     clock_->setClockOnly(minimalMode_ || audioMode_ || (!direct_ && !madvrMode()));
     const bool nativeAudio=settings_->value("audio/renderer","3FP").toString()!="DirectShow";
     if(!clock_->setAudioOutput(nativeAudio?settings_->value("audio/endpoint").toString():QString(),nativeAudio && settings_->value("audio/exclusive",false).toBool())) {setError(clock_->lastError());return false;}
@@ -457,10 +470,7 @@ void PlayerWindow::refreshScript() {
     if (minimalMode_ || (discMenu_ && discMenu_->active()) || imageMode_ || audioMode_ || source_.isEmpty() || mediaInput_.isEmpty() || (madvrMode() && !networkSource())) return;
     if(profile()=="Anime" && media_.value("streams").toArray().isEmpty() && clock_->snapshot().state==ThreeFpState::Opening)return;
     stopDiscIndexing();discIndexParts_.clear();discIndexAttempted_.clear();
-    const bool resume=autoPlay_ || playing_;
-    if(resumeAt_<0 && ready_)resumeAt_=position();
     resetStatistics();
-    clock_->pause(); if (lav_) lav_->pause(); playing_ = false; ready_ = pending_ = false;
     const auto mode=profile();
     bool high=false;for(const auto &entry:media_.value("streams").toArray()){const auto stream=entry.toObject();if(stream.value("type").toString()=="video")high=stream.value("width").toInt()>=3840 || stream.value("height").toInt()>=2160;}
     bool audioOnly=playerAudioExtensions().contains(QFileInfo(source_).suffix().toLower());
@@ -495,10 +505,17 @@ void PlayerWindow::refreshScript() {
         mode=="Anime" || !settings_->value("render/customShader").toString().isEmpty() || nativeAnime_ || mediaInput_.startsWith("bluray:") || networkSource() || audioOnly || preset_.isEmpty() || mode=="Realistic";
     const bool cubeActive = !videoCubePath_.isEmpty() && !networkSource() && !audioOnly &&
         !mediaInput_.startsWith("bluray:") && !mediaInput_.endsWith(".ffconcat");
-    setDirectMode(native && !cubeActive);
+    const bool nextDirect=native && !cubeActive;
+    if(!direct_ || !nextDirect) {
+        autoPlay_=autoPlay_ || playing_;
+        if(resumeAt_<0 && ready_)resumeAt_=position();
+        clock_->pause();if(lav_)lav_->pause();
+        playing_=ready_=pending_=false;
+    }
+    setDirectMode(nextDirect);
     rendererBadge_->setText(direct_?"3FP":"VS");
     applyScaling();
-    profileSize_=profileTarget();autoPlay_=resume;
+    profileSize_=profileTarget();
     if(direct_) {
         server_->unloadScript();ready_=true;lastFrame_=-1;applyScaling();
         QString status=hlslFallback_;
@@ -573,25 +590,26 @@ void PlayerWindow::refreshScript() {
 }
 bool PlayerWindow::networkSource() const {const auto scheme=QUrl(source_).scheme();return scheme=="http" || scheme=="https";}
 void PlayerWindow::savePosition() {
-    if(imageMode_ || source_.isEmpty() || !ready_ || !positionRestored_ || (seekPending_ && clock_->snapshot().timelineGeneration==generation_) || resumeAt_>=0 || !settings_->value("playback/remember",true).toBool())return;
+    if(imageMode_ || source_.isEmpty() || !ready_ || !positionRestored_ || (seekPending_ && clock_->snapshot().timelineGeneration==generation_) || resumeAt_>=0)return;
     const auto key=QString::fromLatin1(QCryptographicHash::hash(source_.toUtf8(),QCryptographicHash::Sha256).toHex());
-    settings_->setValue("positions/"+key,clock_->snapshot().state==ThreeFpState::Ended?0:position());
+    if(settings_->value("playback/remember",true).toBool()) history_->setValue("positions/"+key,clock_->snapshot().state==ThreeFpState::Ended?0:position());
+    if(!settings_->value("playback/rememberTracks",true).toBool())return;
     const auto prefix="tracks/"+key+"/";
-    settings_->setValue(prefix+"audio",clock_->snapshot().selectedAudioStream);settings_->setValue(prefix+"externalAudio",externalAudio_);
-    settings_->setValue(prefix+"subtitle",primarySubtitle_);settings_->setValue(prefix+"secondary",secondarySubtitle_);settings_->setValue(prefix+"visible",subtitleVisible_);
-    settings_->setValue(prefix+"externalSubtitle",externalSubtitle_);settings_->setValue(prefix+"externalSecondary",externalSecondarySubtitle_);
-    settings_->setValue(prefix+"externalIndex",externalSubtitleIndex_[0]);settings_->setValue(prefix+"externalSecondaryIndex",externalSubtitleIndex_[1]);
+    history_->setValue(prefix+"audio",clock_->snapshot().selectedAudioStream);history_->setValue(prefix+"externalAudio",externalAudio_);
+    history_->setValue(prefix+"subtitle",primarySubtitle_);history_->setValue(prefix+"secondary",secondarySubtitle_);history_->setValue(prefix+"visible",subtitleVisible_);
+    history_->setValue(prefix+"externalSubtitle",externalSubtitle_);history_->setValue(prefix+"externalSecondary",externalSecondarySubtitle_);
+    history_->setValue(prefix+"externalIndex",externalSubtitleIndex_[0]);history_->setValue(prefix+"externalSecondaryIndex",externalSubtitleIndex_[1]);
 }
 void PlayerWindow::restoreRememberedTracks(const QJsonArray &streams){
-    if(settings_->value("playback/remember",true).toBool()){
+    if(settings_->value("playback/rememberTracks",true).toBool()){
             const auto key=QString::fromLatin1(QCryptographicHash::hash(source_.toUtf8(),QCryptographicHash::Sha256).toHex());const auto prefix="tracks/"+key+"/";
             const auto available=[&](int index,const QString &type){if(index==-1)return true;for(const auto &v:streams){const auto s=v.toObject();if(s.value("type").toString()==type&&s.value("index").toInt()==index)return true;}return false;};
-            if(settings_->contains(prefix+"audio")){const auto ext=settings_->value(prefix+"externalAudio").toString();const int index=settings_->value(prefix+"audio").toInt();if(!ext.isEmpty()&&QFileInfo(ext).isFile())attachAudio(ext);else if(index>=0&&available(index,"audio"))selectAudio(index);}
-            for(int slot=0;slot<2;++slot){const auto name=prefix+(slot?"secondary":"subtitle");if(!settings_->contains(name))continue;const int index=settings_->value(name).toInt();const auto ext=settings_->value(prefix+(slot?"externalSecondary":"externalSubtitle")).toString();
-                if(index==-2&&QFileInfo(ext).isFile()){attachSubtitle(ext,slot);externalSubtitleIndex_[slot]=settings_->value(prefix+(slot?"externalSecondaryIndex":"externalIndex"),-1).toInt();selectSubtitle(slot,-2);}
+            if(history_->contains(prefix+"audio")){const auto ext=history_->value(prefix+"externalAudio").toString();const int index=history_->value(prefix+"audio").toInt();if(!ext.isEmpty()&&QFileInfo(ext).isFile())attachAudio(ext);else if(index>=0&&available(index,"audio"))selectAudio(index);}
+            for(int slot=0;slot<2;++slot){const auto name=prefix+(slot?"secondary":"subtitle");if(!history_->contains(name))continue;const int index=history_->value(name).toInt();const auto ext=history_->value(prefix+(slot?"externalSecondary":"externalSubtitle")).toString();
+                if(index==-2&&QFileInfo(ext).isFile()){attachSubtitle(ext,slot);externalSubtitleIndex_[slot]=history_->value(prefix+(slot?"externalSecondaryIndex":"externalIndex"),-1).toInt();selectSubtitle(slot,-2);}
                 else if(available(index,"subtitle")){if(slot==0)externalSubtitle_.clear();else externalSecondarySubtitle_.clear();selectSubtitle(slot,index);}
             }
-            subtitleVisible_=settings_->value(prefix+"visible",subtitleVisible_).toBool();
+            subtitleVisible_=history_->value(prefix+"visible",subtitleVisible_).toBool();
         }
 }
 void PlayerWindow::loadPreset(const QString &requestedPath) {
@@ -634,6 +652,11 @@ void PlayerWindow::togglePlayback() {
     if(discMenu_ && discMenu_->active()){playing_=!playing_;discMenu_->pause(!playing_);play_->setText(playing_?"Ⅱ":"▶");return;}
     if (imageMode_ || !ready_ || source_.isEmpty()) return;
     suspendQualityCheck();
+    // An opening session or a queued seek can still return the transport to Ready.
+    if (!playing_ && direct_ && (resumeAt_ >= 0 || seekPending_ || clock_->snapshot().state == ThreeFpState::Opening)) {
+        autoPlay_ = !autoPlay_;
+        return;
+    }
     if (!playing_) manualFrame_ = -1;
     const bool ok = playing_ ? (lav_ ? lav_->pause() : clock_->pause()) : (lav_ ? lav_->play() : clock_->play());
     if(lav_) {if(playing_)clock_->pause();else clock_->play();}
@@ -700,6 +723,7 @@ void PlayerWindow::setRate(double rate) {
     suspendQualityCheck();
     if(discMenu_ && discMenu_->active())discMenu_->rate(normalizedRate(rate));
     speed_ = normalizedRate(rate); { QSignalBlocker blocker(rate_); rate_->setValue(speed_); }
+    if(speedPopup_) if(auto *editor=speedPopup_->findChild<QDoubleSpinBox*>()){QSignalBlocker block(editor);editor->setValue(speed_);}
     settings_->setValue("player/speed",speed_);
     if (source_.isEmpty() || imageMode_) return;
     if (madvrMode() && lav_) {
@@ -762,7 +786,7 @@ void PlayerWindow::updateState() {
     if(snap.state==ThreeFpState::Failed && nativeAnime_ && !hlslFailed_){hlslFailed_=true;hlslFallback_=tr("此内置档位需要原生 SDR HLSL 路径。")+QStringLiteral(" · D3D11");refreshScript();return;}
 #endif
     if(!pendingExternalAudio_.isEmpty() && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Playing || snap.state==ThreeFpState::Paused)){const auto path=pendingExternalAudio_;pendingExternalAudio_.clear();attachAudio(path);}
-    if(direct_ && resumeAt_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)) {const auto stored=resumeAt_;resumeAt_=-1;if(!minimalMode_ && !customShaderPackage_.isEmpty())seekTime(stored);else clock_->seek(stored);}
+    if(direct_ && resumeAt_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)) {const auto stored=resumeAt_;resumeAt_=-1;seekTime(stored);}
     if (snap.state == ThreeFpState::Ready && !rateApplied_) { rateApplied_ = true; clock_->setPlaybackRate(speed_); }
     if (!positionRestored_ && (snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused || snap.state == ThreeFpState::Playing)) {
         media_ = QJsonDocument::fromJson(clock_->mediaInfo().toUtf8()).object();
@@ -774,28 +798,36 @@ void PlayerWindow::updateState() {
         if(madvrMode() || direct_) { for(const auto &entry:media_.value("streams").toArray()) {const auto stream=entry.toObject();if(stream.value("type").toString()=="video") {clip_.width=stream.value("width").toInt();clip_.height=stream.value("height").toInt();clip_.fpsNumerator=stream.value("averageFrameRateNumerator").toInt();clip_.fpsDenominator=stream.value("averageFrameRateDenominator").toInt();clip_.totalFrames=frameAtPosition100ns(snap.duration100ns,INT_MAX,clip_.fpsNumerator,clip_.fpsDenominator)+1;pane_->setVideoSize(QSize(clip_.width,clip_.height));break;}} }
         if(!positionRestored_) {positionRestored_=true;
             if(settingsPosition_>=0){resumeAt_=settingsPosition_;settingsPosition_=-1;}
-            else if(settings_->value("playback/remember",true).toBool()) {const auto key=QString::fromLatin1(QCryptographicHash::hash(source_.toUtf8(),QCryptographicHash::Sha256).toHex());const auto stored=settings_->value("positions/"+key,0).toLongLong();if(stored>0 && stored<snap.duration100ns-10000000)resumeAt_=stored;}
+            else if(settings_->value("playback/remember",true).toBool()) {const auto key=QString::fromLatin1(QCryptographicHash::hash(source_.toUtf8(),QCryptographicHash::Sha256).toHex());const auto stored=history_->value("positions/"+key,0).toLongLong();if(stored>0 && stored<snap.duration100ns-10000000)resumeAt_=stored;}
         }
         if(direct_ && ((preset_.isEmpty() && customShaderPackage_.isEmpty()) || (profile()=="Anime" && (qualityStage_==4 || qualityStage_==5)))){
             applyScaling();
-            if(!autoPlay_ && resumeAt_<0 && !minimalMode_ && snap.state==ThreeFpState::Ready && snap.selectedVideoStream>=0 && !snap.presentedVideoFrames)seekTime(0);
         }
         else if(!audioMode_ && !madvrMode() && (!profile().isEmpty() || !customShaderPackage_.isEmpty() || networkSource()))refreshScript();
         else if(!media_.value("streams").toArray().isEmpty()) {bool video=false;for(const auto &entry:media_.value("streams").toArray())video|=entry.toObject().value("type").toString()=="video";if(!video){setDirectMode(true);ready_=true;server_->unloadScript();}}
+        if(direct_ && !autoPlay_ && resumeAt_<0 && !seekPending_ && !minimalMode_ && snap.state==ThreeFpState::Ready && snap.selectedVideoStream>=0 && !snap.presentedVideoFrames)seekTime(0);
         const bool discTrackSelection=property("discSelectedAudioPid").isValid()||property("discSelectedSubtitlePid").isValid();
         const auto streams=media_.value("streams").toArray();int audio=playerDefaultTrack(streams,"audio"),subtitle=playerDefaultTrack(streams,"subtitle");
         for(const auto &value:streams){const auto stream=value.toObject();if(property("discSelectedAudioPid").isValid() && stream.value("type").toString()=="audio" && stream.value("streamId").toInt()==property("discSelectedAudioPid").toInt())audio=stream.value("index").toInt();if(property("discSelectedSubtitlePid").isValid() && stream.value("type").toString()=="subtitle" && stream.value("streamId").toInt()==property("discSelectedSubtitlePid").toInt())subtitle=stream.value("index").toInt();}
         if(property("discSelectedSubtitlePid").isValid() && property("discSelectedSubtitlePid").toInt()<0)subtitle=-1;
         setProperty("discSelectedAudioPid",QVariant());setProperty("discSelectedSubtitlePid",QVariant());
+        if (reopeningDecoder_) {
+            reopeningDecoder_=false;
+            if(reopenVideo_>=0 && reopenVideo_!=snap.selectedVideoStream) clock_->selectVideo(reopenVideo_);
+            if(!externalAudio_.isEmpty()) attachAudio(externalAudio_);
+            else if(reopenAudio_>=0) selectAudio(reopenAudio_);
+            selectSubtitle(0,primarySubtitle_); selectSubtitle(1,secondarySubtitle_);
+        } else {
         if(audio>=0 && (audio!=snap.selectedAudioStream || lavAudio_) && externalAudio_.isEmpty())selectAudio(audio);
         matchExternalTracks();
         if(externalSubtitle_.isEmpty())selectSubtitle(0,subtitle);
         if(!discTrackSelection)restoreRememberedTracks(streams);
+        }
     }
     if(pendingAudioStream_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Playing || snap.state==ThreeFpState::Paused)){const int stream=pendingAudioStream_;pendingAudioStream_=-2;selectAudio(stream);}
     if(resumeAt_>=0 && ready_ && !direct_ && !seekPending_ && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)){const auto stored=resumeAt_;resumeAt_=-1;seekTime(stored);}
-    if (autoPlay_ && !seekPending_ && seekUiTarget_<0 && (madvrMode() || direct_ || lastFrame_ >= 0) && (lav_ || snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused || (direct_ && snap.state == ThreeFpState::Playing))) { if(!playing_)togglePlayback(); if (playing_) autoPlay_ = false; }
-    if (seekPending_ && snap.timelineGeneration != generation_ && (!direct_ || snap.selectedVideoStream<0 || (snap.presentedVideoFrames>seekPresented_ && snap.frameIndex>=0))) { seekPending_ = false; requested_ = lastFrame_ = -1;
+    if (autoPlay_ && resumeAt_<0 && !seekPending_ && seekUiTarget_<0 && (madvrMode() || direct_ || lastFrame_ >= 0) && (lav_ || snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused || (direct_ && snap.state == ThreeFpState::Playing))) { if(!playing_)togglePlayback(); if (playing_) autoPlay_ = false; }
+    if (seekPending_ && snap.timelineGeneration != generation_ && (!direct_ || autoPlay_ || minimalMode_ || audioMode_ || snap.selectedVideoStream<0 || (snap.presentedVideoFrames>seekPresented_ && snap.frameIndex>=0))) { seekPending_ = false; requested_ = lastFrame_ = -1;
         if(queuedSeek_>=0){const auto next=queuedSeek_;queuedSeek_=-1;seekTime(next);return;}
         if(direct_)seekUiTarget_=-1;
         if (lavKeyPending_ && lav_) { lavKeyPending_ = false; lav_->seek(snap.position100ns); } }
@@ -803,7 +835,7 @@ void PlayerWindow::updateState() {
     const auto at = position(); const auto duration = snap.duration100ns;
     if(updateLoop(at,snap.state==ThreeFpState::Ended))return;
     timeline_->setProperty("duration", duration);
-    if (!time_->hasFocus()) time_->setText(timeText(seekUiTarget_>=0?seekUiTarget_:at)); duration_->setText("/ " + timeText(duration));
+    if (!time_->hasFocus()) time_->setText(timeText(seekUiTarget_>=0?seekUiTarget_:at).section('.',0,minimalMode_?0:-1)); duration_->setText("/ " + timeText(duration));
     frame_->setEnabled(!audioMode_);if (!frame_->hasFocus() && !frameEditPending_) frame_->setText(audioMode_?QStringLiteral("—"):QString::number(frameAtPosition100ns(at, clip_.totalFrames, clip_.fpsNumerator, clip_.fpsDenominator)));
     if (!timeline_->isSliderDown() && seekUiTarget_<0 && !seekPending_ && duration > 0) { QSignalBlocker blocker(timeline_); timeline_->setValue(static_cast<int>(at * 100000 / duration)); }
     if (!madvrMode() && !seekPending_ && ready_) {
@@ -819,7 +851,23 @@ void PlayerWindow::updateState() {
     if(!positionTimer_.isValid() || positionTimer_.elapsed()>=5000){positionTimer_.restart();savePosition();}
 }
 bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
-    if(event->type()==QEvent::Resize && object==this && !isFullScreen() && width()<950 && !minimalMode_ && !imageMode_ && controls_){QTimer::singleShot(0,this,[this]{if(width()<950 && !isFullScreen())setMinimalMode(true);});}
+    if (event->type()==QEvent::Resize && object==this && controls_ && time_ && !isFullScreen()) {
+        updateTransportWidth();
+        if (!imageMode_ && ((!minimalMode_ && width()<500) || (minimalMode_ && width()>=540)))
+            QTimer::singleShot(0,this,[this]{
+                if (!isFullScreen() && !imageMode_) {
+                    if (width()<500) setMinimalMode(true);
+                    else if (width()>=540) setMinimalMode(false);
+                }
+            });
+    }
+    if(event->type()==QEvent::LayoutRequest && object==controls_ && time_)fitTransportControls();
+    if(event->type()==QEvent::KeyPress && trackPopup_ && qApp->activePopupWidget()==trackPopup_) {
+        auto *key=static_cast<QKeyEvent*>(event);
+        if(key->key()<Qt::Key_0 || key->key()>Qt::Key_9)
+            if(handleShortcut(key,true))return true;
+        return false;
+    }
     if(event->type()==QEvent::Resize && object==pane_->surface() && aiCaption_){const auto size=pane_->surface()->size();aiCaption_->setGeometry(24,qMax(0,size.height()-180),qMax(1,size.width()-48),120);}
     if(object==discSurface_ && discMenu_ && discMenu_->active() &&
        (event->type()==QEvent::MouseMove || event->type()==QEvent::MouseButtonRelease)){
@@ -836,7 +884,7 @@ bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
     if (event->type() == QEvent::KeyPress && (isActiveWindow() || qApp->activeWindow()==controls_ || qApp->activeWindow()==playlistPanel_ || qApp->activeWindow()==fullscreenTitle_ || qApp->activeWindow()==equalizerPopup_)) {
         auto *key = static_cast<QKeyEvent *>(event);
         if(key->key()==Qt::Key_Escape && equalizerPopup_ && equalizerPopup_->isVisible()){equalizerPopup_->close();return true;}
-        if (key->key() == Qt::Key_Tab && !minimalMode_ && !source_.isEmpty()) { infoVisible_ = !infoVisible_;infoFpsTimer_.invalidate(); updateInfo(); if(infoVisible_){info_->show();info_->raise();}else {static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();} return true; }
+        if (key->key() == Qt::Key_Tab && !minimalMode_ && !source_.isEmpty()) { toggleInfo(); return true; }
         const bool editing = qApp->activePopupWidget() || isShortcutEditor(qobject_cast<QWidget *>(object)) || isShortcutEditor(qApp->focusWidget());
         if(!editing && discMenu_ && discMenu_->active() && discMenuNavigation_){int command=-1;switch(key->key()){case Qt::Key_Return:case Qt::Key_Enter:command=0;break;case Qt::Key_Up:command=1;break;case Qt::Key_Down:command=2;break;case Qt::Key_Left:command=3;break;case Qt::Key_Right:command=4;break;case Qt::Key_Menu:command=5;break;default:break;}if(command>=0){discMenu_->navigate(command);return true;}}
         if(!editing && handleShortcut(key))return true;
@@ -855,10 +903,19 @@ bool PlayerWindow::eventFilter(QObject *object, QEvent *event) {
         if(event->type()==QEvent::ApplicationDeactivate)equalizerPopup_->close();
         else if(event->type()==QEvent::MouseButtonPress){auto *widget=qobject_cast<QWidget *>(object);if(widget && widget!=equalizerButton_ && widget!=equalizerPopup_ && !equalizerPopup_->isAncestorOf(widget))equalizerPopup_->close();}
     }
-    if(event->type()==QEvent::MouseButtonPress && object==speedButton_ && speedPopup_ && speedPopup_->isVisible()) {speedPopup_->close();return true;}
+    if (event->type()==QEvent::MouseButtonPress) {
+        if (object==rate_ || (rate_ && object==rate_->findChild<QLineEdit*>())) { showSpeedPopup(); return true; }
+        if (object==videoBadge_ || object==audioBadge_ || object==subtitleBadge_) {
+            showTrackPopup(object==videoBadge_ ? "video" : object==audioBadge_ ? "audio" : "subtitle",object==subtitleBadge_ && static_cast<QMouseEvent*>(event)->button()==Qt::RightButton); return true;
+        }
+    }
     return QMainWindow::eventFilter(object, event);
 }
-bool PlayerWindow::handleShortcut(QKeyEvent *event){
+void PlayerWindow::toggleInfo(){
+    if(minimalMode_ || source_.isEmpty())return;
+    infoVisible_ = !infoVisible_;infoFpsTimer_.invalidate(); updateInfo(); if(infoVisible_){info_->show();info_->raise();}else {static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();}
+}
+bool PlayerWindow::handleShortcut(QKeyEvent *event,bool tracksOnly){
     if (isPlayerFullscreenKey(event->key())) return false;
     const auto key=QKeySequence(event->keyCombination()).toString(QKeySequence::PortableText);
     const auto entries=playerShortcuts(*settings_);
@@ -870,15 +927,56 @@ bool PlayerWindow::handleShortcut(QKeyEvent *event){
         const auto assigned = settings_->value(prefix+"key", entry.key).toString();
         if(assigned.isEmpty() || QKeySequence::fromString(assigned,QKeySequence::PortableText).toString(QKeySequence::PortableText)!=key)continue;
         const auto action=settings_->value(prefix+"action",entry.action).toString();const double value=settings_->value(prefix+"value",entry.value).toDouble();
-        if(event->isAutoRepeat() && (action=="play" || action=="mute" || action=="list" || action=="minimal"))return true;
-        if(action=="play")togglePlayback();
+        const bool trackAction=action.endsWith("Tracks");
+        if(tracksOnly && !trackAction)return false;
+        if(event->isAutoRepeat() && (trackAction || action=="play" || action=="mute" || action=="list" || action=="minimal"))return true;
+        if(action.startsWith("menu:")) {
+            if(!event->isAutoRepeat())triggerMenuShortcut(action.mid(5));
+        } else if(action.startsWith("imageTool_")) {
+            if(imageMode_ && !event->isAutoRepeat())
+                if(auto *button=imageTools_->findChild<QToolButton*>(action))button->click();
+        }
+        else if(action=="info"){if(!event->isAutoRepeat())toggleInfo();}
+        else if(action=="decoder"){if(!event->isAutoRepeat())decoderBadge_->click();}
+        else if(action=="speedPopup"){if(!event->isAutoRepeat())showSpeedPopup();}
+        else if(action=="normalRate")setRate(1);
+        else if(action=="zoomIn" || action=="zoomOut" || action=="zoomFit"){
+            if(!minimalMode_)pane_->updateZoom(action=="zoomFit"?1.f:pane_->zoom()*(action=="zoomIn"?1.25f:.8f),pane_->surface()->rect().center());
+        }
+        else if(action=="goStart" || action=="goEnd"){if(ready_)seekTime(action=="goStart"?0:snapshot().duration100ns);}
+        else if(action=="editTime" || action=="editFrame"){
+            auto *edit=action=="editTime"?time_:frame_;
+            if(edit->isVisible() && edit->isEnabled()){edit->window()->activateWindow();edit->setFocus();edit->selectAll();}
+        }
+        else if(action=="play")togglePlayback();
         else if(action=="volume")volume_->setValue(std::clamp(volume_->value()+qRound(value),0,200));
         else if(action=="rate")setRate(speed_+value);
         else if(action=="mute")mute_->click();
-        else if(action=="list" && !minimalMode_){setPlaylistPinned(!playlistPinned_);if(playlistPinned_)for(QTreeWidgetItemIterator it(playlist_);*it;++it)if((*it)->data(0,Qt::UserRole).toString()==source_){playlist_->setCurrentItem(*it);playlist_->scrollToItem(*it);break;}}
+        else if(action=="list" && !minimalMode_){if(playlistHidden_) {playlistHidden_=false;playlistDismissed_=false;}
+            else if(playlistPinned_) {setPlaylistPinned(false);playlistHidden_=true;playlistPanel_->hide();}
+            else setPlaylistPinned(true);
+            if(playlistPinned_)for(QTreeWidgetItemIterator it(playlist_);*it;++it)if((*it)->data(0,Qt::UserRole).toString()==source_){playlist_->setCurrentItem(*it);playlist_->scrollToItem(*it);break;}}
         else if(action=="jinc" || action=="d3d11" || action=="auto"){
             if(action=="d3d11")settings_->setValue("render/upscale",7);
             loadPreset(QDir(PresetStore::directory()).filePath("builtin/"+QString(action=="auto"?"Anime.vpy":action=="jinc"?"Anime-4-Jinc.vpy":"Anime-5-D3D11.vpy")));
+        }
+        else if(action=="moesr" || action=="animeA" || action=="animeFast" || action=="anime1x"){
+            const int stage=action=="moesr"?10:action=="animeA"?8:action=="animeFast"?0:6;
+            loadPreset(QDir(PresetStore::directory()).filePath("builtin/"+builtinAnimeFiles().at(stage)));
+        }
+        else if(action=="openngu" || action=="lanczos"){
+            loadPreset(QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));
+            settings_->setValue("render/upscale",action=="openngu"?15:3);applyScaling();updateAlgorithmBadges();
+        }
+        else if(trackAction)showTrackPopup(action.chopped(6));
+        else if(action=="settings")showSettings();
+        else if(action=="equalizer")showEqualizer();
+        else if(action=="previous" || action=="next")nextFile(action=="previous"?-1:1);
+        else if(action=="fullscreen")toggleFullscreen();
+        else if(QStringList{"jxl","avif","png","jxlFolder","avifFolder","pngFolder"}.contains(action)){
+            const bool choose=action.endsWith("Folder");
+            const auto directory=choose?QFileDialog::getExistingDirectory(this,tr("选择截图保存文件夹"),screenshotDirectory()):screenshotDirectory();
+            if(!directory.isEmpty())captureImage(false,directory,choose?action.chopped(6):action,true);
         }
         else if(action=="seek"){if(imageMode_)nextFile(value<0?-1:1);else seekTime(position()+qRound64(value*1e7));}
         else if(action=="frame")stepFrame(value<0?-1:1);
@@ -903,17 +1001,29 @@ void PlayerWindow::updateMinimalControls(){
     videoSplit_->setVisible(!minimalMode_);
     if(minimalMode_){
         if(!property("minimalMode").toBool())normalWindowSize_=size();
-        infoVisible_=false;static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();playlistPanel_->hide();lyricLabel_->hide();audioSubtitle_->hide();equalizerButton_->hide();speedButton_->hide();
+        infoVisible_=false;static_cast<PlayerInfoPanel *>(info_)->hidePanel();audioInfo_->hidePanel();playlistPanel_->hide();lyricLabel_->hide();audioSubtitle_->hide();equalizerButton_->show();
         pane_->setImage({});pane_->setSurfaceActive(false);setMinimumSize(360,70);
     }else {setMinimumSize(420,160);equalizerButton_->show();}
+    updateTransportWidth();
     setProperty("minimalMode",minimalMode_);layoutChrome();
-    if(minimalMode_ && !isFullScreen()){centralWidget()->layout()->invalidate();const auto margins=centralWidget()->layout()->contentsMargins();resize(420,controls_->sizeHint().height()+margins.top()+margins.bottom()+height()-centralWidget()->height());}
+    if(minimalMode_) controls_->setVisible(isVisible() && !isMinimized());
+    if(minimalMode_ && !isFullScreen()){centralWidget()->layout()->invalidate();const auto margins=centralWidget()->layout()->contentsMargins();resize(470,controls_->sizeHint().height()+margins.top()+margins.bottom()+height()-centralWidget()->height());}
 }
 void PlayerWindow::setMinimalMode(bool enabled){
     if(imageMode_ || (discMenu_ && discMenu_->active()) || minimalMode_==enabled)return;
-    const auto at=position();const bool resume=playing_ || autoPlay_;minimalMode_=enabled;updateMinimalControls();
-    if(!enabled && !isFullScreen())resize(normalWindowSize_.expandedTo(QSize(1000,500)));
-    if(!source_.isEmpty()){server_->unloadScript();output_->stop();clock_->pause();playing_=false;seekPending_=false;seekUiTarget_=queuedSeek_=-1;rateApplied_=false;resumeAt_=at;autoPlay_=resume;openMedia();}
+    const auto at=queuedSeek_>=0 ? queuedSeek_ : seekUiTarget_>=0 ? seekUiTarget_ : resumeAt_>=0 ? resumeAt_ : position();
+    const bool resume=playing_ || autoPlay_;minimalMode_=enabled;updateMinimalControls();
+    if(!enabled && !isFullScreen())resize(width()>=540 ? QSize(width(),qMax(height(),normalWindowSize_.height())) : normalWindowSize_.expandedTo(QSize(960,500)));
+    if (!source_.isEmpty()) {
+        server_->unloadScript();
+        output_->stop();
+        clock_->resetVideoOutput();
+        playing_ = seekPending_ = rateApplied_ = false;
+        seekUiTarget_ = queuedSeek_ = -1;
+        resumeAt_ = at;
+        autoPlay_ = resume;
+        openMedia();
+    }
 }
 void PlayerWindow::dragEnterEvent(QDragEnterEvent *event) {
     if(event->mimeData()->hasUrls()){dragStatus_=message_->text();event->acceptProposedAction();}

@@ -119,7 +119,7 @@ QString emitNode(const FilterNode &node, bool gpu = true)
                        "    _shader_key = (_shader_archive, _shader_member, os.stat(_shader_archive).st_mtime_ns)\n"
                        "    _shader_cached = getattr(_shader_sys, '_vsr_last_shader', (None, None))\n"
                        "    if _shader_cached[0] != _shader_key:\n"
-                       "        _shader_tool = os.path.join(_shader_root, '..', 'runtime', 'tools', '7z.exe')\n"
+                       "        _shader_tool = os.path.join(_shader_root, '..', 'tools', '7z', '7z.exe')\n"
                        "        _shader_text = _shader_process.check_output([_shader_tool, 'x', '-so', '-bd', '-bsp0', '-spd', _shader_archive, _shader_member], creationflags=0x08000000).decode('utf-8').lstrip('\\ufeff')\n"
                        "        _shader_sys._vsr_last_shader = (_shader_key, _shader_text)\n"
                        "    else: _shader_text = _shader_cached[1]\n"
@@ -129,7 +129,7 @@ QString emitNode(const FilterNode &node, bool gpu = true)
             .arg((p.value("mode").toString() == QStringLiteral("自定义 GLSL") || !p.value("shader").toString().isEmpty()
                  ? VpyScriptBuilder::pythonString(p.value("shader").toString())
                  : QString("os.path.join(globals().get('_vsr_directory', %1), 'shaders', %2)")
-                     .arg(VpyScriptBuilder::pythonString(QCoreApplication::applicationDirPath()), VpyScriptBuilder::pythonString(p.value("mode").toString())))).arg(dimensions);
+                     .arg(VpyScriptBuilder::pythonString(QCoreApplication::applicationDirPath()), VpyScriptBuilder::pythonString(p.value("mode").toString()=="anime4k-v4-a.glsl" ? QString("anime4k-mode-a.glsl") : p.value("mode").toString())))).arg(dimensions);
     }
     if (node.definitionId == "qtgmc" || node.definitionId == "smdegrain") {
         const auto prepare=QStringLiteral("import havsfunc as haf\nclip = core.resize.Point(clip, format=vs.YUV444P16, **({'matrix': _vsr_matrix(clip)} if clip.format.color_family == vs.RGB else {}))\n");

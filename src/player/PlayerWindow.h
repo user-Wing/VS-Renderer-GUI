@@ -21,6 +21,7 @@ class QPushButton;
 class QLabel;
 class QTimer;
 class QVBoxLayout;
+class QGridLayout;
 class QSplitter;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -74,7 +75,7 @@ protected:
     void dragLeaveEvent(QDragLeaveEvent *) override;
 private:
     friend class ::TestPlayer;
-    bool handleShortcut(QKeyEvent *event);
+    bool handleShortcut(QKeyEvent *event,bool tracksOnly=false);
     void setMinimalMode(bool enabled);
     void updateMinimalControls();
     bool minimalMode_=false;
@@ -159,6 +160,9 @@ private:
     void migrateCubeLibrary();
     QString videoCubePath_;
     bool videoCubeP3_ = false;
+    void showTrackPopup(const QString &type,bool secondary=false);
+    void updateTransportWidth();
+    void fitTransportControls();
     void showSpeedPopup();
     void updateInfo();
     void updateAudioInfo(const QJsonObject &audio, quint64 bitRate);
@@ -168,6 +172,9 @@ private:
     QTimer *statusTimer_=nullptr;
     QString lastStatus_;
     void showContextMenu(const QPoint &position);
+    QMenu *buildPlayerMenu(bool catalog);
+    void triggerMenuShortcut(const QString &id);
+    void toggleInfo();
     void addLoopMenu(QMenu *menu);
     void setLoopPoint(bool out, qint64 time);
     void openInRenderer(bool loop);
@@ -186,7 +193,7 @@ private:
     void updateAudioLyrics(qint64 time);
     void useNativeAudio();
     QString screenshotDirectory() const;
-    void captureImage(bool source, const QString &directory = {}, const QString &format = "png");
+    void captureImage(bool source, const QString &directory = {}, const QString &format = "png", bool copy = false);
     void saveScreenshot(const QString &path,const QImage &image,const QJsonObject &metadata);
     void applySettings(bool reopen);
     void applyAppearance();
@@ -205,7 +212,7 @@ private:
     bool frameEditPending_ = false;
     int frameJumpTarget_ = -1;
     quint64 frameJumpPresents_ = 0;
-    std::unique_ptr<QSettings> settings_;
+    std::unique_ptr<QSettings> settings_, history_;
     std::unique_ptr<PlayerSubtitles> subtitles_;
     std::unique_ptr<PlayerNetworkInput> network_;
     std::unique_ptr<PlayerLanguage> language_;
@@ -239,6 +246,7 @@ private:
     QLabel *message_ = nullptr;
     QLabel *dragHint_ = nullptr;
     QLabel *interpolationWarning_ = nullptr;
+    QLabel *subtitleBadge_ = nullptr;
     QLabel *videoBadge_ = nullptr;
     QLabel *audioBadge_ = nullptr;
     QPushButton *decoderBadge_ = nullptr;
@@ -262,6 +270,7 @@ private:
     QWidget *controls_ = nullptr;
     QWidget *playlistPanel_ = nullptr;
     QSplitter *videoSplit_ = nullptr;
+    bool playlistHidden_ = false;
     bool playlistPinned_ = false;
     bool playlistDismissed_ = false;
     int playlistWidth_ = 320;
@@ -283,6 +292,8 @@ private:
     QElapsedTimer profileStartup_;
     bool profileFallback_ = false;
     QElapsedTimer positionTimer_;
+    bool reopeningDecoder_ = false;
+    int reopenVideo_ = -1, reopenAudio_ = -1;
     bool positionRestored_ = false;
     quint64 qualityDropped_ = 0, qualitySubmitted_ = 0;
     qint64 resumeAt_ = -1;
@@ -327,8 +338,10 @@ private:
     int infoTick_ = 0;
     quint64 generation_ = 0;
     double speed_ = 1;
+    QGridLayout *transportGrid_ = nullptr;
+    QPointer<QMenu> trackPopup_;
     QPointer<QWidget> speedPopup_;
-    QPushButton *speedButton_ = nullptr;
+
     QByteArray normalGeometry_;
     quint64 skippedFrames_ = 0, submittedFrames_ = 0;
     QElapsedTimer frameTimer_;

@@ -85,7 +85,7 @@ inline QWidget *buildPageThemeEditor(QWidget *parent,const QString &path,const Q
     auto *library=new QComboBox(editor);library->setObjectName("pageThemeLibrary");library->addItem(QObject::tr("当前主题"),path);form->addRow(QObject::tr("主题库"),library);
     auto *name=new QLineEdit(editor);form->addRow(QObject::tr("主题名称"),name);
     const auto root=QFileInfo(path).absolutePath();
-    QDirIterator packs(QDir(root).filePath("themes"),{"skin.ini"},QDir::Files,QDirIterator::Subdirectories);while(packs.hasNext()){const auto ini=packs.next();QSettings pack(ini,QSettings::IniFormat);library->addItem(pack.value("skin_name",QFileInfo(ini).dir().dirName()).toString(),ini);}
+    QDirIterator packs(QDir(root).filePath("skin"),{"skin.ini"},QDir::Files,QDirIterator::Subdirectories);while(packs.hasNext()){const auto ini=packs.next();QSettings pack(ini,QSettings::IniFormat);library->addItem(pack.value("skin_name",QFileInfo(ini).dir().dirName()).toString(),ini);}
     QList<QLineEdit*> images;QList<QSpinBox*> transparency,brightness;QList<QPushButton*> colors;
     for(const auto &page:pages){
         auto *row=new QWidget(editor);auto *layout=new QHBoxLayout(row);layout->setContentsMargins(0,0,0,0);

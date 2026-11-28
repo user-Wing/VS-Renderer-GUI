@@ -17,9 +17,6 @@
 #include <QTemporaryDir>
 #include <QSettings>
 #include <QScopeGuard>
-#include <QLocalSocket>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QTest>
 
 using namespace vsr;
@@ -40,15 +37,14 @@ private slots:
         ExportWindow restored;QCOMPARE(restored.findChild<QTreeWidget*>("encodingQueue")->topLevelItemCount(),2);
     }
 
-    void commandBridgeAndHistory(){
+    void externalCommandAndHistory(){
         QSettings settings;const auto saved=settings.value("export/commandHistory");const auto restore=qScopeGuard([&]{if(saved.isValid())settings.setValue("export/commandHistory",saved);else settings.remove("export/commandHistory");});
         ExportWindow window;window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
         auto *command=window.findChild<QPlainTextEdit*>("exportCommand");auto *history=window.findChild<QComboBox*>("exportCommandHistory");QVERIFY(command && history);
         const QString text="ffmpeg -i \"input file.mkv\" -c:v libx264 output.mkv";
-        QLocalSocket socket;socket.connectToServer("VSRenderer.ExportCommand");QTRY_COMPARE(socket.state(),QLocalSocket::ConnectedState);
-        socket.write(QJsonDocument(QJsonObject{{"command",text}}).toJson(QJsonDocument::Compact)+'\n');socket.flush();QTRY_VERIFY(socket.canReadLine());QCOMPARE(socket.readLine(),QByteArray("OK\n"));QCOMPARE(command->toPlainText(),text);QCOMPARE(history->itemText(0),text);
-        QCOMPARE(window.findChild<QTreeWidget*>()->topLevelItemCount(),0);
-        window.hide();QLocalSocket hidden;hidden.connectToServer("VSRenderer.ExportCommand");QTRY_COMPARE(hidden.state(),QLocalSocket::ConnectedState);hidden.write("{\"command\":\"ignored\"}\n");hidden.flush();QTRY_VERIFY(hidden.canReadLine());QVERIFY(hidden.readLine().startsWith("ERROR"));QCOMPARE(command->toPlainText(),text);
+        auto *queue=window.findChild<QTreeWidget*>("encodingQueue");QVERIFY(queue);const int initialJobs=queue->topLevelItemCount();
+        window.receiveExternalCommand(text);QCOMPARE(command->toPlainText(),text);QCOMPARE(history->itemText(0),text);
+        QCOMPARE(queue->topLevelItemCount(),initialJobs);
     }
     void initTestCase()
     {
@@ -80,7 +76,7 @@ private slots:
         const QString source = directory.filePath(QStringLiteral("input.mkv"));
         const QString script = directory.filePath(QStringLiteral("preview.vpy"));
         const QString ffmpeg = directory.filePath(QStringLiteral("runtime/ffmpeg/ffmpeg.exe"));
-        const QString vspipe = directory.filePath(QStringLiteral("runtime/python/Lib/site-packages/vapoursynth/vspipe.exe"));
+        const QString vspipe = directory.filePath(QStringLiteral("tools/vapoursynth/Lib/site-packages/vapoursynth/vspipe.exe"));
         QDir().mkpath(QFileInfo(ffmpeg).absolutePath());
         QDir().mkpath(QFileInfo(vspipe).absolutePath());
         for (const QString &path : {source, script, ffmpeg, vspipe}) {
@@ -128,7 +124,7 @@ private slots:
         const QString source = directory.filePath(QStringLiteral("input.mkv"));
         const QString script = directory.filePath(QStringLiteral("preview.vpy"));
         const QString ffmpeg = directory.filePath(QStringLiteral("runtime/ffmpeg/ffmpeg.exe"));
-        const QString vspipe = directory.filePath(QStringLiteral("runtime/python/Lib/site-packages/vapoursynth/vspipe.exe"));
+        const QString vspipe = directory.filePath(QStringLiteral("tools/vapoursynth/Lib/site-packages/vapoursynth/vspipe.exe"));
         QDir().mkpath(QFileInfo(ffmpeg).absolutePath());
         QDir().mkpath(QFileInfo(vspipe).absolutePath());
         for (const QString &path : {source, script, ffmpeg, vspipe}) {
@@ -168,7 +164,7 @@ private slots:
             ffmpeg = QStringLiteral("C:\\PortableSoft\\FFmpegFreeUI ReadyToRun x64\\ffmpeg.exe");
         const QString appDir = QCoreApplication::applicationDirPath();
         const QString vspipe = QDir(appDir).filePath(
-            QStringLiteral("runtime/python/Lib/site-packages/vapoursynth/vspipe.exe"));
+            QStringLiteral("tools/vapoursynth/Lib/site-packages/vapoursynth/vspipe.exe"));
         if (!QFileInfo::exists(ffmpeg) || !QFileInfo::exists(vspipe))
             QSKIP("Real FFmpeg/VapourSynth runtime is not available.");
 

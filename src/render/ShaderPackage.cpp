@@ -33,7 +33,7 @@ QByteArray read(const QString &path) { QFile file(path);return file.open(QIODevi
 bool write(const QString &path,const QByteArray &data) { QFile file(path);return file.open(QIODevice::WriteOnly) && file.write(data)==data.size(); }
 QString toolPath(const QString &name) {
     const QDir app(QCoreApplication::applicationDirPath());
-    for(const auto &directory:QStringList{app.filePath("runtime/shader-tools"),app.filePath("../../.deps/color/ucrt64/bin"),app.filePath(".deps/color/ucrt64/bin")}) {
+    for(const auto &directory:QStringList{app.filePath("tools/shader-tools"),app.filePath("../../.deps/color/ucrt64/bin"),app.filePath(".deps/color/ucrt64/bin")}) {
         const auto path=QDir(directory).filePath(name+".exe");if(QFileInfo::exists(path))return QFileInfo(path).absoluteFilePath();
     }
     return {};
@@ -226,7 +226,7 @@ ShaderPackageResult ShaderPackage::prepare(const QString &sourcePath,const QStri
         const auto output=QDir(root).filePath("bundled/"+QString::fromLatin1(QCryptographicHash::hash(read(archive),QCryptographicHash::Sha256).toHex())+"/"+member);
         QDir().mkpath(QFileInfo(output).absolutePath());
         if(!QFileInfo::exists(output))for(const auto &suffix:QStringList{"",".vsrhlsl",".vsrhlsl.json"}){
-            QProcess process;process.start(QDir(QCoreApplication::applicationDirPath()).filePath("runtime/tools/7z.exe"),{"x","-so","-bd","-bsp0","-spd",archive,member+suffix});
+            QProcess process;process.start(QDir(QCoreApplication::applicationDirPath()).filePath("tools/7z/7z.exe"),{"x","-so","-bd","-bsp0","-spd",archive,member+suffix});
             if(!process.waitForStarted() || !process.waitForFinished(30000)){process.kill();process.waitForFinished();return {{},"Cannot extract bundled shader."};}
             if(process.exitCode()==0){if(!write(output+suffix,process.readAllStandardOutput()))return {{},"Cannot save bundled shader."};}
             else if(suffix.isEmpty())return {{},"Bundled shader is missing: "+member};
@@ -235,6 +235,10 @@ ShaderPackageResult ShaderPackage::prepare(const QString &sourcePath,const QStri
     }
     ShaderPackageResult result;const auto source=read(sourcePath);const auto suffix=QFileInfo(sourcePath).suffix().toLower();
     if(source.isEmpty() || source.size()>16*1024*1024){result.error="Cannot read shader (limit 16 MiB): "+sourcePath;return result;}
+    if (suffix=="vsrhlsl") {
+        if (!validCache(source)) return {{}, "Invalid compiled VSR shader package."};
+        return {QFileInfo(sourcePath).absoluteFilePath(), {}};
+    }
     const bool native=suffix=="hlsl";
     const bool multipass=native && QRegularExpression("^//!HOOK\\s",QRegularExpression::MultilineOption).match(QString::fromUtf8(source)).hasMatch();
     if(!native && suffix!="glsl" && suffix!="hook"){result.error="Expected .hlsl, .glsl or .hook.";return result;}
@@ -248,7 +252,7 @@ ShaderPackageResult ShaderPackage::prepare(const QString &sourcePath,const QStri
         if(!QDir().mkpath(cache) || (read(path)!=bytes && !write(path,bytes)))return {{},"Cannot materialize bundled shader."};return {path,{}};
     }
     const auto glslc=toolPath("glslc"),cross=toolPath("spirv-cross");
-    if(!native && (glslc.isEmpty() || cross.isEmpty())){result.error="GLSL conversion tools are missing (runtime/shader-tools/glslc.exe and spirv-cross.exe).";return result;}
+    if(!native && (glslc.isEmpty() || cross.isEmpty())){result.error="GLSL conversion tools are missing (tools/shader-tools/glslc.exe and spirv-cross.exe).";return result;}
     QCryptographicHash hash(QCryptographicHash::Sha256);hash.addData("VSR-HLSL-1.0.17-format1-main-prekernel-native-multipass-params-v8");hash.addData(suffix.toUtf8());hash.addData(source);
     if(!native){hash.addData(read(glslc));hash.addData(read(cross));}
     wchar_t compilerPath[MAX_PATH]{};if(GetModuleFileNameW(GetModuleHandleW(L"d3dcompiler_47.dll"),compilerPath,MAX_PATH))hash.addData(read(QString::fromWCharArray(compilerPath)));

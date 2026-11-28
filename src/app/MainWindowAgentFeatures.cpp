@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include "app/MainWindow.h"
 #include "agent/AgentSession.h"
 #include "agent/AgentInstructions.h"
@@ -24,7 +25,7 @@ void MainWindow::initializeAgentFeatures()
 {
     const auto directory = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("agent");
     agentInstructions_ = new AgentInstructions(directory, this);
-    agentMcp_ = new AgentMcpManager(QDir(directory).filePath("mcp.json"), QDir(QCoreApplication::applicationDirPath()).filePath("runtime/agent"), this);
+    agentMcp_ = new AgentMcpManager(QDir(directory).filePath("mcp.json"), QDir(QCoreApplication::applicationDirPath()).filePath("tools/agent"), this);
     QString error; if (!agentMcp_->load(&error)) QTimer::singleShot(0, this, [this, error] { setStatus(error, true); });
     agentQueue_=configureAgentConversation(agentSession_,agentSession_->property("agentConversationId").toString());
     agentPage_ = new AgentPage(agentSession_, pages_); pages_->addWidget(agentPage_);
@@ -69,7 +70,7 @@ AgentTaskQueue *MainWindow::configureAgentConversation(AgentSession *session,con
     session->registerTool("get_token_usage", QStringLiteral("读取当前会话的实际Token累计、缓存/推理用量及预计上下文占用。"), object({}), [session](const QJsonObject &) { return session->usage(); });
     agentMcp_->registerTools(session);
     connect(agentMcp_, &AgentMcpManager::toolsChanged, session, [session] {
-        for(const auto &name:QSettings().value("agent/disabledTools").toStringList())session->setToolEnabled(name,false);
+        for(const auto &name:vsr::rendererSettings().value("agent/disabledTools").toStringList())session->setToolEnabled(name,false);
     });
     const auto directory=QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("agent");
     const auto queues=QDir(directory).filePath("conversation-tasks");const bool migrate=!QDir(queues).exists();QDir().mkpath(queues);
@@ -79,7 +80,7 @@ AgentTaskQueue *MainWindow::configureAgentConversation(AgentSession *session,con
     connect(queue,&AgentTaskQueue::sessionCreated,session,[this,registerEnvironment](AgentSession *child,bool writes){registerEnvironment(child);if(writes)agentMcp_->registerTools(child);});
     connect(queue,&AgentTaskQueue::changed,this,[this,queue]{if(agentPage_&&agentQueue_==queue){agentPage_->setQueueSummary(queue->summary());refreshAgentCompletions();}});
     connect(queue,&AgentTaskQueue::errorOccurred,this,[this](const QString &message){setStatus(message,true);});
-    for(const auto &name:QSettings().value("agent/disabledTools").toStringList())session->setToolEnabled(name,false);
+    for(const auto &name:vsr::rendererSettings().value("agent/disabledTools").toStringList())session->setToolEnabled(name,false);
     return queue;
 }
 }

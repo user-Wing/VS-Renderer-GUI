@@ -54,7 +54,7 @@ QProcessEnvironment environment(const QJsonObject &overrides)
 #ifdef Q_OS_WIN
     paths.append(QDir::toNativeSeparators(QDir(qEnvironmentVariable("SystemRoot", "C:/Windows")).filePath("System32")));
 #endif
-    for (const auto &relative : {".", "runtime/agent", "runtime/agent/npm", "runtime/agent/npm/bin", "runtime/python", "runtime/python/Scripts", "runtime/tools"}) {
+    for (const auto &relative : {".", "tools/agent", "tools/agent/npm", "tools/agent/npm/bin", "tools/vapoursynth", "tools/vapoursynth/Scripts", "tools/7z", "tools/aria2-next"}) {
         const auto path = QDir(base).absoluteFilePath(relative); if (QFileInfo(path).isDir()) paths.append(QDir::toNativeSeparators(path));
     }
     paths.removeDuplicates(); env.insert("PATH", paths.join(QDir::listSeparator()));

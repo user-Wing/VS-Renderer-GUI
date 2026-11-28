@@ -30,9 +30,9 @@
 #endif
 namespace vsr {
 namespace {
-const QStringList ids{"VS-GUI","ffmpeg","mkvtoolnix","MadVR","LAV-Filters","aria2-next","AI-Subtitles","mpv-shaders"};
+const QStringList ids{"VS-GUI","ffmpeg","mkvtoolnix","MadVR","LAV-Filters","aria2-next","AI-Subtitles","mpv-shaders","NCNN"};
 QString title(const QString &id){return id=="VS-GUI"?QStringLiteral("软件本体"):id=="AI-Subtitles"?QStringLiteral("AI 实时字幕 · Qwen3-ASR"):id;}
-QString tool(const QString &name){return QDir(QCoreApplication::applicationDirPath()).filePath("runtime/tools/"+name);}
+QString tool(const QString &name){return QDir(QCoreApplication::applicationDirPath()).filePath("tools/"+QString(name.startsWith("7z")?"7z/":name.startsWith("aria2")?"aria2-next/":"update/")+name);}
 QJsonObject json(const QString &path){QFile f(path);return f.open(QIODevice::ReadOnly)?QJsonDocument::fromJson(f.readAll()).object():QJsonObject();}
 QString digest(const QString &path){QFile f(path);QCryptographicHash hash(QCryptographicHash::Sha256);if(!f.open(QIODevice::ReadOnly))return {};while(!f.atEnd()){const auto bytes=f.read(8*1024*1024);if(bytes.isEmpty())return {};hash.addData(bytes);}return QString::fromLatin1(hash.result().toHex());}
 bool x64(const QString &path){QFile f(path);if(!f.open(QIODevice::ReadOnly))return false;const auto dos=f.read(64);if(dos.size()!=64 || dos.left(2)!="MZ")return false;const auto offset=qFromLittleEndian<quint32>(dos.constData()+60);if(offset>quint64(f.size()-6) || !f.seek(offset))return false;const auto pe=f.read(6);return pe.left(4)==QByteArray("PE\0\0",4) && qFromLittleEndian<quint16>(pe.constData()+4)==0x8664;}
@@ -63,7 +63,7 @@ ComponentDownloads::ComponentDownloads(QWidget *parent):QWidget(parent),network_
     connect(&process_,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){if(error==QProcess::FailedToStart)fail(process_.errorString());});refresh();
 }
 ComponentDownloads::~ComponentDownloads(){if(process_.state()!=QProcess::NotRunning){process_.kill();process_.waitForFinished(3000);}}
-QString ComponentDownloads::destination(const QString &id){if(id=="ffmpeg")return ".";if(id=="mkvtoolnix")return "runtime/mkvtoolnix";if(id=="MadVR")return "madVR09217";if(id=="LAV-Filters")return "LAVFilters64";if(id=="aria2-next")return "runtime/tools";if(id=="AI-Subtitles")return "runtime/ai-subtitles";if(id=="mpv-shaders")return "shaders";return {};}
+QString ComponentDownloads::destination(const QString &id){if(id=="NCNN")return "tools/ncnn";if(id=="ffmpeg")return ".";if(id=="mkvtoolnix")return "tools/mkvtoolnix";if(id=="MadVR")return "tools/madvr09217";if(id=="LAV-Filters")return "tools/lav";if(id=="aria2-next")return "tools/aria2-next";if(id=="AI-Subtitles")return "tools/ai-subtitles";if(id=="mpv-shaders")return "shaders";return {};}
 bool ComponentDownloads::newer(const QString &a,const QString &b){return !a.isEmpty() && (b.isEmpty() || QVersionNumber::compare(QVersionNumber::fromString(a).normalized(),QVersionNumber::fromString(b).normalized())>0);}
 QList<ComponentRelease> ComponentDownloads::releases(const QString &id,const QJsonArray &files){
     QList<ComponentRelease> result;for(const auto &value:files){const auto f=value.toObject();const auto path=f.value("Path").toString();if(f.value("Type").toString()!="blob" || !path.startsWith(id+"/",Qt::CaseInsensitive))continue;
@@ -79,10 +79,11 @@ QList<ComponentRelease> ComponentDownloads::releases(const QString &id,const QJs
 }
 QString ComponentDownloads::localVersion(const QString &id)const{
     if(id=="VS-GUI")return VSR_VERSION;const auto app=QCoreApplication::applicationDirPath();const auto installed=json(QDir(app).filePath("components.json")).value(id).toString();
-    if(id=="AI-Subtitles")return QFileInfo::exists(QDir(app).filePath("runtime/ai-subtitles/ai-subtitles.json"))?installed:QString();
+    if(id=="NCNN")return QFileInfo::exists(QDir(app).filePath("tools/ncnn/models.json"))?installed:QString();
+    if(id=="AI-Subtitles")return QFileInfo::exists(QDir(app).filePath("tools/ai-subtitles/ai-subtitles.json"))?installed:QString();
     if(id=="mpv-shaders")return QFileInfo::exists(QDir(app).filePath("shaders/mpv-shaders.7z")) && !json(QDir(app).filePath("shaders/mpv-shaders/manifest.json")).value("files").toArray().isEmpty()?installed:QString();
-    if(id=="mkvtoolnix" && !QFileInfo::exists(QDir(app).filePath("runtime/mkvtoolnix/mkvmerge.exe")) && (QFileInfo::exists(QDir(app).filePath("runtime/mkvtoolnix.7z")) || QFileInfo::exists(QDir(app).filePath("runtime/mkvtoolnix.zip")))){QFile receipt(QDir(app).filePath("runtime/mkvtoolnix.version"));return receipt.open(QIODevice::ReadOnly)?QString::fromUtf8(receipt.readAll()).trimmed():installed;}
-    QString file=id=="mkvtoolnix"?"runtime/mkvtoolnix/mkvmerge.exe":id=="ffmpeg"?"ffmpeg.exe":id=="aria2-next"?"runtime/tools/aria2-next.exe":id=="MadVR"?"madVR09217/madVR64.ax":"LAVFilters64/LAVVideo.ax";
+    if(id=="mkvtoolnix" && !QFileInfo::exists(QDir(app).filePath("tools/mkvtoolnix/mkvmerge.exe")) && (QFileInfo::exists(QDir(app).filePath("tools/mkvtoolnix/mkvtoolnix.7z")) || QFileInfo::exists(QDir(app).filePath("tools/mkvtoolnix/mkvtoolnix.zip")))){QFile receipt(QDir(app).filePath("tools/mkvtoolnix/mkvtoolnix.version"));return receipt.open(QIODevice::ReadOnly)?QString::fromUtf8(receipt.readAll()).trimmed():installed;}
+    QString file=id=="mkvtoolnix"?"tools/mkvtoolnix/mkvmerge.exe":id=="ffmpeg"?"ffmpeg.exe":id=="aria2-next"?"tools/aria2-next/aria2-next.exe":id=="MadVR"?"tools/madvr09217/madVR64.ax":"tools/lav/LAVVideo.ax";
     if(!QFileInfo(QDir(app).filePath(file)).isFile())return {};if(id=="MadVR" || id=="LAV-Filters")return fileVersion(QDir(app).filePath(file));if(id=="ffmpeg" && !installed.isEmpty())return installed;
     QProcess p;p.start(QDir(app).filePath(file),{id=="ffmpeg"?"-version":"--version"});if(!p.waitForFinished(1500))return {};const auto output=QString::fromUtf8(p.readAllStandardOutput());const auto match=QRegularExpression("\\d+(?:\\.\\d+){1,3}").match(output);return match.captured(0);
 }
@@ -137,6 +138,12 @@ void ComponentDownloads::unpack(){
         process_.disconnect(this);connect(&process_,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){if(error==QProcess::FailedToStart)fail(process_.errorString());});connect(&process_,&QProcess::finished,this,[this](int result,QProcess::ExitStatus exit){if(result || exit!=QProcess::NormalExit){fail(tr("解压失败"));return;}extracted();});process_.start(tool("7z.exe"),{"x","-y","-o"+staging_,archive_});});process_.start(tool("7z.exe"),{"l","-slt","-sccUTF-8",archive_});
 }
 QString ComponentDownloads::payloadDirectory(const QString &id,const QString &root){
+    if(id=="NCNN"){
+        QDir dir(root);
+        for(const auto &name:{"models.json","ncnn-worker.py","python/python.exe","upscale_ncnn_vulkan_wrapper.cp312-win_amd64.pyd"})
+            if(!QFileInfo(dir.filePath(name)).isFile())return {};
+        return root;
+    }
     if(id=="mpv-shaders"){
         QStringList found;QDirIterator it(root,{"mpv-shaders.7z"},QDir::Files|QDir::NoSymLinks,QDirIterator::Subdirectories);
         while(it.hasNext()){const QFileInfo archive(it.next());const auto folder=archive.absolutePath();if(archive.size()>0 && !json(QDir(folder).filePath("mpv-shaders/manifest.json")).value("files").toArray().isEmpty())found<<folder;}

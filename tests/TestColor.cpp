@@ -148,7 +148,7 @@ private slots:
         const double expected=range==1?std::clamp((code-16)/219.0,0.0,1.0):code/255.0;
         QVERIFY2(std::abs(pixel.red-expected)<1.5/255.0,qPrintable(QString("actual %1 expected %2").arg(pixel.red).arg(expected)));
     }
-    void packedYuvRejectsUnsupportedMatrix() {
+    void packedYuvUsesFallbackForUnspecifiedTransform() {
         QTemporaryDir directory;QVERIFY(directory.isValid());
         const QString ffmpeg=QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe");
         const auto encoded=directory.filePath("packed.mkv"),media=directory.filePath("tagged.mkv");
@@ -159,8 +159,8 @@ private slots:
         QWidget surface;surface.resize(192,144);surface.show();QVERIFY(QTest::qWaitForWindowExposed(&surface));
         ThreeFpApi api;ThreeFpPlayer player(api,&surface);QVERIFY(player.setDecodeMode(1));QVERIFY(player.openFile(media));
         QTRY_COMPARE(player.snapshot().state,ThreeFpState::Ready);QVERIFY(player.seekFrame(0));
-        QTRY_VERIFY_WITH_TIMEOUT(player.lastError().contains("unsupported component transform"),5000);
-        QCOMPARE(player.snapshot().swapChainPresents,quint64(0));
+        QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().swapChainPresents>0,5000);
+        QVERIFY(!player.capture().isNull());
     }
     void nativeMissingChromaDefaultsToLeft() {
         QWidget surface; surface.resize(320,240); surface.show(); QVERIFY(QTest::qWaitForWindowExposed(&surface));

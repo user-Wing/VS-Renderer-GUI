@@ -13,8 +13,8 @@ $LibiamfRoot=(Resolve-Path -LiteralPath $LibiamfRoot).Path
 $checkout=(& git -C $NativeRoot rev-parse --show-toplevel).Trim()
 if($LASTEXITCODE -ne 0 -or (Resolve-Path -LiteralPath $checkout).Path -ne $NativeRoot){throw 'NativeRoot must be a separate FFF_Project Git checkout.'}
 $commit=(& git -C $NativeRoot rev-parse HEAD).Trim()
-if($commit -ne '85f514be34cdbcef17ba5c44b90cd9bbe4c2526d'){throw 'Checkout the pinned upstream commit 85f514be34cdbcef17ba5c44b90cd9bbe4c2526d first.'}
-$patch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches/3fp-vsp-upstream-20261115.patch'
+if($commit -ne '2fb8f25b3f69f3a6cddd1d5ab8c98d748e6d22e9'){throw 'Checkout the pinned upstream commit 2fb8f25b3f69f3a6cddd1d5ab8c98d748e6d22e9 first.'}
+$patch=Join-Path (Split-Path $PSScriptRoot -Parent) 'patches/3fp-vsp-1.2.0.patch'
 $ErrorActionPreference='Continue'
 & git -C $NativeRoot apply --reverse --check $patch 2>$null
 $applied=$LASTEXITCODE -eq 0
@@ -26,12 +26,6 @@ if(!$applied){
     if($LASTEXITCODE -ne 0){throw 'VSP upstream integration patch failed.'}
 }
 $projectRoot=Split-Path $PSScriptRoot -Parent
-$previewPatch=Join-Path $projectRoot 'patches/3fp-vsr-preview.patch'
-& git -C $NativeRoot apply --reverse --check $previewPatch 2>$null
-if($LASTEXITCODE -ne 0){
-    & git -C $NativeRoot apply $previewPatch
-    if($LASTEXITCODE -ne 0){throw 'VSR preview patch failed.'}
-}
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/PlaybackScheduling.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/PlaybackScheduling.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/LocalMediaPath.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Core/LocalMediaPath.h') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'src/backend/AudioFormatPolicy.h') -Destination (Join-Path $NativeRoot 'FFF.Native/3FP/Audio/AudioFormatPolicy.h') -Force

@@ -244,7 +244,7 @@ void TestAgentLocalProcess::installedCommands()
 
 void TestAgentLocalProcess::portableRuntimePath()
 {
-    const auto runtime = QDir(QCoreApplication::applicationDirPath()).filePath("runtime/agent");
+    const auto runtime = QDir(QCoreApplication::applicationDirPath()).filePath("tools/agent");
     if (!QFileInfo::exists(QDir(runtime).filePath("node.exe"))) QSKIP("Portable runtime is not staged beside this test executable.");
     AgentSession session; session.setAccessMode(AgentAccessMode::FullEnvironment); AgentLocalProcess local(&session); local.registerTools();
     const auto system = qEnvironmentVariable("SystemRoot", "C:/Windows");

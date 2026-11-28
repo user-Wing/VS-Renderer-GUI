@@ -17,6 +17,7 @@ class PreviewPane final : public QWidget {
 public:
     PreviewPane(const QString &title, const QString &badge, QWidget *parent = nullptr);
     QWidget *surface() const;
+    void updateZoom(float next, const QPointF &anchor);
     float zoom() const;
     QPointF pan() const;
     void setChromeVisible(bool visible);
@@ -51,7 +52,6 @@ private:
     void positionPixel();
     void applyWheel(QWheelEvent *event, const QPointF &surfacePosition);
     void scheduleRedraw();
-    void updateZoom(float next, const QPointF &anchor);
 
     QWidget *titleBar_ = nullptr;
     QLabel *titleLabel_ = nullptr;

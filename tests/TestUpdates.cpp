@@ -32,8 +32,8 @@
 using namespace vsr;
 namespace {
 void write(const QString &path,const QByteArray &bytes){QDir().mkpath(QFileInfo(path).absolutePath());QFile file(path);if(file.open(QIODevice::WriteOnly))file.write(bytes);}
-QString tool(const QString &name){return QDir(QCoreApplication::applicationDirPath()).filePath("runtime/tools/"+name);}
-void payload(const QString &root){for(const auto &name:QStringList{"VSRenderer.exe","vs-player.exe","FFF.Native.dll","Qt6Core.dll","runtime/python/python.exe","runtime/tools/aria2-next.exe","runtime/tools/7z.exe","runtime/tools/7z.dll","runtime/tools/apply-update.ps1","languages/en_US.json","languages/zh_CN.json"})write(QDir(root).filePath(name),"new-binary");write(QDir(root).filePath("release.json"),"{\"version\":\"1.0.3\"}");}
+QString tool(const QString &name){return QDir(QCoreApplication::applicationDirPath()).filePath("tools/"+QString(name.startsWith("7z")?"7z/":name.startsWith("aria2")?"aria2-next/":"update/")+name);}
+void payload(const QString &root){for(const auto &name:QStringList{"VSRenderer.exe","vs-player.exe","FFF.Native.dll","Qt6Core.dll","tools/vapoursynth/python.exe","tools/aria2-next/aria2-next.exe","tools/7z/7z.exe","tools/7z/7z.dll","tools/update/apply-update.ps1","config/languages/en_US.json","config/languages/zh_CN.json"})write(QDir(root).filePath(name),"new-binary");write(QDir(root).filePath("release.json"),"{\"version\":\"1.0.3\"}");}
 }
 class TestUpdates : public QObject {
     Q_OBJECT
@@ -79,11 +79,11 @@ private slots:
         const auto identity=[](const QString &path){auto handle=CreateFileW(reinterpret_cast<LPCWSTR>(path.utf16()),FILE_READ_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,0,nullptr);BY_HANDLE_FILE_INFORMATION info{};const bool ok=handle!=INVALID_HANDLE_VALUE && GetFileInformationByHandle(handle,&info);if(handle!=INVALID_HANDLE_VALUE)CloseHandle(handle);return ok?(quint64(info.nFileIndexHigh)<<32)|info.nFileIndexLow:quint64(0);};
         const auto prepared=identity(source+"/FFF.Native.dll");QVERIFY(prepared);QProcess apply;QElapsedTimer elapsed;elapsed.start();apply.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-update.ps1"),"-ParentPid","0","-Source",source,"-Target",target,"-NoLaunch"});QVERIFY(apply.waitForFinished(30000));QVERIFY2(apply.exitCode()==0,apply.readAllStandardError().constData());qInfo()<<"prepared-directory update ms"<<elapsed.elapsed();QCOMPARE(identity(target+"/FFF.Native.dll"),prepared);QVERIFY(!QFileInfo::exists(source));QFile ini(target+"/player.ini");QVERIFY(ini.open(QIODevice::ReadOnly));QCOMPARE(ini.readAll(),QByteArray("user"));
     }
-    void componentVersionsAndLayouts(){QVERIFY(ComponentDownloads::newer("102.0","99.0"));QVERIFY(!ComponentDownloads::newer("0.83","0.83.0"));QVERIFY(ComponentDownloads::newer("20261003","20260929"));QJsonArray files;for(const auto &path:QStringList{"aria2-next/v2.8.3/aria2-next-2.8.3-windows-x86_64.exe","aria2-next/v2.8.2/aria2-next-2.8.2-source.zip","aria2-next/v2.8.2/aria2-next-2.8.2-windows-x86_64.exe"})files<<QJsonObject{{"Path",path},{"Type","blob"},{"Size",100},{"Sha256",QString(64,'a')}};const auto versions=ComponentDownloads::releases("aria2-next",files);QCOMPARE(versions.size(),2);QCOMPARE(versions.first().version,QString("2.8.3"));QCOMPARE(ComponentDownloads::destination("mkvtoolnix"),QString("runtime/mkvtoolnix"));QVERIFY(ComponentDownloads::destination("bad").isEmpty());
+    void componentVersionsAndLayouts(){QVERIFY(ComponentDownloads::newer("102.0","99.0"));QVERIFY(!ComponentDownloads::newer("0.83","0.83.0"));QVERIFY(ComponentDownloads::newer("20261003","20260929"));QJsonArray files;for(const auto &path:QStringList{"aria2-next/v2.8.3/aria2-next-2.8.3-windows-x86_64.exe","aria2-next/v2.8.2/aria2-next-2.8.2-source.zip","aria2-next/v2.8.2/aria2-next-2.8.2-windows-x86_64.exe"})files<<QJsonObject{{"Path",path},{"Type","blob"},{"Size",100},{"Sha256",QString(64,'a')}};const auto versions=ComponentDownloads::releases("aria2-next",files);QCOMPARE(versions.size(),2);QCOMPARE(versions.first().version,QString("2.8.3"));QCOMPARE(ComponentDownloads::destination("mkvtoolnix"),QString("tools/mkvtoolnix"));QVERIFY(ComponentDownloads::destination("bad").isEmpty());
         files={QJsonObject{{"Path","MadVR/madVR09217.7z"},{"Type","blob"},{"Size",100},{"Sha256",QString(64,'a')}}};QCOMPARE(ComponentDownloads::releases("MadVR",files).first().version,QString("0.92.17"));
         QTemporaryDir tmp;QByteArray pe(128,'\0');pe.replace(0,2,"MZ");qToLittleEndian<quint32>(64,pe.data()+60);pe.replace(64,4,QByteArray("PE\0\0",4));qToLittleEndian<quint16>(0x8664,pe.data()+68);write(tmp.filePath("wrapper/deep/mkvmerge.exe"),pe);QCOMPARE(ComponentDownloads::payloadDirectory("mkvtoolnix",tmp.path()),tmp.filePath("wrapper/deep"));write(tmp.filePath("duplicate/mkvmerge.exe"),pe);QVERIFY(ComponentDownloads::payloadDirectory("mkvtoolnix",tmp.path()).isEmpty());
     }
-    void componentInstallPreservesPaths(){QTemporaryDir temp;const auto target=temp.filePath("portable with space"),cache=temp.filePath("cache"),source=cache+"/staging/wrapper/actual";write(target+"/vs-player.exe","player");write(target+"/runtime/tools/7z.exe","keep-7z");write(target+"/runtime/mkvtoolnix/mkvtoolnix-gui.ini","user");write(source+"/mkvmerge.exe","new-tool");write(source+"/mkvtoolnix-gui.ini","default");const auto plan=cache+"/plan.json";write(plan,QJsonDocument(QJsonArray{QJsonObject{{"id","mkvtoolnix"},{"version","102.0"},{"source",source}}}).toJson());QProcess helper;helper.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-components.ps1"),"-ParentPid","0","-Plan",plan,"-Target",target,"-NoLaunch"});QVERIFY(helper.waitForFinished(20000));QVERIFY2(helper.exitCode()==0,helper.readAllStandardError().constData());QFile installed(target+"/runtime/mkvtoolnix/mkvmerge.exe");QVERIFY(installed.open(QIODevice::ReadOnly));QCOMPARE(installed.readAll(),QByteArray("new-tool"));QFile config(target+"/runtime/mkvtoolnix/mkvtoolnix-gui.ini");QVERIFY(config.open(QIODevice::ReadOnly));QCOMPARE(config.readAll(),QByteArray("user"));QVERIFY(QFileInfo(target+"/runtime/tools/7z.exe").exists());
+    void componentInstallPreservesPaths(){QTemporaryDir temp;const auto target=temp.filePath("portable with space"),cache=temp.filePath("cache"),source=cache+"/staging/wrapper/actual";write(target+"/vs-player.exe","player");write(target+"/tools/7z/7z.exe","keep-7z");write(target+"/tools/mkvtoolnix/mkvtoolnix-gui.ini","user");write(source+"/mkvmerge.exe","new-tool");write(source+"/mkvtoolnix-gui.ini","default");const auto plan=cache+"/plan.json";write(plan,QJsonDocument(QJsonArray{QJsonObject{{"id","mkvtoolnix"},{"version","102.0"},{"source",source}}}).toJson());QProcess helper;helper.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-components.ps1"),"-ParentPid","0","-Plan",plan,"-Target",target,"-NoLaunch"});QVERIFY(helper.waitForFinished(20000));QVERIFY2(helper.exitCode()==0,helper.readAllStandardError().constData());QFile installed(target+"/tools/mkvtoolnix/mkvmerge.exe");QVERIFY(installed.open(QIODevice::ReadOnly));QCOMPARE(installed.readAll(),QByteArray("new-tool"));QFile config(target+"/tools/mkvtoolnix/mkvtoolnix-gui.ini");QVERIFY(config.open(QIODevice::ReadOnly));QCOMPARE(config.readAll(),QByteArray("user"));QVERIFY(QFileInfo(target+"/tools/7z/7z.exe").exists());
         write(plan,QJsonDocument(QJsonArray{QJsonObject{{"id","VS-GUI"},{"version","0.1"},{"source",source}}}).toJson());helper.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-components.ps1"),"-ParentPid","0","-Plan",plan,"-Target",target,"-NoLaunch"});QVERIFY(helper.waitForFinished(20000));QCOMPARE(helper.exitCode(),1);
     }
     void componentListInteraction(){
@@ -136,7 +136,7 @@ private slots:
     void archivePaths(){const QString root="VS-Renderer-GUI-1.0.3-windows-x64";QVERIFY(PortableUpdater::safeArchiveListing("header\n----------\nPath = "+root+"\nPath = "+root+"/vs-player.exe\n"));
         QVERIFY(PortableUpdater::safeArchiveListing("----------\nPath = VS-Renderer-GUI-windows-x64\nPath = VS-Renderer-GUI-windows-x64/vs-player.exe\n"));
         QVERIFY(PortableUpdater::safeArchiveListing("----------\nPath = Arbitrary folder/vs-player.exe\n"));
-        QVERIFY(PortableUpdater::safeArchiveListing("----------\nPath = vs-player.exe\nPath = runtime/python/python.exe\n"));
+        QVERIFY(PortableUpdater::safeArchiveListing("----------\nPath = vs-player.exe\nPath = tools/vapoursynth/python.exe\n"));
         for(const auto &path:QStringList{"/abs","C:/abs",root+"/../evil",root+"/x:stream",root+"/CON.txt",root+"/bad.",root+"/bad ",root+"//x"})QVERIFY2(!PortableUpdater::safeArchiveListing("----------\nPath = "+path+"\n"),qPrintable(path));
         QVERIFY(!PortableUpdater::safeArchiveListing("----------\nPath = "+root+"/x\nSymbolic Link = ../outside\n"));QVERIFY(!PortableUpdater::safeArchiveListing("----------\nPath = "+root+"/X\nPath = "+root+"/x\n"));}
     void releasedPackageCompatibility(){
@@ -172,24 +172,26 @@ private slots:
     void packedMkvUpdateStaysPacked(){
         QFETCH(QString,suffix);
         QTemporaryDir temp;const auto target=temp.filePath("portable"),cache=temp.filePath("cache"),source=cache+"/staging/component";
-        write(target+"/vs-player.exe","player");write(target+"/runtime/mkvtoolnix."+suffix,"old archive");write(target+"/runtime/mkvtoolnix/user.ini","user");
+        write(target+"/vs-player.exe","player");write(target+"/tools/mkvtoolnix/mkvtoolnix."+suffix,"old archive");write(target+"/tools/mkvtoolnix/user.ini","user");
         for(const auto &name:QStringList{"mkvmerge.exe","mkvextract.exe","mkvinfo.exe","mkvpropedit.exe"})write(source+"/"+name,"new-cli");
         write(source+"/mkvtoolnix-gui.exe","not shipped");write(source+"/doc/licenses/COPYING","license");write(source+"/doc/en/mkvmerge.html","guide");
         const auto plan=cache+"/plan.json";write(plan,QJsonDocument(QJsonArray{QJsonObject{{"id","mkvtoolnix"},{"version","102.0"},{"source",source}}}).toJson());
-        QDir().mkpath(target+"/runtime/tools");for(const auto &name:QStringList{"7z.exe","7z.dll"})QVERIFY(QFile::copy(tool(name),target+"/runtime/tools/"+name));
+        QDir().mkpath(target+"/tools/7z");for(const auto &name:QStringList{"7z.exe","7z.dll"})QVERIFY(QFile::copy(tool(name),target+"/tools/7z/"+name));
         QProcess helper;helper.start("powershell.exe",{"-NoProfile","-ExecutionPolicy","Bypass","-File",tool("apply-components.ps1"),"-ParentPid","0","-Plan",plan,"-Target",target,"-NoLaunch"});QVERIFY(helper.waitForFinished(20000));QVERIFY2(helper.exitCode()==0,helper.readAllStandardError().constData());
-        QVERIFY(QFileInfo::exists(target+"/runtime/mkvtoolnix."+suffix));QVERIFY(!QFileInfo::exists(target+"/runtime/mkvtoolnix/mkvmerge.exe"));QVERIFY(QFileInfo::exists(target+"/runtime/mkvtoolnix/user.ini"));
-        QProcess list;list.start(tool("7z.exe"),{"l",target+"/runtime/mkvtoolnix."+suffix});QVERIFY(list.waitForFinished());const auto listing=list.readAllStandardOutput();QVERIFY(listing.contains("mkvmerge.exe"));QVERIFY(!listing.contains("mkvtoolnix-gui.exe"));
+        QVERIFY(QFileInfo::exists(target+"/tools/mkvtoolnix/mkvtoolnix."+suffix));QVERIFY(!QFileInfo::exists(target+"/tools/mkvtoolnix/mkvmerge.exe"));QVERIFY(QFileInfo::exists(target+"/tools/mkvtoolnix/user.ini"));
+        QProcess list;list.start(tool("7z.exe"),{"l",target+"/tools/mkvtoolnix/mkvtoolnix."+suffix});QVERIFY(list.waitForFinished());const auto listing=list.readAllStandardOutput();QVERIFY(listing.contains("mkvmerge.exe"));QVERIFY(!listing.contains("mkvtoolnix-gui.exe"));
         QCOMPARE(QDir(cache).entryList({"backup-*","packed-*"},QDir::Dirs).size(),0);
     }
     void lazyOptionalRuntime_data(){QTest::addColumn<QString>("suffix");QTest::newRow("zip")<<QString("zip");QTest::newRow("7z")<<QString("7z");}
     void lazyOptionalRuntime(){
         QFETCH(QString,suffix);
         const auto component="test-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
-        const auto archive=QDir(QCoreApplication::applicationDirPath()).filePath("runtime/"+component+"."+suffix);
+        const QDir directory(QDir(QCoreApplication::applicationDirPath()).filePath("tools/"+component));
+        QVERIFY(QDir().mkpath(directory.path()));
+        const auto archive=directory.filePath(component+"."+suffix);
         QTemporaryDir source;write(source.filePath("probe.exe"),"optional-cli");QProcess zip;zip.setWorkingDirectory(source.path());
         zip.start(tool("7z.exe"),{"a","-t"+suffix,archive,"probe.exe"});QVERIFY(zip.waitForFinished(10000));QCOMPARE(zip.exitCode(),0);
-        const auto cleanup=qScopeGuard([&]{QFile::remove(archive);});
+        const auto cleanup=qScopeGuard([&]{QFile::remove(archive);QDir().rmdir(directory.path());});
         const auto pending=optionalRuntimeExecutable(component,"probe.exe",false);QVERIFY(!pending.isEmpty());QVERIFY(!QFileInfo::exists(pending));
         QString error;const auto ready=optionalRuntimeExecutable(component,"probe.exe",true,&error);QVERIFY2(!ready.isEmpty(),qPrintable(error));QCOMPARE(ready,pending);
         QFile extracted(ready);QVERIFY(extracted.open(QIODevice::ReadOnly));QCOMPARE(extracted.readAll(),QByteArray("optional-cli"));extracted.close();

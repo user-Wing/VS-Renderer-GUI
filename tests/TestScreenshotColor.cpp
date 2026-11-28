@@ -103,8 +103,8 @@ private slots:
             QImage image(32,16,QImage::Format_RGBA32FPx4);image.setColorSpace(QColorSpace::SRgbLinear);image.fill(QColor::fromRgbF(2.,.5,.25,1));
             QImage overlay(image.size(),QImage::Format_RGBA8888);overlay.fill(Qt::transparent);for(int y=0;y<16;++y)for(int x=16;x<32;++x)overlay.setPixelColor(x,y,QColor(255,255,255,128));
             QString error;const auto out=vsr::ImageHdrSurface::compositionProbe(image,overlay,white,true,&error);QVERIFY2(!out.isNull(),qPrintable(error));
-            const auto *left=reinterpret_cast<const float*>(out.constScanLine(8))+8*4;QVERIFY(std::abs(left[0]-2)<.002);QVERIFY(std::abs(left[1]-.5)<.002);
-            const auto *right=reinterpret_cast<const float*>(out.constScanLine(8))+24*4;const double alpha=128./255.,expected=2*(1-alpha)+(white/80)*alpha;QVERIFY(std::abs(right[0]-expected)<.005);
+            const auto *left=reinterpret_cast<const float*>(out.constScanLine(out.height()/2))+(out.width()/4)*4;QVERIFY(std::abs(left[0]-2)<.002);QVERIFY(std::abs(left[1]-.5)<.002);
+            const auto *right=reinterpret_cast<const float*>(out.constScanLine(out.height()/2))+(out.width()*3/4)*4;const double alpha=128./255.,expected=2*(1-alpha)+(white/80)*alpha;QVERIFY2(std::abs(right[0]-expected)<.005,qPrintable(QString("white=%1 size=%2x%3 red=%4 expected=%5").arg(white).arg(out.width()).arg(out.height()).arg(right[0]).arg(expected)));
             const auto evidencePath=qEnvironmentVariable("VSR_COLOR_EVIDENCE");if(!evidencePath.isEmpty()){
                 auto image=out;image.setText("capHdr","scRGB-FP16");image.setText("capSdrWhiteNits",QString::number(white));
                 QVERIFY(cap::savePng(image,evidencePath+QString("/gpu-composite-%1.png").arg(white)));

@@ -1,3 +1,5 @@
+#include "runtime/PortableQtPlugins.h"
+#include "runtime/PortableLayout.h"
 #include "player/PlayerWindow.h"
 #include <QApplication>
 #include <QFont>
@@ -59,7 +61,7 @@ void prefetchPlaybackLibraries(std::stop_token stop, bool standby = false) {
         CloseHandle(file);
     };
     if (standby) {
-        for (auto *name : {L"vs-player.exe", L"Qt6Core.dll", L"Qt6Gui.dll", L"Qt6Widgets.dll", L"platforms\\qwindows.dll", L"FFF.Native.dll"})
+        for (auto *name : {L"vs-player.exe", L"Qt6Core.dll", L"Qt6Gui.dll", L"Qt6Widgets.dll", L"qwindows.dll", L"FFF.Native.dll"})
             readAhead(name);
     }
     for (auto *name : {L"avcodec-63.dll", L"avformat-63.dll", L"avutil-61.dll", L"swresample-7.dll", L"swscale-10.dll", L"avfilter-12.dll"})
@@ -133,7 +135,7 @@ int runWarmWindow(QApplication &app, const wchar_t *exe) {
         memory.PrivateUsage + brokerMemory.PrivateUsage >= 50000000 ||
         memory.WorkingSetSize > budget || !standbyRunning()) return 1;
 
-    const auto config = qEnvironmentVariable("VSR_PLAYER_CONFIG", QDir(app.applicationDirPath()).filePath("player.ini"));
+    const auto config = vsr::playerConfigFile();
     const auto theme = QDir(QFileInfo(config).absolutePath()).filePath("themes.ini");
     const auto revisions = [&] { return std::array{QFileInfo(config).lastModified(), QFileInfo(theme).lastModified()}; };
     const auto prepared = revisions();
@@ -243,7 +245,9 @@ int main(int argc, char **argv) {
     wchar_t disabled[2]{};
     if (!warm && (GetEnvironmentVariableW(L"FFF_NO_PREFETCH",disabled,2)!=1 || disabled[0]!=L'1'))
         if (argc<2 || QByteArray(argv[1])!="--photocraft-import") prefetch=std::jthread(prefetchPlaybackLibraries, false);
+    vsr::registerPortableQtPlugins();
     QApplication app(argc, argv);
+    vsr::migratePortableLayout();
     if(app.arguments().value(1)=="--install-thumbnails"){
         auto extensions=app.arguments().mid(2);if(extensions.isEmpty())extensions=vsr::thumbnailExtensions();
         QString error;const bool ok=vsr::installPlayerThumbnails(extensions,&error);if(!ok)qWarning().noquote()<<error;return ok?0:1;
@@ -274,8 +278,7 @@ int main(int argc, char **argv) {
             QMessageBox::warning(nullptr, QStringLiteral("VS Player"), QStringLiteral("无法准备 Renderer 预览会话。"));
             return 1;
         }
-        const auto current = qEnvironmentVariable("VSR_PLAYER_CONFIG",
-            QDir(app.applicationDirPath()).filePath("player.ini"));
+        const auto current = vsr::playerConfigFile();
         const auto preview = previewSettings->filePath("player.ini");
         if (QFileInfo::exists(current) && !QFile::copy(current, preview)) {
             QMessageBox::warning(nullptr, QStringLiteral("VS Player"), QStringLiteral("无法读取播放器预览配置。"));

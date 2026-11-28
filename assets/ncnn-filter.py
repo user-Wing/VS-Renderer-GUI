@@ -10,7 +10,7 @@ def _vsr_ncnn(c, directory, model, gpu):
     import vapoursynth as vs
     if c.get_frame(0).props.get('_Transfer', 2) in (16, 18):
         raise ValueError('NCNN still-image models require SDR input')
-    runtime = os.path.join(directory, 'runtime', 'ncnn')
+    runtime = os.path.join(directory, 'tools', 'ncnn')
     with open(os.path.join(runtime, 'models.json'), encoding='utf-8') as f:
         entry = next(item for item in json.load(f) if item['name'] == model)
     rgb = vs.core.resize.Bicubic(c, format=vs.RGB24, **({'matrix_in': _vsr_matrix(c)} if c.format.color_family == vs.YUV else {}))

@@ -2,6 +2,8 @@
 
 #include <QAbstractSpinBox>
 #include <QComboBox>
+#include <QCompleter>
+#include <QCoreApplication>
 #include <QDoubleSpinBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -14,6 +16,7 @@
 #include <QTextEdit>
 #include <QToolButton>
 #include <cmath>
+#include <functional>
 #include <utility>
 
 namespace vsr {
@@ -80,6 +83,25 @@ class ShortcutTable final : public QTableWidget {
         }
     };
 
+    class SearchableActions final : public QComboBox {
+    public:
+        explicit SearchableActions(QWidget *parent) : QComboBox(parent)
+        {
+            setEditable(true);
+            setInsertPolicy(QComboBox::NoInsert);
+            completer()->setCompletionMode(QCompleter::PopupCompletion);
+            completer()->setCaseSensitivity(Qt::CaseInsensitive);
+            completer()->setFilterMode(Qt::MatchContains);
+        }
+
+        void showPopup() override
+        {
+            lineEdit()->selectAll();
+            completer()->setCompletionPrefix({});
+            completer()->complete();
+        }
+    };
+
     class Delegate final : public QStyledItemDelegate {
     public:
         explicit Delegate(ShortcutTable *table) : QStyledItemDelegate(table), table_(table) {}
@@ -97,7 +119,13 @@ class ShortcutTable final : public QTableWidget {
                 return recorder;
             }
             if (index.column() == 1) {
-                auto *combo = new QComboBox(parent);
+                QComboBox *combo;
+                if (table_->actionProvider_) {
+                    table_->actions_ = table_->actionProvider_();
+                    combo = new SearchableActions(parent);
+                } else {
+                    combo = new QComboBox(parent);
+                }
                 for (const auto &action : table_->actions_) combo->addItem(action.label, action.id);
                 auto *delegate = const_cast<Delegate *>(this);
                 connect(combo, &QComboBox::activated, delegate, [delegate, combo] {
@@ -135,7 +163,9 @@ class ShortcutTable final : public QTableWidget {
                 }
                 model->setData(index, sequence);
             } else if (auto *combo = qobject_cast<QComboBox *>(editor)) {
-                model->setItemData(index, {{Qt::UserRole, combo->currentData()}, {Qt::DisplayRole, combo->currentText()}});
+                const int selected = combo->currentIndex();
+                if (selected < 0 || combo->currentText() != combo->itemText(selected)) return;
+                model->setItemData(index, {{Qt::UserRole, combo->currentData()}, {Qt::DisplayRole, combo->itemText(selected)}});
                 table_->updateValue(index.row());
             } else {
                 QStyledItemDelegate::setModelData(editor, model, index);
@@ -181,6 +211,11 @@ public:
                 amount.isValid() ? amount.toDouble() : value->data(Qt::UserRole).toDouble()};
     }
 
+    void setActionProvider(std::function<QList<ShortcutAction>()> provider)
+    {
+        actionProvider_ = std::move(provider);
+    }
+
     void setActions(QList<ShortcutAction> actions)
     {
         actions_ = std::move(actions);
@@ -193,7 +228,7 @@ private:
     {
         for (const auto &action : actions_)
             if (action.id == id) return action;
-        return actions_.front();
+        return {id, QCoreApplication::translate("PlayerWindow", "当前不可用") + " / " + id};
     }
 
     void updateValue(int row)
@@ -207,6 +242,7 @@ private:
     }
 
     QList<ShortcutAction> actions_;
+    std::function<QList<ShortcutAction>()> actionProvider_;
 };
 
 }

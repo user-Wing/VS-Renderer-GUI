@@ -109,7 +109,7 @@ ExportPlan ExportPipeline::buildPlan(const QString &command, const QString &sour
         QStringLiteral("C:\\PortableSoft\\FFmpegFreeUI ReadyToRun x64\\ffmpeg.exe"));
     plan.vspipeProgram = resolveExecutable(
         QStringLiteral("vspipe.exe"), applicationDirectory,
-        QStringLiteral("runtime/python/Lib/site-packages/vapoursynth/vspipe.exe"));
+        QStringLiteral("tools/vapoursynth/Lib/site-packages/vapoursynth/vspipe.exe"));
     if (plan.ffmpegProgram.isEmpty()) {
         plan.error = QStringLiteral("找不到 ffmpeg.exe；请把它放在程序目录、PATH，或使用绝对路径开头的命令。");
         return plan;

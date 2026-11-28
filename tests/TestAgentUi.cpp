@@ -163,13 +163,14 @@ private slots:
             auto *list=page.findChild<QListWidget*>("agentConversations");
             auto find=[&](const QString &key){for(int i=0;i<list->count();++i)if(list->item(i)->data(Qt::UserRole).toString()==key)return list->item(i);return static_cast<QListWidgetItem*>(nullptr);};
             auto *item=find(id); QVERIFY(item); list->setCurrentItem(item); item=find(id); QVERIFY(item);
+            QVERIFY(QTest::qWaitForWindowExposed(&page)); list->scrollToItem(item);
             QTimer::singleShot(0,&page,[&]{auto *menu=qobject_cast<QMenu*>(QApplication::activePopupWidget()); QVERIFY(menu); menu->setActiveAction(menu->actions().first()); QTest::keyClick(menu,Qt::Key_Return);});
-            QTimer::singleShot(20,&page,[&]{auto *dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); QVERIFY(dialog); dialog->setTextValue("renamed title"); dialog->accept();});
+            QTimer::singleShot(20,&page,[&]{QTRY_VERIFY_WITH_TIMEOUT(qobject_cast<QInputDialog*>(QApplication::activeModalWidget()),3000); auto *dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); dialog->setTextValue("renamed title"); dialog->accept();});
             QMetaObject::invokeMethod(list,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,list->visualItemRect(item).center()));
             QCOMPARE(page.findChild<QLabel*>("agentConversationTitle")->text(),QString("renamed title"));
             item=find(id); QVERIFY(item);
             QTimer::singleShot(0,&page,[&]{auto *menu=qobject_cast<QMenu*>(QApplication::activePopupWidget()); QVERIFY(menu); screenshot(*menu,"ui-conversation-menu.png"); menu->setActiveAction(menu->actions().at(1)); QTest::keyClick(menu,Qt::Key_Return);});
-            QTimer::singleShot(20,&page,[&]{auto *dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); QVERIFY(dialog); QVERIFY(dialog->width()>=520); screenshot(*dialog,"ui-conversation-group.png"); auto *combo=dialog->findChild<QComboBox*>(); QVERIFY(combo); combo->setEditText(QStringLiteral("动画项目")); dialog->accept();});
+            QTimer::singleShot(20,&page,[&]{QTRY_VERIFY_WITH_TIMEOUT(qobject_cast<QInputDialog*>(QApplication::activeModalWidget()),3000); auto *dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); QVERIFY(dialog->width()>=520); screenshot(*dialog,"ui-conversation-group.png"); auto *combo=dialog->findChild<QComboBox*>(); QVERIFY(combo); combo->setEditText(QStringLiteral("动画项目")); dialog->accept();});
             QMetaObject::invokeMethod(list,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,list->visualItemRect(item).center()));
             QTemporaryDir other; QVERIFY(other.isValid()); QVERIFY(page.activeSession()->setWorkingDirectory(other.path()));
             QListWidgetItem *header=nullptr; for(int i=0;i<list->count();++i)if(list->item(i)->data(Qt::UserRole+1).toString()==QStringLiteral("动画项目"))header=list->item(i);

@@ -59,7 +59,7 @@ void PlayerWindow::preindexDisc() {
     for(const auto &part:discIndexParts_){
         const auto from=start;start=part.end;
         if(from<=at || part.index.isEmpty() || QFileInfo::exists(part.index) || discIndexAttempted_.contains(part.index))continue;
-        const auto python=QDir(QCoreApplication::applicationDirPath()).filePath("runtime/python/python.exe");
+        const auto python=QDir(QCoreApplication::applicationDirPath()).filePath("tools/vapoursynth/python.exe");
         if(!QFileInfo::exists(python))return;
         discIndexAttempted_.insert(part.index);
         auto *job=new QProcess(this);discIndexer_=job;
@@ -237,7 +237,13 @@ void PlayerWindow::layoutChrome() {
     auto *layout=qobject_cast<QVBoxLayout *>(centralWidget()->layout());
     if(overlay!=overlayChrome_){overlayChrome_=overlay;if(overlay){layout->removeWidget(videoSplit_);layout->removeWidget(controls_);layout->removeWidget(imageTools_);controls_->setWindowFlags(Qt::Tool|Qt::FramelessWindowHint);controls_->setAttribute(Qt::WA_TranslucentBackground);}
         else {controls_->setWindowFlags(Qt::Widget);layout->insertWidget(0,imageTools_);layout->addWidget(videoSplit_,1);layout->addWidget(controls_);}}
-    if(overlay){const int h=controls_->sizeHint().height();controlsTop_=centralWidget()->height()-h-2;videoSplit_->setGeometry(centralWidget()->rect().adjusted(0,0,0,isFullScreen()?0:-h-2));controls_->setGeometry(QRect(centralWidget()->mapToGlobal(QPoint(0,controlsTop_)),QSize(centralWidget()->width(),h)));controls_->raise();if(imageTools_){imageTools_->setGeometry(0,0,centralWidget()->width(),imageTools_->sizeHint().height());imageTools_->raise();}}
+    if(overlay){const int h=controls_->sizeHint().height();controlsTop_=centralWidget()->height()-h-2;videoSplit_->setGeometry(centralWidget()->rect().adjusted(0,0,0,isFullScreen()?0:-h-2));QRect bar(centralWidget()->mapToGlobal(QPoint(0,controlsTop_)),QSize(centralWidget()->width(),h));
+        if(settings_->value("experimental/oversize",false).toBool()){
+            const auto available=screen()->availableGeometry();
+            if (bar.bottom()>available.bottom()) bar.moveBottom(available.bottom());
+            if (bar.width()>available.width()) {bar.setLeft(available.left());bar.setRight(available.right());}
+        }
+        controls_->setGeometry(bar);controls_->raise();if(imageTools_){imageTools_->setGeometry(0,0,centralWidget()->width(),imageTools_->sizeHint().height());imageTools_->raise();}}
     if(playlistPanel_->isWindow()){const int top=isFullScreen()?fullscreenTitle_->sizeHint().height():0,width=qMin(playlistWidth_,centralWidget()->width()/2);playlistPanel_->setGeometry(QRect(centralWidget()->mapToGlobal(QPoint(centralWidget()->width()-width,top)),QSize(width,centralWidget()->height()-controls_->sizeHint().height()-top)));}
 }
 void PlayerWindow::updateChrome() {
@@ -256,7 +262,7 @@ void PlayerWindow::updateChrome() {
         const int panelWidth=qMin(playlistWidth_,centralWidget()->width()/2);
         if(!inside || pos.x()<centralWidget()->width()-panelWidth-12)playlistDismissed_=false;
         const bool audioDetail=infoVisible_ && settings_->value("info/audioDetailed",false).toBool() && audioInfo_->isVisible();
-        if(audioDetail && !playlistPinned_)playlistPanel_->hide();
+        if(playlistHidden_ || (audioDetail && !playlistPinned_))playlistPanel_->hide();
         else if(playlistPinned_ || (!playlistDismissed_ && inside && activePlayer && pos.x()>=centralWidget()->width()-panelWidth && pos.y()>=panelTop && pos.y()<bottom)) {playlistPanel_->show();playlistPanel_->raise();}
         else if(!playlistPinned_ && playlistPanel_->isVisible() && (!inside || pos.x()<centralWidget()->width()-panelWidth-12 || pos.y()<panelTop || pos.y()>=bottom))playlistPanel_->hide();
     }

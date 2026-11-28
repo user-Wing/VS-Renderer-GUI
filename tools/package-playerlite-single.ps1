@@ -37,12 +37,15 @@ New-Item -ItemType Directory -Path $stage | Out-Null
 $ffmpegFiles = @((Get-Content -LiteralPath (Join-Path $SourceDirectory 'release.json') -Raw | ConvertFrom-Json).ffmpegOnlyFiles)
 $ffmpegPattern = '^(ffmpeg|ffprobe)\.exe$|^(avcodec|avdevice|avfilter|avformat|avutil|swresample|swscale)(-\d+)?\.dll$'
 Get-ChildItem -LiteralPath $SourceDirectory -Force | Where-Object {
-    $_.Name -notin @('player.ini','themes.ini','themes','killvsp.exe') -and $_.Name -notin $ffmpegFiles -and $_.Name -notmatch $ffmpegPattern
+    $_.Name -notin @('config','player.ini','themes.ini','themes','killvsp.exe') -and $_.Name -notin $ffmpegFiles -and $_.Name -notmatch $ffmpegPattern
 } | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $stage -Recurse -Force
 }
+& python (Join-Path $PSScriptRoot 'layout-portable.py') $stage --single
+if ($LASTEXITCODE -ne 0) { throw 'Single-player layout migration failed' }
+& (Join-Path $PSScriptRoot 'stage-shaders.ps1') -OutputDirectory (Join-Path $stage 'shaders')
 foreach ($name in @('7z.exe','7z.dll')) {
-    if (!(Test-Path -LiteralPath (Join-Path $stage "runtime/tools/$name"))) { throw "Missing theme archive tool in SourceDirectory: runtime/tools/$name" }
+    if (!(Test-Path -LiteralPath (Join-Path $stage "tools/7z/$name"))) { throw "Missing theme archive tool in SourceDirectory: tools/7z/$name" }
 }
 New-Item -ItemType Directory -Path (Join-Path $stage 'licenses/PawnIO-Modules') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'assets/pawnio/COPYING'),(Join-Path $root 'assets/pawnio/NOTICE.md') -Destination (Join-Path $stage 'licenses/PawnIO-Modules') -Force
@@ -57,6 +60,7 @@ $files = @(Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $_.
 $release.version = $version
 $release.edition = "SinglePlayer"
 $release.ffmpegOnlyFiles = @()
+$release | Add-Member -NotePropertyName nativeSha256 -NotePropertyValue (Get-FileHash -LiteralPath (Join-Path $stage 'FFF.Native.dll')).Hash.ToLowerInvariant() -Force
 $release | Add-Member -NotePropertyName externalFFmpeg -NotePropertyValue @('ffmpeg.exe','ffprobe.exe','avcodec-63.dll','avformat-63.dll','avutil-61.dll','swresample-7.dll','swscale-10.dll','avfilter-12.dll') -Force
 $release.totalBytes = ($files | Measure-Object Length -Sum).Sum
 $release.excludingFFmpegBytes = ($files | Where-Object { $_.Name -notin $release.ffmpegOnlyFiles } | Measure-Object Length -Sum).Sum
@@ -134,4 +138,4 @@ Copy-Item -LiteralPath $temp -Destination $pending -Force
 Move-Item -LiteralPath $pending -Destination $destination -Force
 Write-Output ('Single EXE: {0} ({1:N2} MiB)' -f $OutputFile,((Get-Item -LiteralPath $OutputFile).Length / 1MB))
 Write-Output 'FFmpeg bundled: no; temporary runtime beside launcher, shared while standby is enabled.'
-Write-Output 'Configuration: player.ini beside the launcher, preserved across updates.'
+Write-Output 'Configuration: config/player.ini beside the launcher, preserved across updates.'

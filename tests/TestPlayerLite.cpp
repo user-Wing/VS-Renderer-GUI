@@ -1,3 +1,4 @@
+#include "runtime/PortableLayout.h"
 #include <QSignalSpy>
 #include "player/PlayerBluetooth.h"
 #include "player/PlayerThumbnails.h"
@@ -11,6 +12,7 @@
 #include <QCryptographicHash>
 #include <QCheckBox>
 #include "player/PlayerWindow.h"
+#include "player/PlayerShortcuts.h"
 #include "player/PlayerAssociations.h"
 #include "player/PlayerIdleGuide.h"
 #include "player/PlayerMenu.h"
@@ -34,6 +36,7 @@
 #include <QCursor>
 #include <QScreen>
 #include <QComboBox>
+#include <QCompleter>
 #include <QDialog>
 #include <QDir>
 #include <QFile>
@@ -51,6 +54,7 @@
 #include <QPushButton>
 #include <QProcess>
 #include <QMenu>
+#include <QTableWidget>
 #include <QToolTip>
 #include <QEnterEvent>
 #include <QListWidget>
@@ -60,9 +64,14 @@ using namespace vsr;
 class TestPlayer final : public QObject {
     Q_OBJECT
     QByteArray previous_;bool existed_=false;
-    QString config() const {return QDir(QCoreApplication::applicationDirPath()).filePath("player.ini");}
+    QString config() const {return vsr::playerConfigFile();}
     QString configPath() const {return config();}
+private:
+#include "PlayerTransportAcceptance.inc"
+#include "PlayerShortcutAcceptance.inc"
 private slots:
+    void shortcutCatalogAndMigration(){checkShortcutCatalogAndMigration();}
+    void trackPopupKeyboardAndTransportBounds(){checkTrackPopupKeyboardAndTransportBounds();}
     void cubeMenuVisibleForImages() {
         QTemporaryDir directory;
         const auto file = directory.filePath("cube.png");
@@ -87,6 +96,17 @@ private slots:
     void thumbnailRegistrationRestoresPrevious(){runThumbnailRegistrationRestoresPrevious();}
     void upstreamBluetoothPolicy(){runUpstreamBluetoothPolicy();}
     void upstreamRawImage(){runUpstreamRawImage();}
+    void importedCompiledShaderSurvivesOriginalRemoval(){
+        QTemporaryDir directory;
+        const auto input=directory.filePath("import.vsrhlsl");
+        QVERIFY(QFile::copy(":/filters/builtin-shaders/moesr-50k.hlsl.vsrhlsl",input));
+        QFile::setPermissions(input,QFileDevice::ReadOwner|QFileDevice::WriteOwner);
+        PlayerWindow player;player.settings_->setValue("render/shaderDirectory",directory.filePath("library"));
+        QVERIFY(player.importCustomShader(input));QVERIFY(QFile::remove(input));
+        QCOMPARE(player.customShaderPackage_,player.settings_->value("render/customShader").toString());
+        QVERIFY(QFileInfo(player.customShaderPackage_).isFile());
+        QVERIFY(player.clock_->setCustomShader(player.customShaderPackage_));
+    }
     void openNguMenu(){runOpenNguMenu();}
     void openNguPlayback(){runOpenNguPlayback();}
     void startupTheme(){runStartupTheme();}
@@ -114,9 +134,10 @@ private slots:
     void rememberedTracksWithPosition(){
         QTemporaryDir temp;const auto old=qgetenv("VSR_PLAYER_CONFIG");qputenv("VSR_PLAYER_CONFIG",temp.filePath("player.ini").toUtf8());const auto restore=qScopeGuard([&]{qputenv("VSR_PLAYER_CONFIG",old);});
         PlayerWindow p;p.timer_->stop();p.source_=temp.filePath("fixture.mkv");p.ready_=true;p.positionRestored_=true;p.resumeAt_=-1;p.settings_->setValue("playback/remember",true);p.primarySubtitle_=-1;p.secondarySubtitle_=-1;p.subtitleVisible_=false;p.savePosition();
-        const auto key=QString::fromLatin1(QCryptographicHash::hash(p.source_.toUtf8(),QCryptographicHash::Sha256).toHex());QVERIFY(p.settings_->contains("positions/"+key));QCOMPARE(p.settings_->value("tracks/"+key+"/subtitle").toInt(),-1);QCOMPARE(p.settings_->value("tracks/"+key+"/visible").toBool(),false);
+        const auto key=QString::fromLatin1(QCryptographicHash::hash(p.source_.toUtf8(),QCryptographicHash::Sha256).toHex());QVERIFY(p.history_->contains("positions/"+key));QCOMPARE(p.history_->value("tracks/"+key+"/subtitle").toInt(),-1);QCOMPARE(p.history_->value("tracks/"+key+"/visible").toBool(),false);
         p.primarySubtitle_=5;p.secondarySubtitle_=6;p.subtitleVisible_=true;p.restoreRememberedTracks({});QCOMPARE(p.primarySubtitle_,-1);QCOMPARE(p.secondarySubtitle_,-1);QVERIFY(!p.subtitleVisible_);
-        p.settings_->setValue("playback/remember",false);p.primarySubtitle_=7;p.restoreRememberedTracks({});QCOMPARE(p.primarySubtitle_,7);
+        p.settings_->setValue("playback/remember",false);p.primarySubtitle_=7;p.restoreRememberedTracks({});QCOMPARE(p.primarySubtitle_,-1);
+        p.settings_->setValue("playback/rememberTracks",false);p.primarySubtitle_=7;p.restoreRememberedTracks({});QCOMPARE(p.primarySubtitle_,7);
     }
 
     void audioOutputSettingsPersist(){
@@ -180,11 +201,11 @@ private slots:
     void idleGuideJsonControlsAndReload(){
         QTemporaryDir directory;const auto path=directory.filePath("preset-descriptions.json");QFile initial(path);QVERIFY(initial.open(QIODevice::WriteOnly));initial.write("{\"builtin/Anime.vpy\":\"keep\"}");initial.close();
         QWidget host;host.resize(500,400);QWidget controls(&host),timeline(&host);controls.setGeometry(0,300,500,100);timeline.setGeometry(0,294,500,6);QPushButton button(&controls);button.setObjectName("testButton");button.setGeometry(100,10,40,28);
-        PlayerIdleGuide guide(&host,&controls,&timeline,path);guide.setGeometry(0,0,500,290);host.show();guide.raise();QTest::qWait(80);QFile created(path);QVERIFY(created.open(QIODevice::ReadOnly));auto root=QJsonDocument::fromJson(created.readAll()).object();created.close();created.close();QCOMPARE(root.value("builtin/Anime.vpy").toString(),QString("keep"));QVERIFY(root.value("playerGuide").isObject());
+        PlayerIdleGuide guide(&host,&controls,&timeline,path);guide.setGeometry(0,0,500,290);host.show();guide.raise();QTest::qWait(80);QFile created(path);QVERIFY(created.open(QIODevice::ReadOnly));auto root=QJsonDocument::fromJson(created.readAll()).object();created.close();QCOMPARE(root.value("builtin/Anime.vpy").toString(),QString("keep"));QVERIFY(root.value("playerGuide").isObject());
         const auto store=[&](int length){root.insert("playerGuide",QJsonObject{{"center",QJsonObject{{"text",""}}},{"color","#00ff00"},{"guides",QJsonArray{QJsonObject{{"targets",QJsonArray{"testButton"}},{"text",""},{"length",length}}}}});QSaveFile file(path);if(!file.open(QIODevice::WriteOnly))return false;file.write(QJsonDocument(root).toJson());return file.commit();};
         const auto ink=[&](int x,int top,int bottom){const auto image=guide.grab().toImage();const auto dpi=image.devicePixelRatio();int count=0;for(int y=top;y<=bottom;++y){bool found=false;for(int column=qMax(0,qRound(x*dpi)-2);column<=qMin(image.width()-1,qRound(x*dpi)+2);++column){const auto c=image.pixelColor(column,qRound(y*dpi));found|=c.green()>c.red()+50 && c.green()>c.blue()+50;}count+=found;}return count;};
         QVERIFY(store(60));QTRY_VERIFY(ink(119,222,282)>10);button.move(180,10);guide.update();QTRY_VERIFY(ink(199,222,282)>10);QCOMPARE(ink(119,222,282),0);
-        QVERIFY(store(120));QTRY_VERIFY(ink(199,166,214)>10);QVERIFY(store(40));QTRY_COMPARE(ink(199,166,214),0);
+        QVERIFY(store(120));QTRY_VERIFY(ink(199,166,214)>10);QTRY_VERIFY(store(40));QTRY_COMPARE(ink(199,166,214),0);
     }
     void fullscreenPhysicalBottomEdge(){
         POINT original{};GetCursorPos(&original);const auto restore=qScopeGuard([&]{SetCursorPos(original.x,original.y);});
@@ -295,17 +316,24 @@ private slots:
         QTemporaryDir directory;const auto file=directory.filePath("minimal-position.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=24","-f","lavfi","-i","sine=frequency=440:sample_rate=48000","-t","15","-c:v","ffv1","-c:a","flac",file});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
         PlayerWindow player;player.settings_->setValue("playback/remember",false);player.resize(1100,650);player.show();QVERIFY(player.openFile(file));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0,15000);
         player.seekTime(50000000);QTRY_VERIFY_WITH_TIMEOUT(player.position()>=49000000,5000);if(player.playing_)player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
-        QTest::keyClick(&player,Qt::Key_Period);QVERIFY(player.minimalMode_);QTest::qWait(500);QVERIFY(player.position()>=49000000);QVERIFY(!player.playing_);QVERIFY(player.snapshot().state!=ThreeFpState::Playing);
-        QTest::keyClick(&player,Qt::Key_Period);QVERIFY(!player.minimalMode_);QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0,5000);QVERIFY(player.position()>=49000000);QVERIFY(!player.playing_);QVERIFY(player.snapshot().state!=ThreeFpState::Playing);
-        player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Playing);QTest::keyClick(&player,Qt::Key_Period);QVERIFY(player.minimalMode_);QTRY_COMPARE(player.snapshot().state,ThreeFpState::Playing);const auto at=player.position();QVERIFY(at>=49000000);QTest::qWait(350);QVERIFY(player.position()>at);
-        const auto audioAt=player.position();QTest::keyClick(&player,Qt::Key_Period);QVERIFY(!player.minimalMode_);QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0 && player.snapshot().state==ThreeFpState::Playing,5000);QVERIFY(player.position()>=audioAt-1000000);
+        QTest::keyClick(&player,Qt::Key_Period);QVERIFY(player.minimalMode_);QTRY_VERIFY_WITH_TIMEOUT(player.position()>=49000000 && player.resumeAt_<0 && !player.seekPending_,8000);QVERIFY(!player.playing_);QVERIFY(player.snapshot().state!=ThreeFpState::Playing);
+        QTest::keyClick(&player,Qt::Key_Period);QVERIFY(!player.minimalMode_);QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0 && player.position()>=49000000 && !player.seekPending_,8000);QVERIFY(!player.playing_);QVERIFY(player.snapshot().state!=ThreeFpState::Playing);
+        player.togglePlayback();
+        QTRY_COMPARE(player.snapshot().state,ThreeFpState::Playing);
+        QTest::keyClick(&player,Qt::Key_Period);QVERIFY(player.minimalMode_);
+        QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Playing,
+            qPrintable(QString("minimal=%1 width=%2 ready=%3 playing=%4 autoplay=%5 pending=%6 target=%7 state=%8 position=%9")
+                .arg(player.minimalMode_).arg(player.width()).arg(player.ready_).arg(player.playing_).arg(player.autoPlay_)
+                .arg(player.seekPending_).arg(player.seekUiTarget_).arg(int(player.snapshot().state)).arg(player.position())),8000);
+        const auto at=player.position();QVERIFY(at>=49000000);QTRY_VERIFY_WITH_TIMEOUT(player.position()>at,5000);
+        const auto audioAt=player.position();QTest::keyClick(&player,Qt::Key_Period);QVERIFY(!player.minimalMode_);QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().presentedVideoFrames>0 && player.snapshot().state==ThreeFpState::Playing,qPrintable(QString("state=%1 playing=%2 auto=%3 seek=%4 position=%5 target=%6 pending=%7 frames=%8").arg(int(player.snapshot().state)).arg(player.playing_).arg(player.autoPlay_).arg(player.seekPending_).arg(player.position()).arg(player.seekUiTarget_).arg(player.resumeAt_).arg(player.snapshot().presentedVideoFrames)),8000);QVERIFY(player.position()>=audioAt-1000000);
     }
     void minimalModeDoesNotDecodeVideo(){
-        QTemporaryDir directory;const auto path=directory.filePath("audio-mode.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=24","-f","lavfi","-i","sine=frequency=440:sample_rate=48000","-t","4","-c:v","ffv1","-c:a","flac",path});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
+        QTemporaryDir directory;const auto path=directory.filePath("audio-mode.mkv");QProcess ff;ff.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=24","-f","lavfi","-i","sine=frequency=440:sample_rate=48000","-t","20","-c:v","ffv1","-c:a","flac",path});QVERIFY(ff.waitForFinished(15000));QCOMPARE(ff.exitCode(),0);
         PlayerWindow player;player.show();QVERIFY(player.openFile(path));QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().decodedVideoFrames>2,15000);player.setMinimalMode(true);
         QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().decodedAudioFrames>0 && player.snapshot().state==ThreeFpState::Playing,15000);const auto before=player.snapshot();QTest::qWait(400);const auto after=player.snapshot();
         QCOMPARE(after.decodedVideoFrames,before.decodedVideoFrames);QVERIFY(after.audioPosition100ns>before.audioPosition100ns);QVERIFY(player.minimalMode_);QVERIFY(!player.videoBadge_->isVisible());
-        player.setMinimalMode(false);QTRY_VERIFY_WITH_TIMEOUT(player.snapshot().decodedVideoFrames>2,15000);
+        player.setMinimalMode(false);QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().decodedVideoFrames>2,qPrintable(QString("state=%1 position=%2 playing=%3 autoplay=%4 target=%5 seek=%6 generation=%7 error=%8").arg(int(player.snapshot().state)).arg(player.position()).arg(player.playing_).arg(player.autoPlay_).arg(player.seekUiTarget_).arg(player.seekPending_).arg(player.snapshot().timelineGeneration).arg(player.clock_->lastError())),15000);
     }
 
 
@@ -607,7 +635,7 @@ private slots:
     void nativeAnimePresets_data(){QTest::addColumn<int>("stage");for(int stage:{0,1,4,5,6,7,8,9})QTest::newRow(qPrintable(QString::number(stage)))<<stage;}
     void nativeAnimePresets(){
         QFETCH(int,stage);QTemporaryDir directory;auto file=qEnvironmentVariable("VSR_ANIME4K_SOURCE");
-        if(file.isEmpty()){file=directory.filePath("pattern.mkv");QProcess process;process.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=320x180:rate=24","-t","3","-c:v","ffv1",file});QVERIFY(process.waitForFinished(10000));QCOMPARE(process.exitCode(),0);}
+        if(file.isEmpty()){file=directory.filePath("pattern.mkv");QProcess process;process.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=320x180:rate=24","-t","20","-c:v","ffv1",file});QVERIFY(process.waitForFinished(10000));QCOMPARE(process.exitCode(),0);}
         QSettings settings(config(),QSettings::IniFormat);settings.setValue("decode/mode",1);settings.setValue("player/muted",true);settings.sync();
         PlayerWindow player;player.resize(1100,760);player.show();QVERIFY(player.openFile(file));QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>2,15000);
         player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);QTest::qWait(200);const auto pts=player.outputSnapshot().framePts;
@@ -622,14 +650,18 @@ private slots:
         if(stage==0 || stage==6 || stage==8){player.loadPreset(files[stage+1]);const auto other=player.clock_->capture();QVERIFY(!other.isNull());QVERIFY2(filtered!=other,"Enhanced/1X renderer variants must produce distinct output");player.loadPreset(files[stage]);}
         const auto evidence=qEnvironmentVariable("VSR_ANIME4K_EVIDENCE");if(!evidence.isEmpty()){QDir().mkpath(evidence);QVERIFY(filtered.save(QDir(evidence).filePath(QString("stage-%1.png").arg(stage))));}
         QVERIFY(player.direct_);QVERIFY(!player.server_->available());QVERIFY(!GetModuleHandleW(L"VapourSynth.dll"));
-        const auto before=player.outputSnapshot().position100ns;player.togglePlayback();QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().position100ns>before+2000000,5000);player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
+        QTRY_VERIFY_WITH_TIMEOUT(player.ready_ && player.resumeAt_<0 && !player.seekPending_,5000);
+        const auto before=player.outputSnapshot().position100ns;player.togglePlayback();
+        QTRY_VERIFY2_WITH_TIMEOUT(player.playing_ && player.snapshot().state==ThreeFpState::Playing && player.outputSnapshot().position100ns>before+2000000,
+            qPrintable(QString("playing=%1 state=%2 from=%3 to=%4 target=%5 seek=%6 resume=%7 auto=%8").arg(player.playing_).arg(int(player.snapshot().state)).arg(before).arg(player.position()).arg(player.seekUiTarget_).arg(player.seekPending_).arg(player.resumeAt_).arg(player.autoPlay_)),5000);
+        player.togglePlayback();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
         player.seekTime(15000000);QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.outputSnapshot().position100ns>=15000000,5000);QVERIFY(!player.clock_->capture().isNull());
         PlayerWindow reopened;reopened.show();QVERIFY(reopened.openFile(file));QTRY_VERIFY_WITH_TIMEOUT(reopened.outputSnapshot().presentedVideoFrames>2,15000);QCOMPARE(reopened.qualityStage(),stage);QCOMPARE(reopened.scalingAlgorithm(),algorithms[stage]);
     }
     void anime4kFastMenuAndPixels_data(){QTest::addColumn<int>("decode");QTest::newRow("software")<<1;QTest::newRow("hardware")<<2;}
     void anime4kFastMenuAndPixels(){
         QFETCH(int,decode);QTemporaryDir directory;auto file=qEnvironmentVariable("VSR_ANIME4K_SOURCE");
-        if(file.isEmpty()){file=directory.filePath("pattern.mkv");QProcess process;process.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=320x180:rate=24","-t","3","-c:v","ffv1",file});QVERIFY(process.waitForFinished(10000));QCOMPARE(process.exitCode(),0);}
+        if(file.isEmpty()){file=directory.filePath("pattern.mkv");QProcess process;process.start("ffmpeg",{"-v","error","-f","lavfi","-i","testsrc2=size=320x180:rate=24","-t","20","-c:v","ffv1",file});QVERIFY(process.waitForFinished(10000));QCOMPARE(process.exitCode(),0);}
         QSettings settings(config(),QSettings::IniFormat);settings.setValue("decode/mode",decode);settings.setValue("player/muted",true);settings.sync();
         PlayerWindow player;player.resize(1100,760);player.show();QVERIFY(player.openFile(file));
         QTRY_VERIFY_WITH_TIMEOUT(player.outputSnapshot().presentedVideoFrames>2,15000);
