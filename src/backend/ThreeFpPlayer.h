@@ -32,6 +32,7 @@ public:
     bool setSoftwarePreScale(int height);
     void stop();
     bool seek(std::int64_t position100ns);
+    std::optional<std::uint64_t> completedSeekTimeline(std::int64_t target) const { return api_.completedSeekTimeline(handle_, target); }
     bool seekFrame(std::int64_t frame);
     bool stepFrame(int direction);
     void setMuted(bool muted);

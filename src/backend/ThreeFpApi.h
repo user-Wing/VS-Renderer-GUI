@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include "backend/SourcePixelProbe.h"
 #include "backend/FrameColorMetadata.h"
 #include "color/ColorBridge.h"
@@ -262,6 +263,7 @@ public:
     ThreeFpResult setRenderBackend(void *handle, bool enabled) const;
     ThreeFpResult setSoftwarePreScale(void *handle, int height) const;
     ThreeFpResult stop(void *handle) const;
+    std::optional<std::uint64_t> completedSeekTimeline(void *handle, std::int64_t target) const;
     ThreeFpResult seek(void *handle, std::int64_t position100ns) const;
     ThreeFpResult seekFrame(void *handle, std::int64_t frame) const;
     ThreeFpResult stepFrame(void *handle, std::int32_t direction) const;
@@ -358,6 +360,8 @@ private:
     HandleFn play_ = nullptr;
     HandleFn pause_ = nullptr;
     HandleFn stop_ = nullptr;
+    using SeekTimelineFn = std::uint64_t (*)(void *, std::int64_t);
+    SeekTimelineFn completedSeekTimeline_ = nullptr;
     SeekFn seek_ = nullptr;
     SeekFn seekFrame_ = nullptr;
     StepFn stepFrame_ = nullptr;

@@ -36,6 +36,7 @@ void ThreeFpApi::initialize()
     ok &= resolve(pause_, "FFF3FP_Pause");
     ok &= resolve(stop_, "FFF3FP_Stop");
     ok &= resolve(seek_, "FFF3FP_Seek");
+    completedSeekTimeline_ = reinterpret_cast<SeekTimelineFn>(library_.resolve("VSR3FP_CompletedSeekTimeline"));
     ok &= resolve(seekFrame_, "FFF3FP_SeekFrame");
     ok &= resolve(stepFrame_, "FFF3FP_StepFrame");
     ok &= resolve(setVolume_, "FFF3FP_SetVolume");
@@ -121,6 +122,11 @@ ThreeFpResult ThreeFpApi::setClockOnly(void *h,bool enabled) const { return setC
 ThreeFpResult ThreeFpApi::setRenderBackend(void *h,bool enabled) const { return setRenderBackend_?setRenderBackend_(h,enabled?1:0):ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::setSoftwarePreScale(void *h,int height) const { return setSoftwarePreScale_?setSoftwarePreScale_(h,height):ThreeFpResult::NotSupported; }
 ThreeFpResult ThreeFpApi::stop(void *h) const { return available() ? stop_(h) : ThreeFpResult::NativeFailure; }
+std::optional<std::uint64_t> ThreeFpApi::completedSeekTimeline(void *handle, std::int64_t target) const {
+    if (!completedSeekTimeline_) return std::nullopt;
+    return completedSeekTimeline_(handle, target);
+}
+
 ThreeFpResult ThreeFpApi::seek(void *h, std::int64_t p) const { return available() ? seek_(h, p) : ThreeFpResult::NativeFailure; }
 QString ThreeFpApi::sessionError(void *h) const {if(!h || !sessionError_)return {};char text[4096]{};std::uint32_t size=0;return sessionError_(h,text,sizeof(text),&size)==ThreeFpResult::Success?QString::fromUtf8(text):QString();}
 ThreeFpResult ThreeFpApi::seekFrame(void *h, std::int64_t f) const { return available() ? seekFrame_(h, f) : ThreeFpResult::NativeFailure; }

@@ -29,6 +29,7 @@
 | Player 区间交接 | `PlayerLoop.cpp` 用源时间传给新 Renderer，`MainWindowTimeGroups.cpp` 按源 FPS 建组并选中 A–B | 不覆盖已有 Renderer 工作区；区间按恒定帧率源帧对齐 |
 | Explorer 适配器与解码进程分离 | `src/shell/` 的轻量 COM 适配器启动有时限的 worker，媒体解码在独立进程 | 不在 Explorer 中载入媒体解码器；当前用户注册由 `PlayerThumbnails.cpp` 备份和恢复 |
 | 专用时间轴与请求代次 | 管理 seek、补帧和源/输出 FPS | 不使用 seek 后局部帧号直接推算全局源帧 |
+| 直通精确定位 | 时间跳转由 Native 合并相邻请求，参考帧仅用于解码。可定位的网络盘 MKV 复用已打开的读取器及索引；HD HEVC 软解从暂停重开时，在既有线程和内存限额内增加解码并行度。按帧号跳转时，本地 Matroska/WebM AV1 按需解析视频包并缓存显示时间戳 | 时间戳或包结构有歧义时沿用解码计数路径，保留可变帧率定位精度 |
 | 直通相对逐帧 | `PlayerWindow::stepFrame` 调用内核当前PTS逐帧；Native重新解码局部GOP确认相邻帧 | 不用绝对帧号逐帧，也不把稀疏缓存中的近邻当成真实相邻帧；VS仍按输出帧号定位 |
 | 查看与编辑解耦 | PhotoCraft 独立进程保留未保存工作 | 旧 Qt 编辑器仍有源码/测试，不作为生产编辑入口 |
 | 截图事实与颜色计划 | `color/ScreenshotColor.h` 区分显示模式、源存储/有效精度、绝对 scRGB 和相对白位；像素与标准声明共用计划 | 不按 HDR 开关或输出10位猜测源精度；WGC helper 缺失时尝试 DXGI，再以明确原因退回传统8位 |

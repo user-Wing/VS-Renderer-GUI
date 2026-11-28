@@ -117,3 +117,79 @@ void checkPausedTransport() {
     QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Playing && player.position()>2000000,qPrintable(state()),5000);
 
 }
+
+void exactSeekTargetsData() {
+    QTest::addColumn<QString>("operation");
+    QTest::addColumn<int>("mode");
+    for(int mode:{1,2})for(const QString operation:{"frame","time","burst","mixed"})
+        QTest::newRow(qPrintable(operation+(mode==1?"-SW":"-HW")))<<operation<<mode;
+}
+
+void checkExactSeekTargets() {
+    QFETCH(QString,operation);
+    QFETCH(int,mode);
+    QTemporaryDir directory;
+    auto video=qEnvironmentVariable("VSR_TRANSPORT_MEDIA");
+    const bool generated=video.isEmpty();
+    if(generated){
+        video=directory.filePath("exact-seek.mkv");
+        QProcess encode;
+        encode.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),
+            {"-v","error","-f","lavfi","-i","testsrc2=size=160x90:rate=30:duration=22",
+             "-c:v","libx264","-threads","2","-g","240","-sc_threshold","0","-y",video});
+        QVERIFY(encode.waitForFinished(20000));QCOMPARE(encode.exitCode(),0);
+    }
+    QSettings settings(configPath(),QSettings::IniFormat);
+    settings.setValue("decode/mode",mode);settings.setValue("basic/autoplay",true);
+    settings.setValue("player/preset",QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));
+    settings.setValue("playback/remember",false);settings.sync();
+    PlayerWindow player;player.resize(1440,810);player.show();
+    QVERIFY(player.openFile(video));
+    QTRY_VERIFY_WITH_TIMEOUT(player.playing_ && player.snapshot().presentedVideoFrames>2,10000);
+    QTest::keyClick(&player,Qt::Key_Space);
+    QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
+    QTest::qWait(450); // Exercise the first deliberate seek after key repeat has stopped.
+    const auto before=player.snapshot();
+    QVERIFY(player.direct_);
+    const auto frame=qEnvironmentVariableIntValue("VSR_SEEK_TEST_FRAME")>0?qEnvironmentVariableIntValue("VSR_SEEK_TEST_FRAME"):441;
+    const auto timestamp=qEnvironmentVariableIntValue("VSR_SEEK_TEST_MS")>0?qint64(qEnvironmentVariableIntValue("VSR_SEEK_TEST_MS"))*10000:153000000;
+    QElapsedTimer elapsed;elapsed.start();
+    if(operation=="frame") {
+        player.frame_->setText(QString::number(frame));player.frameEditPending_=true;
+        QTest::keyClick(player.frame_,Qt::Key_Return);
+        QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().frameIndex==frame && !player.seekPending_,
+            qPrintable(QString("frame=%1 requested=%2 pending=%3 position=%4 presented=%5 total=%6")
+                .arg(player.snapshot().frameIndex).arg(frame).arg(player.seekPending_).arg(player.position())
+                .arg(player.snapshot().presentedVideoFrames-before.presentedVideoFrames).arg(player.clip_.totalFrames)),12000);
+    } else {
+        auto target=timestamp;
+        if(operation=="time")player.seekTime(target);
+        else {
+            auto* forward=player.findChild<QPushButton*>("playerForwardSecond");
+            auto* back=player.findChild<QPushButton*>("playerBackwardSecond");
+            QVERIFY(forward && back);
+            target=before.position100ns;
+            for(int i=0;i<6;++i){
+                const bool reverse=operation=="mixed" && (i==2 || i==4);
+                (reverse?back:forward)->click();
+                target+=reverse?-10000000:10000000;
+                if(operation=="mixed" && i<5)QTest::qWait(12);
+            }
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.queuedSeek_<0,8000);
+        QVERIFY2(qAbs(player.snapshot().position100ns-target)<500000,qPrintable(QString("target=%1 actual=%2").arg(target).arg(player.snapshot().position100ns)));
+    }
+    const auto after=player.snapshot();
+    qInfo()<<operation<<"decoder"<<after.decodeMode<<"ms"<<elapsed.elapsed()<<"pts"<<after.framePts<<"presented"<<after.presentedVideoFrames-before.presentedVideoFrames;
+    if(operation=="frame" && qEnvironmentVariableIsSet("VSR_SEEK_TEST_PTS"))
+        QCOMPARE(after.framePts,qEnvironmentVariable("VSR_SEEK_TEST_PTS").toLongLong());
+    if(operation!="mixed")QCOMPARE(after.presentedVideoFrames-before.presentedVideoFrames,quint64(1));
+    else QVERIFY(after.presentedVideoFrames>before.presentedVideoFrames);
+    if(generated && operation=="frame"){
+        player.frame_->setText("10000");player.frameEditPending_=true;
+        QTest::keyClick(player.frame_,Qt::Key_Return);
+        QTRY_VERIFY_WITH_TIMEOUT(!player.seekPending_ && player.snapshot().frameIndex==659,6000);
+        QCOMPARE(player.snapshot().framePts,qint64(21967));
+        QCOMPARE(player.snapshot().presentedVideoFrames-after.presentedVideoFrames,quint64(1));
+    }
+}

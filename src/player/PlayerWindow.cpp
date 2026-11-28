@@ -674,9 +674,12 @@ void PlayerWindow::seekTime(qint64 time) {
     manualFrame_ = -1;resumeAt_=-1;suspendQualityCheck();
     lastFrame_=-1;
     const auto snap = clock_->snapshot(); time = std::clamp<qint64>(time, 0, std::max<qint64>(0, snap.duration100ns));
+    if(seekPending_ && seekUiTarget_==time)return;
     seekUiTarget_=time;
     if(snap.duration100ns>0 && !timeline_->isSliderDown()){QSignalBlocker blocker(timeline_);timeline_->setValue(int(time*100000/snap.duration100ns));}
-    if(seekPending_){queuedSeek_=time;return;}
+    if(seekPending_ && (!direct_ || lav_ || !clock_->completedSeekTimeline(time).has_value())){
+        queuedSeek_=time;return;
+    }
     seekPresented_=outputSnapshot().presentedVideoFrames;
     if (lav_) { lav_->seek(time); clock_->seek(time); requested_ = lastFrame_ = -1; }
     else { generation_ = snap.timelineGeneration; seekPending_ = clock_->seek(time); }
@@ -685,7 +688,7 @@ void PlayerWindow::seekFrame(qint64 frame) {
     if (clip_.fpsNumerator <= 0 || !ready_) return;
     if (playing_) togglePlayback();
     const auto bounded = std::clamp<qint64>(frame, 0, clip_.totalFrames - 1);
-    if(direct_){resumeAt_=-1;suspendQualityCheck();generation_=clock_->snapshot().timelineGeneration;seekPending_=clock_->seekFrame(bounded);}
+    if(direct_){resumeAt_=queuedSeek_=seekUiTarget_=-1;suspendQualityCheck();generation_=clock_->snapshot().timelineGeneration;seekPresented_=outputSnapshot().presentedVideoFrames;seekPending_=clock_->seekFrame(bounded);}
     else seekTime(static_cast<qint64>(std::llround(bounded * 10000000.0 * clip_.fpsDenominator / clip_.fpsNumerator)));
     manualFrame_ = static_cast<int>(bounded);
 }
@@ -841,9 +844,18 @@ void PlayerWindow::updateState() {
     if(pendingAudioStream_>=0 && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Playing || snap.state==ThreeFpState::Paused)){const int stream=pendingAudioStream_;pendingAudioStream_=-2;selectAudio(stream);}
     if(resumeAt_>=0 && ready_ && !direct_ && !seekPending_ && (snap.state==ThreeFpState::Ready || snap.state==ThreeFpState::Paused || snap.state==ThreeFpState::Playing)){const auto stored=resumeAt_;resumeAt_=-1;seekTime(stored);}
     if (autoPlay_ && resumeAt_<0 && !seekPending_ && seekUiTarget_<0 && (madvrMode() || direct_ || lastFrame_ >= 0) && (lav_ || snap.state == ThreeFpState::Ready || snap.state == ThreeFpState::Paused || (direct_ && snap.state == ThreeFpState::Playing))) { if(!playing_)togglePlayback(); if (playing_) autoPlay_ = false; }
-    if (seekPending_ && snap.timelineGeneration != generation_ && (!direct_ || autoPlay_ || minimalMode_ || audioMode_ || snap.selectedVideoStream<0 || (snap.presentedVideoFrames>seekPresented_ && snap.frameIndex>=0))) { seekPending_ = false; requested_ = lastFrame_ = -1;
+    const auto completed = seekPending_ && direct_ && !lav_ && seekUiTarget_>=0
+        ? clock_->completedSeekTimeline(seekUiTarget_) : std::nullopt;
+    const bool seekCompleted = completed ? *completed!=0 && *completed==snap.timelineGeneration : snap.timelineGeneration!=generation_;
+    if (seekPending_ && seekCompleted && (!direct_ || autoPlay_ || minimalMode_ || audioMode_ || snap.selectedVideoStream<0 || (snap.presentedVideoFrames>seekPresented_ && snap.frameIndex>=0))) { seekPending_ = false; requested_ = lastFrame_ = -1;
         if(queuedSeek_>=0){const auto next=queuedSeek_;queuedSeek_=-1;seekTime(next);return;}
-        if(direct_)seekUiTarget_=-1;
+        if(direct_){
+            seekUiTarget_=-1;
+            if(frameJumpTarget_>=0 && manualFrame_>=0 && snap.frameIndex>=0 && snap.frameIndex!=manualFrame_){
+                frameJumpTarget_=manualFrame_=int(snap.frameIndex);
+                if(!frameEditPending_)frame_->setText(QString::number(manualFrame_));
+            }
+        }
         if (lavKeyPending_ && lav_) { lavKeyPending_ = false; lav_->seek(snap.position100ns); } }
     if(!direct_ && !seekPending_ && seekUiTarget_>=0){const auto rendered=outputSnapshot();if(rendered.presentedVideoFrames>seekPresented_ && rendered.frameIndex==frameAtPosition100ns(seekUiTarget_,clip_.totalFrames,clip_.fpsNumerator,clip_.fpsDenominator))seekUiTarget_=-1;}
     const auto at = position(); const auto duration = snap.duration100ns;
@@ -992,7 +1004,7 @@ bool PlayerWindow::handleShortcut(QKeyEvent *event,bool tracksOnly){
             const auto directory=choose?QFileDialog::getExistingDirectory(this,tr("选择截图保存文件夹"),screenshotDirectory()):screenshotDirectory();
             if(!directory.isEmpty())captureImage(false,directory,choose?action.chopped(6):action,true);
         }
-        else if(action=="seek"){if(imageMode_)nextFile(value<0?-1:1);else seekTime(position()+qRound64(value*1e7));}
+        else if(action=="seek"){if(imageMode_)nextFile(value<0?-1:1);else seekTime((seekUiTarget_>=0?seekUiTarget_:position())+qRound64(value*1e7));}
         else if(action=="frame")stepFrame(value<0?-1:1);
         else if(action=="keyframe")stepKeyframe(value<0?-1:1);
         else if(action=="chapter"){
