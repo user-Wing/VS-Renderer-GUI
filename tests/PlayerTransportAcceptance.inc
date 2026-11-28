@@ -55,3 +55,65 @@ void checkTrackPopupKeyboardAndTransportBounds() {
         if(width==1440)QTRY_VERIFY(!files->isHidden());
     }
 }
+
+void checkPausedTransport() {
+    QTemporaryDir directory;
+    QString video=qEnvironmentVariable("VSR_TRANSPORT_MEDIA");
+    if(video.isEmpty()){
+        video=directory.filePath("transport.mkv");
+        QProcess encode;
+        encode.start(QDir(QCoreApplication::applicationDirPath()).filePath("ffmpeg.exe"),
+            {"-v","error","-f","lavfi","-i","testsrc2=size=320x180:rate=24:duration=15",
+             "-c:v","libx264","-threads","2","-g","24","-y",video});
+        QVERIFY(encode.waitForFinished(20000));QCOMPARE(encode.exitCode(),0);
+    }
+    QFETCH(int,mode);
+    QSettings settings(configPath(),QSettings::IniFormat);
+    settings.setValue("decode/mode",mode);
+    settings.setValue("player/preset",QDir(PresetStore::directory()).filePath("builtin/Anime-5-D3D11.vpy"));
+    settings.setValue("basic/autoplay",true);settings.setValue("playback/remember",false);settings.sync();
+    PlayerWindow player;player.resize(1440,810);player.show();player.activateWindow();
+    const auto remembered=qEnvironmentVariable("VSR_TRANSPORT_POSITION").toLongLong();
+    if(remembered>0) {
+        player.settings_->setValue("playback/remember",true);
+        player.history_->setValue("positions/"+QString::fromLatin1(QCryptographicHash::hash(video.toUtf8(),QCryptographicHash::Sha256).toHex()),remembered);
+    }
+    QVERIFY(player.openFile(video));
+    const auto space=[&]{QTest::keyClick(&player,Qt::Key_Space);};
+    const auto click=[&](const char *id){auto *button=player.findChild<QPushButton*>(id);QVERIFY(button);QTest::mouseClick(button,Qt::LeftButton);};
+    const auto state=[&]{
+        const auto s=player.snapshot();
+        return QString("state=%1 pos=%2 pending=%3 seekTarget=%4 auto=%5 playing=%6 generation=%7/%8 frames=%9/%10 index=%11 error=%12")
+            .arg(int(s.state)).arg(s.position100ns).arg(player.seekPending_).arg(player.seekUiTarget_).arg(player.autoPlay_).arg(player.playing_)
+            .arg(s.timelineGeneration).arg(player.generation_).arg(s.presentedVideoFrames).arg(player.seekPresented_).arg(s.frameIndex).arg(player.clock_->lastError());
+    };
+    QTRY_VERIFY2_WITH_TIMEOUT(player.playing_ && player.snapshot().presentedVideoFrames>2,qPrintable(state()),15000);
+    space();QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Paused,qPrintable(state()),2500);
+    const auto paused=player.position();
+    space();QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Playing && player.position()>paused+2000000,qPrintable(state()),5000);
+    for(int round=0;round<3;++round){
+        space();QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Paused,qPrintable(state()),2500);
+        QList<const char*> buttons{"playerNextFrame","playerPreviousFrame","playerForwardSecond","playerBackwardSecond","playerNextKeyframe","playerPreviousKeyframe"};
+        std::rotate(buttons.begin(),buttons.begin()+2*round,buttons.end());
+        for(auto id:buttons){
+            const auto before=player.snapshot();
+            click(id);
+            QTRY_VERIFY2_WITH_TIMEOUT(!player.seekPending_ && player.snapshot().presentedVideoFrames>before.presentedVideoFrames,
+                qPrintable(QString(id)+" "+state()),6000);
+        }
+        auto *slider=player.timeline_;
+        QTest::mouseClick(slider,Qt::LeftButton,Qt::NoModifier,QPoint(slider->width()*(1+round)/5,slider->height()/2));
+        const auto target=player.snapshot().duration100ns*slider->value()/100000;
+        QTRY_VERIFY2_WITH_TIMEOUT(!player.seekPending_ && qAbs(player.position()-target)<1000000,qPrintable(state()),7000);
+        if(round%2)click("playerPlay");else space();
+        QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Playing && player.position()>target+2000000,qPrintable(state()),5000);
+    }
+    space();QTRY_COMPARE(player.snapshot().state,ThreeFpState::Paused);
+    player.seekTime(0);
+    QTRY_VERIFY2_WITH_TIMEOUT(!player.seekPending_ && player.position()<1000000,qPrintable(state()),5000);
+    click("playerPreviousKeyframe");
+    QTest::qWait(100);
+    space();
+    QTRY_VERIFY2_WITH_TIMEOUT(player.snapshot().state==ThreeFpState::Playing && player.position()>2000000,qPrintable(state()),5000);
+
+}

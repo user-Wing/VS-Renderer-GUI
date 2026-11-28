@@ -71,6 +71,8 @@ private:
 #include "PlayerShortcutAcceptance.inc"
 private slots:
     void shortcutCatalogAndMigration(){checkShortcutCatalogAndMigration();}
+    void pausedTransport_data(){QTest::addColumn<int>("mode");QTest::newRow("SW")<<1;QTest::newRow("HW")<<2;}
+    void pausedTransport(){checkPausedTransport();}
     void trackPopupKeyboardAndTransportBounds(){checkTrackPopupKeyboardAndTransportBounds();}
     void cubeMenuVisibleForImages() {
         QTemporaryDir directory;

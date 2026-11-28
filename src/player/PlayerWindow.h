@@ -56,6 +56,7 @@ public:
     void seekTime(qint64 time);
     void seekFrame(qint64 frame);
     void stepFrame(int direction);
+    void stepKeyframe(int direction);
     void setRate(double rate);
     qint64 position() const;
     ThreeFpSnapshot snapshot() const;

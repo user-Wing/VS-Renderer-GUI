@@ -867,7 +867,7 @@ index 320faa2..0056da8 100644
      // Number of output frames still covered by the startup/seek de-click ramp.
      // This is deliberately renderer-local so every device restart and seek has
 diff --git a/FFF.Native/3FP/Core/PlayerSession.cpp b/FFF.Native/3FP/Core/PlayerSession.cpp
-index 9cc1f2b..7c209fc 100644
+index 9cc1f2b..323f0fa 100644
 --- a/FFF.Native/3FP/Core/PlayerSession.cpp
 +++ b/FFF.Native/3FP/Core/PlayerSession.cpp
 @@ -1,4 +1,7 @@
@@ -1085,9 +1085,12 @@ index 9cc1f2b..7c209fc 100644
      });
      return FFFResult::Success;
  }
-@@ -2797,6 +2885,10 @@ void PlayerSession::ProcessStep() noexcept {
+@@ -2795,8 +2883,12 @@ void PlayerSession::ProcessStep() noexcept {
+ }
+ 
  void PlayerSession::DoStepFrame(const std::int32_t direction) {
-     if (format_ == nullptr || videoStream_ < 0 || videoDecoder_ == nullptr) return;
+-    if (format_ == nullptr || videoStream_ < 0 || videoDecoder_ == nullptr) return;
++    if (format_ == nullptr || videoStream_ < 0 || (videoDecoder_ == nullptr && !videoDecoderReleasedForPause_)) return;
      SuspendAudioRenderer(true);
 +    if (softwareReferenceOnly_ || softwareRealtimeActive_ || videoSkipRung_ || appliedSkipRung_) {
 +        if (DoSeek(snapshot_.position100ns) != FFFResult::Success) return;
@@ -1157,7 +1160,7 @@ index 9cc1f2b..7c209fc 100644
 +        }
 +        return;
 +    }
-+    if(videoDecoder_==nullptr)return;
++    if (!RestoreSoftwareVideoDecoderAfterPause() || videoDecoder_ == nullptr) return;
      SuspendAudioRenderer(true);
      if ((direction < 0 && snapshot_.position100ns <= 0) ||
          (direction > 0 && snapshot_.duration100ns > 0 &&

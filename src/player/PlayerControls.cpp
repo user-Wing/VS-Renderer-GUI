@@ -95,15 +95,8 @@ void PlayerWindow::buildTransport(QVBoxLayout *layout) {
     button("›|", tr("进一帧"), [this] { stepFrame(1); })->setObjectName("playerNextFrame");
     button("−1s", tr("退一秒"), [this] { QKeyEvent key(QEvent::KeyPress,Qt::Key_Left,Qt::NoModifier);handleShortcut(&key); })->setObjectName("playerBackwardSecond");
     button("+1s", tr("进一秒"), [this] { QKeyEvent key(QEvent::KeyPress,Qt::Key_Right,Qt::NoModifier);handleShortcut(&key); })->setObjectName("playerForwardSecond");
-    const auto keyframe = [this](int direction) {
-        suspendQualityCheck();
-        manualFrame_ = -1;
-        if (playing_) togglePlayback();
-        if (lav_) { clock_->seek(position()); lavKeyPending_ = true; }
-        generation_ = clock_->snapshot().timelineGeneration; seekPending_ = clock_->stepKeyframe(direction);
-    };
-    button("K‹", tr("上一个关键帧"), [=] { keyframe(-1); })->setObjectName("playerPreviousKeyframe");
-    button("›K", tr("下一个关键帧"), [=] { keyframe(1); })->setObjectName("playerNextKeyframe");
+    button("K‹", tr("上一个关键帧"), [this] { stepKeyframe(-1); })->setObjectName("playerPreviousKeyframe");
+    button("›K", tr("下一个关键帧"), [this] { stepKeyframe(1); })->setObjectName("playerNextKeyframe");
     button("|◀", tr("上一个视频"), [this] { nextFile(-1); })->setObjectName("playerPreviousFile");
     button("▶|", tr("下一个视频"), [this] { nextFile(1); })->setObjectName("playerNextFile");
     time_ = new QLineEdit("00:00:00.000", this); time_->setObjectName("playerPosition"); time_->setFixedWidth(110); time_->setToolTip(tr("输入 HH:MM:SS.mmm 或秒数，Enter 精确跳转")); row->addWidget(time_);time_->setProperty("minimalControl",true);

@@ -697,11 +697,25 @@ void PlayerWindow::stepFrame(int direction) {
     const auto snap=clock_->snapshot();
     if ((direction<0 && snap.position100ns<=0) || (direction>0 && snap.duration100ns>0 && snap.position100ns>=snap.duration100ns)) return;
     autoPlay_=false;manualFrame_=-1;frameJumpTarget_=-1;resumeAt_=-1;seekUiTarget_=-1;suspendQualityCheck();
-    generation_=snap.timelineGeneration;seekPresented_=snap.presentedVideoFrames;
-    lavKeyPending_=bool(lav_);
-    // Relative stepping follows the current PTS; an absolute frame seek may
-    // rebuild its rolling ordinal index by decoding the entire stream prefix.
-    seekPending_=clock_->stepFrame(direction);
+    // A relative step may stop at the media boundary without starting a new timeline.
+    // The direct renderer presents the result itself. Leave later transport commands free to run.
+    const bool stepped=clock_->stepFrame(direction);
+    if(lav_) {
+        generation_=snap.timelineGeneration;seekPresented_=snap.presentedVideoFrames;
+        lavKeyPending_=seekPending_=stepped;
+    }
+}
+void PlayerWindow::stepKeyframe(int direction) {
+    suspendQualityCheck();
+    manualFrame_ = -1;
+    if (playing_) togglePlayback();
+    if (lav_) { clock_->seek(position()); lavKeyPending_ = true; }
+    if (direct_ && !lav_) {
+        clock_->stepKeyframe(direction);
+    } else {
+        generation_ = clock_->snapshot().timelineGeneration;
+        seekPending_ = clock_->stepKeyframe(direction);
+    }
 }
 bool PlayerWindow::commitFrameEdit() {
     if(!frameEditPending_)return false;
@@ -980,7 +994,7 @@ bool PlayerWindow::handleShortcut(QKeyEvent *event,bool tracksOnly){
         }
         else if(action=="seek"){if(imageMode_)nextFile(value<0?-1:1);else seekTime(position()+qRound64(value*1e7));}
         else if(action=="frame")stepFrame(value<0?-1:1);
-        else if(action=="keyframe"){generation_=clock_->snapshot().timelineGeneration;seekPending_=clock_->stepKeyframe(value<0?-1:1);}
+        else if(action=="keyframe")stepKeyframe(value<0?-1:1);
         else if(action=="chapter"){
             qint64 target=value<0?0:clock_->snapshot().duration100ns;const auto at=position();
             for(const auto &item:media_.value("chapters").toArray()){const auto start=qint64(item.toObject().value("start100ns").toDouble());if(value<0 && start<at-10000000)target=qMax(target,start);if(value>0 && start>at+1000000)target=qMin(target,start);}seekTime(target);
